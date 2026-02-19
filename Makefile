@@ -17,18 +17,30 @@ Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c, $(wildcard $(Q3MAP_DIR)/*.c))
 JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 
-# Object files
-OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
-      $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) \
-      $(JPEG_SRC:$(JPEG_DIR)/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
-      $(PAK_SRC:$(PAK_DIR)/%.cpp=$(OBJ_DIR)/pak/%.o)
+# Object files divided into libraries and application
+LIB_OBJ = $(JPEG_SRC:$(JPEG_DIR)/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
+          $(PAK_SRC:$(PAK_DIR)/%.cpp=$(OBJ_DIR)/pak/%.o)
+
+APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
+          $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o)
 
 TARGET = q3map.exe
 
+# By default, we only depend on application objects
+# Use REBUILD_LIBS=1 to force checking libraries
+ifeq ($(REBUILD_LIBS),1)
+ALL_OBJ = $(LIB_OBJ) $(APP_OBJ)
+else
+ALL_OBJ = $(APP_OBJ)
+endif
+
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
-	$(CXX) -o $@ $^ $(LDFLAGS)
+# Define a specific target to build libraries
+libs: $(LIB_OBJ)
+
+$(TARGET): $(ALL_OBJ)
+	$(CXX) -o $@ $(LIB_OBJ) $(APP_OBJ) $(LDFLAGS)
 
 # Compile rules
 $(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c
@@ -51,4 +63,5 @@ clean:
 	rm -rf $(OBJ_DIR)
 	rm -f $(TARGET)
 
-.PHONY: all clean
+.PHONY: all clean libs
+
