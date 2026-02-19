@@ -452,6 +452,10 @@ int main(int argc, char **argv) {
       _printf("Showing seams on terrain.\n");
     } else if (!strcmp(argv[i], "-tmpout")) {
       strcpy(outbase, "/tmp");
+    } else if (!strcmp(argv[i], "-basepath")) {
+      strcpy(qdir, argv[++i]);
+    } else if (!strcmp(argv[i], "-game")) {
+      strcpy(gamedir, argv[++i]);
     } else if (!strcmp(argv[i], "-fakemap")) {
       fakemap = qtrue;
       _printf("will generate fakemap.map\n");

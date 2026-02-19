@@ -78,14 +78,19 @@ public:
     }
   }
   void Log(const char *pFormat, ...) {
+    /*
+    if (!m_pFile)
+      return;
     va_list arg_ptr;
     va_start(arg_ptr, pFormat);
-    fprintf(m_pFile, pFormat, arg_ptr);
+    vfprintf(m_pFile, pFormat, arg_ptr);
     va_end(arg_ptr);
+    fflush(m_pFile);
+    */
   }
 };
 
-LogFile g_LogFile("c:\\paklog.txt");
+LogFile g_LogFile("paklog.txt");
 #endif
 
 template <class T> class StrPtr : public Str {
@@ -1012,5 +1017,17 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
     }
   } else {
     OpenPakFile(pName);
+  }
+}
+
+void ScanPakFiles(void (*callback)(const char *filename)) {
+  if (!g_bPK3)
+    return;
+
+  PK3List *p = g_PK3Files.Next();
+  while (p != NULL) {
+    PK3FileInfo *pKey = p->Ptr();
+    callback(pKey->m_pName);
+    p = p->Next();
   }
 }

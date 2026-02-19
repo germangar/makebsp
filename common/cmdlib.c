@@ -27,7 +27,14 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
+#include <stdint.h>
 #include <windows.h>
+#endif
+
+#ifndef _WIN32
+#include <dirent.h>
+#include <unistd.h>
 #endif
 
 #ifdef NeXT
@@ -134,12 +141,21 @@ For abnormal program terminations in console apps
 void Error(const char *error, ...) {
   va_list argptr;
 
-  _printf("\n************ ERROR ************\n");
+  printf("\n************ ERROR ************\n");
+  fprintf(stderr, "\n************ ERROR ************\n");
 
   va_start(argptr, error);
   vprintf(error, argptr);
   va_end(argptr);
-  _printf("\r\n");
+
+  va_start(argptr, error);
+  vfprintf(stderr, error, argptr);
+  va_end(argptr);
+
+  printf("\n");
+  fprintf(stderr, "\n");
+  fflush(stdout);
+  fflush(stderr);
 
   exit(1);
 }
@@ -173,7 +189,8 @@ void _printf(const char *format, ...) {
   vsprintf(text, format, argptr);
   va_end(argptr);
 
-  printf(text);
+  printf("%s", text);
+  fflush(stdout);
 
 #ifdef _WIN32
   if (!lookedForServer) {
@@ -206,71 +223,49 @@ char gamedir[1024];
 char writedir[1024];
 
 void SetQdirFromPath(const char *path) {
-  char temp[1024];
-  const char *c;
-  const char *sep;
-  int len, count;
+  int i;
 
-  if (!(path[0] == '/' || path[0] == '\\' ||
-        path[1] == ':')) { // path is partial
-    Q_getwd(temp);
-    strcat(temp, path);
-    path = temp;
+  // If no directory is set, default to current directory
+  if (!qdir[0]) {
+    Q_getwd(qdir);
   }
 
-  // search for "quake2" in path
-
-  len = strlen(BASEDIRNAME);
-  for (c = path + strlen(path) - 1; c != path; c--) {
-    int i;
-
-    if (!Q_strncasecmp(c, BASEDIRNAME, len)) {
-      //
-      // strncpy (qdir, path, c+len+2-path);
-      // the +2 assumes a 2 or 3 following quake which is not the
-      // case with a retail install
-      // so we need to add up how much to the next separator
-      sep = c + len;
-      count = 1;
-      while (*sep && *sep != '/' && *sep != '\\') {
-        sep++;
-        count++;
-      }
-      strncpy(qdir, path, c + len + count - path);
-      qprintf("qdir: %s\n", qdir);
-      for (i = 0; i < strlen(qdir); i++) {
-        if (qdir[i] == '\\')
-          qdir[i] = '/';
-      }
-
-      c += len + count;
-      while (*c) {
-        if (*c == '/' || *c == '\\') {
-          strncpy(gamedir, path, c + 1 - path);
-
-          for (i = 0; i < strlen(gamedir); i++) {
-            if (gamedir[i] == '\\')
-              gamedir[i] = '/';
-          }
-
-          qprintf("gamedir: %s\n", gamedir);
-
-          if (!writedir[0])
-            strcpy(writedir, gamedir);
-          else if (writedir[strlen(writedir) - 1] != '/') {
-            writedir[strlen(writedir)] = '/';
-            writedir[strlen(writedir) + 1] = 0;
-          }
-
-          return;
-        }
-        c++;
-      }
-      Error("No gamedir in %s", path);
-      return;
-    }
+  if (!gamedir[0]) {
+    strcpy(gamedir, qdir);
   }
-  Error("SetQdirFromPath: no '%s' in %s", BASEDIRNAME, path);
+
+  if (!writedir[0]) {
+    strcpy(writedir, gamedir);
+  }
+
+  // Ensure all paths use forward slashes for consistency
+  for (i = 0; i < strlen(qdir); i++) {
+    if (qdir[i] == '\\')
+      qdir[i] = '/';
+  }
+  if (qdir[0] && qdir[strlen(qdir) - 1] != '/') {
+    strcat(qdir, "/");
+  }
+
+  for (i = 0; i < strlen(gamedir); i++) {
+    if (gamedir[i] == '\\')
+      gamedir[i] = '/';
+  }
+  if (gamedir[0] && gamedir[strlen(gamedir) - 1] != '/') {
+    strcat(gamedir, "/");
+  }
+
+  for (i = 0; i < strlen(writedir); i++) {
+    if (writedir[i] == '\\')
+      writedir[i] = '/';
+  }
+  if (writedir[0] && writedir[strlen(writedir) - 1] != '/') {
+    strcat(writedir, "/");
+  }
+
+  qprintf("qdir: %s\n", qdir);
+  qprintf("gamedir: %s\n", gamedir);
+  qprintf("writedir: %s\n", writedir);
 }
 
 char *ExpandArg(const char *path) {
@@ -604,9 +599,10 @@ FileExists
 qboolean FileExists(const char *filename) {
   FILE *f;
 
-  f = fopen(filename, "r");
-  if (!f)
+  f = fopen(filename, "rb");
+  if (!f) {
     return qfalse;
+  }
   fclose(f);
   return qtrue;
 }
@@ -1049,4 +1045,45 @@ void QCopyFile(const char *from, const char *to) {
   CreatePath(to);
   SaveFile(to, buffer, length);
   free(buffer);
+}
+void Sys_ListFiles(const char *directory, const char *extension,
+                   void (*callback)(const char *filename)) {
+  char search[MAX_OS_PATH];
+  int extLen;
+
+  extLen = strlen(extension);
+
+#ifdef _WIN32
+  struct _finddata_t fileinfo;
+  intptr_t handle;
+
+  sprintf(search, "%s%s", directory, extension);
+  handle = _findfirst(search, &fileinfo);
+  if (handle == -1)
+    return;
+
+  do {
+    callback(fileinfo.name);
+  } while (_findnext(handle, &fileinfo) != -1);
+
+  _findclose(handle);
+#else
+  DIR *dir;
+  struct dirent *entry;
+  int nameLen;
+
+  dir = opendir(directory);
+  if (!dir)
+    return;
+
+  while ((entry = readdir(dir)) != NULL) {
+    nameLen = strlen(entry->d_name);
+    if (nameLen >= extLen &&
+        !Q_stricmp(entry->d_name + nameLen - extLen, extension + 1)) {
+      callback(entry->d_name);
+    }
+  }
+
+  closedir(dir);
+#endif
 }

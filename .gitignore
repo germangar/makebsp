@@ -1,3 +1,6 @@
 q3map.exe
 obj/
-junk/
+scripts/
+maps/
+textures/
+testmapbuild.bat

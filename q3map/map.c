@@ -755,7 +755,6 @@ void ParseRawBrush() {
     if (buildBrush->numsides == MAX_BUILD_SIDES) {
       Error("MAX_BUILD_SIDES");
     }
-
     side = &buildBrush->sides[buildBrush->numsides];
     memset(side, 0, sizeof(*side));
     buildBrush->numsides++;
@@ -820,6 +819,10 @@ void ParseRawBrush() {
 
     // find the plane number
     planenum = MapPlaneFromPoints(planepts[0], planepts[1], planepts[2]);
+    if (planenum == -1) {
+      Error("Entity %i, Brush %i, side %i: MapPlaneFromPoints failed",
+            num_entities - 1, entitySourceBrushes, buildBrush->numsides - 1);
+    }
     side->planenum = planenum;
 
     if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES)
@@ -1008,8 +1011,10 @@ ParseMapEntity
 qboolean ParseMapEntity(void) {
   epair_t *e;
 
-  if (!GetToken(qtrue))
+  // _printf("ParseMapEntity...\n");
+  if (!GetToken(qtrue)) {
     return qfalse;
+  }
 
   if (strcmp(token, "{")) {
     Error("ParseEntity: { not found, found %s on line %d - last entity was at: "
@@ -1123,6 +1128,7 @@ void LoadMapFile(char *filename) {
 
   while (ParseMapEntity()) {
   }
+  _printf("--- LoadMapFile: %i entities loaded ---\n", num_entities);
 
   ClearBounds(map_mins, map_maxs);
   for (b = entities[0].brushes; b; b = b->next) {

@@ -32,10 +32,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "shaders.h"
 #ifdef _WIN32
-
 #include "../libs/jpeglib.h"
 #include "../libs/pakstuff.h"
-
 #endif
 
 // 5% backsplash by default
@@ -558,30 +556,54 @@ LoadShaderInfo
 ===============
 */
 #define MAX_SHADER_FILES 64
-void LoadShaderInfo(void) {
-  char filename[1024];
+static char loadedShaderFiles[MAX_SHADER_FILES][MAX_QPATH];
+static int numLoadedShaderFiles;
+
+static void AddShaderFile(const char *filename) {
+  char base[MAX_QPATH];
   int i;
-  char *shaderFiles[MAX_SHADER_FILES];
-  int numShaderFiles;
 
-  sprintf(filename, "%sscripts/shaderlist.txt", gamedir);
-  LoadScriptFile(filename);
+  ExtractFileBase(filename, base);
 
-  numShaderFiles = 0;
-  while (1) {
-    if (!GetToken(qtrue)) {
-      break;
+  for (i = 0; i < numLoadedShaderFiles; i++) {
+    if (!Q_stricmp(loadedShaderFiles[i], base)) {
+      return;
     }
-    shaderFiles[numShaderFiles] = malloc(MAX_OS_PATH);
-    strcpy(shaderFiles[numShaderFiles], token);
-    numShaderFiles++;
   }
 
-  for (i = 0; i < numShaderFiles; i++) {
-    sprintf(filename, "%sscripts/%s.shader", gamedir, shaderFiles[i]);
-    ParseShaderFile(filename);
-    free(shaderFiles[i]);
+  if (numLoadedShaderFiles == MAX_SHADER_FILES) {
+    Error("MAX_SHADER_FILES");
   }
 
-  qprintf("%5i shaderInfo\n", numShaderInfo);
+  strcpy(loadedShaderFiles[numLoadedShaderFiles], base);
+  numLoadedShaderFiles++;
+
+  ParseShaderFile(filename);
+}
+
+static void ShaderLooseCallback(const char *filename) {
+  char full[MAX_QPATH];
+  sprintf(full, "scripts/%s", filename);
+  AddShaderFile(full);
+}
+
+static void ShaderPakCallback(const char *filename) {
+  if (strstr(filename, "scripts/") && strstr(filename, ".shader")) {
+    AddShaderFile(filename);
+  }
+}
+
+void LoadShaderInfo(void) {
+  _printf("Scanning for shaders...\n");
+
+  numLoadedShaderFiles = 0;
+
+  // Scan loose files on disk (portable)
+  Sys_ListFiles(ExpandGamePath("scripts/"), "*.shader", ShaderLooseCallback);
+
+  // Scan files in PAKs
+  ScanPakFiles(ShaderPakCallback);
+
+  _printf("%5i shader files parsed\n", numLoadedShaderFiles);
+  _printf("%5i shaders found\n", numShaderInfo);
 }

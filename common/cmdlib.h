@@ -80,6 +80,8 @@ char *ExpandArg(const char *path);  // from cmd line
 char *ExpandPath(const char *path); // from scripts
 char *ExpandGamePath(const char *path);
 char *ExpandPathAndArchive(const char *path);
+void Sys_ListFiles(const char *directory, const char *extension,
+                   void (*callback)(const char *filename));
 
 double I_FloatTime(void);
 
