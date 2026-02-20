@@ -44,6 +44,7 @@ mapDrawSurface_t *AllocDrawSurf(void) {
   if (numMapDrawSurfs >= MAX_MAP_DRAW_SURFS) {
     Error("MAX_MAP_DRAW_SURFS");
   }
+
   ds = &mapDrawSurfs[numMapDrawSurfs];
   numMapDrawSurfs++;
 
@@ -664,7 +665,7 @@ int FilterMiscModelSurfIntoTree(mapDrawSurface_t *ds, tree_t *tree) {
   winding_t *w;
 
   l = 0;
-  for (i = 0; i < ds->numIndexes - 2; i++) {
+  for (i = 0; i < ds->numIndexes - 2; i += 3) {
     w = AllocWinding(3);
     VectorCopy(ds->verts[ds->indexes[i]].xyz, w->p[0]);
     VectorCopy(ds->verts[ds->indexes[i + 1]].xyz, w->p[1]);
@@ -1130,7 +1131,7 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree) {
     } else {
       refs = FilterFaceIntoTree(ds, tree);
       //			if ( ds->shaderInfo->value >= 1000 ) { //
-      //ds->shaderInfo->flareShader[0] ) {
+      // ds->shaderInfo->flareShader[0] ) {
       if (ds->shaderInfo->flareShader[0]) {
         CreateFlareSurface(ds);
       }

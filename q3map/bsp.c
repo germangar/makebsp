@@ -129,6 +129,12 @@ void ProcessWorldModel(void) {
   // add references to the detail brushes
   FilterDetailBrushesIntoTree(e, tree);
 
+  // loading pass for misc_models (bakes transformations)
+  LoadTriangleModels();
+
+  // Create collision brushes for triangle models
+  CreateTriangleModelCollision();
+
   // create drawsurfs for triangle models
   AddTriangleModels(tree);
 

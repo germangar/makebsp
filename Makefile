@@ -42,11 +42,11 @@ $(TARGET): $(ALL_OBJ)
 	$(CXX) -o $@ $(LIB_OBJ) $(APP_OBJ) $(LDFLAGS)
 
 # Compile rules
-$(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c
+$(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c q3map/qbsp.h
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c
+$(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c q3map/qbsp.h
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

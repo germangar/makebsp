@@ -19,6 +19,19 @@ int c_triangleSurfaces;
 int c_triangleVertexes;
 int c_triangleIndexes;
 
+#define MAX_MODEL_INSTANCES 1024
+static modelInstance_t modelInstances[MAX_MODEL_INSTANCES];
+static int numModelInstances;
+
+typedef struct modelCache_s {
+  char name[MAX_QPATH];
+  const struct aiScene *scene;
+} modelCache_t;
+
+#define MAX_MODEL_CACHE 256
+static modelCache_t modelCache[MAX_MODEL_CACHE];
+static int numModelCache;
+
 /*
 ============
 ShaderForMesh
@@ -29,9 +42,18 @@ Determine the shader name for a given mesh, applying format-specific rules.
 static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
                           const struct aiScene *scene, char *shaderName) {
   char ext[16];
-  struct aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
+  struct aiMaterial *mat;
   struct aiString path;
   struct aiString matName;
+
+  if (mesh->mMaterialIndex >= scene->mNumMaterials) {
+    _printf("WARNING: mesh->mMaterialIndex (%i) >= scene->mNumMaterials (%i)\n",
+            mesh->mMaterialIndex, scene->mNumMaterials);
+    strcpy(shaderName, "default");
+    return;
+  }
+
+  mat = scene->mMaterials[mesh->mMaterialIndex];
 
   // Step 1: Prioritize high-level texture API (Diffuse) for all formats
   if (aiGetMaterialTexture(mat, aiTextureType_DIFFUSE, 0, &path, NULL, NULL,
@@ -44,7 +66,6 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
 
   ExtractFileExtension(modelPath, ext);
 
-  // Step 2: Fallback to raw '$tex.file' key for .obj models
   if (!Q_stricmp(ext, "obj")) {
     if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
         aiReturn_SUCCESS) {
@@ -55,220 +76,117 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
     }
   }
 
-  // Step 3: Fallback to the unified material name
   if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS) {
     strncpy(shaderName, matName.data, MAX_QPATH - 1);
     shaderName[MAX_QPATH - 1] = '\0';
   } else {
-    // Step 4: Absolute final fallback
     strcpy(shaderName, "default");
   }
 }
 
 /*
-============
-InsertAssimpModel
-
-Convert a model entity to raw geometry surfaces using Assimp
-============
+====================
+GetCachedModel
+====================
 */
-void InsertAssimpModel(const char *modelName, vec3_t origin, float angle,
-                       tree_t *tree) {
+static const struct aiScene *GetCachedModel(const char *modelName) {
+  int i;
   char filename[1024];
-  const struct aiScene *scene;
-  int i, j;
-  float angleRad;
-  float angleCos, angleSin;
-  mapDrawSurface_t *ds;
-  drawVert_t *dv;
-  struct aiMesh *mesh;
-  char shaderName[MAX_QPATH];
-  vec3_t temp;
 
-  sprintf(filename, "%s%s", gamedir, modelName);
-  _printf("--- InsertAssimpModel: %s ---\n", filename);
-
-  if (modelsInfoFile) {
-    fprintf(modelsInfoFile, "Model: \"%s\" {\n", modelName);
+  for (i = 0; i < numModelCache; i++) {
+    if (!Q_stricmp(modelCache[i].name, modelName)) {
+      return modelCache[i].scene;
+    }
   }
 
-  // Import the file with triangulation and standard Q3-friendly flags
-  scene = aiImportFile(filename, aiProcess_Triangulate |
-                                     aiProcess_JoinIdenticalVertices |
-                                     aiProcess_SortByPType | aiProcess_FlipUVs |
-                                     aiProcess_FlipWindingOrder |
-                                     aiProcess_PreTransformVertices);
+  if (numModelCache == MAX_MODEL_CACHE) {
+    Error("MAX_MODEL_CACHE reached");
+  }
+
+  sprintf(filename, "%s%s", gamedir, modelName);
+  _printf("--- Loading Model: %s ---\n", filename);
+  fflush(stdout);
+
+  const struct aiScene *scene = aiImportFile(
+      filename, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
+                    aiProcess_SortByPType | aiProcess_FlipUVs |
+                    aiProcess_FlipWindingOrder |
+                    aiProcess_PreTransformVertices);
 
   if (!scene) {
     _printf("WARNING: Assimp failed to load model %s: %s\n", filename,
             aiGetErrorString());
-    if (modelsInfoFile) {
-      fprintf(modelsInfoFile, "  ERROR: %s\n}\n", aiGetErrorString());
-    }
-    return;
+    fflush(stdout);
+    return NULL;
   }
 
-  angleRad = angle / 180.0f * Q_PI;
-  angleCos = cos(angleRad);
-  angleSin = sin(angleRad);
+  _printf("    Assimp success: %i meshes, %i materials\n", scene->mNumMeshes,
+          scene->mNumMaterials);
 
-  for (i = 0; i < scene->mNumMeshes; i++) {
-    mesh = scene->mMeshes[i];
-
-    c_triangleModels++;
-    c_triangleSurfaces++;
-
-    if (mesh->mNumVertices <= 0 || mesh->mNumFaces <= 0) {
-      if (modelsInfoFile) {
-        fprintf(modelsInfoFile, "  Mesh %i: (Empty)\n", i);
-      }
-      continue;
-    }
-
-    // Allocate a new draw surface
-    ds = AllocDrawSurf();
-    ds->miscModel = qtrue;
-
-    // Determine shader name
-    ShaderForMesh(modelName, mesh, scene, shaderName);
-    _printf("  Mesh %i: Name: '%s', Verts: %i, Faces: %i, Shader: '%s'\n", i,
-            mesh->mName.data, mesh->mNumVertices, mesh->mNumFaces, shaderName);
-
-    if (modelsInfoFile) {
-      struct aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
-      fprintf(modelsInfoFile, "  Mesh %i: \"%s\" {\n", i, mesh->mName.data);
-      fprintf(modelsInfoFile, "    Vertices: %i\n", mesh->mNumVertices);
-      fprintf(modelsInfoFile, "    Faces: %i\n", mesh->mNumFaces);
-      fprintf(modelsInfoFile, "    Shader Name: \"%s\"\n", shaderName);
-
-      fprintf(modelsInfoFile, "    Material Properties (%i) {\n",
-              mat->mNumProperties);
-      for (int p = 0; p < (int)mat->mNumProperties; p++) {
-        struct aiMaterialProperty *prop = mat->mProperties[p];
-        fprintf(modelsInfoFile,
-                "      [%2i] Key: '%-20s' Sem: %2i Idx: %i Type: %i Len: %i", p,
-                prop->mKey.data, prop->mSemantic, prop->mIndex, prop->mType,
-                prop->mDataLength);
-
-        if (prop->mType == aiPTI_String && prop->mDataLength > 4) {
-          struct aiString *str = (struct aiString *)prop->mData;
-          fprintf(modelsInfoFile, " String: '%s'", str->data);
-        }
-        fprintf(modelsInfoFile, "\n");
-      }
-      fprintf(modelsInfoFile, "    }\n"); // End Properties
-
-      // Textures
-      fprintf(modelsInfoFile, "    Textures {\n");
-      for (int t = 1; t <= 18; t++) {
-        unsigned int count =
-            aiGetMaterialTextureCount(mat, (enum aiTextureType)t);
-        for (unsigned int texIdx = 0; texIdx < count; texIdx++) {
-          struct aiString path;
-          if (aiGetMaterialTexture(mat, (enum aiTextureType)t, texIdx, &path,
-                                   NULL, NULL, NULL, NULL, NULL,
-                                   NULL) == aiReturn_SUCCESS) {
-            fprintf(modelsInfoFile, "      Type %i, Idx %i: \"%s\"\n", t,
-                    texIdx, path.data);
-          }
-        }
-      }
-      fprintf(modelsInfoFile, "    }\n"); // End Textures
-      fprintf(modelsInfoFile, "  }\n");   // End Mesh
-    }
-
-    ds->shaderInfo = ShaderInfoForShader(shaderName);
-
-    ds->numVerts = mesh->mNumVertices;
-    ds->verts = malloc(sizeof(drawVert_t) * ds->numVerts);
-
-    ds->numIndexes = mesh->mNumFaces * 3;
-    ds->indexes = malloc(sizeof(int) * ds->numIndexes);
-
-    ds->lightmapNum = -1;
-    ds->fogNum = -1;
-
-    // Copy vertices and apply transformations
-    c_triangleVertexes += ds->numVerts;
-    for (j = 0; j < ds->numVerts; j++) {
-      dv = &ds->verts[j];
-      float mx, my, mz;
-
-      // Position (Rotate and Translate)
-      mx = mesh->mVertices[j].x;
-      my = mesh->mVertices[j].y;
-      mz = mesh->mVertices[j].z;
-
-      // Axis Swap (Assimp Y-Up -> Quake Z-Up)
-      temp[0] = mx;
-      temp[1] = -mz;
-      temp[2] = my;
-
-      dv->xyz[0] = origin[0] + (temp[0] * angleCos - temp[1] * angleSin);
-      dv->xyz[1] = origin[1] + (temp[0] * angleSin + temp[1] * angleCos);
-      dv->xyz[2] = origin[2] + temp[2];
-
-      // Normal (Rotate)
-      if (mesh->mNormals) {
-        mx = mesh->mNormals[j].x;
-        my = mesh->mNormals[j].y;
-        mz = mesh->mNormals[j].z;
-
-        // Axis Swap (Assimp Y-Up -> Quake Z-Up)
-        temp[0] = mx;
-        temp[1] = -mz;
-        temp[2] = my;
-
-        dv->normal[0] = temp[0] * angleCos - temp[1] * angleSin;
-        dv->normal[1] = temp[0] * angleSin + temp[1] * angleCos;
-        dv->normal[2] = temp[2];
-      }
-
-      // Texture Coordinates
-      if (mesh->mTextureCoords[0]) {
-        dv->st[0] = mesh->mTextureCoords[0][j].x;
-        dv->st[1] = mesh->mTextureCoords[0][j].y;
-      }
-
-      // Default values
-      dv->color[0] = 255;
-      dv->color[1] = 255;
-      dv->color[2] = 255;
-      dv->color[3] = 255;
-    }
-
-    // Copy indices
-    c_triangleIndexes += ds->numIndexes;
-    for (j = 0; j < mesh->mNumFaces; j++) {
-      struct aiFace *face = &mesh->mFaces[j];
-      if (face->mNumIndices != 3) {
-        continue;
-      }
-      ds->indexes[j * 3 + 0] = face->mIndices[0];
-      ds->indexes[j * 3 + 1] = face->mIndices[1];
-      ds->indexes[j * 3 + 2] = face->mIndices[2];
-    }
+  if (strlen(modelName) >= MAX_QPATH) {
+    _printf("WARNING: modelName too long: %s\n", modelName);
   }
+  strncpy(modelCache[numModelCache].name, modelName, MAX_QPATH - 1);
+  modelCache[numModelCache].name[MAX_QPATH - 1] = '\0';
+  modelCache[numModelCache].scene = scene;
+  numModelCache++;
 
-  if (modelsInfoFile) {
-    fprintf(modelsInfoFile, "}\n");
-  }
-
-  aiReleaseImport(scene);
+  return scene;
 }
 
 /*
-=====================
-AddTriangleModels
-=====================
+====================
+AnglesToMatrix
+====================
 */
-void AddTriangleModels(tree_t *tree) {
+static void AnglesToMatrix(vec3_t angles, float matrix[3][3]) {
+  float angle, sr, cr, sp, cp, sy, cy;
+
+  angle = DEG2RAD(angles[1]); // Yaw
+  sy = sin(angle);
+  cy = cos(angle);
+  angle = DEG2RAD(angles[0]); // Pitch
+  sp = sin(angle);
+  cp = cos(angle);
+  angle = DEG2RAD(angles[2]); // Roll
+  sr = sin(angle);
+  cr = cos(angle);
+
+  matrix[0][0] = cp * cy;
+  matrix[0][1] = cp * sy;
+  matrix[0][2] = -sp;
+
+  matrix[1][0] = sr * sp * cy + cr * -sy;
+  matrix[1][1] = sr * sp * sy + cr * cy;
+  matrix[1][2] = sr * cp;
+
+  matrix[2][0] = cr * sp * cy + -sr * -sy;
+  matrix[2][1] = cr * sp * sy + -sr * cy;
+  matrix[2][2] = cr * cp;
+}
+
+/*
+====================
+LoadTriangleModels
+
+Initial pass to load and transform all misc_model entities.
+====================
+*/
+void LoadTriangleModels(void) {
   int entity_num;
   entity_t *entity;
+  const char *model;
+  const struct aiScene *scene;
+  vec3_t origin, angles;
+  float scale;
+  vec3_t scale_vec;
   char infoName[1024];
   char base[1024];
+  float rotationMatrix[3][3];
 
-  qprintf("----- AddTriangleModels (Assimp) -----\n");
+  _printf("----- LoadTriangleModels (Assimp) -----\n");
+
+  numModelInstances = 0; // Reset instances
 
   ExtractFileBase(source, base);
   sprintf(infoName, "%s_modelsinfo.txt", base);
@@ -281,27 +199,191 @@ void AddTriangleModels(tree_t *tree) {
     entity = &entities[entity_num];
 
     if (!Q_stricmp("misc_model", ValueForKey(entity, "classname"))) {
-      const char *model;
-      vec3_t origin;
-      float angle;
-
-      angle = FloatForKey(entity, "angle");
-      GetVectorForKey(entity, "origin", origin);
       model = ValueForKey(entity, "model");
+      if (!model[0])
+        continue;
 
-      if (!model[0]) {
-        _printf("WARNING: misc_model at %i %i %i without a model key\n",
-                (int)origin[0], (int)origin[1], (int)origin[2]);
+      _printf("  Processing entity %i: %s\n", entity_num, model);
+
+      GetVectorForKey(entity, "origin", origin);
+      GetVectorForKey(entity, "angles", angles);
+      if (angles[0] == 0 && angles[1] == 0 && angles[2] == 0) {
+        angles[1] = FloatForKey(entity, "angle");
+      }
+
+      scale = FloatForKey(entity, "modelscale");
+      if (scale == 0)
+        scale = 1.0f;
+
+      GetVectorForKey(entity, "modelscale_vec", scale_vec);
+      if (scale_vec[0] == 0 && scale_vec[1] == 0 && scale_vec[2] == 0) {
+        scale_vec[0] = scale_vec[1] = scale_vec[2] = scale;
+      }
+
+      scene = GetCachedModel(model);
+      if (!scene) {
         continue;
       }
 
-      InsertAssimpModel(model, origin, angle, tree);
+      if (numModelInstances == MAX_MODEL_INSTANCES) {
+        Error("MAX_MODEL_INSTANCES reached");
+      }
+
+      modelInstance_t *inst = &modelInstances[numModelInstances++];
+      strncpy(inst->modelName, model, MAX_QPATH - 1);
+      inst->modelName[MAX_QPATH - 1] = '\0';
+
+      if (modelsInfoFile) {
+        fprintf(modelsInfoFile, "Entity %i (Model: %s) {\n", entity_num, model);
+        fprintf(modelsInfoFile, "  Origin: %.2f %.2f %.2f\n", origin[0],
+                origin[1], origin[2]);
+        fprintf(modelsInfoFile, "  Angles: %.2f %.2f %.2f\n", angles[0],
+                angles[1], angles[2]);
+        fprintf(modelsInfoFile, "  Scale: %.2f %.2f %.2f\n", scale_vec[0],
+                scale_vec[1], scale_vec[2]);
+      }
+
+      inst->numDrawSurfs = scene->mNumMeshes;
+      inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * inst->numDrawSurfs);
+      if (!inst->drawSurfs) {
+        Error("Failed to allocate drawSurfs array");
+      }
+
+      AnglesToMatrix(angles, rotationMatrix);
+
+      for (int i = 0; i < scene->mNumMeshes; i++) {
+        struct aiMesh *mesh = scene->mMeshes[i];
+        char shaderName[MAX_QPATH];
+
+        ShaderForMesh(model, mesh, scene, shaderName);
+
+        mapDrawSurface_t *ds = AllocDrawSurf();
+        inst->drawSurfs[i] = ds;
+        memset(ds, 0, sizeof(*ds));
+        ds->miscModel = qtrue;
+        ds->planeNum = -1;
+        ds->shaderInfo = ShaderInfoForShader(shaderName);
+
+        ds->numVerts = mesh->mNumVertices;
+        ds->verts = malloc(sizeof(drawVert_t) * ds->numVerts);
+        if (!ds->verts)
+          Error("Failed to allocate vertices");
+
+        ds->numIndexes = mesh->mNumFaces * 3;
+        ds->indexes = malloc(sizeof(int) * ds->numIndexes);
+        if (!ds->indexes)
+          Error("Failed to allocate indices");
+        memset(ds->indexes, 0, sizeof(int) * ds->numIndexes);
+
+        ds->lightmapNum = -1;
+        ds->fogNum = -1;
+
+        for (int j = 0; j < mesh->mNumVertices; j++) {
+          drawVert_t *dv = &ds->verts[j];
+          float mx = mesh->mVertices[j].x * scale_vec[0];
+          float my = mesh->mVertices[j].y * scale_vec[1];
+          float mz = mesh->mVertices[j].z * scale_vec[2];
+
+          // Axis Swap (Assimp Y-Up -> Quake Z-Up)
+          vec3_t tx;
+          tx[0] = mx;
+          tx[1] = -mz;
+          tx[2] = my;
+
+          // Rotation
+          dv->xyz[0] = origin[0] + (tx[0] * rotationMatrix[0][0] +
+                                    tx[1] * rotationMatrix[1][0] +
+                                    tx[2] * rotationMatrix[2][0]);
+          dv->xyz[1] = origin[1] + (tx[0] * rotationMatrix[0][1] +
+                                    tx[1] * rotationMatrix[1][1] +
+                                    tx[2] * rotationMatrix[2][1]);
+          dv->xyz[2] = origin[2] + (tx[0] * rotationMatrix[0][2] +
+                                    tx[1] * rotationMatrix[1][2] +
+                                    tx[2] * rotationMatrix[2][2]);
+
+          if (mesh->mNormals) {
+            float nx = mesh->mNormals[j].x;
+            float ny = mesh->mNormals[j].y;
+            float nz = mesh->mNormals[j].z;
+
+            // Axis Swap for Normals (No Scale!)
+            tx[0] = nx;
+            tx[1] = -nz;
+            tx[2] = ny;
+
+            dv->normal[0] =
+                (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] +
+                 tx[2] * rotationMatrix[2][0]);
+            dv->normal[1] =
+                (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] +
+                 tx[2] * rotationMatrix[2][1]);
+            dv->normal[2] =
+                (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] +
+                 tx[2] * rotationMatrix[2][2]);
+          }
+
+          if (mesh->mTextureCoords[0]) {
+            dv->st[0] = mesh->mTextureCoords[0][j].x;
+            dv->st[1] = mesh->mTextureCoords[0][j].y;
+          }
+
+          dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
+        }
+
+        for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+          struct aiFace *face = &mesh->mFaces[j];
+          if (face->mNumIndices != 3)
+            continue;
+
+          // Robustness: Validation of indices against vertex count
+          if (face->mIndices[0] >= (unsigned int)ds->numVerts ||
+              face->mIndices[1] >= (unsigned int)ds->numVerts ||
+              face->mIndices[2] >= (unsigned int)ds->numVerts) {
+            _printf("WARNING: Mesh %i face %i has out-of-bounds indices "
+                    "(%i,%i,%i) for %i verts. Skipping.\n",
+                    i, j, face->mIndices[0], face->mIndices[1],
+                    face->mIndices[2], ds->numVerts);
+            continue;
+          }
+
+          ds->indexes[j * 3 + 0] = face->mIndices[0];
+          ds->indexes[j * 3 + 1] = face->mIndices[1];
+          ds->indexes[j * 3 + 2] = face->mIndices[2];
+        }
+      }
+
+      if (modelsInfoFile) {
+        fprintf(modelsInfoFile, "}\n");
+      }
     }
   }
 
   if (modelsInfoFile) {
     fclose(modelsInfoFile);
     modelsInfoFile = NULL;
+  }
+}
+
+/*
+=====================
+AddTriangleModels
+
+Second pass: Insert the pre-calculated surfaces into the BSP tree.
+=====================
+*/
+void AddTriangleModels(tree_t *tree) {
+  int i;
+  _printf("----- AddTriangleModels (Insertion) -----\n");
+
+  for (i = 0; i < numModelInstances; i++) {
+    modelInstance_t *inst = &modelInstances[i];
+    c_triangleModels++;
+    for (int j = 0; j < inst->numDrawSurfs; j++) {
+      c_triangleSurfaces++;
+      mapDrawSurface_t *ds = inst->drawSurfs[j];
+      c_triangleVertexes += ds->numVerts;
+      c_triangleIndexes += ds->numIndexes;
+    }
   }
 
   qprintf("%5i triangle models\n", c_triangleModels);

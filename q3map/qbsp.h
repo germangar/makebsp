@@ -416,12 +416,27 @@ tree_t *FaceBSP(bspface_t *list);
 
 // misc_model.c
 
+typedef struct modelInstance_s {
+  char modelName[MAX_QPATH];
+  int numDrawSurfs;
+  mapDrawSurface_t *
+      *drawSurfs; // References to surfaces created for this instance
+  // Future: bspbrush_t *collisionBrushes;
+} modelInstance_t;
+
 extern int c_triangleModels;
 extern int c_triangleSurfaces;
 extern int c_triangleVertexes;
 extern int c_triangleIndexes;
 
+void LoadTriangleModels(void);
 void AddTriangleModels(tree_t *tree);
+
+//=============================================================================
+
+// model_collision.c
+
+void CreateTriangleModelCollision(void);
 
 //=============================================================================
 
