@@ -7,11 +7,10 @@ This file is part of Quake III Arena source code.
 ===========================================================================
 */
 
+#include "../libs/assimp/include/assimp/cimport.h"
+#include "../libs/assimp/include/assimp/postprocess.h"
+#include "../libs/assimp/include/assimp/scene.h"
 #include "qbsp.h"
-#include <assimp/cimport.h>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-
 
 int c_triangleModels;
 int c_triangleSurfaces;
@@ -29,7 +28,7 @@ void InsertAssimpModel(const char *modelName, vec3_t origin, float angle,
                        tree_t *tree) {
   char filename[1024];
   const struct aiScene *scene;
-  int i, j, k;
+  int i, j;
   float angleRad;
   float angleCos, angleSin;
   mapDrawSurface_t *ds;

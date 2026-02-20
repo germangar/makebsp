@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++
-CFLAGS = -O2 -Wall -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
+CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
          -Ilibs/assimp/include \
          -D_WIN32 -DNDEBUG -D_CONSOLE
 CXXFLAGS = $(CFLAGS)
