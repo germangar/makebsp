@@ -1,8 +1,11 @@
 CC = gcc
 CXX = g++
-CFLAGS = -O2 -Wall -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -D_WIN32 -DNDEBUG -D_CONSOLE
+CFLAGS = -O2 -Wall -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
+         -Ilibs/assimp/include \
+         -D_WIN32 -DNDEBUG -D_CONSOLE
 CXXFLAGS = $(CFLAGS)
-LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm
+LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm \
+          -Llibs/assimp/lib -lassimp -lzlibstatic -lstdc++
 
 # Directories
 COMMON_DIR = common
@@ -13,7 +16,7 @@ OBJ_DIR = obj
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
-Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c, $(wildcard $(Q3MAP_DIR)/*.c))
+Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c $(Q3MAP_DIR)/misc_model_old.c, $(wildcard $(Q3MAP_DIR)/*.c))
 JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 
@@ -28,11 +31,7 @@ TARGET = q3map.exe
 
 # By default, we only depend on application objects
 # Use REBUILD_LIBS=1 to force checking libraries
-ifeq ($(REBUILD_LIBS),1)
 ALL_OBJ = $(LIB_OBJ) $(APP_OBJ)
-else
-ALL_OBJ = $(APP_OBJ)
-endif
 
 all: $(TARGET)
 
