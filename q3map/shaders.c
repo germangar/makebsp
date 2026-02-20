@@ -185,7 +185,7 @@ static void LoadShaderImage(shaderInfo_t *si) {
   }
 
   // couldn't load anything
-  _printf("WARNING: Couldn't find image for shader %s\n", si->shader);
+  _printf("WARNING: Missing image for material: %s\n", si->shader);
 
   si->color[0] = 1;
   si->color[1] = 1;

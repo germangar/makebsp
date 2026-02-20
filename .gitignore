@@ -3,7 +3,11 @@ obj/
 scripts/
 maps/
 textures/
+models/
 testmapbuild.bat
 libs/assimp_src/
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
+
+paklog.txt
+modeltest_modelsinfo.txt
