@@ -235,7 +235,7 @@ qboolean BoundBrush(bspbrush_t *brush);
 qboolean CreateBrushWindings(bspbrush_t *brush);
 bspbrush_t *BrushFromBounds(vec3_t mins, vec3_t maxs);
 vec_t BrushVolume(bspbrush_t *brush);
-void WriteBspBrushMap(char *name, bspbrush_t *list);
+void WriteBspBrushMap(char *name, bspbrush_t *list, char *shader);
 
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);
@@ -262,6 +262,7 @@ extern entity_t *mapent;
 extern bspbrush_t *buildBrush;
 
 void LoadMapFile(char *filename);
+int MapPlaneFromPoints(vec3_t p0, vec3_t p1, vec3_t p2);
 int FindFloatPlane(vec3_t normal, vec_t dist);
 int PlaneTypeForNormal(vec3_t normal);
 bspbrush_t *FinishBrush(void);
@@ -431,6 +432,10 @@ extern int c_triangleIndexes;
 
 void LoadTriangleModels(void);
 void AddTriangleModels(tree_t *tree);
+
+#define MAX_MODEL_INSTANCES 1024
+extern modelInstance_t modelInstances[MAX_MODEL_INSTANCES];
+extern int numModelInstances;
 
 //=============================================================================
 

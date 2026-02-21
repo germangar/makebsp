@@ -1148,7 +1148,7 @@ void LoadMapFile(char *filename) {
           map_mins[1], map_mins[2], map_maxs[0], map_maxs[1], map_maxs[2]);
 
   if (fakemap) {
-    WriteBspBrushMap("fakemap.map", entities[0].brushes);
+    WriteBspBrushMap("fakemap.map", entities[0].brushes, NULL);
   }
 
   if (testExpand) {
@@ -1192,7 +1192,7 @@ void TestExpandBrushes(void) {
     }
   }
 
-  WriteBspBrushMap("expanded.map", entities[0].brushes);
+  WriteBspBrushMap("expanded.map", entities[0].brushes, NULL);
 
   Error("can't proceed after expanding brushes");
 }

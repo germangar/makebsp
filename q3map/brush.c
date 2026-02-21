@@ -336,11 +336,14 @@ vec_t BrushVolume(bspbrush_t *brush) {
 WriteBspBrushMap
 ==================
 */
-void WriteBspBrushMap(char *name, bspbrush_t *list) {
+void WriteBspBrushMap(char *name, bspbrush_t *list, char *shader) {
   FILE *f;
   side_t *s;
   int i;
   winding_t *w;
+
+  if (!shader)
+    shader = "notexture";
 
   _printf("writing %s\n", name);
   f = fopen(name, "wb");
@@ -352,18 +355,22 @@ void WriteBspBrushMap(char *name, bspbrush_t *list) {
   for (; list; list = list->next) {
     fprintf(f, "{\n");
     for (i = 0, s = list->sides; i < list->numsides; i++, s++) {
-      w = BaseWindingForPlane(mapplanes[s->planenum].normal,
-                              mapplanes[s->planenum].dist);
+      if (s->winding && s->winding->numpoints >= 3) {
+        w = s->winding;
+      } else {
+        w = BaseWindingForPlane(mapplanes[s->planenum].normal,
+                                mapplanes[s->planenum].dist);
+      }
 
-      fprintf(f, "( %i %i %i ) ", (int)w->p[0][0], (int)w->p[0][1],
-              (int)w->p[0][2]);
-      fprintf(f, "( %i %i %i ) ", (int)w->p[1][0], (int)w->p[1][1],
-              (int)w->p[1][2]);
-      fprintf(f, "( %i %i %i ) ", (int)w->p[2][0], (int)w->p[2][1],
-              (int)w->p[2][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
 
-      fprintf(f, "notexture 0 0 0 1 1\n");
-      FreeWinding(w);
+      fprintf(f, "%s 0 0 0 1 1\n", shader);
+
+      if (w != s->winding) {
+        FreeWinding(w);
+      }
     }
     fprintf(f, "}\n");
   }

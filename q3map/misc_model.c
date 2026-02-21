@@ -20,8 +20,8 @@ int c_triangleVertexes;
 int c_triangleIndexes;
 
 #define MAX_MODEL_INSTANCES 1024
-static modelInstance_t modelInstances[MAX_MODEL_INSTANCES];
-static int numModelInstances;
+modelInstance_t modelInstances[MAX_MODEL_INSTANCES];
+int numModelInstances;
 
 typedef struct modelCache_s {
   char name[MAX_QPATH];

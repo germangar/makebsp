@@ -1,11 +1,11 @@
 CC = gcc
 CXX = g++
 CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
-         -Ilibs/assimp/include \
-         -D_WIN32 -DNDEBUG -D_CONSOLE
+         -Ilibs/assimp/include -Ilibs/coacd/public \
+         -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0
 CXXFLAGS = $(CFLAGS)
 LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm \
-          -Llibs/assimp/lib -lassimp -lzlibstatic -lstdc++
+          -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lzlibstatic -lstdc++ -fopenmp
 
 # Directories
 COMMON_DIR = common
