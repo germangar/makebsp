@@ -235,7 +235,7 @@ qboolean BoundBrush(bspbrush_t *brush);
 qboolean CreateBrushWindings(bspbrush_t *brush);
 bspbrush_t *BrushFromBounds(vec3_t mins, vec3_t maxs);
 vec_t BrushVolume(bspbrush_t *brush);
-void WriteBspBrushMap(char *name, bspbrush_t *list, char *shader);
+void WriteBspBrushMap(char *name, bspbrush_t *list);
 
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);

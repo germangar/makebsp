@@ -34,7 +34,7 @@ Converts a convex hull (triangle soup) into a bspbrush_t.
 Deduplicates coplanar faces by finding unique plane indices.
 ====================
 */
-bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh) {
+bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
   int i, j;
   int numUniquePlanes = 0;
   int uniquePlanes[MAX_BRUSH_SIDES];
@@ -88,10 +88,12 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh) {
   b = AllocBrush(numUniquePlanes);
   b->numsides = numUniquePlanes;
   b->detail = qtrue;
-  b->contents = CONTENTS_SOLID;
+  b->contents = si->contents;
+  b->contentShader = si;
 
   for (i = 0; i < numUniquePlanes; i++) {
     b->sides[i].planenum = uniquePlanes[i];
+    b->sides[i].shaderInfo = si;
     // Create a 3-point winding for WriteBspBrushMap
     b->sides[i].winding = AllocWinding(3);
     b->sides[i].winding->numpoints = 3;
@@ -202,9 +204,10 @@ void CreateTriangleModelCollision(void) {
 
   _printf("CoACD generated %i convex hulls.\n", (int)hulls.meshes_count);
 
+  shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   // Step 4: Convert hulls to bspbrushes
   for (i = 0; i < hulls.meshes_count; i++) {
-    bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[i]);
+    bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[i], caulk);
     if (b) {
       b->next = allCollisionBrushes;
       allCollisionBrushes = b;
@@ -219,7 +222,7 @@ void CreateTriangleModelCollision(void) {
     char debugName[1024];
     sprintf(debugName, "%s_collision.map", source);
     _printf("Writing diagnostic map: %s\n", debugName);
-    WriteBspBrushMap(debugName, allCollisionBrushes, "common/fullclip");
+    WriteBspBrushMap(debugName, allCollisionBrushes);
   }
 
   // Cleanup

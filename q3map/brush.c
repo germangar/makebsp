@@ -336,14 +336,11 @@ vec_t BrushVolume(bspbrush_t *brush) {
 WriteBspBrushMap
 ==================
 */
-void WriteBspBrushMap(char *name, bspbrush_t *list, char *shader) {
+void WriteBspBrushMap(char *name, bspbrush_t *list) {
   FILE *f;
   side_t *s;
   int i;
   winding_t *w;
-
-  if (!shader)
-    shader = "notexture";
 
   _printf("writing %s\n", name);
   f = fopen(name, "wb");
@@ -366,6 +363,13 @@ void WriteBspBrushMap(char *name, bspbrush_t *list, char *shader) {
       fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
       fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
 
+      const char *shader = "textures/common/caulk";
+      if (s->shaderInfo) {
+        shader = s->shaderInfo->shader;
+      }
+      if (!Q_strncasecmp(shader, "textures/", 9)) {
+        shader += 9;
+      }
       fprintf(f, "%s 0 0 0 1 1\n", shader);
 
       if (w != s->winding) {
