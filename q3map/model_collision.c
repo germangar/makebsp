@@ -11,6 +11,21 @@ This file is part of Quake III Arena source code.
 #include "../libs/coacd_api.h"
 #include "qbsp.h"
 
+#define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
+
+#define MAX_FUNC_CLIPS 16       // Max number of func_static groups
+#define MAX_CLIP_ENTITY_GROUPS 16 // Max number of clip entity groups
+typedef struct {
+  entity_t *entity;
+  float brush_density;
+  vec3_t mins, maxs;
+  int numBrushes;
+} clip_entity_group_t;
+
+clip_entity_group_t clip_entity_groups[MAX_CLIP_ENTITY_GROUPS];
+int num_clip_entity_groups = 0;
+
+
 /*
 ====================
 BrushFromMesh
@@ -72,6 +87,9 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh) {
 
   b = AllocBrush(numUniquePlanes);
   b->numsides = numUniquePlanes;
+  b->detail = qtrue;
+  b->contents = CONTENTS_SOLID;
+
   for (i = 0; i < numUniquePlanes; i++) {
     b->sides[i].planenum = uniquePlanes[i];
     // Create a 3-point winding for WriteBspBrushMap
