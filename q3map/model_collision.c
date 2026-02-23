@@ -25,6 +25,9 @@ typedef struct {
 clip_entity_group_t clip_entity_groups[MAX_CLIP_ENTITY_GROUPS];
 int num_clip_entity_groups = 0;
 
+int c_degenerate_triangles = 0;
+int c_degenerate_hulls = 0;
+
 
 /*
 ====================
@@ -38,8 +41,13 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
   int i, j;
   int numUniquePlanes = 0;
   int uniquePlanes[MAX_BRUSH_SIDES];
+  float maxPlaneArea[MAX_BRUSH_SIDES];
   vec3_t trianglePoints[MAX_BRUSH_SIDES][3];
   bspbrush_t *b;
+
+  for (i = 0; i < MAX_BRUSH_SIDES; i++) {
+    maxPlaneArea[i] = -1.0f;
+  }
 
   // For each triangle, find its unique plane
   for (i = 0; i < mesh->triangles_count; i++) {
@@ -58,13 +66,38 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
     p2[1] = mesh->vertices_ptr[idx2 * 3 + 1];
     p2[2] = mesh->vertices_ptr[idx2 * 3 + 2];
 
-    // MapPlaneFromPoints computes normal pointing OUT for CW triangles
+    // Check for degenerate triangle (near zero area)
+    vec3_t t1, t2, cross;
+    VectorSubtract(p1, p0, t1);
+    VectorSubtract(p2, p0, t2);
+    CrossProduct(t1, t2, cross);
+    float area = VectorLength(cross);
+    if (area < 0.1) {
+      c_degenerate_triangles++;
+      continue;
+    }
+
+    // MapPlaneFromPoints computes normal pointing OUT for CW triangles.
+    // If our mesh is CCW (standard), feeding MapPlaneFromPoints(p0, p2, p1)
+    // gives the correct outgoing normal.
     int planenum = MapPlaneFromPoints(p0, p2, p1);
+    if (planenum == -1) {
+      c_degenerate_triangles++;
+      continue;
+    }
 
     // Deduplicate against existing planes in this brush
     for (j = 0; j < numUniquePlanes; j++) {
-      if (uniquePlanes[j] == planenum)
+      if (uniquePlanes[j] == planenum) {
+        // If this triangle is significantly larger, use it for the .map points
+        if (area > maxPlaneArea[j]) {
+          maxPlaneArea[j] = area;
+          VectorCopy(p0, trianglePoints[j][0]);
+          VectorCopy(p1, trianglePoints[j][1]);
+          VectorCopy(p2, trianglePoints[j][2]);
+        }
         break;
+      }
     }
 
     if (j == numUniquePlanes) {
@@ -73,7 +106,8 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
         break;
       }
       uniquePlanes[numUniquePlanes] = planenum;
-      // Capture the triangle points to define the plane in the .map file
+      maxPlaneArea[numUniquePlanes] = area;
+      // Capture CCW triangle points (p0, p1, p2)
       VectorCopy(p0, trianglePoints[numUniquePlanes][0]);
       VectorCopy(p1, trianglePoints[numUniquePlanes][1]);
       VectorCopy(p2, trianglePoints[numUniquePlanes][2]);
@@ -94,7 +128,10 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
   for (i = 0; i < numUniquePlanes; i++) {
     b->sides[i].planenum = uniquePlanes[i];
     b->sides[i].shaderInfo = si;
-    // Create a 3-point winding for WriteBspBrushMap
+
+    // Create a 3-point winding for WriteBspBrushMap.
+    // Storing them as original CCW (p0, p1, p2).
+    // WriteBspBrushMap will flip them to CW (0, 2, 1).
     b->sides[i].winding = AllocWinding(3);
     b->sides[i].winding->numpoints = 3;
     VectorCopy(trianglePoints[i][0], b->sides[i].winding->p[0]);
@@ -184,7 +221,7 @@ void CreateTriangleModelCollision(void) {
   fflush(stdout);
 
   CoACD_MeshArray hulls = CoACD_run(&input,
-                                    0.05, // threshold
+                                    0.2, // threshold
                                     -1,   // max_convex_hull
                                     COACD_PREPROCESS_AUTO,
                                     50,           // prep_resolution
@@ -194,8 +231,8 @@ void CreateTriangleModelCollision(void) {
                                     3,            // mcts_max_depth
                                     false,        // pca
                                     true,         // merge
-                                    false,        // decimate
-                                    256,          // max_ch_vertex
+                                    true,         // decimate
+                                    (int)(totalVerts * 0.9), // max_ch_vertex
                                     false,        // extrude
                                     0.01,         // extrude_margin
                                     COACD_APX_CH, // apx_mode
@@ -207,6 +244,7 @@ void CreateTriangleModelCollision(void) {
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   // Step 4: Convert hulls to bspbrushes
   for (i = 0; i < hulls.meshes_count; i++) {
+    _printf("Converting hull %i/%i...\n", i + 1, (int)hulls.meshes_count);
     bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[i], caulk);
     if (b) {
       b->next = allCollisionBrushes;
@@ -216,6 +254,11 @@ void CreateTriangleModelCollision(void) {
 
   _printf("Converted to %i BSP brushes.\n",
           CountBrushList(allCollisionBrushes));
+
+  if (c_degenerate_triangles > 0 || c_degenerate_hulls > 0) {
+    _printf("Degenerate geometry skipped: %i triangles, %i hulls\n",
+            c_degenerate_triangles, c_degenerate_hulls);
+  }
 
   // Step 5: Diagnostic visualization
   if (allCollisionBrushes) {
