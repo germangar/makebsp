@@ -16,7 +16,8 @@ This file is part of Quake III Arena source code.
 #define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
 
 #define MAX_FUNC_CLIPS 16       // Max number of func_static groups
-#define MAX_CLIP_ENTITY_GROUPS 16 // Max number of clip entity groups
+#define MAX_CLIP_ENTITY_GROUPS                                                 \
+  MAX_MODEL_INSTANCES // Max number of clip entity groups
 typedef struct {
   entity_t *entity;
   float brush_density;
@@ -141,6 +142,13 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
     VectorCopy(trianglePoints[i][2], b->sides[i].winding->p[2]);
   }
 
+  // Calculate bounds from the 3-point windings
+  if (!BoundBrush(b)) {
+    c_degenerate_hulls++;
+    FreeBrush(b);
+    return NULL;
+  }
+
   return b;
 }
 
@@ -171,6 +179,13 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   int *allIndexes;
   int currentVert = 0;
   int currentIndex = 0;
+  bspbrush_t *hulls_list = NULL;
+  int numHulls = 0;
+
+  if (num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS) {
+    _printf("WARNING: MAX_CLIP_ENTITY_GROUPS reached\n");
+    return;
+  }
 
   // Reset per-model degenerate counters
   c_degenerate_triangles = 0;
@@ -248,20 +263,55 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
 
   _printf("CoACD generated %i convex hulls.\n", (int)hulls.meshes_count);
 
-  // Step 4: Convert hulls to bspbrushes and attach to instance
+  // Step 4: Convert hulls to bspbrushes
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   for (j = 0; j < (int)hulls.meshes_count; j++) {
     bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[j], caulk);
     if (b) {
-      b->next = inst->collisionBrushes;
-      inst->collisionBrushes = b;
+      b->next = hulls_list;
+      hulls_list = b;
+      numHulls++;
     }
   }
 
-  // Step 5: Per-model reporting
-  _printf("Instance %s: Converted to %i BSP brushes.\n", inst->modelName,
-          CountBrushList(inst->collisionBrushes));
+  // Step 5: Populate clip entity group
+  if (hulls_list) {
+    clip_entity_group_t *group = &clip_entity_groups[num_clip_entity_groups++];
 
+    // Create a local entity (not part of the map entities yet)
+    entity_t *ent = malloc(sizeof(entity_t));
+    memset(ent, 0, sizeof(entity_t));
+    ent->epairs = malloc(sizeof(epair_t));
+    memset(ent->epairs, 0, sizeof(epair_t));
+    ent->epairs->key = strdup("classname");
+    ent->epairs->value = strdup("func_static");
+    ent->brushes = hulls_list;
+
+    group->entity = ent;
+    group->numBrushes = numHulls;
+
+    // Calculate bounds
+    ClearBounds(group->mins, group->maxs);
+    for (bspbrush_t *b = hulls_list; b; b = b->next) {
+      AddPointToBounds(b->mins, group->mins, group->maxs);
+      AddPointToBounds(b->maxs, group->mins, group->maxs);
+    }
+
+    // Calculate brush density
+    vec3_t size;
+    VectorSubtract(group->maxs, group->mins, size);
+    float volume = size[0] * size[1] * size[2];
+    if (volume > 1.0f) {
+      group->brush_density = (float)numHulls / volume;
+    } else {
+      group->brush_density = 0;
+    }
+
+    _printf("Instance %s: Created clip group with %i brushes, density %e\n",
+            inst->modelName, numHulls, group->brush_density);
+  }
+
+  // Step 6: Per-model reporting
   if (c_degenerate_triangles > 0 || c_degenerate_hulls > 0) {
     _printf("Instance %s: Degenerate geometry skipped: %i triangles, %i hulls\n",
             inst->modelName, c_degenerate_triangles, c_degenerate_hulls);
@@ -274,6 +324,73 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
 }
 
 /*
+==================
+WriteCollisionMap
+==================
+*/
+static void WriteCollisionMap(const char *name) {
+  FILE *f;
+  int i, j;
+  side_t *s;
+  winding_t *w;
+  clip_entity_group_t *group;
+
+  _printf("Writing diagnostic map: %s\n", name);
+  f = fopen(name, "wb");
+  if (!f) {
+    Error("Can't write %s", name);
+  }
+
+  // Worldspawn (empty or placeholder)
+  fprintf(f, "{\n\"classname\" \"worldspawn\"\n}\n");
+
+  for (i = 0; i < num_clip_entity_groups; i++) {
+    group = &clip_entity_groups[i];
+    if (!group->entity || !group->entity->brushes) {
+      continue;
+    }
+
+    fprintf(f, "{\n");
+    // Write entity epairs
+    for (epair_t *ep = group->entity->epairs; ep; ep = ep->next) {
+      if (ep->key && ep->value) {
+        fprintf(f, "\"%s\" \"%s\"\n", ep->key, ep->value);
+      }
+    }
+
+    // Write entity brushes
+    for (bspbrush_t *b = group->entity->brushes; b; b = b->next) {
+      fprintf(f, "{\n");
+      for (j = 0; j < b->numsides; j++) {
+        s = &b->sides[j];
+        w = s->winding;
+        if (!w || w->numpoints < 3) {
+          continue;
+        }
+
+        // Write points in CW order (0, 2, 1) to define plane pointing OUT
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
+
+        const char *shader = "textures/common/caulk";
+        if (s->shaderInfo) {
+          shader = s->shaderInfo->shader;
+        }
+        if (!Q_strncasecmp(shader, "textures/", 9)) {
+          shader += 9;
+        }
+        fprintf(f, "%s 0 0 0 1 1\n", shader);
+      }
+      fprintf(f, "}\n");
+    }
+    fprintf(f, "}\n");
+  }
+
+  fclose(f);
+}
+
+/*
 ====================
 CreateTriangleModelCollision
 
@@ -283,7 +400,6 @@ Generates collision brushes from model geometry using CoACD (per-instance pass).
 void CreateTriangleModelCollision(void) {
   int i;
   modelInstance_t *inst;
-  bspbrush_t *allCollisionBrushes = NULL;
   qboolean hasSolid = qfalse;
 
   _printf("----- CreateTriangleModelCollision -----\n");
@@ -307,6 +423,9 @@ void CreateTriangleModelCollision(void) {
     return;
   }
 
+  // Reset groups
+  num_clip_entity_groups = 0;
+
   // Step 2: Decomposition and Categorization Pass (per instance)
   for (i = 0; i < numModelInstances; i++) {
     inst = &modelInstances[i];
@@ -315,28 +434,8 @@ void CreateTriangleModelCollision(void) {
   }
 
   if (WRITE_COLLISION_MAP) {
-    // Collect all instance brushes for diagnostic map
-    for (i = 0; i < numModelInstances; i++) {
-      inst = &modelInstances[i];
-      if (inst->collisionBrushes) {
-        bspbrush_t *last = inst->collisionBrushes;
-        while (last->next) {
-          last = last->next;
-        }
-        last->next = allCollisionBrushes;
-        allCollisionBrushes = inst->collisionBrushes;
-      }
-    }
-
-    // Step 4: Diagnostic visualization
-    if (allCollisionBrushes) {
-      char debugName[1024];
-      sprintf(debugName, "%s_collision.map", source);
-      _printf("Writing diagnostic map: %s\n", debugName);
-      WriteBspBrushMap(debugName, allCollisionBrushes);
-
-      // We should probably detach them again if we don't want to pollute allCollisionBrushes,
-      // but since this is the end of the function and allCollisionBrushes is local, it's fine.
-    }
+    char debugName[1024];
+    sprintf(debugName, "%s_collision.map", source);
+    WriteCollisionMap(debugName);
   }
 }
