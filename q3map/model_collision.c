@@ -11,6 +11,8 @@ This file is part of Quake III Arena source code.
 #include "../libs/coacd_api.h"
 #include "qbsp.h"
 
+#define WRITE_COLLISION_MAP qtrue
+
 #define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
 
 #define MAX_FUNC_CLIPS 16       // Max number of func_static groups
@@ -312,24 +314,29 @@ void CreateTriangleModelCollision(void) {
     DecomposeModelCollision(inst);
   }
 
-  // Step 3: Collect all instance brushes for diagnostic map
-  for (i = 0; i < numModelInstances; i++) {
-    inst = &modelInstances[i];
-    if (inst->collisionBrushes) {
-      bspbrush_t *last = inst->collisionBrushes;
-      while (last->next) {
-        last = last->next;
+  if (WRITE_COLLISION_MAP) {
+    // Collect all instance brushes for diagnostic map
+    for (i = 0; i < numModelInstances; i++) {
+      inst = &modelInstances[i];
+      if (inst->collisionBrushes) {
+        bspbrush_t *last = inst->collisionBrushes;
+        while (last->next) {
+          last = last->next;
+        }
+        last->next = allCollisionBrushes;
+        allCollisionBrushes = inst->collisionBrushes;
       }
-      last->next = allCollisionBrushes;
-      allCollisionBrushes = inst->collisionBrushes;
     }
-  }
 
-  // Step 4: Diagnostic visualization
-  if (allCollisionBrushes) {
-    char debugName[1024];
-    sprintf(debugName, "%s_collision.map", source);
-    _printf("Writing diagnostic map: %s\n", debugName);
-    WriteBspBrushMap(debugName, allCollisionBrushes);
+    // Step 4: Diagnostic visualization
+    if (allCollisionBrushes) {
+      char debugName[1024];
+      sprintf(debugName, "%s_collision.map", source);
+      _printf("Writing diagnostic map: %s\n", debugName);
+      WriteBspBrushMap(debugName, allCollisionBrushes);
+
+      // We should probably detach them again if we don't want to pollute allCollisionBrushes,
+      // but since this is the end of the function and allCollisionBrushes is local, it's fine.
+    }
   }
 }

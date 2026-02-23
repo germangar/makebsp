@@ -74,6 +74,9 @@ void ProcessWorldModel(void) {
   // check for patches with adjacent edges that need to LOD together
   PatchMapDrawSurfs(e);
 
+  // loading pass for misc_models (bakes transformations)
+  LoadTriangleModels();
+
   // build an initial bsp tree using all of the sides
   // of all of the structural brushes
   faces = MakeStructuralBspFaceList(entities[0].brushes);
@@ -126,14 +129,11 @@ void ProcessWorldModel(void) {
   }
   FloodAreas(tree);
 
-  // add references to the detail brushes
-  FilterDetailBrushesIntoTree(e, tree);
-
-  // loading pass for misc_models (bakes transformations)
-  LoadTriangleModels();
-
   // Create collision brushes for triangle models
   CreateTriangleModelCollision();
+
+  // add references to the detail brushes
+  FilterDetailBrushesIntoTree(e, tree);
 
   // create drawsurfs for triangle models
   AddTriangleModels(tree);
