@@ -33,6 +33,73 @@ int c_degenerate_hulls = 0;
 
 
 /*
+==================
+WriteCollisionMap
+==================
+*/
+static void WriteCollisionMap(const char *name) {
+  FILE *f;
+  int i, j;
+  side_t *s;
+  winding_t *w;
+  clip_entity_group_t *group;
+
+  _printf("Writing diagnostic map: %s\n", name);
+  f = fopen(name, "wb");
+  if (!f) {
+    Error("Can't write %s", name);
+  }
+
+  // Worldspawn (empty or placeholder)
+  fprintf(f, "{\n\"classname\" \"worldspawn\"\n}\n");
+
+  for (i = 0; i < num_clip_entity_groups; i++) {
+    group = &clip_entity_groups[i];
+    if (!group->entity || !group->entity->brushes) {
+      continue;
+    }
+
+    fprintf(f, "{\n");
+    // Write entity epairs
+    for (epair_t *ep = group->entity->epairs; ep; ep = ep->next) {
+      if (ep->key && ep->value) {
+        fprintf(f, "\"%s\" \"%s\"\n", ep->key, ep->value);
+      }
+    }
+
+    // Write entity brushes
+    for (bspbrush_t *b = group->entity->brushes; b; b = b->next) {
+      fprintf(f, "{\n");
+      for (j = 0; j < b->numsides; j++) {
+        s = &b->sides[j];
+        w = s->winding;
+        if (!w || w->numpoints < 3) {
+          continue;
+        }
+
+        // Write points in CW order (0, 2, 1) to define plane pointing OUT
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
+
+        const char *shader = "textures/common/caulk";
+        if (s->shaderInfo) {
+          shader = s->shaderInfo->shader;
+        }
+        if (!Q_strncasecmp(shader, "textures/", 9)) {
+          shader += 9;
+        }
+        fprintf(f, "%s 0 0 0 1 1\n", shader);
+      }
+      fprintf(f, "}\n");
+    }
+    fprintf(f, "}\n");
+  }
+
+  fclose(f);
+}
+
+/*
 ====================
 BrushFromMesh
 
@@ -321,73 +388,6 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   CoACD_freeMeshArray(hulls);
   free(allVerts);
   free(allIndexes);
-}
-
-/*
-==================
-WriteCollisionMap
-==================
-*/
-static void WriteCollisionMap(const char *name) {
-  FILE *f;
-  int i, j;
-  side_t *s;
-  winding_t *w;
-  clip_entity_group_t *group;
-
-  _printf("Writing diagnostic map: %s\n", name);
-  f = fopen(name, "wb");
-  if (!f) {
-    Error("Can't write %s", name);
-  }
-
-  // Worldspawn (empty or placeholder)
-  fprintf(f, "{\n\"classname\" \"worldspawn\"\n}\n");
-
-  for (i = 0; i < num_clip_entity_groups; i++) {
-    group = &clip_entity_groups[i];
-    if (!group->entity || !group->entity->brushes) {
-      continue;
-    }
-
-    fprintf(f, "{\n");
-    // Write entity epairs
-    for (epair_t *ep = group->entity->epairs; ep; ep = ep->next) {
-      if (ep->key && ep->value) {
-        fprintf(f, "\"%s\" \"%s\"\n", ep->key, ep->value);
-      }
-    }
-
-    // Write entity brushes
-    for (bspbrush_t *b = group->entity->brushes; b; b = b->next) {
-      fprintf(f, "{\n");
-      for (j = 0; j < b->numsides; j++) {
-        s = &b->sides[j];
-        w = s->winding;
-        if (!w || w->numpoints < 3) {
-          continue;
-        }
-
-        // Write points in CW order (0, 2, 1) to define plane pointing OUT
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
-
-        const char *shader = "textures/common/caulk";
-        if (s->shaderInfo) {
-          shader = s->shaderInfo->shader;
-        }
-        if (!Q_strncasecmp(shader, "textures/", 9)) {
-          shader += 9;
-        }
-        fprintf(f, "%s 0 0 0 1 1\n", shader);
-      }
-      fprintf(f, "}\n");
-    }
-    fprintf(f, "}\n");
-  }
-
-  fclose(f);
 }
 
 /*
