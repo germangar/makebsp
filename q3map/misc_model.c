@@ -232,6 +232,7 @@ void LoadTriangleModels(void) {
       modelInstance_t *inst = &modelInstances[numModelInstances++];
       strncpy(inst->modelName, model, MAX_QPATH - 1);
       inst->modelName[MAX_QPATH - 1] = '\0';
+      inst->creator = entity;
 
       if (modelsInfoFile) {
         fprintf(modelsInfoFile, "Entity %i (Model: %s) {\n", entity_num, model);

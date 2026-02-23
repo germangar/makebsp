@@ -420,9 +420,9 @@ tree_t *FaceBSP(bspface_t *list);
 typedef struct modelInstance_s {
   char modelName[MAX_QPATH];
   int numDrawSurfs;
-  mapDrawSurface_t *
-      *drawSurfs; // References to surfaces created for this instance
-  // Future: bspbrush_t *collisionBrushes;
+  mapDrawSurface_t **drawSurfs; // References to surfaces created for this instance
+  entity_t *creator;            // Reference to the entity that created this instance
+  struct bspbrush_s *collisionBrushes;
 } modelInstance_t;
 
 extern int c_triangleModels;

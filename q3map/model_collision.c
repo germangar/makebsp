@@ -144,14 +144,24 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
 
 /*
 ====================
-CreateTriangleModelCollision
+CategorizeModel
 
-Generates collision brushes from aggregated model geometry using CoACD.
+Reserved for future entity-specific classification for CoACD.
 ====================
 */
-void CreateTriangleModelCollision(void) {
-  int i, j, k;
-  modelInstance_t *inst;
+static void CategorizeModel(modelInstance_t *inst) {
+  // Shell for future entity-based classification (e.g., checking epairs)
+}
+
+/*
+====================
+DecomposeModelCollision
+
+Aggregates solid geometry for one instance, runs CoACD, and converts results to brushes.
+====================
+*/
+static void DecomposeModelCollision(modelInstance_t *inst) {
+  int j, k;
   mapDrawSurface_t *ds;
   int totalVerts = 0;
   int totalIndexes = 0;
@@ -159,119 +169,167 @@ void CreateTriangleModelCollision(void) {
   int *allIndexes;
   int currentVert = 0;
   int currentIndex = 0;
-  bspbrush_t *allCollisionBrushes = NULL;
 
-  _printf("----- CreateTriangleModelCollision -----\n");
+  // Reset per-model degenerate counters
+  c_degenerate_triangles = 0;
+  c_degenerate_hulls = 0;
 
-  // Step 1: Count total solid vertices and indices
-  for (i = 0; i < numModelInstances; i++) {
-    inst = &modelInstances[i];
-    for (j = 0; j < inst->numDrawSurfs; j++) {
-      ds = inst->drawSurfs[j];
-      if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
-        continue;
-      }
-      totalVerts += ds->numVerts;
-      totalIndexes += ds->numIndexes;
+  // Step 1: Count solid vertices and indices for this instance
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
+      continue;
     }
+    totalVerts += ds->numVerts;
+    totalIndexes += ds->numIndexes;
   }
 
   if (totalVerts == 0) {
-    _printf("No solid model geometry found for collision.\n");
     return;
   }
 
-  _printf("Aggregating %i vertices and %i indices...\n", totalVerts,
-          totalIndexes);
+  _printf("Instance %s: Aggregating %i vertices and %i indices...\n",
+          inst->modelName, totalVerts, totalIndexes);
 
   // Step 2: Allocate and fill buffers
   allVerts = malloc(totalVerts * 3 * sizeof(double));
   allIndexes = malloc(totalIndexes * sizeof(int));
 
-  for (i = 0; i < numModelInstances; i++) {
-    inst = &modelInstances[i];
-    for (j = 0; j < inst->numDrawSurfs; j++) {
-      ds = inst->drawSurfs[j];
-      if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
-        continue;
-      }
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
+      continue;
+    }
 
-      int startVert = currentVert;
-      for (k = 0; k < ds->numVerts; k++) {
-        allVerts[currentVert * 3 + 0] = ds->verts[k].xyz[0];
-        allVerts[currentVert * 3 + 1] = ds->verts[k].xyz[1];
-        allVerts[currentVert * 3 + 2] = ds->verts[k].xyz[2];
-        currentVert++;
-      }
+    int startVert = currentVert;
+    for (k = 0; k < ds->numVerts; k++) {
+      allVerts[currentVert * 3 + 0] = ds->verts[k].xyz[0];
+      allVerts[currentVert * 3 + 1] = ds->verts[k].xyz[1];
+      allVerts[currentVert * 3 + 2] = ds->verts[k].xyz[2];
+      currentVert++;
+    }
 
-      for (k = 0; k < ds->numIndexes; k++) {
-        allIndexes[currentIndex++] = startVert + ds->indexes[k];
-      }
+    for (k = 0; k < ds->numIndexes; k++) {
+      allIndexes[currentIndex++] = startVert + ds->indexes[k];
     }
   }
 
-  // Step 3: Run CoACD
+  // Step 3: Run CoACD for this instance
   CoACD_Mesh input;
   input.vertices_ptr = allVerts;
   input.vertices_count = totalVerts;
   input.triangles_ptr = allIndexes;
   input.triangles_count = totalIndexes / 3;
 
-  _printf("Running CoACD decomposition (threshold=0.05, preprocess=auto)...\n");
+  _printf("Running CoACD decomposition for instance %s...\n", inst->modelName);
   fflush(stdout);
 
-  CoACD_MeshArray hulls = CoACD_run(&input,
-                                    0.2, // threshold
-                                    -1,   // max_convex_hull
-                                    COACD_PREPROCESS_AUTO,
-                                    50,           // prep_resolution
-                                    2000,         // sample_resolution
-                                    20,           // mcts_nodes
-                                    100,          // mcts_iteration
-                                    3,            // mcts_max_depth
-                                    false,        // pca
-                                    true,         // merge
-                                    true,         // decimate
-                                    (int)(totalVerts * 0.9), // max_ch_vertex
-                                    false,        // extrude
-                                    0.01,         // extrude_margin
-                                    COACD_APX_CH, // apx_mode
-                                    1234          // seed
-  );
+  CoACD_MeshArray hulls =
+      CoACD_run(&input,
+                0.2, // threshold
+                -1,  // max_convex_hull
+                COACD_PREPROCESS_AUTO,
+                50,                      // prep_resolution
+                2000,                    // sample_resolution
+                20,                      // mcts_nodes
+                100,                     // mcts_iteration
+                3,                       // mcts_max_depth
+                false,                   // pca
+                true,                    // merge
+                true,                    // decimate
+                (int)(totalVerts * 0.9), // max_ch_vertex
+                false,                   // extrude
+                0.01,                    // extrude_margin
+                COACD_APX_CH,            // apx_mode
+                1234                     // seed
+      );
 
   _printf("CoACD generated %i convex hulls.\n", (int)hulls.meshes_count);
 
+  // Step 4: Convert hulls to bspbrushes and attach to instance
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
-  // Step 4: Convert hulls to bspbrushes
-  for (i = 0; i < hulls.meshes_count; i++) {
-    _printf("Converting hull %i/%i...\n", i + 1, (int)hulls.meshes_count);
-    bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[i], caulk);
+  for (j = 0; j < (int)hulls.meshes_count; j++) {
+    bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[j], caulk);
     if (b) {
-      b->next = allCollisionBrushes;
-      allCollisionBrushes = b;
+      b->next = inst->collisionBrushes;
+      inst->collisionBrushes = b;
     }
   }
 
-  _printf("Converted to %i BSP brushes.\n",
-          CountBrushList(allCollisionBrushes));
+  // Step 5: Per-model reporting
+  _printf("Instance %s: Converted to %i BSP brushes.\n", inst->modelName,
+          CountBrushList(inst->collisionBrushes));
 
   if (c_degenerate_triangles > 0 || c_degenerate_hulls > 0) {
-    _printf("Degenerate geometry skipped: %i triangles, %i hulls\n",
-            c_degenerate_triangles, c_degenerate_hulls);
-  }
-
-  // Step 5: Diagnostic visualization
-  if (allCollisionBrushes) {
-    char debugName[1024];
-    sprintf(debugName, "%s_collision.map", source);
-    _printf("Writing diagnostic map: %s\n", debugName);
-    WriteBspBrushMap(debugName, allCollisionBrushes);
+    _printf("Instance %s: Degenerate geometry skipped: %i triangles, %i hulls\n",
+            inst->modelName, c_degenerate_triangles, c_degenerate_hulls);
   }
 
   // Cleanup
   CoACD_freeMeshArray(hulls);
   free(allVerts);
   free(allIndexes);
+}
 
-  // TODO: Classification and linkage to entities
+/*
+====================
+CreateTriangleModelCollision
+
+Generates collision brushes from model geometry using CoACD (per-instance pass).
+====================
+*/
+void CreateTriangleModelCollision(void) {
+  int i;
+  modelInstance_t *inst;
+  bspbrush_t *allCollisionBrushes = NULL;
+  qboolean hasSolid = qfalse;
+
+  _printf("----- CreateTriangleModelCollision -----\n");
+
+  // Step 1: Quick check for any solid geometry (optimization)
+  for (i = 0; i < numModelInstances; i++) {
+    inst = &modelInstances[i];
+    for (int j = 0; j < inst->numDrawSurfs; j++) {
+      if (inst->drawSurfs[j]->shaderInfo &&
+          (inst->drawSurfs[j]->shaderInfo->contents & CONTENTS_SOLID)) {
+        hasSolid = qtrue;
+        break;
+      }
+    }
+    if (hasSolid)
+      break;
+  }
+
+  if (!hasSolid) {
+    _printf("No solid model geometry found for collision.\n");
+    return;
+  }
+
+  // Step 2: Decomposition and Categorization Pass (per instance)
+  for (i = 0; i < numModelInstances; i++) {
+    inst = &modelInstances[i];
+    CategorizeModel(inst);
+    DecomposeModelCollision(inst);
+  }
+
+  // Step 3: Collect all instance brushes for diagnostic map
+  for (i = 0; i < numModelInstances; i++) {
+    inst = &modelInstances[i];
+    if (inst->collisionBrushes) {
+      bspbrush_t *last = inst->collisionBrushes;
+      while (last->next) {
+        last = last->next;
+      }
+      last->next = allCollisionBrushes;
+      allCollisionBrushes = inst->collisionBrushes;
+    }
+  }
+
+  // Step 4: Diagnostic visualization
+  if (allCollisionBrushes) {
+    char debugName[1024];
+    sprintf(debugName, "%s_collision.map", source);
+    _printf("Writing diagnostic map: %s\n", debugName);
+    WriteBspBrushMap(debugName, allCollisionBrushes);
+  }
 }
