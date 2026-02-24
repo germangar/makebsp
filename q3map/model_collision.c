@@ -16,8 +16,8 @@ This file is part of Quake III Arena source code.
 #define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
 
 #define MAX_FUNC_CLIPS 16       // Max number of func_static groups
-#define MAX_CLIP_ENTITY_GROUPS                                                 \
-  MAX_MODEL_INSTANCES // Max number of clip entity groups
+#define MIN_FUNC_CLIP_DENSITY 0.000001 // Minimum density for a func_static group
+#define MAX_CLIP_ENTITY_GROUPS MAX_MODEL_INSTANCES // Max number of clip entity groups
 typedef struct {
   entity_t *entity;
   float brush_density;
@@ -27,6 +27,30 @@ typedef struct {
 
 clip_entity_group_t clip_entity_groups[MAX_CLIP_ENTITY_GROUPS];
 int num_clip_entity_groups = 0;
+
+typedef enum {
+  MC_NONE,
+  MC_OBJECT,
+  MC_WALKABLE,
+  MC_FULL,
+  MC_SHELL
+} modelCategory_t;
+
+const char *CategoryString(modelCategory_t cat) {
+  switch (cat) {
+  case MC_WALKABLE:
+    return "WALKABLE";
+  case MC_FULL:
+    return "FULL";
+  case MC_SHELL:
+    return "SHELL";
+  case MC_OBJECT:
+    return "OBJECT";
+  case MC_NONE:
+  default:
+    return "NONE";
+  }
+}
 
 int c_degenerate_triangles = 0;
 int c_degenerate_hulls = 0;
@@ -97,6 +121,142 @@ static void WriteCollisionMap(const char *name) {
   }
 
   fclose(f);
+}
+
+/*
+==================
+CompareDensity
+
+QSort comparison function
+==================
+*/
+static int CompareDensity(const void *a, const void *b) {
+  const clip_entity_group_t *ga = (const clip_entity_group_t *)a;
+  const clip_entity_group_t *gb = (const clip_entity_group_t *)b;
+
+  if (ga->brush_density > gb->brush_density)
+    return -1;
+  if (ga->brush_density < gb->brush_density)
+    return 1;
+  return 0;
+}
+
+/*
+==================
+PrepareClipEntityGroups
+
+Sorts groups by density, merges overflow into a func_group,
+and assigns model numbers to the top ones.
+==================
+*/
+static void PrepareClipEntityGroups(void) {
+  int i;
+  int models;
+  char value[32];
+
+  if (num_clip_entity_groups <= 0) {
+    return;
+  }
+
+  _printf("----- PrepareClipEntityGroups -----\n");
+
+  // Step 1: Figure out the next available model number
+  // Submodels start at *1 and go up for each map entity with brushes.
+  models = 1;
+  for (i = 1; i < num_entities; i++) {
+    if (entities[i].brushes || entities[i].patches) {
+      models++;
+    }
+  }
+  _printf("Existing map models: %i. Starting clip models at *%i\n", models - 1,
+          models);
+
+  // Step 2: Sort by density (descending)
+  qsort(clip_entity_groups, num_clip_entity_groups, sizeof(clip_entity_group_t),
+        CompareDensity);
+
+  // Step 3: Identify the split point for overflow or low density
+  int splitPoint = num_clip_entity_groups;
+
+  // First check: density-based filtering
+  for (i = 0; i < num_clip_entity_groups; i++) {
+    if (clip_entity_groups[i].brush_density < MIN_FUNC_CLIP_DENSITY) {
+      splitPoint = i;
+      break;
+    }
+  }
+
+  // Second check: limit to MAX_FUNC_CLIPS
+  if (splitPoint > MAX_FUNC_CLIPS) {
+    splitPoint = MAX_FUNC_CLIPS;
+  }
+
+  // Step 4: Merge overflow/low-density groups into a single func_group
+  if (splitPoint < num_clip_entity_groups) {
+    _printf("Merging %i groups (overflow or low density) into a single func_group\n",
+            num_clip_entity_groups - splitPoint);
+
+    clip_entity_group_t *merged = &clip_entity_groups[splitPoint];
+    entity_t *groupEnt = malloc(sizeof(entity_t));
+    memset(groupEnt, 0, sizeof(entity_t));
+    SetKeyValue(groupEnt, "classname", "func_group");
+
+    ClearBounds(merged->mins, merged->maxs);
+    merged->numBrushes = 0;
+
+    for (i = splitPoint; i < num_clip_entity_groups; i++) {
+      clip_entity_group_t *g = &clip_entity_groups[i];
+      if (g->entity && g->entity->brushes) {
+        bspbrush_t *b = g->entity->brushes;
+        while (b->next) {
+          b = b->next;
+        }
+        b->next = groupEnt->brushes;
+        groupEnt->brushes = g->entity->brushes;
+
+        AddPointToBounds(g->mins, merged->mins, merged->maxs);
+        AddPointToBounds(g->maxs, merged->mins, merged->maxs);
+        merged->numBrushes += g->numBrushes;
+
+        // Cleanup the orphaned local entity (epairs and brushes are handled)
+        g->entity->brushes = NULL; // Brushes moved, don't free them
+        // Free epairs
+        epair_t *next_ep;
+        for (epair_t *curr_ep = g->entity->epairs; curr_ep; curr_ep = next_ep) {
+          next_ep = curr_ep->next;
+          free(curr_ep->key);
+          free(curr_ep->value);
+          free(curr_ep);
+        }
+        free(g->entity);
+      }
+    }
+
+    merged->entity = groupEnt;
+    num_clip_entity_groups = splitPoint + 1;
+  }
+
+  // Step 4: Assign model numbers to the remaining func_static entities
+  for (i = 0; i < num_clip_entity_groups; i++) {
+    clip_entity_group_t *g = &clip_entity_groups[i];
+    const char *cls = ValueForKey(g->entity, "classname");
+
+    if (!Q_stricmp(cls, "func_static")) {
+      sprintf(value, "*%i", models++);
+      SetKeyValue(g->entity, "model", value);
+    }
+
+    // Add metadata
+    if (!Q_stricmp(cls, "func_static")) {
+      sprintf(value, "%.8f", g->brush_density);
+      SetKeyValue(g->entity, "density", value);
+    }
+
+    if (!Q_stricmp(cls, "func_static") || !Q_stricmp(cls, "func_group")) {
+      sprintf(value, "%i", g->numBrushes);
+      SetKeyValue(g->entity, "brushcount", value);
+    }
+  }
 }
 
 /*
@@ -226,8 +386,110 @@ CategorizeModel
 Reserved for future entity-specific classification for CoACD.
 ====================
 */
-static void CategorizeModel(modelInstance_t *inst) {
-  // Shell for future entity-based classification (e.g., checking epairs)
+static modelCategory_t CategorizeModel(modelInstance_t *inst) {
+  int j, k;
+  mapDrawSurface_t *ds;
+  vec3_t mins, maxs, centroid;
+  float totalArea = 0;
+  float groundArea = 0;
+  float inwardArea = 0;
+  float outwardArea = 0;
+  int totalVerts = 0;
+
+  ClearBounds(mins, maxs);
+  VectorClear(centroid);
+
+  // Pass 1: AABB and Centroid
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
+      continue;
+    }
+    for (k = 0; k < ds->numVerts; k++) {
+      AddPointToBounds(ds->verts[k].xyz, mins, maxs);
+      VectorAdd(centroid, ds->verts[k].xyz, centroid);
+      totalVerts++;
+    }
+  }
+
+  if (totalVerts == 0) {
+    return MC_NONE;
+  }
+
+  VectorScale(centroid, 1.0f / totalVerts, centroid);
+
+  // Pass 2: Orientation and Ground heuristics
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
+      continue;
+    }
+
+    for (k = 0; k < ds->numIndexes; k += 3) {
+      vec3_t v[3], edge1, edge2, normal, center;
+      VectorCopy(ds->verts[ds->indexes[k + 0]].xyz, v[0]);
+      VectorCopy(ds->verts[ds->indexes[k + 1]].xyz, v[1]);
+      VectorCopy(ds->verts[ds->indexes[k + 2]].xyz, v[2]);
+
+      VectorSubtract(v[2], v[0], edge1);
+      VectorSubtract(v[1], v[0], edge2);
+      CrossProduct(edge1, edge2, normal);
+      float area = VectorLength(normal) * 0.5f;
+      if (area < 0.001f)
+        continue;
+
+      VectorNormalize(normal, normal);
+
+      // Ground detect
+      if (normal[2] > 0.7f) {
+        groundArea += area;
+      }
+
+      // Orientation (Centroid Dot Product)
+      VectorAdd(v[0], v[1], center);
+      VectorAdd(center, v[2], center);
+      VectorScale(center, 1.0f / 3.0f, center);
+
+      vec3_t fromCentroid;
+      VectorSubtract(center, centroid, fromCentroid);
+      if (DotProduct(normal, fromCentroid) > 0) {
+        outwardArea += area;
+      } else {
+        inwardArea += area;
+      }
+
+      totalArea += area;
+    }
+  }
+
+  if (totalArea < 1.0f) {
+    return MC_NONE;
+  }
+
+  float groundRatio = groundArea / totalArea;
+  float outwardRatio = outwardArea / totalArea;
+  float inwardRatio = inwardArea / totalArea;
+  float height = maxs[2] - mins[2];
+  qboolean isFlat = height < 8.0f;
+
+  modelCategory_t category = MC_OBJECT;
+
+  if (groundRatio > 0.3f || (isFlat && groundRatio > 0.15f)) {
+    category = MC_WALKABLE;
+  } else if (outwardRatio > 0.8f) {
+    category = MC_FULL;
+  } else if (inwardRatio > 0.8f) {
+    category = MC_SHELL;
+  }
+
+  _printf("Instance %s: Categorized as %s\n", inst->modelName,
+          CategoryString(category));
+  _printf("  Metrics: Area %.1f, Ground %.1f%%, Outward %.1f%%, Inward %.1f%%, "
+          "Height %.1f\n",
+          totalArea, groundRatio * 100.0f, outwardRatio * 100.0f,
+          inwardRatio * 100.0f, height);
+
+  return category;
 }
 
 /*
@@ -237,7 +499,7 @@ DecomposeModelCollision
 Aggregates solid geometry for one instance, runs CoACD, and converts results to brushes.
 ====================
 */
-static void DecomposeModelCollision(modelInstance_t *inst) {
+static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t category) {
   int j, k;
   mapDrawSurface_t *ds;
   int totalVerts = 0;
@@ -251,6 +513,25 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
 
   if (num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS) {
     _printf("WARNING: MAX_CLIP_ENTITY_GROUPS reached\n");
+    return;
+  }
+
+  float threshold;
+  switch (category) {
+  case MC_WALKABLE:
+    threshold = 0.1f;
+    break;
+  case MC_FULL:
+    threshold = 0.2f;
+    break;
+  case MC_SHELL:
+    threshold = 0.2f;
+    break;
+  case MC_OBJECT:
+  default:
+    threshold = 0.05f;
+    break;
+  case MC_NONE:
     return;
   }
 
@@ -310,7 +591,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
 
   CoACD_MeshArray hulls =
       CoACD_run(&input,
-                0.2, // threshold
+                threshold, // threshold
                 -1,  // max_convex_hull
                 COACD_PREPROCESS_AUTO,
                 50,                      // prep_resolution
@@ -348,10 +629,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     // Create a local entity (not part of the map entities yet)
     entity_t *ent = malloc(sizeof(entity_t));
     memset(ent, 0, sizeof(entity_t));
-    ent->epairs = malloc(sizeof(epair_t));
-    memset(ent->epairs, 0, sizeof(epair_t));
-    ent->epairs->key = strdup("classname");
-    ent->epairs->value = strdup("func_static");
+    SetKeyValue(ent, "classname", "func_static");
     ent->brushes = hulls_list;
 
     group->entity = ent;
@@ -429,9 +707,14 @@ void CreateTriangleModelCollision(void) {
   // Step 2: Decomposition and Categorization Pass (per instance)
   for (i = 0; i < numModelInstances; i++) {
     inst = &modelInstances[i];
-    CategorizeModel(inst);
-    DecomposeModelCollision(inst);
+    modelCategory_t category = CategorizeModel(inst);
+    if (category != MC_NONE) {
+      DecomposeModelCollision(inst, category);
+    }
   }
+
+  // Step 3: Preparation pass
+  PrepareClipEntityGroups();
 
   if (WRITE_COLLISION_MAP) {
     char debugName[1024];

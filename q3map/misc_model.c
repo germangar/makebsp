@@ -69,6 +69,8 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
   if (!Q_stricmp(ext, "obj")) {
     if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
         aiReturn_SUCCESS) {
+      _printf("      obj $tex.file: %s\n", path.data);
+      fflush(stdout);
       strncpy(shaderName, path.data, MAX_QPATH - 1);
       shaderName[MAX_QPATH - 1] = '\0';
       StripExtension(shaderName);
@@ -77,9 +79,13 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
   }
 
   if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS) {
+    _printf("      AI_MATKEY_NAME: %s\n", matName.data);
+    fflush(stdout);
     strncpy(shaderName, matName.data, MAX_QPATH - 1);
     shaderName[MAX_QPATH - 1] = '\0';
   } else {
+    _printf("      Using default shader\n");
+    fflush(stdout);
     strcpy(shaderName, "default");
   }
 }
@@ -256,17 +262,18 @@ void LoadTriangleModels(void) {
         struct aiMesh *mesh = scene->mMeshes[i];
         char shaderName[MAX_QPATH];
 
-        ShaderForMesh(model, mesh, scene, shaderName);
+    ShaderForMesh(model, mesh, scene, shaderName);
 
-        mapDrawSurface_t *ds = AllocDrawSurf();
-        inst->drawSurfs[i] = ds;
-        memset(ds, 0, sizeof(*ds));
-        ds->miscModel = qtrue;
-        ds->planeNum = -1;
-        ds->shaderInfo = ShaderInfoForShader(shaderName);
+    mapDrawSurface_t *ds = AllocDrawSurf();
+    inst->drawSurfs[i] = ds;
+    memset(ds, 0, sizeof(*ds));
+    ds->miscModel = qtrue;
+    ds->planeNum = -1;
 
-        ds->numVerts = mesh->mNumVertices;
-        ds->verts = malloc(sizeof(drawVert_t) * ds->numVerts);
+    ds->shaderInfo = ShaderInfoForShader(shaderName);
+
+    ds->numVerts = mesh->mNumVertices;
+    ds->verts = malloc(sizeof(drawVert_t) * ds->numVerts);
         if (!ds->verts)
           Error("Failed to allocate vertices");
 
@@ -363,6 +370,7 @@ void LoadTriangleModels(void) {
     fclose(modelsInfoFile);
     modelsInfoFile = NULL;
   }
+  _printf("----- LoadTriangleModels finished -----\n");
 }
 
 /*
