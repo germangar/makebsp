@@ -106,46 +106,54 @@ LoadShaderImage
 ===============
 */
 
-byte *LoadImageFile(char *filename, qboolean *bTGA) {
+#ifdef _WIN32
+void LoadJPGBuff(unsigned char *fbuffer, size_t nLen, unsigned char **pic,
+                 int *width, int *height);
+#endif
+
+int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA) {
   byte *buffer = NULL;
   int nLen = 0;
   *bTGA = qtrue;
+
   if (FileExists(filename)) {
-    LoadFileBlock(filename, (void **)&buffer);
+    nLen = LoadFileBlock(filename, (void **)&buffer);
   }
 #ifdef _WIN32
   else {
-    PakLoadAnyFile(filename, (void **)&buffer);
+    nLen = PakLoadAnyFile(filename, (void **)&buffer);
   }
 #endif
+
   if (buffer == NULL) {
     nLen = strlen(filename);
+    if (nLen < 4)
+      return 0;
     filename[nLen - 3] = 'j';
     filename[nLen - 2] = 'p';
     filename[nLen - 1] = 'g';
+
     if (FileExists(filename)) {
-      LoadFileBlock(filename, (void **)&buffer);
+      nLen = LoadFileBlock(filename, (void **)&buffer);
     }
 #ifdef _WIN32
     else {
-      PakLoadAnyFile(filename, (void **)&buffer);
+      nLen = PakLoadAnyFile(filename, (void **)&buffer);
     }
 #endif
+
     if (buffer) {
       *bTGA = qfalse;
     }
   }
-  return buffer;
+
+  *bufferptr = buffer;
+  return nLen;
 }
 
-/*
-===============
-LoadShaderImage
-===============
-*/
 static void LoadShaderImage(shaderInfo_t *si) {
   char filename[1024];
-  int i, count;
+  int i, count, nLen;
   float color[4];
   byte *buffer;
   qboolean bTGA = qtrue;
@@ -154,7 +162,7 @@ static void LoadShaderImage(shaderInfo_t *si) {
   if (si->lightimage[0]) {
     sprintf(filename, "%s%s", gamedir, si->lightimage);
     DefaultExtension(filename, ".tga");
-    buffer = LoadImageFile(filename, &bTGA);
+    nLen = LoadImageFile(filename, &buffer, &bTGA);
     if (buffer != NULL) {
       goto loadTga;
     }
@@ -164,7 +172,7 @@ static void LoadShaderImage(shaderInfo_t *si) {
   if (si->editorimage[0]) {
     sprintf(filename, "%s%s", gamedir, si->editorimage);
     DefaultExtension(filename, ".tga");
-    buffer = LoadImageFile(filename, &bTGA);
+    nLen = LoadImageFile(filename, &buffer, &bTGA);
     if (buffer != NULL) {
       goto loadTga;
     }
@@ -173,13 +181,13 @@ static void LoadShaderImage(shaderInfo_t *si) {
   // just try the shader name with a .tga
   // on unix, we have case sensitivity problems...
   sprintf(filename, "%s%s.tga", gamedir, si->shader);
-  buffer = LoadImageFile(filename, &bTGA);
+  nLen = LoadImageFile(filename, &buffer, &bTGA);
   if (buffer != NULL) {
     goto loadTga;
   }
 
   sprintf(filename, "%s%s.TGA", gamedir, si->shader);
-  buffer = LoadImageFile(filename, &bTGA);
+  nLen = LoadImageFile(filename, &buffer, &bTGA);
   if (buffer != NULL) {
     goto loadTga;
   }
@@ -196,13 +204,13 @@ static void LoadShaderImage(shaderInfo_t *si) {
   memset(si->pixels, 255, si->width * si->height * 4);
   return;
 
-  // load the image to get dimensions and color
+// load the image to get dimensions and color
 loadTga:
   if (bTGA) {
     LoadTGABuffer(buffer, &si->pixels, &si->width, &si->height);
   } else {
 #ifdef _WIN32
-    LoadJPGBuff(buffer, &si->pixels, &si->width, &si->height);
+    LoadJPGBuff(buffer, (size_t)nLen, &si->pixels, &si->width, &si->height);
 #endif
   }
 
@@ -233,11 +241,11 @@ static shaderInfo_t *AllocShaderInfo(void) {
   if (numShaderInfo == MAX_SURFACE_INFO) {
     Error("MAX_SURFACE_INFO");
   }
+
   si = &shaderInfo[numShaderInfo];
   numShaderInfo++;
 
   // set defaults
-
   si->contents = CONTENTS_SOLID;
 
   si->backsplashFraction = DEFAULT_BACKSPLASH_FRACTION;
