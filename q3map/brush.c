@@ -401,6 +401,12 @@ int FilterBrushIntoTree_r(bspbrush_t *b, node_t *node) {
 
   // add it to the leaf list
   if (node->planenum == PLANENUM_LEAF) {
+    // skip if detail inside solid
+    if (b->detail && node->opaque) {
+      FreeBrush(b);
+      return 0;
+    }
+
     b->next = node->brushlist;
     node->brushlist = b;
 
