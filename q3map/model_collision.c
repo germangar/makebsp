@@ -597,10 +597,9 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
       }
     }
     
+    CoACD_freeMeshArray(hulls);
     free(allVerts);
     free(allIndexes);
-    // hulls.meshes_ptr is managed by CoACD, but in our current glue we don't have an explicit free for it yet
-    // unless we added it to CoACD_MeshArray structure.
   } else {
     // Calculate Collision Per Mesh
     for (j = 0; j < inst->numDrawSurfs; j++) {
@@ -642,6 +641,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
         }
       }
 
+      CoACD_freeMeshArray(hulls);
       free(meshVerts);
       free(meshIndexes);
     }
