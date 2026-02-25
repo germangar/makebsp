@@ -96,15 +96,21 @@ static void WriteCollisionMap(const char *name) {
       fprintf(f, "{\n");
       for (j = 0; j < b->numsides; j++) {
         s = &b->sides[j];
-        w = s->winding;
-        if (!w || w->numpoints < 3) {
-          continue;
-        }
 
-        // Write points in CW order (0, 2, 1) to define plane pointing OUT
+        // Derive 3 export points directly from the plane equation.
+        // This ensures all faces are written even if CreateBrushWindings
+        // produced a NULL winding (e.g. due to plane snapping), and gives
+        // maximally precise plane definitions for the editor.
+        w = BaseWindingForPlane(mapplanes[s->planenum].normal,
+                                mapplanes[s->planenum].dist);
+
+        // BaseWindingForPlane produces CW from normal direction.
+        // Writing (0,1,2) gives correct outward normal via MapPlaneFromPoints.
         fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
         fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
+
+        FreeWinding(w);
 
         const char *shader = "textures/common/caulk";
         if (s->shaderInfo) {
@@ -319,7 +325,7 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
     // Deduplicate against existing planes in this brush
     for (j = 0; j < numUniquePlanes; j++) {
       if (uniquePlanes[j] == planenum) {
-        // If this triangle is significantly larger, use it for the .map points
+        // Track the largest triangle per plane (for fallback windings)
         if (area > maxPlaneArea[j]) {
           maxPlaneArea[j] = area;
           VectorCopy(p0, trianglePoints[j][0]);
@@ -337,7 +343,6 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
       }
       uniquePlanes[numUniquePlanes] = planenum;
       maxPlaneArea[numUniquePlanes] = area;
-      // Capture CCW triangle points (p0, p1, p2)
       VectorCopy(p0, trianglePoints[numUniquePlanes][0]);
       VectorCopy(p1, trianglePoints[numUniquePlanes][1]);
       VectorCopy(p2, trianglePoints[numUniquePlanes][2]);
@@ -358,22 +363,28 @@ bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
   for (i = 0; i < numUniquePlanes; i++) {
     b->sides[i].planenum = uniquePlanes[i];
     b->sides[i].shaderInfo = si;
-
-    // Create a 3-point winding for WriteBspBrushMap.
-    // Storing them as original CCW (p0, p1, p2).
-    // WriteBspBrushMap will flip them to CW (0, 2, 1).
-    b->sides[i].winding = AllocWinding(3);
-    b->sides[i].winding->numpoints = 3;
-    VectorCopy(trianglePoints[i][0], b->sides[i].winding->p[0]);
-    VectorCopy(trianglePoints[i][1], b->sides[i].winding->p[1]);
-    VectorCopy(trianglePoints[i][2], b->sides[i].winding->p[2]);
   }
 
-  // Calculate bounds from the 3-point windings
-  if (!BoundBrush(b)) {
-    c_degenerate_hulls++;
-    FreeBrush(b);
-    return NULL;
+  // Try full-polygon windings from plane intersections first.
+  // If that fails (e.g. plane snapping made faces degenerate),
+  // fall back to 3-point windings from the best CoACD triangles.
+  if (!CreateBrushWindings(b)) {
+    _printf("WARNING: CreateBrushWindings failed, using triangle fallback\n");
+    for (i = 0; i < numUniquePlanes; i++) {
+      if (b->sides[i].winding) {
+        FreeWinding(b->sides[i].winding);
+      }
+      b->sides[i].winding = AllocWinding(3);
+      b->sides[i].winding->numpoints = 3;
+      VectorCopy(trianglePoints[i][0], b->sides[i].winding->p[0]);
+      VectorCopy(trianglePoints[i][1], b->sides[i].winding->p[1]);
+      VectorCopy(trianglePoints[i][2], b->sides[i].winding->p[2]);
+    }
+    if (!BoundBrush(b)) {
+      c_degenerate_hulls++;
+      FreeBrush(b);
+      return NULL;
+    }
   }
 
   return b;
