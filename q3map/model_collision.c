@@ -586,7 +586,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
     input.triangles_ptr = allIndexes;
     input.triangles_count = totalIndexes / 3;
 
-    CoACD_MeshArray hulls = CoACD_run(&input, threshold, -1, COACD_PREPROCESS_AUTO, 50, 2000, 20, 100, 3, false, true, true, (int)(totalVerts * 0.9), false, 0.01, COACD_APX_CH, 1234);
+    CoACD_MeshArray hulls = CoACD_run(&input, threshold, -1, COACD_PREPROCESS_AUTO, 50, 2000, 20, 100, 3, false, true, true, MAX_POINTS_ON_WINDING, false, 0.01, COACD_APX_CH, 1234);
 
     for (j = 0; j < (int)hulls.meshes_count; j++) {
       bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[j], caulk);
@@ -631,7 +631,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
       input.triangles_ptr = meshIndexes;
       input.triangles_count = ds->numIndexes / 3;
 
-      CoACD_MeshArray hulls = CoACD_run(&input, threshold, -1, COACD_PREPROCESS_AUTO, 50, 2000, 20, 100, 3, false, true, true, (int)(ds->numVerts * 0.9), false, 0.01, COACD_APX_CH, 1234);
+      CoACD_MeshArray hulls = CoACD_run(&input, threshold, -1, COACD_PREPROCESS_AUTO, 50, 2000, 20, 100, 3, false, true, true, MAX_POINTS_ON_WINDING, false, 0.01, COACD_APX_CH, 1234);
 
       for (k = 0; k < (int)hulls.meshes_count; k++) {
         bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[k], caulk);
