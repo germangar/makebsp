@@ -405,7 +405,11 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   qboolean mergeMeshes = (category == MC_FULL) ? qtrue : qfalse;
 
-  hulls_list = GenerateCoACDCollision(inst, category, mergeMeshes, caulk);
+  if (category == MC_OBJECT) {
+    hulls_list = GenerateMOCollision(inst, category, caulk);
+  } else {
+    hulls_list = GenerateCoACDCollision(inst, category, mergeMeshes, caulk);
+  }
 
   for (bspbrush_t *b = hulls_list; b; b = b->next) {
     numHulls++;

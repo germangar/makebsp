@@ -325,7 +325,7 @@ typedef struct {
 
 #define	MAX_MAP_AREAS		0x100	// MAX_MAP_AREA_BYTES in q_shared must match!
 #define	MAX_MAP_FOGS		0x100
-#define	MAX_MAP_PLANES		0x20000
+#define	MAX_MAP_PLANES		0x80000
 #define	MAX_MAP_NODES		0x20000
 #define	MAX_MAP_BRUSHSIDES	0x20000
 #define	MAX_MAP_LEAFS		0x20000
