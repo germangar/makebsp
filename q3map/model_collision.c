@@ -260,7 +260,7 @@ CategorizeModel
 Reserved for future entity-specific classification for CoACD.
 ====================
 */
-static modelCategory_t CategorizeModel(modelInstance_t *inst) {
+static void CategorizeModel(modelInstance_t *inst) {
   int j, k;
   mapDrawSurface_t *ds;
   vec3_t mins, maxs, centroid;
@@ -291,7 +291,7 @@ static modelCategory_t CategorizeModel(modelInstance_t *inst) {
   if (totalVerts == 0) {
     inst->category = MC_NONE;
     inst->triangle_density = 0.0f;
-    return MC_NONE;
+    return;
   }
 
   // Calculate volume and normalized density per 128-unit cube
@@ -352,7 +352,8 @@ static modelCategory_t CategorizeModel(modelInstance_t *inst) {
   }
 
   if (totalArea < 1.0f) {
-    return MC_NONE;
+    inst->category = MC_NONE;
+    return;
   }
 
   float groundRatio = groundArea / totalArea;
@@ -380,7 +381,8 @@ static modelCategory_t CategorizeModel(modelInstance_t *inst) {
           totalArea, groundRatio * 100.0f, outwardRatio * 100.0f,
           inwardRatio * 100.0f, height, inst->triangle_density);
 
-  return category;
+
+  return;
 }
 
 /*
@@ -390,7 +392,8 @@ DecomposeModelCollision
 
 ====================
 */
-static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t category) {
+static void DecomposeModelCollision(modelInstance_t *inst) {
+  modelCategory_t category = inst->category;
   bspbrush_t *hulls_list = NULL;
   int numHulls = 0;
 
@@ -406,9 +409,9 @@ static void DecomposeModelCollision(modelInstance_t *inst, modelCategory_t categ
   qboolean mergeMeshes = (category == MC_FULL) ? qtrue : qfalse;
 
   if (category == MC_OBJECT) {
-    hulls_list = GenerateMOCollision(inst, category, caulk);
+    hulls_list = GenerateMOCollision(inst, caulk);
   } else {
-    hulls_list = GenerateCoACDCollision(inst, category, mergeMeshes, caulk);
+    hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
   }
 
   for (bspbrush_t *b = hulls_list; b; b = b->next) {
@@ -493,9 +496,9 @@ void CreateTriangleModelCollision(void) {
   // Step 2: Decomposition and Categorization Pass (per instance)
   for (i = 0; i < numModelInstances; i++) {
     inst = &modelInstances[i];
-    modelCategory_t category = CategorizeModel(inst);
-    if (category != MC_NONE) {
-      DecomposeModelCollision(inst, category);
+    CategorizeModel(inst);
+    if (inst->category != MC_NONE) {
+      DecomposeModelCollision(inst);
     }
   }
 

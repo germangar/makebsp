@@ -146,7 +146,7 @@ GenerateCoACDCollision
 Generates collision brushes for a given model instance using CoACD.
 ====================
 */
-bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, modelCategory_t category, qboolean mergeMeshes, shaderInfo_t *shader) {
+bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, shaderInfo_t *shader) {
   int j, k;
   mapDrawSurface_t *ds;
   int totalVerts = 0;
@@ -163,6 +163,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, modelCategory_t catego
   float threshold, resolution, prep_resolution;
   int mcts_max_depth;
   qboolean decimate;
+  modelCategory_t category = inst->category;
   switch (category) {
     case MC_WALKABLE:
       threshold = 0.1f;

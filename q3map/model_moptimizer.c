@@ -105,12 +105,12 @@ Processes a model instance, optimizes its meshes via meshoptimizer,
 and passes the geometry to an extrusion helper.
 ====================
 */
-bspbrush_t *GenerateMOCollision(modelInstance_t *inst, modelCategory_t category, shaderInfo_t *shader) {
+bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
   int j, k;
   mapDrawSurface_t *ds;
   
-  _printf("Instance %s: Running MeshOptimizer Extrusion (MC_OBJECT)\n", inst->modelName);
+  _printf("Instance %s: Running MeshOptimizer Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
   
   for (j = 0; j < inst->numDrawSurfs; j++) {
     ds = inst->drawSurfs[j];
