@@ -417,11 +417,21 @@ tree_t *FaceBSP(bspface_t *list);
 
 // misc_model.c
 
+typedef enum {
+  MC_NONE,
+  MC_OBJECT,
+  MC_WALKABLE,
+  MC_FULL,
+  MC_SHELL
+} modelCategory_t;
+
 typedef struct modelInstance_s {
   char modelName[MAX_QPATH];
   int numDrawSurfs;
   mapDrawSurface_t **drawSurfs; // References to surfaces created for this instance
   entity_t *creator;            // Reference to the entity that created this instance
+  float triangle_density;
+  modelCategory_t category;
 } modelInstance_t;
 
 extern int c_triangleModels;
@@ -441,6 +451,11 @@ extern int numModelInstances;
 // model_collision.c
 
 void CreateTriangleModelCollision(void);
+
+
+
+bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, modelCategory_t category, qboolean mergeMeshes, shaderInfo_t *shader);
+const char *CategoryString(modelCategory_t cat);
 
 //=============================================================================
 
