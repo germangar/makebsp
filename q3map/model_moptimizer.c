@@ -33,10 +33,13 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(double *vertsRaw, unsigned int *ind
     
     vec3_t faceNormal;
     vec3_t t1, t2;
-    VectorSubtract(p1, p0, t1);
-    VectorSubtract(p2, p0, t2);
+    // Assimp mesh is CW. To get outward normal, cross (p2-p0) with (p1-p0)
+    VectorSubtract(p2, p0, t1);
+    VectorSubtract(p1, p0, t2);
     CrossProduct(t1, t2, faceNormal);
-    VectorNormalize(faceNormal, faceNormal);
+    if (VectorNormalize(faceNormal, faceNormal) < 0.0001f) {
+      continue;
+    }
     
     // We want 5 planes for a simple extrusion (face, backface, 3 edges)
     bspbrush_t *b = AllocBrush(5);
@@ -46,31 +49,33 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(double *vertsRaw, unsigned int *ind
     b->contentShader = si;
     
     // 1. The main face plane (pointing outwards)
-    b->sides[0].planenum = MapPlaneFromPoints(p0, p2, p1);
+    // Assimp triangles are CW, so p0, p1, p2 produces an outward normal.
+    b->sides[0].planenum = MapPlaneFromPoints(p0, p1, p2);
     b->sides[0].shaderInfo = si;
     
     // 2. The back face (extruded inwards along the negative normal)
-    // For a rough extrusion, push the points inward by 4 units
-    float extrudeDist = 4.0f;
+    // For a rough extrusion, push the points inward by 0.5 units
+    float extrudeDist = 0.5f;
     vec3_t bp0, bp1, bp2;
     VectorMA(p0, -extrudeDist, faceNormal, bp0);
     VectorMA(p1, -extrudeDist, faceNormal, bp1);
     VectorMA(p2, -extrudeDist, faceNormal, bp2);
     
-    b->sides[1].planenum = MapPlaneFromPoints(bp0, bp1, bp2); // Flipped winding
+    // Back face needs reversed winding to be CW from the back.
+    b->sides[1].planenum = MapPlaneFromPoints(bp0, bp2, bp1); 
     b->sides[1].shaderInfo = si;
     
-    // 3, 4, 5. The edge planes 
+    // 3, 4, 5. The edge planes (CW when viewed from outside the edge)
     // Edge 1: p0 -> p1
-    b->sides[2].planenum = MapPlaneFromPoints(p0, p1, bp0);
+    b->sides[2].planenum = MapPlaneFromPoints(p0, bp0, p1);
     b->sides[2].shaderInfo = si;
     
     // Edge 2: p1 -> p2
-    b->sides[3].planenum = MapPlaneFromPoints(p1, p2, bp1);
+    b->sides[3].planenum = MapPlaneFromPoints(p1, bp1, p2);
     b->sides[3].shaderInfo = si;
     
     // Edge 3: p2 -> p0
-    b->sides[4].planenum = MapPlaneFromPoints(p2, p0, bp2);
+    b->sides[4].planenum = MapPlaneFromPoints(p2, bp2, p0);
     b->sides[4].shaderInfo = si;
     
     // Check if any plane failed to generate
@@ -136,7 +141,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     }
 
     // 1. Simplify the mesh to reduce triangle count
-    float optimization_target = 0.02f; // User-adjustable baseline: 2% of original indices
+    float optimization_target = 0.2f; // User-adjustable baseline: 2% of original indices
     
     size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
     // Allow up to 5% deformation
