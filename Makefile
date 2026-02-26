@@ -13,7 +13,6 @@ Q3MAP_DIR = q3map
 JPEG_DIR = libs/jpeg6
 PAK_DIR = libs/pak
 MESHOPT_DIR = libs/meshoptimizer/src
-PMP_DIR = libs/pmp-library/src/pmp
 OBJ_DIR = obj
 
 # Source files
@@ -22,25 +21,11 @@ Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c $(Q3MAP_DIR)/misc_model_old.c, $(
 JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 MESHOPT_SRC = $(wildcard $(MESHOPT_DIR)/*.cpp)
-PMP_SRC = $(PMP_DIR)/surface_mesh.cpp \
-          $(PMP_DIR)/algorithms/decimation.cpp \
-          $(PMP_DIR)/algorithms/hole_filling.cpp \
-          $(PMP_DIR)/algorithms/normals.cpp \
-          $(PMP_DIR)/algorithms/triangulation.cpp \
-          $(PMP_DIR)/algorithms/utilities.cpp \
-          $(PMP_DIR)/algorithms/curvature.cpp \
-          $(PMP_DIR)/algorithms/smoothing.cpp \
-          $(PMP_DIR)/algorithms/differential_geometry.cpp \
-          $(PMP_DIR)/algorithms/laplace.cpp \
-          $(PMP_DIR)/algorithms/numerics.cpp \
-          $(PMP_DIR)/algorithms/distance_point_triangle.cpp \
-          $(PMP_DIR)/algorithms/fairing.cpp
 
 # Object files divided into libraries and application
 LIB_OBJ = $(JPEG_SRC:$(JPEG_DIR)/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
           $(PAK_SRC:$(PAK_DIR)/%.cpp=$(OBJ_DIR)/pak/%.o) \
-          $(MESHOPT_SRC:$(MESHOPT_DIR)/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
-          $(PMP_SRC:$(PMP_DIR)/%.cpp=$(OBJ_DIR)/pmp/%.o)
+          $(MESHOPT_SRC:$(MESHOPT_DIR)/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o)
 
 APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
           $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o)
@@ -67,6 +52,7 @@ $(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c q3map/qbsp.h
 $(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c q3map/qbsp.h
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
 
 $(OBJ_DIR)/jpeg6/%.o: $(JPEG_DIR)/%.cpp
 	mkdir -p $(dir $@)

@@ -408,7 +408,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   qboolean mergeMeshes = (category == MC_FULL) ? qtrue : qfalse;
 
-  if (category == MC_OBJECT) {
+  if (category == MC_OBJECT || category == MC_WALKABLE) {
     hulls_list = GenerateMOCollision(inst, caulk);
   } else {
     hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
@@ -450,7 +450,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
       group->brush_density = 0;
     }
 
-    _printf("Instance %s: Created clip group with %i brushes, density %e\n",
+    _printf("Instance %s: Created clip group with %i brushes, density %.6f\n",
             inst->modelName, numHulls, group->brush_density);
   }
 
