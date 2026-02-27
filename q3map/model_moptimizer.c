@@ -973,7 +973,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     float optimization_target = 0.2f;
     
     size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
-    float target_error = 0.05f;
+    float target_error = 4.0f;  /* absolute units — max vertex displacement */
     
     unsigned int *simplifiedIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
     size_t simplifiedIndexCount = meshopt_simplify(
@@ -983,7 +983,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         sizeof(float) * 3, 
         target_index_count, 
         target_error, 
-        0, NULL
+        meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL
     );
     
     _printf("Instance %s: Simplified from %i to %zu indices\n", inst->modelName, ds->numIndexes, simplifiedIndexCount);
