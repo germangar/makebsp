@@ -1025,5 +1025,9 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     free(weldedVerts);
   }
   
+  if (hulls_list) {
+    CSGMergeBrushList(&hulls_list);
+  }
+
   return hulls_list;
 }
