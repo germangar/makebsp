@@ -1,6 +1,18 @@
 project(MRMeshC CXX)
 
 file(GLOB SOURCES "*.cpp")
+IF(NOT MESHLIB_BUILD_VOXELS)
+  list(REMOVE_ITEM SOURCES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/MRFloatGrid.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MRVoxelsLoad.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MRVoxelsSave.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MRVDBConversions.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/MROffset.cpp"
+  )
+ENDIF()
+IF(NOT MESHLIB_BUILD_EXTRA_IO_FORMATS)
+  list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/MRIOExtras.cpp")
+ENDIF()
 file(GLOB HEADERS "*.h")
 file(GLOB DETAIL_HEADERS "detail/*.h" "detail/*.hpp")
 
@@ -12,9 +24,13 @@ ENDIF()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   MRMesh
-  MRIOExtras
-  MRVoxels
 )
+IF(MESHLIB_BUILD_EXTRA_IO_FORMATS)
+  target_link_libraries(${PROJECT_NAME} PRIVATE MRIOExtras)
+ENDIF()
+IF(MESHLIB_BUILD_VOXELS)
+  target_link_libraries(${PROJECT_NAME} PRIVATE MRVoxels)
+ENDIF()
 
 set(CMAKE_INSTALL_PREFIX "/Library/Frameworks")
 install(

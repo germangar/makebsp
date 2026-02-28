@@ -202,7 +202,7 @@ public:
     /// \param fltXf transformation from floating object space to global space
     /// \param refXf transformation from reference object space to global space
     /// \param samplingVoxelSize approximate distance between samples on each of two objects
-    MRMESH_API ICP( const MeshOrPoints& flt, const MeshOrPoints& ref, const AffineXf3f& fltXf, const AffineXf3f& refXf,
+    ICP( const MeshOrPoints& flt, const MeshOrPoints& ref, const AffineXf3f& fltXf, const AffineXf3f& refXf,
         float samplingVoxelSize ) : ICP( { flt, fltXf }, { ref, refXf }, samplingVoxelSize ) {}
     MRMESH_API ICP( const MeshOrPointsXf& flt, const MeshOrPointsXf& ref, float samplingVoxelSize );
 

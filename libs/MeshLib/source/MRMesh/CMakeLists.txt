@@ -12,27 +12,28 @@ IF(MR_EMSCRIPTEN)
 ENDIF()
 
 file(GLOB SOURCES "*.cpp")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/MRZip.cpp")
+list(APPEND SOURCES 
+    "${CMAKE_CURRENT_SOURCE_DIR}/MRZipStub.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/json_reader.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/json_value.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/json_writer.cpp"
+)
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/MRZip.cpp")
 file(GLOB HEADERS "*.h" "*.hpp")
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config_cmake.h.in ${CMAKE_CURRENT_SOURCE_DIR}/config_cmake.h)
 
-# Emscripten's Boost package doesn't contain CMake config files
-IF(EMSCRIPTEN)
-  IF(POLICY CMP0167)
-    cmake_policy(SET CMP0167 OLD)
-  ENDIF()
-  find_package(Boost 1.73 REQUIRED)
-ELSE()
-  find_package(Boost 1.73 CONFIG COMPONENTS headers REQUIRED)
-ENDIF()
-find_package(Eigen3 REQUIRED)
-find_package(fmt 8 REQUIRED)
-find_package(JsonCpp REQUIRED)
-find_package(spdlog 1.9 REQUIRED)
-find_package(TBB 2020.1 COMPONENTS tbb REQUIRED)
-find_package(tl-expected REQUIRED)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../manual_deps.cmake)
+# find_package(Boost 1.73 CONFIG COMPONENTS headers REQUIRED)
+# find_package(Eigen3 REQUIRED)
+# find_package(fmt 8 REQUIRED)
+# find_package(JsonCpp REQUIRED)
+# find_package(spdlog 1.9 REQUIRED)
+# find_package(TBB 2020.1 COMPONENTS tbb REQUIRED)
+# find_package(tl-expected REQUIRED)
 
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
@@ -44,24 +45,31 @@ target_link_libraries(${PROJECT_NAME}
     TBB::tbb
     tl::expected
   PRIVATE
+    ZLIB::ZLIB
     ${CMAKE_DL_LIBS}
 )
+add_definitions(-DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0601)
+target_compile_options(${PROJECT_NAME} PRIVATE -include bit_cast_shim.h)
 
 # libzip on Emscripten is unable to resolve its dependencies by itself
-IF(EMSCRIPTEN)
-  find_package(MbedTLS 1.0 REQUIRED)
-  find_package(ZLIB REQUIRED)
-ENDIF()
+# IF(EMSCRIPTEN)
+#   find_package(MbedTLS 1.0 REQUIRED)
+#   find_package(ZLIB REQUIRED)
+# ENDIF()
+
+# IF(EMSCRIPTEN)
+#   set(ZLIB_INCLUDE_DIRS "${EMSCRIPTEN_SYSROOT}/include")
+# ELSE()
+#   find_package(ZLIB REQUIRED)
+# ENDIF()
 # libzip prior to version 1.11.4 has incorrect CMake config that requires libzip tools to be installed
-IF(MESHLIB_USE_VCPKG OR APPLE OR EMSCRIPTEN)
-  # vcpkg, homebrew, and submodule versions are already updated
-  find_package(libzip REQUIRED)
-ELSE()
-  # on Ubuntu LTS (22.04, 24.04) we have to use pkg-config instead
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(libzip REQUIRED IMPORTED_TARGET libzip)
-  add_library(libzip::zip ALIAS PkgConfig::libzip)
-ENDIF()
+# IF(MESHLIB_USE_VCPKG OR APPLE OR EMSCRIPTEN)
+#   find_package(libzip REQUIRED)
+# ELSE()
+#   find_package(PkgConfig REQUIRED)
+#   pkg_check_modules(libzip REQUIRED IMPORTED_TARGET libzip)
+#   add_library(libzip::zip ALIAS PkgConfig::libzip)
+# ENDIF()
 target_link_libraries(${PROJECT_NAME} PRIVATE libzip::zip)
 
 # TODO: CMake config

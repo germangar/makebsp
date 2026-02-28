@@ -35,6 +35,9 @@
 
 #if _WIN32
     // Unify system calls
+    #ifndef LOAD_LIBRARY_SAFE_CURRENT_DIRS
+    #define LOAD_LIBRARY_SAFE_CURRENT_DIRS 0x00002000
+    #endif
     #define dlopen( name, flags )   LoadLibraryEx( name, /*reserved*/NULL, flags )
     #define dlsym( handle, name )   GetProcAddress( handle, name )
     // FreeLibrary return bool value that is not used.

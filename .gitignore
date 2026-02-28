@@ -14,3 +14,24 @@ modeltest_modelsinfo.txt
 libs/coacd
 AGENTS.md
 .vscode/settings.json
+
+# MeshLib binaries and temporary files
+libs/MeshLib/build/
+libs/MeshLib/build_minimal/
+libs/MeshLib/tmp_cmake_test/
+libs/MeshLib/cmake_trace.txt
+libs/MeshLib/thirdparty/
+
+# Debug OBJ exports
+*_meshlib.obj
+*_simplified.obj
+*_meshoptimizer.obj
+
+libMRMesh.dll
+libMRMeshC.dll
+
+# General build artifacts
+*.o
+*.a
+*.dll
+libMRMesh.dll

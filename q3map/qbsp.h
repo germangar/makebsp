@@ -456,6 +456,7 @@ void CreateTriangleModelCollision(void);
 
 bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, shaderInfo_t *shader);
 bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader);
+bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader);
 
 int CSGMergeBrushList(bspbrush_t **pList);
 const char *CategoryString(modelCategory_t cat);

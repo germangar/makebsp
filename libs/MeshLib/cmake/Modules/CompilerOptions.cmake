@@ -14,7 +14,7 @@ ENDIF()
 message("MR_PCH=${MR_PCH}")
 
 # make link to fail if there are unresolved symbols (GCC and Clang)
-IF(NOT APPLE)
+IF(NOT APPLE AND NOT MINGW)
   IF(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,defs")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,defs")

@@ -408,7 +408,9 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   qboolean mergeMeshes = (category == MC_FULL) ? qtrue : qfalse;
 
-  if (category == MC_OBJECT || category == MC_WALKABLE) {
+  if (category == MC_OBJECT) {
+    hulls_list = GenerateMLCollision(inst, caulk);
+  } else if (category == MC_WALKABLE) {
     hulls_list = GenerateMOCollision(inst, caulk);
   } else {
     hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
