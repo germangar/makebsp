@@ -414,6 +414,10 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
   }
 
+  if (hulls_list) {
+    //CSGMergeBrushList(&hulls_list);
+  }
+
   for (bspbrush_t *b = hulls_list; b; b = b->next) {
     numHulls++;
   }

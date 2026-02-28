@@ -345,10 +345,5 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
     _printf("Instance %s: Degenerate geometry skipped: %i triangles, %i hulls\n",
             inst->modelName, c_degenerate_triangles, c_degenerate_hulls);
   }
-
-  if (hulls_list) {
-    CSGMergeBrushList(&hulls_list);
-  }
-
   return hulls_list;
 }

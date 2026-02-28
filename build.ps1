@@ -24,7 +24,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "[2/2] Running modeltest.map..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./q3map.exe -v maps/modeltest.map | Select-String -Pattern "(Fan|Generated total|Simplified|wood_bridge|CSG Merge|Floor Smoother)"
+    ./q3map.exe -v maps/modeltest.map | Select-String -Pattern "(Fan|Generated total|Simplified|wood_bridge|CSG Merge|WARNING)"
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red
