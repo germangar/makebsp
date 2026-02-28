@@ -1,0 +1,55 @@
+#pragma once
+
+#include "MRObjectLinesHolder.h"
+
+namespace MR
+{
+
+/// This object type has not visual representation, just holder for lines in scene
+/// \ingroup DataModelGroup
+class MRMESH_CLASS ObjectLines : public ObjectLinesHolder
+{
+public:
+    ObjectLines() = default;
+    ObjectLines( ObjectLines&& ) = default;
+    ObjectLines& operator=( ObjectLines&& ) = default;
+
+    constexpr static const char* StaticTypeName() noexcept { return "ObjectLines"; }
+    virtual const char* typeName() const override { return StaticTypeName(); }
+
+    constexpr static const char* StaticClassName() noexcept { return "Polyline"; }
+    virtual std::string className() const override { return StaticClassName(); }
+
+    constexpr static const char* StaticClassNameInPlural() noexcept { return "Polylines"; }
+    virtual std::string classNameInPlural() const override { return StaticClassNameInPlural(); }
+
+    MRMESH_API virtual std::shared_ptr<Object> clone() const override;
+    MRMESH_API virtual std::shared_ptr<Object> shallowClone() const override;
+
+    MRMESH_API virtual void setPolyline( const std::shared_ptr<Polyline3>& polyline );
+    /// sets given polyline to this, and returns back previous polyline of this;
+    MRMESH_API virtual std::shared_ptr< Polyline3 > updatePolyline( std::shared_ptr< Polyline3 > polyline );
+
+    virtual const std::shared_ptr<Polyline3>& varPolyline() { return polyline_; }
+
+    /// \note this ctor is public only for std::make_shared used inside clone()
+    ObjectLines( ProtectedStruct, const ObjectLines& obj ) : ObjectLines( obj ) {}
+
+    MRMESH_API virtual std::vector<std::string> getInfoLines() const override;
+
+protected:
+    ObjectLines( const ObjectLines& other ) = default;
+
+    /// swaps this object with other
+    MRMESH_API virtual void swapBase_( Object& other ) override;
+
+    MRMESH_API virtual void serializeFields_( Json::Value& root ) const override;
+};
+
+/// constructs new ObjectLines containing the union of valid data from all input objects
+[[nodiscard]] MRMESH_API std::shared_ptr<ObjectLines> merge( const std::vector<std::shared_ptr<ObjectLines>>& objsLines );
+
+/// constructs new ObjectLines containing the region of data from input object
+[[nodiscard]] MRMESH_API std::shared_ptr<ObjectLines> cloneRegion( const std::shared_ptr<ObjectLines>& objLines, const UndirectedEdgeBitSet& region );
+
+} // namespace MR

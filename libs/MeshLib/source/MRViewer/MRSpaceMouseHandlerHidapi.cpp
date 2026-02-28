@@ -1,0 +1,268 @@
+#ifndef __EMSCRIPTEN__
+#include "MRSpaceMouseHandlerHidapi.h"
+#include "MRMesh/MRTelemetry.h"
+#include "MRViewer.h"
+#include "MRGladGlfw.h"
+#include "MRMouseController.h"
+#include "MRMesh/MRFinally.h"
+#include "MRMesh/MRSystem.h"
+#include "MRMesh/MRStringConvert.h"
+#include "MRPch/MRSpdlog.h"
+#include <bit>
+
+namespace MR::SpaceMouse
+{
+HandlerHidapi::HandlerHidapi()
+    : device_( nullptr )
+    , terminateListenerThread_( false )
+    , dataPacket_( { 0 } )
+    , packetLength_( 0 )
+    , active_( true )
+{
+    connect( &getViewerInstance(), 0, boost::signals2::connect_position::at_back );
+}
+
+HandlerHidapi::~HandlerHidapi()
+{
+    terminateListenerThread_ = true;
+    cv_.notify_one();
+
+    if ( listenerThread_.joinable() )
+        listenerThread_.join();
+
+    if ( device_ != nullptr )
+        hid_close( device_ );
+
+    hid_exit();
+}
+
+bool HandlerHidapi::initialize()
+{
+    if ( hid_init() != 0 )
+    {
+        spdlog::error( "HID API: init error" );
+        return false;
+    }
+
+#ifdef __APPLE__
+    hid_darwin_set_open_exclusive( 0 );
+#endif
+
+    terminateListenerThread_ = false;
+    initListenerThread_();
+
+    return true;
+}
+
+bool HandlerHidapi::findAndAttachDevice_( bool verbose )
+{
+    const static int HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER = 8; //Multi-axis Controller
+    const static int HID_USAGE_PAGE_GENERIC = 1; //Generic Desktop Controls
+    assert( !device_ );
+    for ( const auto& [vendorId, supportedDevicesId] : cVendor2Device )
+    {
+        // search through supported vendors
+        hid_device_info* localDevicesIt = hid_enumerate( vendorId, 0x0 ); // hid_enumerate( 0x0, 0x0 ) to enumerate all devices of all vendors
+        while ( localDevicesIt && ( !device_ || verbose ) )
+        {
+            if ( verbose )
+            {
+                spdlog::info( "HID API device found: {:04x}:{:04x}, path={}, usage={}, usage_page={}, name={}:{}",
+                    vendorId, localDevicesIt->product_id, localDevicesIt->path, localDevicesIt->usage, localDevicesIt->usage_page,
+                    wideToUtf8( localDevicesIt->manufacturer_string ), wideToUtf8( localDevicesIt->product_string ) );
+                if ( localDevicesIt->usage == HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER && localDevicesIt->usage_page == HID_USAGE_PAGE_GENERIC )
+                    TelemetrySignal( fmt::format( "HID API device {:04x}:{:04x} found: {}:{}", vendorId, localDevicesIt->product_id,
+                        wideToUtf8( localDevicesIt->manufacturer_string ), wideToUtf8( localDevicesIt->product_string ) ) );
+            }
+            for ( ProductId deviceId : supportedDevicesId )
+            {
+                if ( !device_ && deviceId == localDevicesIt->product_id && localDevicesIt->usage == HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER && localDevicesIt->usage_page == HID_USAGE_PAGE_GENERIC )
+                {
+                    device_ = hid_open_path( localDevicesIt->path );
+                    if ( device_ )
+                    {
+                        numMsg_ = 0;
+                        spdlog::info( "SpaceMouse connected: {:04x}:{:04x}, path={}", vendorId, deviceId, localDevicesIt->path );
+                        TelemetrySignal( fmt::format( "HID API device {:04x}:{:04x} opened", vendorId, localDevicesIt->product_id ) );
+                        smDevice_.resetDevice( vendorId, deviceId );
+                        if ( !verbose )
+                            break;
+                    }
+                    else if ( verbose )
+                    {
+                        spdlog::error( "HID API device ({:04x}:{:04x}, path={}) open error: {}",
+                            vendorId, deviceId, localDevicesIt->path, wideToUtf8( hid_error( nullptr ) ) );
+                        TelemetrySignal( fmt::format( "HID API device {:04x}:{:04x} open failed", vendorId, localDevicesIt->product_id ) );
+                    }
+                }
+            }
+            localDevicesIt = localDevicesIt->next;
+        }
+        hid_free_enumeration( localDevicesIt );
+    }
+    return (bool)device_;
+}
+
+void HandlerHidapi::handle()
+{
+    // works in pair with HandlerHidapi::startListenerThread_()
+    std::unique_lock<std::mutex> syncThreadLock( syncThreadMutex_, std::defer_lock );
+    if ( !syncThreadLock.try_lock() )
+        return;
+
+    if ( packetLength_ <= 0 || !device_ )
+    {
+        cv_.notify_one();
+        return;
+    }
+
+    // set the device handle to be non-blocking
+    hid_set_nonblocking( device_, 1 );
+
+    Action action;
+    smDevice_.parseRaw( dataPacket_, packetLength_, action );
+
+    int packetLengthTmp = 0;
+    do
+    {
+        DataPacketRaw dataPacketTmp;
+        packetLengthTmp = hid_read( device_, dataPacketTmp.data(), dataPacketTmp.size() );
+        smDevice_.parseRaw( dataPacketTmp, packetLengthTmp, action );
+    } while ( packetLengthTmp > 0 );
+
+    processAction_( action );
+
+    syncThreadLock.unlock();
+    cv_.notify_one();
+}
+
+void HandlerHidapi::initListenerThread_()
+{
+    // works in pair with HandlerHidapi::handle()
+    // waits for updates on SpaceMouse and notifies main thread
+    listenerThread_ = std::thread( [&] ()
+    {
+        spdlog::info( "SpaceMouse Listener thread started" );
+        SetCurrentThreadName( "SpaceMouse listener" );
+        MR_FINALLY {
+            spdlog::info( "SpaceMouse listener thread finished" );
+        };
+
+        do
+        {
+            std::unique_lock<std::mutex> syncThreadLock( syncThreadMutex_ );
+            // stay in loop until SpaceMouse is found
+            bool firstSearch = true;
+            while ( !device_ )
+            {
+                if ( terminateListenerThread_ )
+                    return;
+                if ( findAndAttachDevice_( firstSearch ) )
+                    break;
+                firstSearch = false; // avoid spam in log
+                syncThreadLock.unlock();
+                std::this_thread::sleep_for( std::chrono::milliseconds( 1000 ) );
+                syncThreadLock.lock();
+            }
+
+            // set the device handle to be blocking
+            hid_set_nonblocking( device_, 0 );
+            // wait for active state and read all data packets during inactive state
+            while ( !active_ )
+            {
+                do
+                {
+                    packetLength_ = hid_read_timeout( device_, dataPacket_.data(), dataPacket_.size(), 200 );
+                } while ( packetLength_ > 0 && !active_ && !terminateListenerThread_ );
+                if ( terminateListenerThread_ )
+                    return;
+            }
+
+            // hid_read_timeout() waits until there is data to read before returning or 1000ms passed (to help with thread shutdown)
+            packetLength_ = hid_read_timeout( device_, dataPacket_.data(), dataPacket_.size(), 1000 );
+
+            // device connection lost
+            if ( packetLength_ < 0 )
+            {
+                hid_close( device_ );
+                device_ = nullptr;
+                smDevice_.resetDevice();
+                spdlog::error( "HID API: device lost" );
+                TelemetrySignal( fmt::format( "HID API device lost" ) );
+            }
+            else if ( packetLength_ > 0 )
+            {
+                // trigger main rendering loop and wait for main thread to read and process all SpaceMouse packets
+                glfwPostEmptyEvent();
+                cv_.wait( syncThreadLock );
+            }
+            // nothing to do with packet_length == 0
+        } while ( !terminateListenerThread_ );
+    } );
+}
+
+void HandlerHidapi::postFocus_( bool focused )
+{
+    active_ = focused;
+    cv_.notify_one();
+}
+
+void HandlerHidapi::processAction_( const Action& action )
+{
+    ++numMsg_;
+    if ( numMsg_ == 1 )
+        TelemetrySignal( "HID API first action processing" );
+    if ( std::popcount( numMsg_ ) == 1 ) // report every power of 2
+        TelemetrySignal( "HID API SpaceMouse next log messages" );
+    smDevice_.process( action );
+    glfwPostEmptyEvent();
+}
+
+bool HandlerHidapi::hasValidDeviceConnected() const
+{
+    return smDevice_.valid();
+}
+
+void HandlerHidapi::AtomicDevice::resetDevice( VendorId vId, ProductId pId )
+{
+    std::unique_lock lock( mutex_ );
+    bool clear = vId == 0 && pId == 0;
+    if ( clear )
+    {
+        if ( device_ )
+        {
+            device_->resetDevice();
+            device_.reset();
+        }
+        return;
+    }
+    if ( !device_ )
+        device_ = std::make_unique<Device>();
+    device_->resetDevice(); // as far as we now only support single device with HID API we reset old one
+    device_->updateDevice( vId, pId );
+}
+
+void HandlerHidapi::AtomicDevice::parseRaw( const DataPacketRaw& packet, int packet_length, Action& action ) const
+{
+    std::unique_lock lock( mutex_ );
+    if ( device_ )
+        device_->parseRawEvent( packet, packet_length, action );
+}
+
+void HandlerHidapi::AtomicDevice::process( const Action& action )
+{
+    std::unique_lock lock( mutex_ );
+    if ( device_ )
+        device_->processAction( action );
+}
+
+bool HandlerHidapi::AtomicDevice::valid() const
+{
+    std::unique_lock lock( mutex_ );
+    if ( device_ )
+        return device_->valid();
+    return false;
+}
+
+}
+#endif

@@ -1,0 +1,120 @@
+#pragma once
+
+#include "MRProgressCallback.h"
+#include "MRAffineXf3.h"
+#include "MRId.h"
+#include "MRVector.h"
+#include "MRUnitInfo.h"
+#include "MRColor.h"
+#include <cassert>
+#include <optional>
+
+namespace MR
+{
+
+/// determines how to save points/lines/mesh
+struct SaveSettings
+{
+    /// true - save valid points/vertices only (pack them);
+    /// false - save all points/vertices preserving their indices
+    bool onlyValidPoints = true;
+
+    /// whether to allow packing or shuffling of primitives (triangles in meshes or edges in polylines);
+    /// if packPrimitives=true, then ids of invalid primitives are reused by valid primitives
+    /// and higher compression (in .ctm format) can be reached if the order of triangles is changed;
+    /// if packPrimitives=false then all primitives maintain their ids, and invalid primitives are saved with all vertex ids equal to zero;
+    /// currently this flag affects the saving in .ctm and .ply formats only
+    bool packPrimitives = true;
+
+    /// optional per-vertex color to save with the geometry
+    const VertColors * colors = nullptr;
+
+    /// per-face colors for meshes, per-undirected-edge colors for polylines, unused for point clouds and other
+    const std::vector<Color> * primitiveColors = nullptr;
+
+    /// optional per-vertex uv coordinate to save with the geometry
+    const VertUVCoords * uvMap = nullptr;
+
+    /// if a format supports both per-vertex and per-tri-corner UV-coordinates,
+    /// then prefer the later option (it takes more space but more supported in other software)
+    bool saveTriCornerUVCoords = true;
+
+    /// optional texture to save with the geometry
+    const MeshTexture * texture = nullptr;
+
+    /// the name of file (UTF8 encoded) without extension to save texture in some formats (e.g. .OBJ, .PLY)
+    std::string materialName = "Default";
+
+    /// this transformation can optionally be applied to all vertices (points) of saved object
+    const AffineXf3d * xf = nullptr;
+
+    /// units of input coordinates and transformation, to be serialized if the format supports it
+    std::optional<LengthUnit> lengthUnit;
+
+    /// the color of whole object
+    std::optional<Color> solidColor;
+
+    /// to report save progress and cancel saving if user desires
+    ProgressCallback progress;
+};
+
+/// returns the point as is or after application of given transform to it in double precision
+inline Vector3f applyFloat( const AffineXf3d * xf, const Vector3f & p )
+{
+    return xf ? Vector3f( (*xf)( Vector3d( p ) ) ) : p;
+}
+
+/// returns the normal as is or after application of given matrix to it in double precision
+inline Vector3f applyFloat( const Matrix3d * m, const Vector3f & n )
+{
+    return m ? Vector3f( *m * Vector3d( n ) ) : n;
+}
+
+/// converts given point in double precision and applies given transformation to it
+inline Vector3d applyDouble( const AffineXf3d * xf, const Vector3f & p )
+{
+    Vector3d pd( p );
+    return xf ? (*xf)( pd ) : pd;
+}
+
+/// converts given normal in double precision and applies given matrix to it
+inline Vector3d applyDouble( const Matrix3d * m, const Vector3f & n )
+{
+    Vector3d nd( n );
+    return m ? *m * nd : nd;
+}
+
+/// maps valid points to packed sequential indices
+class VertRenumber
+{
+public:
+    /// prepares the mapping
+    MRMESH_API VertRenumber( const VertBitSet & validVerts, bool saveValidOnly );
+
+    bool saveValidOnly() const { return !vert2packed_.empty(); }
+
+    /// return the total number of vertices to be saved
+    int sizeVerts() const { return sizeVerts_; }
+
+    /// return packed index (if saveValidOnly = true) or same index (if saveValidOnly = false)
+    int operator()( VertId v ) const
+    {
+        assert( v );
+        return vert2packed_.empty() ? (int)v : vert2packed_[v];
+    }
+
+private:
+    Vector<int, VertId> vert2packed_;
+    int sizeVerts_ = 0;
+};
+
+/// if (xf) is null then just returns (verts);
+/// otherwise copies transformed points in (buf) and returns it
+MRMESH_API const VertCoords & transformPoints( const VertCoords & verts, const VertBitSet & validVerts, const AffineXf3d * xf, VertCoords & buf,
+    const VertRenumber * vertRenumber = nullptr );
+
+/// if (m) is null then just returns (normals);
+/// otherwise copies transformed normals in (buf) and returns it
+MRMESH_API const VertNormals & transformNormals( const VertNormals & normals, const VertBitSet & validVerts, const Matrix3d * m, VertNormals & buf );
+
+} //namespace MR

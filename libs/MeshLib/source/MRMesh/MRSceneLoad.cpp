@@ -1,0 +1,291 @@
+#include "MRSceneLoad.h"
+#include "MRIOFormatsRegistry.h"
+#include "MRObjectLoad.h"
+#include "MRStringConvert.h"
+#include "MRSceneRoot.h"
+
+#include <MRPch/MRSpdlog.h>
+
+namespace MR::SceneLoad
+{
+
+namespace
+{
+
+// check if stream is empty (has no data)
+inline bool isEmpty( std::ostream& os )
+{
+    return os.tellp() == std::streampos( 0 );
+}
+
+// find corresponding filter in the async object loader registry
+std::optional<IOFilter> findAsyncObjectLoadFilter( const std::filesystem::path& path )
+{
+    // TODO: resolve GCC bug
+    //auto ext = std::string( "*" ) + utf8string( path.extension().u8string() );
+    auto ext = utf8string( path.extension().u8string() );
+    ext = std::string( "*" ) + ext;
+    for ( auto& c : ext )
+        c = (char)std::tolower( c );
+    const auto asyncFilters = AsyncObjectLoad::getFilters();
+    return findFilter( asyncFilters, ext );
+}
+
+// helper class to unify scene construction process
+class SceneConstructor
+{
+public:
+    SceneConstructor( const std::optional<LengthUnit>& targetUnit ) : targetUnit_( targetUnit ) {}
+
+    // gather objects and error and warning messages
+    void process( const std::filesystem::path& path, Expected<LoadedObjects> res )
+    {
+        const auto fileName = utf8string( path );
+        if ( !res.has_value() || !res->objs.empty() ) // if not skipped folder
+            spdlog::info( "Load {} - {}", fileName, res.has_value() ? "success" : res.error().c_str() );
+        if ( !res.has_value() )
+        {
+            // TODO: user-defined error format
+            if ( !isEmpty( errorSummary_ ) )
+                errorSummary_ << "\n\n";
+            if ( res.error().find( fileName ) == std::string::npos )
+                errorSummary_ << fileName << ":\n" << res.error() << "\n";
+            else
+                errorSummary_ << res.error() << "\n";
+            return;
+        }
+        if ( res.has_value() && !res->warnings.empty() )
+        {
+            // TODO: user-defined warning format
+            if ( !isEmpty( warningSummary_ ) )
+                warningSummary_ << "\n\n";
+            if ( res->warnings.find( fileName ) == std::string::npos )
+                warningSummary_ << fileName << ":\n" << res->warnings;
+            else
+                warningSummary_ << res->warnings;
+        }
+
+        const auto prevObjectCount = loadedObjects_.size();
+        for ( auto& obj : res->objs )
+            if ( obj )
+            {
+                if ( targetUnit_ && res->lengthUnit && *targetUnit_ != *res->lengthUnit )
+                {
+                    const auto s = getUnitInfo( *res->lengthUnit ).conversionFactor / getUnitInfo( *targetUnit_ ).conversionFactor;
+                    auto xf = obj->xf();
+                    xf.A *= s;
+                    xf.b *= s;
+                    obj->setXf( xf );
+                }
+                loadedObjects_.emplace_back( std::move( obj ) );
+            }
+        if ( prevObjectCount != loadedObjects_.size() )
+            loadedFiles_.emplace_back( path );
+        else
+            errorSummary_ << ( !isEmpty( errorSummary_ ) ? "\n" : "" ) << "\n" << fileName << ":\n" << "No objects found" << "\n";
+    }
+
+    // construct a scene object
+    SceneLoad::Result construct() const
+    {
+        auto scene = std::make_shared<SceneRootObject>();
+
+        bool constructed;
+        if ( loadedObjects_.size() == 1 )
+        {
+            const auto& object = loadedObjects_.front();
+            auto typeName = std::string( object->typeName() );
+            if ( typeName == SceneRootObject::StaticTypeName() || ( typeName == Object::StaticTypeName() && object->xf() == AffineXf3f() ) )
+            {
+                scene = createRootFormObject( object );
+                constructed = false;
+            }
+            else
+            {
+                constructed = true;
+                scene->addChild( object );
+            }
+        }
+        else
+        {
+            constructed = true;
+            for ( const auto& object : loadedObjects_ )
+                scene->addChild( object );
+        }
+
+        SceneLoad::Result ret{
+            .scene = std::move( scene ),
+            .isSceneConstructed = constructed,
+            .loadedFiles = loadedFiles_,
+            .errorSummary = errorSummary_.str(),
+            .warningSummary = warningSummary_.str(),
+        };
+
+        if ( ret.loadedFiles.empty() )
+            ret.scene = nullptr; // Don't emit the root object on failure.
+        else
+        {
+            // If something is loaded, consider errors as warnings
+            if ( !ret.errorSummary.empty() )
+            {
+                if ( ret.warningSummary.empty() )
+                    ret.warningSummary = std::move( ret.errorSummary );
+                else
+                {
+                    ret.warningSummary += "\n\n";
+                    ret.warningSummary += ret.errorSummary;
+                }
+                ret.errorSummary.clear();
+            }
+        }
+
+        return ret;
+    }
+
+private:
+    const std::optional<LengthUnit> targetUnit_;
+    std::vector<std::filesystem::path> loadedFiles_;
+    std::vector<std::shared_ptr<Object>> loadedObjects_;
+    std::ostringstream errorSummary_;
+    std::ostringstream warningSummary_;
+};
+
+// async loading context
+struct AsyncLoadContext
+{
+    std::vector<std::filesystem::path> paths;
+    std::vector<Expected<LoadedObjects>> results;
+
+    std::atomic_size_t asyncCount{ 0 };
+
+    ProgressCallback progressCallback;
+    std::map<size_t, float> asyncProgressMap;
+#if !defined( __EMSCRIPTEN__ ) || defined( __EMSCRIPTEN_PTHREADS__ )
+    std::mutex asyncProgressMutex;
+#endif
+
+    void initializeProgressMap( const BitSet& asyncBitSet )
+    {
+        for ( const auto index : asyncBitSet )
+            asyncProgressMap.emplace( index, .00f );
+    }
+
+    // create a progress callback for async task
+    ProgressCallback progressCallbackFor( size_t index )
+    {
+        if ( !progressCallback )
+            return {};
+
+        return [this, index] ( float v )
+        {
+            float sum = .00f;
+            {
+#if !defined( __EMSCRIPTEN__ ) || defined( __EMSCRIPTEN_PTHREADS__ )
+                std::unique_lock lock( asyncProgressMutex );
+#endif
+                asyncProgressMap[index] = v;
+                for ( const auto& [_, v1] : asyncProgressMap )
+                    sum += v1 / (float)asyncProgressMap.size();
+            }
+            return reportProgress( progressCallback, sum );
+        };
+    }
+};
+
+Expected<LoadedObjects> sLoadPath( const std::filesystem::path& path, const Settings::OpenFolder& openFolder, const ProgressCallback& callback )
+{
+    std::error_code ec;
+    if ( is_directory( path, ec ) )
+    {
+        if ( !openFolder )
+        {
+            spdlog::info( "Skipping directory {}", utf8string( path ) );
+            return {};
+        }
+
+        spdlog::info( "Loading directory {}", utf8string( path ) );
+        return openFolder( path, callback );
+    }
+
+    spdlog::info( "Loading file {}", utf8string( path ) );
+    return loadObjectFromFile( path, callback );
+}
+
+} // anonymous namespace
+
+Result fromAnySupportedFormat( const std::vector<std::filesystem::path>& files, const Settings& settings )
+{
+    SceneConstructor constructor( settings.targetUnit );
+    for ( auto index = 0ull; index < files.size(); ++index )
+    {
+        const auto& path = files[index];
+        if ( path.empty() )
+            continue;
+        constructor.process( path, sLoadPath( path, settings.openFolder, subprogress( settings.progress, index, files.size() ) ) );
+    }
+    return constructor.construct();
+}
+
+void asyncFromAnySupportedFormat( const std::vector<std::filesystem::path>& files,
+                                  const SceneLoad::PostLoadCallback& postLoadCallback, const Settings& settings )
+{
+    auto ctx = std::make_shared<AsyncLoadContext>();
+    ctx->paths = files;
+    std::erase_if( ctx->paths, [] ( auto&& path ) { return path.empty(); } );
+
+    const auto count = ctx->paths.size();
+    ctx->results.resize( count, unexpected( "Uninitialized" ) );
+
+    size_t syncIndex = 0;
+    BitSet asyncBitSet( count );
+    for ( auto index = 0ull; index < count; ++index )
+    {
+        const auto& path = ctx->paths[index];
+        if ( findAsyncObjectLoadFilter( path ) )
+        {
+            asyncBitSet.set( index );
+        }
+        else
+        {
+            spdlog::info( "Loading file {}", utf8string( path ) );
+            ctx->results[index] = sLoadPath( path, settings.openFolder, subprogress( settings.progress, syncIndex++, count ) );
+        }
+    }
+    assert( syncIndex + asyncBitSet.count() == count );
+
+    ctx->progressCallback = subprogress( settings.progress, (float)syncIndex / (float)count, 1.00f );
+    ctx->initializeProgressMap( asyncBitSet );
+
+    auto postLoad = [ctx, count, postLoadCallback, targetUnit = settings.targetUnit]
+    {
+        SceneConstructor constructor( targetUnit );
+        for ( auto index = 0ull; index < count; ++index )
+            constructor.process( ctx->paths[index], ctx->results[index] );
+        postLoadCallback( constructor.construct() );
+    };
+
+    if ( asyncBitSet.none() )
+        return postLoad();
+
+    ctx->asyncCount = asyncBitSet.count();
+    for ( const auto index : asyncBitSet )
+    {
+        const auto& path = ctx->paths[index];
+        const auto asyncFilter = findAsyncObjectLoadFilter( path );
+        assert( asyncFilter );
+        const auto asyncLoader = AsyncObjectLoad::getObjectLoader( *asyncFilter );
+        assert( asyncLoader );
+        const auto callback = ctx->progressCallbackFor( index );
+        spdlog::info( "Async loading file {}", utf8string( path ) );
+        asyncLoader( path, [ctx, index, postLoad, callback] ( Expected<LoadedObjects> result )
+        {
+            ctx->results[index] = std::move( result );
+            reportProgress( callback, 1.00f );
+            if ( ctx->asyncCount.fetch_sub( 1 ) == 1 )
+                // that was the last file
+                postLoad();
+        }, callback );
+    }
+}
+
+} // namespace MR::SceneLoad

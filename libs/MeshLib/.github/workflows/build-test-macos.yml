@@ -1,0 +1,286 @@
+name: Build and test MacOS
+
+on:
+  workflow_call:
+    inputs:
+      app_version:
+        required: true
+        type: string
+      full_config_build:
+        default: false
+        required: false
+        type: boolean
+      internal_build:
+        required: false
+        type: boolean
+      upload_artifacts:
+        required: true
+        type: boolean
+      upload_test_artifacts:
+        required: true
+        type: boolean
+      mrbind:
+        default: true
+        required: false
+        type: boolean
+      mrbind_c:
+        default: true
+        required: false
+        type: boolean
+      nuget_build_patch:
+        default: false
+        required: false
+        type: boolean
+
+jobs:
+  macos-build-test:
+    timeout-minutes: 100
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ x64, arm64 ]
+        config: [ Debug, Release ]
+        exclude:
+          - arch: x64
+            config: Debug
+        include:
+          - arch: x64
+            config: Release
+            os: x64
+            compiler: AppleClang
+            cxx-compiler-template: /usr/bin/clang++
+            c-compiler-template: /usr/bin/clang
+            # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners
+            runner: macos-15-intel # github hosted
+          - arch: arm64
+            config: Debug
+            os: github-arm
+            compiler: AppleClang
+            cxx-compiler-template: /usr/bin/clang++
+            c-compiler-template: /usr/bin/clang
+            runner: macos-latest  # github hosted
+          - arch: arm64
+            config: Release
+            os: arm
+            compiler: brew-llvm18
+            cxx-compiler-template: BREW_PREFIX/opt/llvm@18/bin/clang++
+            c-compiler-template: BREW_PREFIX/opt/llvm@18/bin/clang
+            runner: [ self-hosted, macos, arm64, build ] #  any macos version
+    permissions:
+      id-token: write # This is required for requesting the JWT
+      contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Checkout third-party submodules
+        run: |
+          # Download sub-submodules for certain submodules. We don't recurse above in Checkout to improve build performance. See: https://github.com/actions/checkout/issues/1779
+          git submodule update --init --recursive --depth 1 thirdparty/mrbind
+
+      - name: Setup Homebrew prefix and resolve compiler paths
+        id: setup
+        run: |
+          BREW_PREFIX=$(brew --prefix)
+          echo "Brew prefix: $BREW_PREFIX"
+          echo "brew-prefix=$BREW_PREFIX" >> $GITHUB_OUTPUT
+          echo "BREW_PREFIX=$BREW_PREFIX" >> $GITHUB_ENV
+
+          # Substitute BREW_PREFIX in templates and set actual compiler paths
+          CXX_COMPILER=$(echo "${{ matrix.cxx-compiler-template }}" | sed "s|BREW_PREFIX|$BREW_PREFIX|g")
+          C_COMPILER=$(echo "${{ matrix.c-compiler-template }}" | sed "s|BREW_PREFIX|$BREW_PREFIX|g")
+
+          echo "CXX compiler: $CXX_COMPILER"
+          echo "C compiler: $C_COMPILER"
+
+          echo "cxx-compiler=$CXX_COMPILER" >> $GITHUB_OUTPUT
+          echo "c-compiler=$C_COMPILER" >> $GITHUB_OUTPUT
+
+      - name: Collect runner's system stats
+        if: ${{ inputs.internal_build }}
+        id: collect-runner-stats
+        continue-on-error: true
+        uses: ./.github/actions/collect-runner-stats
+        with:
+          target_os: macos
+          target_arch: ${{ matrix.arch }}
+          cxx_compiler: ${{ steps.setup.outputs.cxx-compiler }}
+          build_config: ${{ matrix.config }}
+
+      - name: Install thirdparty libs
+        run: ./scripts/build_thirdparty.sh
+        env:
+          CMAKE_CXX_COMPILER: ${{ steps.setup.outputs.cxx-compiler }}
+          CMAKE_C_COMPILER: ${{ steps.setup.outputs.c-compiler }}
+
+      - name: Install MRBind
+        if: ${{ inputs.mrbind || inputs.mrbind_c }}
+        run: |
+          ./scripts/mrbind/install_deps_macos.sh
+          ./scripts/mrbind/install_mrbind_macos.sh
+
+      - name: Create virtualenv
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          echo PATH=$PATH >> $GITHUB_ENV
+
+      - name: Setup python requirements
+        run: |
+          curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+          python3 -m pip install -r ./requirements/python.txt
+          python3 -m pip install pytest
+
+      - name: Generate C bindings
+        if: ${{ inputs.mrbind_c }}
+        env:
+          PATH: ${{ steps.setup.outputs.brew-prefix }}/opt/make/libexec/gnubin:${{ steps.setup.outputs.brew-prefix }}/opt/grep/libexec/gnubin:${{env.PATH}}
+          CXX: ${{ steps.setup.outputs.cxx-compiler }}
+        run: |
+          make --version
+          make -f scripts/mrbind/generate.mk -B --trace TARGET=c
+
+      - name: Build
+        run: ./scripts/build_source.sh
+        env:
+          MESHLIB_BUILD_RELEASE: ${{ fromJSON('["OFF", "ON"]')[matrix.config == 'Release'] }}
+          MESHLIB_BUILD_DEBUG: ${{ fromJSON('["OFF", "ON"]')[matrix.config == 'Debug'] }}
+          CMAKE_CXX_COMPILER: ${{ steps.setup.outputs.cxx-compiler }}
+          MR_VERSION: ${{ inputs.app_version }}
+          MR_CMAKE_OPTIONS: >
+            -DMESHLIB_BUILD_MRMESH_PY_LEGACY=${{ fromJSON('["ON", "OFF"]')[inputs.mrbind] }}
+            -DMR_CXX_STANDARD=23
+            -DMESHLIB_BUILD_GENERATED_C_BINDINGS=${{ fromJSON('["OFF", "ON"]')[inputs.mrbind_c] }}
+
+      - name: MRMesh Exported Symbols
+        run: |
+          export PATH="$(brew --prefix llvm@18)/bin:$PATH"
+          nm -gU ./build/${{ matrix.config }}/bin/libMRMesh.dylib | llvm-cxxfilt
+
+      - name: Generate and build Python bindings
+        if: ${{ inputs.mrbind }}
+        env:
+          PATH: ${{ steps.setup.outputs.brew-prefix }}/opt/make/libexec/gnubin:${{ steps.setup.outputs.brew-prefix }}/opt/grep/libexec/gnubin:${{env.PATH}}
+          CXX: ${{ steps.setup.outputs.cxx-compiler }}
+        run: |
+          make --version
+          make -f scripts/mrbind/generate.mk \
+            -B --trace \
+            PYTHON_PKGCONF_NAME=python-3.10-embed \
+            MESHLIB_SHLIB_DIR=build/${{matrix.config}}/bin
+
+      - name: Run Start-and-Exit Tests
+        timeout-minutes: 3
+        run: ./build/${{ matrix.config }}/bin/MeshViewer -tryHidden -noEventLoop -unloadPluginsAtEnd
+
+      - name: Unit Tests
+        env:
+          GTEST_OUTPUT: 'xml:unit_tests_report_gtest.xml'
+        run: ./build/${{ matrix.config }}/bin/MRTest
+
+      - name: C Unit Tests
+        if: ${{ inputs.mrbind_c }}
+        run: ./build/${{ matrix.config }}/bin/MRTestC2
+
+      - name: Python Sanity Tests
+        timeout-minutes: 8
+        working-directory: ./build/${{ matrix.config }}/bin
+        run: python3 ./../../../scripts/run_python_test_script.py -d '../test_python' -a ' --junit-xml=../unit_tests_report_pytest.xml'
+
+      - name: Python Regression Tests
+        if: ${{ inputs.internal_build }}
+        env:
+          RUN_CUDA_ARG: "--run-cuda=negative --junit-xml=../unit_tests_report_regression.xml"
+        uses: ./.github/actions/python-regression-tests
+        with:
+          build_config: ${{ matrix.config }}
+          mrbind: ${{ inputs.mrbind }}
+          smoke: ${{ !inputs.full_config_build && matrix.config == 'Debug' }}
+          test_artifacts_path: macos/${{ matrix.os }}
+          upload_test_artifacts: ${{ inputs.upload_test_artifacts }}
+
+      - name: Generate Test Performance Report
+        continue-on-error: true
+        run: |
+          scripts/junit_to_csv.py unit_tests_report.csv unit_tests_report_*.xml
+          cat unit_tests_report.csv
+
+      - name: Create Pkg
+        if: ${{ matrix.config == 'Release' }}
+        run: |
+          ./scripts/distribution_apple.sh ${{ inputs.app_version }}
+          mv MeshLib_.pkg meshlib_${{matrix.os}}.pkg
+
+      - name: Extract Pkg
+        if: ${{ matrix.config == 'Release' }}
+        run: |
+          # https://gist.github.com/ugultopu/1adf8e08acb87be649d69419cf7aca3c
+          pkgutil --expand meshlib_${{ matrix.os }}.pkg ./meshlib_install
+          cd ./meshlib_install/MeshLib.pkg
+          cat Payload | gunzip | cpio -i
+
+      - name: Build C++ examples
+        if: ${{ matrix.config == 'Release' }}
+        env:
+          CXX: ${{ steps.setup.outputs.cxx-compiler }}
+        run: |
+          cmake \
+            -S examples/cpp-examples \
+            -B cpp-examples-build \
+            -D CMAKE_FRAMEWORK_PATH=$(pwd)/meshlib_install/MeshLib.pkg/Frameworks/
+          cmake \
+            --build cpp-examples-build \
+            --parallel $(sysctl -n hw.physicalcpu)
+
+      - name: Build C examples
+        if: ${{ matrix.config == 'Release' }}
+        env:
+          CC: ${{ steps.setup.outputs.c-compiler }}
+        run: |
+          cmake \
+            -S examples/c-examples \
+            -B c-examples-build \
+            -D CMAKE_FRAMEWORK_PATH=$(pwd)/meshlib_install/MeshLib.pkg/Frameworks/
+          cmake \
+            --build c-examples-build \
+            --parallel $(sysctl -n hw.physicalcpu)
+
+      - name: Upload Macos Distribution
+        if: ${{ inputs.upload_artifacts && matrix.config == 'Release' }}
+        uses: actions/upload-artifact@v6
+        env:
+          ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: 1800000
+        with:
+          name: Distributives_macos-${{matrix.os}}
+          path: meshlib_${{matrix.os}}.pkg
+          retention-days: 1
+
+      - name: Collect artifact stats
+        if: ${{ inputs.internal_build && inputs.upload_artifacts }}
+        continue-on-error: true
+        uses: ./.github/actions/collect-artifact-stats
+        with:
+          artifact_path: ${{ github.workspace }}
+          artifact_glob: meshlib_${{matrix.os}}.pkg
+          stats_file_suffix: -${{ steps.collect-runner-stats.outputs.job_id }}
+
+      - name: Create and fix fake Wheel for NuGet
+        if: ${{ inputs.nuget_build_patch && matrix.config == 'Release' }}
+        shell: bash
+        run: |
+          python3 -m venv ./wheel_venv
+          source ./wheel_venv/bin/activate
+          python3 -m pip install delocate==0.10.7
+          python3 ./scripts/nuget_patch/patch_library_deps.py "./build/Release/bin/libMeshLibC2.dylib" "./patched_content/"
+          ./scripts/nuget_patch/fix_macos_rpath.sh ./patched_content/libMeshLibC2.dylib
+
+      - name: Upload NuGet files to Artifacts
+        if: ${{ inputs.nuget_build_patch && matrix.config == 'Release' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: DotNetPatchArchiveMacOs-${{ matrix.arch }}
+          path: ./patched_content/*
+          retention-days: 1
