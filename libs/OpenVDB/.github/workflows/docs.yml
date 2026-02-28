@@ -1,0 +1,150 @@
+
+name: Docs
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'feature/**'
+      - 'pr/**'
+    paths-ignore:
+      - 'CHANGES'
+      - 'openvdb_maya/**'
+      - 'pendingchanges/**'
+      - '**.md'
+  pull_request:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'CHANGES'
+      - 'openvdb_maya/**'
+      - 'pendingchanges/**'
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to openvdb-website (docs/coverage)?'
+        required: true
+        default: 'none'
+
+# Allow subsequent pushes to the same PR or REF to cancel any previous jobs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doxygen:
+    runs-on: ${{ (github.repository_owner == 'AcademySoftwareFoundation' && 'ubuntu-22.04-8c-32g-300h') || 'ubuntu-latest' }}
+    env:
+      CXX: g++
+    container:
+      image: aswf/ci-openvdb:2026
+    steps:
+    - uses: actions/checkout@v4
+    - name: install_doxygen
+      run: ./ci/install_doxygen.sh 1_14_0
+    - name: nanobind
+      run: ./ci/install_nanobind.sh 2.5.0
+    - name: install_latex
+      run: ./ci/install_texlive.sh
+    - name: build
+      run: >
+        ./ci/build.sh -v
+        --build-type=Release
+        --components="core,python,doc"
+        --cargs=\"
+        -DUSE_BLOSC=OFF
+        -DOPENVDB_CORE_STATIC=OFF
+        -DOPENVDB_PYTHON_WRAP_ALL_GRID_TYPES=ON
+        -DUSE_EXPLICIT_INSTANTIATION=OFF
+        -DDISABLE_DEPENDENCY_VERSION_CHECKS=ON
+        \"
+    - name: pre_deploy
+      # Overwrite global SSH configuration
+      #  https://github.com/peaceiris/actions-gh-pages/issues/719
+      #  https://linuxhint.com/ssh-stricthostkeychecking/
+      run: >
+        echo "Host *
+          StrictHostKeyChecking no
+          UserKnownHostsFile=/dev/null
+        " > /etc/ssh/ssh_config
+    - name: deploy
+      # only deploy documentation on a manual workflow dispatch
+      if: |
+        github.repository_owner == 'AcademySoftwareFoundation' &&
+        github.event_name == 'workflow_dispatch' &&
+        github.event.inputs.deploy == 'docs'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        deploy_key: ${{ secrets.PRIVATE_KEY }}
+        publish_dir: /usr/local/share/doc/OpenVDB/html
+        destination_dir: documentation/doxygen
+        external_repository: AcademySoftwareFoundation/openvdb-website
+        publish_branch: master
+        full_commit_message: "Automatic doxygen documentation update
+          - Deployed from: AcademySoftwareFoundation/openvdb ${{ github.sha }}
+
+          Signed-off-by: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+
+  #############################################################################
+  ################################ Coverage ###################################
+  #############################################################################
+
+  linux-coverage:
+    if: |
+      github.repository_owner == 'AcademySoftwareFoundation' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy == 'coverage'
+    runs-on: ubuntu-latest
+    container:
+      image: aswf/ci-openvdb:2025-clang19.1
+    env:
+      CXX: g++
+    steps:
+    - uses: actions/checkout@v3
+    - name: install_gcovr
+      run: pip install gcovr
+    - name: build
+      run: >
+        ./ci/build.sh -v
+        --build-type=coverage
+        --components="core,axcore,test,axtest"
+        --cargs=\"-DOPENVDB_CORE_STATIC=OFF -DOPENVDB_AX_STATIC=OFF\"
+    - name: test_and_gcov
+      run: |
+        cd build
+        ctest -V
+        make gcov_html
+        cd -
+    - name: zip_large_html
+      # The index.function list is > 100mb. Just zip it and provide it as a
+      # download (could instead use LFS to host but not really worth it).
+      run: |
+        cd build/gcov_html
+        tar -czvf index.functions.html.tar.gz index.functions.html
+        sed -i -e 's/index.functions.html/index.functions.html.tar.gz/g' index.html
+        sed -i -e 's/List of functions/Download function index/g' index.html
+        rm index.functions.html
+        cd -
+    - name: pre_deploy
+      # Overwrite global SSH configuration
+      #  https://github.com/peaceiris/actions-gh-pages/issues/719
+      #  https://linuxhint.com/ssh-stricthostkeychecking/
+      run: >
+        echo "Host *
+          StrictHostKeyChecking no
+          UserKnownHostsFile=/dev/null
+        " > /etc/ssh/ssh_config
+    - name: deploy
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+        publish_dir: ./build/gcov_html
+        destination_dir: documentation/code_coverage
+        external_repository: AcademySoftwareFoundation/openvdb-website
+        publish_branch: master
+        full_commit_message: "Automatic code coverage update
+          - Deployed from: AcademySoftwareFoundation/openvdb ${{ github.sha }}
+
+          Signed-off-by: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>"
+
