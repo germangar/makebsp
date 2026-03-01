@@ -26,5 +26,6 @@ void FreeCollisionMesh(collisionMesh_t *mesh);
 /* Shared extrusion logic (from model_moptimizer.c) */
 bspbrush_t *ExtrudeTrianglesToBrushes(collisionMesh_t *mesh, shaderInfo_t *si);
 bspbrush_t *CombineBrushes(bspbrush_t *list, bspbrush_t *newBrushes);
+void WriteCollisionOBJ(collisionMesh_t **meshes, int numMeshes, const char *filename);
 
 #endif

@@ -987,6 +987,51 @@ void FreeCollisionMesh(collisionMesh_t *mesh) {
 
 /*
 ====================
+WriteCollisionOBJ
+
+Writes multiple collision meshes into a single OBJ file.
+Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)
+====================
+*/
+void WriteCollisionOBJ(collisionMesh_t **meshes, int numMeshes, const char *filename) {
+  FILE *f = fopen(filename, "w");
+  if (!f) {
+    _printf("ERROR: Could not open %s for writing\n", filename);
+    return;
+  }
+
+  fprintf(f, "# Unified Collision OBJ: %d meshes\n", numMeshes);
+  fprintf(f, "# Axis swap: Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)\n");
+
+  int vertexOffset = 0;
+  for (int i = 0; i < numMeshes; i++) {
+    collisionMesh_t *m = meshes[i];
+    if (!m) continue;
+
+    fprintf(f, "o mesh_%d\n", i);
+    
+    /* Vertices */
+    for (int v = 0; v < m->numVerts; v++) {
+      fprintf(f, "v %f %f %f\n", m->verts[v][0], m->verts[v][2], -m->verts[v][1]);
+    }
+
+    /* Faces (1-indexed + offset) */
+    for (int t = 0; t < m->numTris; t++) {
+      fprintf(f, "f %d %d %d\n", 
+              m->tris[t][0] + vertexOffset + 1,
+              m->tris[t][1] + vertexOffset + 1,
+              m->tris[t][2] + vertexOffset + 1);
+    }
+
+    vertexOffset += m->numVerts;
+  }
+
+  fclose(f);
+  _printf("  Wrote collision debug to %s\n", filename);
+}
+
+/*
+====================
 GenerateMOCollision
 
 Processes a model instance, optimizes its meshes via meshoptimizer,
@@ -997,6 +1042,8 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
   int j, k;
   mapDrawSurface_t *ds;
+  collisionMesh_t *meshes[256];
+  int numMeshes = 0;
   
   _printf("Instance %s: Running MeshOptimizer Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
 
@@ -1071,12 +1118,35 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     /* Append to main list */
     hulls_list = CombineBrushes(hulls_list, surfBrushes);
 
-    /* Cleanup */
-    FreeCollisionMesh(colMesh);
+    /* Accumulate for OBJ export */
+    if (numMeshes < 256) {
+      meshes[numMeshes++] = colMesh;
+    } else {
+      FreeCollisionMesh(colMesh);
+    }
+
     free(remap);
     free(simplifiedIndexes);
     free(meshIndexes);
     free(meshVerts);
+  }
+
+  /* Unified OBJ export at the end */
+  if (numMeshes > 0) {
+    char objPath[1024];
+    strcpy(objPath, inst->modelName);
+    char *ext = strrchr(objPath, '.');
+    if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL) {
+      *ext = '\0';
+    }
+    strcat(objPath, "_mopt.obj");
+    
+    WriteCollisionOBJ(meshes, numMeshes, objPath);
+
+    /* Cleanup accumulated meshes */
+    for (int i = 0; i < numMeshes; i++) {
+        FreeCollisionMesh(meshes[i]);
+    }
   }
 
   return hulls_list;

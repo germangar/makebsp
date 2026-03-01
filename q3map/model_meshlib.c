@@ -218,6 +218,8 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   int j, k;
   mapDrawSurface_t *ds;
   bspbrush_t *hulls_list = NULL;
+  collisionMesh_t *meshes[256];
+  int numMeshes = 0;
 
   _printf("Instance %s: Running MeshLib Pipeline (%s)\n",
           inst->modelName, CategoryString(inst->category));
@@ -290,7 +292,13 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
         hulls_list = CombineBrushes(hulls_list, surfBrushes);
 
-        FreeCollisionMesh(colMesh);
+        /* Accumulate for OBJ export */
+        if (numMeshes < 256) {
+          meshes[numMeshes++] = colMesh;
+        } else {
+          FreeCollisionMesh(colMesh);
+        }
+
         mrTriangulationFree(tri);
       }
 
@@ -299,6 +307,24 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
 
     free(meshVerts);
     free(meshIndexes);
+  }
+
+  /* Unified OBJ export at the end */
+  if (numMeshes > 0) {
+    char objPath[1024];
+    strcpy(objPath, inst->modelName);
+    char *ext = strrchr(objPath, '.');
+    if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL) {
+      *ext = '\0';
+    }
+    strcat(objPath, "_mlib.obj");
+    
+    WriteCollisionOBJ(meshes, numMeshes, objPath);
+
+    /* Cleanup accumulated meshes */
+    for (int i = 0; i < numMeshes; i++) {
+        FreeCollisionMesh(meshes[i]);
+    }
   }
 
   _printf("Instance %s: MeshLib pipeline complete (%s)\n",
