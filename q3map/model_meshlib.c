@@ -210,44 +210,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
             inputTris, finalFaces, reduction);
   }
 
-  /* --- Step 7: Export debug OBJ (Q3 Z-up → OBJ Y-up) --- */
-  {
-    char objPath[1024];
-    sprintf(objPath, "%s_meshlib.obj", debugName);
 
-    FILE *objFile = fopen(objPath, "w");
-    if (objFile) {
-      const MRVector3f *pts = mrMeshPoints(mesh);
-      size_t numPts = mrMeshPointsNum(mesh);
-      const MRMeshTopology *saveTopo = mrMeshTopology(mesh);
-      MRTriangulation *tri = mrMeshTopologyGetTriangulation(saveTopo);
-
-      fprintf(objFile, "# MeshLib healed/decimated mesh: %s\n", debugName);
-      fprintf(objFile, "# %zu verts, %zu faces\n", numPts, tri ? tri->size : 0);
-      fprintf(objFile, "# Axis swap: Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)\n");
-
-      /* Write vertices with axis swap */
-      for (size_t vi = 0; vi < numPts; vi++) {
-        fprintf(objFile, "v %f %f %f\n", pts[vi].x, pts[vi].z, -pts[vi].y);
-      }
-
-      /* Write faces (1-indexed) */
-      if (tri) {
-        for (size_t fi = 0; fi < tri->size; fi++) {
-          /* Only write valid faces */
-          MRThreeVertIds *face = &tri->data[fi];
-          if ((*face)[0].id >= 0 && (*face)[1].id >= 0 && (*face)[2].id >= 0) {
-            fprintf(objFile, "f %d %d %d\n", 
-                    (*face)[0].id + 1, (*face)[1].id + 1, (*face)[2].id + 1);
-          }
-        }
-        mrTriangulationFree(tri);
-      }
-
-      fclose(objFile);
-      // _printf("  DEBUG: Wrote healed/decimated mesh to %s (%zu verts)\n", objPath, numPts);
-    }
-  }
 
   return mesh;
 }
