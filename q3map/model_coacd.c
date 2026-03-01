@@ -8,135 +8,62 @@ This file is part of Quake III Arena source code.
 */
 
 #include "qbsp.h"
+#include "model_collision.h"
 #include "../libs/coacd_api.h"
 #include <stdio.h>
 
-static int c_degenerate_triangles = 0;
-static int c_degenerate_hulls = 0;
+/*
+====================
+ConvertCoACDToCollisionHull
+
+Adapter: converts CoACD's double-precision mesh to our float colHull_t.
+====================
+*/
+static colHull_t *ConvertCoACDToCollisionHull(CoACD_Mesh *mesh) {
+    int i;
+    colHull_t *hull = malloc(sizeof(colHull_t));
+    hull->numVerts = (int)mesh->vertices_count;
+    hull->verts = malloc(hull->numVerts * sizeof(vec3_t));
+    for (i = 0; i < hull->numVerts; i++) {
+        hull->verts[i][0] = (float)mesh->vertices_ptr[i * 3 + 0];
+        hull->verts[i][1] = (float)mesh->vertices_ptr[i * 3 + 1];
+        hull->verts[i][2] = (float)mesh->vertices_ptr[i * 3 + 2];
+    }
+    
+    hull->numTris = (int)mesh->triangles_count;
+    hull->tris = malloc(hull->numTris * sizeof(colTri_t));
+    for (i = 0; i < hull->numTris; i++) {
+        hull->tris[i][0] = mesh->triangles_ptr[i * 3 + 0];
+        hull->tris[i][1] = mesh->triangles_ptr[i * 3 + 1];
+        hull->tris[i][2] = mesh->triangles_ptr[i * 3 + 2];
+    }
+    return hull;
+}
 
 /*
 ====================
-BrushFromMesh
+BrushesFromHullsCoACD
 
-Converts a convex hull (triangle soup) into a bspbrush_t.
-Deduplicates coplanar faces by finding unique plane indices.
+Adapter: bridge for CoACD.
 ====================
 */
-static bspbrush_t *BrushFromMesh(CoACD_Mesh *mesh, shaderInfo_t *si) {
-  int i, j;
-  int numUniquePlanes = 0;
-  int uniquePlanes[MAX_BRUSH_SIDES];
-  float maxPlaneArea[MAX_BRUSH_SIDES];
-  vec3_t trianglePoints[MAX_BRUSH_SIDES][3];
-  bspbrush_t *b;
-
-  for (i = 0; i < MAX_BRUSH_SIDES; i++) {
-    maxPlaneArea[i] = -1.0f;
-  }
-
-  // For each triangle, find its unique plane
-  for (i = 0; i < mesh->triangles_count; i++) {
-    int idx0 = mesh->triangles_ptr[i * 3 + 0];
-    int idx1 = mesh->triangles_ptr[i * 3 + 1];
-    int idx2 = mesh->triangles_ptr[i * 3 + 2];
-
-    vec3_t p0, p1, p2;
-    p0[0] = mesh->vertices_ptr[idx0 * 3 + 0];
-    p0[1] = mesh->vertices_ptr[idx0 * 3 + 1];
-    p0[2] = mesh->vertices_ptr[idx0 * 3 + 2];
-    p1[0] = mesh->vertices_ptr[idx1 * 3 + 0];
-    p1[1] = mesh->vertices_ptr[idx1 * 3 + 1];
-    p1[2] = mesh->vertices_ptr[idx1 * 3 + 2];
-    p2[0] = mesh->vertices_ptr[idx2 * 3 + 0];
-    p2[1] = mesh->vertices_ptr[idx2 * 3 + 1];
-    p2[2] = mesh->vertices_ptr[idx2 * 3 + 2];
-
-    // Check for degenerate triangle (near zero area)
-    vec3_t t1, t2, cross;
-    VectorSubtract(p1, p0, t1);
-    VectorSubtract(p2, p0, t2);
-    CrossProduct(t1, t2, cross);
-    float area = VectorLength(cross);
-    if (area < 0.001f) {
-      c_degenerate_triangles++;
-      continue;
+static bspbrush_t *BrushesFromHullsCoACD(CoACD_MeshArray hulls, shaderInfo_t *si) {
+    int i;
+    bspbrush_t *brushes;
+    colHull_t **tempHulls = malloc(hulls.meshes_count * sizeof(colHull_t *));
+    
+    for (i = 0; i < (int)hulls.meshes_count; i++) {
+        tempHulls[i] = ConvertCoACDToCollisionHull(&hulls.meshes_ptr[i]);
     }
-
-    // MapPlaneFromPoints computes normal pointing OUT for CW triangles.
-    // If our mesh is CCW (standard), feeding MapPlaneFromPoints(p0, p2, p1)
-    // gives the correct outgoing normal.
-    int planenum = MapPlaneFromPoints(p0, p2, p1);
-    if (planenum == -1) {
-      c_degenerate_triangles++;
-      continue;
+    
+    brushes = BrushesFromHulls(tempHulls, (int)hulls.meshes_count, si);
+    
+    for (i = 0; i < (int)hulls.meshes_count; i++) {
+        FreeCollisionHull(tempHulls[i]);
     }
-
-    // Deduplicate against existing planes in this brush
-    for (j = 0; j < numUniquePlanes; j++) {
-      if (uniquePlanes[j] == planenum) {
-        // Track the largest triangle per plane (for fallback windings)
-        if (area > maxPlaneArea[j]) {
-          maxPlaneArea[j] = area;
-          VectorCopy(p0, trianglePoints[j][0]);
-          VectorCopy(p1, trianglePoints[j][1]);
-          VectorCopy(p2, trianglePoints[j][2]);
-        }
-        break;
-      }
-    }
-
-    if (j == numUniquePlanes) {
-      if (numUniquePlanes >= MAX_BRUSH_SIDES) {
-        _printf("WARNING: BrushFromMesh reached MAX_BRUSH_SIDES\n");
-        break;
-      }
-      uniquePlanes[numUniquePlanes] = planenum;
-      maxPlaneArea[numUniquePlanes] = area;
-      VectorCopy(p0, trianglePoints[numUniquePlanes][0]);
-      VectorCopy(p1, trianglePoints[numUniquePlanes][1]);
-      VectorCopy(p2, trianglePoints[numUniquePlanes][2]);
-      numUniquePlanes++;
-    }
-  }
-
-  if (numUniquePlanes < 4) {
-    return NULL;
-  }
-
-  b = AllocBrush(numUniquePlanes);
-  b->numsides = numUniquePlanes;
-  b->detail = qtrue;
-  b->contents = si->contents;
-  b->contentShader = si;
-
-  for (i = 0; i < numUniquePlanes; i++) {
-    b->sides[i].planenum = uniquePlanes[i];
-    b->sides[i].shaderInfo = si;
-  }
-
-  // Try full-polygon windings from plane intersections first.
-  // If that fails (e.g. plane snapping made faces degenerate),
-  // fall back to 3-point windings from the best CoACD triangles.
-  if (!CreateBrushWindings(b)) {
-    _printf("WARNING: CreateBrushWindings failed, using triangle fallback\n");
-    for (i = 0; i < numUniquePlanes; i++) {
-      if (b->sides[i].winding) {
-        FreeWinding(b->sides[i].winding);
-      }
-      b->sides[i].winding = AllocWinding(3);
-      b->sides[i].winding->numpoints = 3;
-      VectorCopy(trianglePoints[i][0], b->sides[i].winding->p[0]);
-      VectorCopy(trianglePoints[i][1], b->sides[i].winding->p[1]);
-      VectorCopy(trianglePoints[i][2], b->sides[i].winding->p[2]);
-    }
-    if (!BoundBrush(b)) {
-      c_degenerate_hulls++;
-      FreeBrush(b);
-      return NULL;
-    }
-  }
-
-  return b;
+    free(tempHulls);
+    
+    return brushes;
 }
 
 /*
@@ -156,9 +83,6 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
   int currentVert = 0;
   int currentIndex = 0;
   bspbrush_t *hulls_list = NULL;
-
-  c_degenerate_triangles = 0;
-  c_degenerate_hulls = 0;
 
   float threshold, resolution, prep_resolution;
   int mcts_max_depth;
@@ -264,13 +188,8 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
 
     _printf("Instance %s: Library produced %i raw hulls\n", inst->modelName, (int)hulls.meshes_count);
 
-    for (j = 0; j < (int)hulls.meshes_count; j++) {
-      bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[j], shader);
-      if (b) {
-        b->next = hulls_list;
-        hulls_list = b;
-      }
-    }
+    bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, shader);
+    hulls_list = CombineBrushes(hulls_list, brushes);
     
     CoACD_freeMeshArray(hulls);
     free(allVerts);
@@ -327,13 +246,8 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
 
       _printf("Instance %s: Library produced %i raw hulls (one mesh)\n", inst->modelName, (int)hulls.meshes_count);
 
-      for (k = 0; k < (int)hulls.meshes_count; k++) {
-        bspbrush_t *b = BrushFromMesh(&hulls.meshes_ptr[k], shader);
-        if (b) {
-          b->next = hulls_list;
-          hulls_list = b;
-        }
-      }
+      bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, shader);
+      hulls_list = CombineBrushes(hulls_list, brushes);
 
       CoACD_freeMeshArray(hulls);
       free(meshVerts);
@@ -341,9 +255,5 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
     }
   }
 
-  if (c_degenerate_triangles > 0 || c_degenerate_hulls > 0) {
-    _printf("Instance %s: Degenerate geometry skipped: %i triangles, %i hulls\n",
-            inst->modelName, c_degenerate_triangles, c_degenerate_hulls);
-  }
   return hulls_list;
 }

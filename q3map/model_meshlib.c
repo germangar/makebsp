@@ -218,7 +218,7 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   int j, k;
   mapDrawSurface_t *ds;
   bspbrush_t *hulls_list = NULL;
-  collisionMesh_t *meshes[256];
+  colMesh_t *meshes[256];
   int numMeshes = 0;
 
   _printf("Instance %s: Running MeshLib Pipeline (%s)\n",
@@ -255,14 +255,14 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
                                           inst->modelName);
 
     if (healed) {
-      /* Extract data from MRMesh into unified collisionMesh_t */
+      /* Extract data from MRMesh into unified colMesh_t */
       const MRVector3f *pts = mrMeshPoints(healed);
       size_t numPts = mrMeshPointsNum(healed);
       const MRMeshTopology *topo = mrMeshTopology(healed);
       MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
 
       if (tri && tri->size > 0) {
-        collisionMesh_t *colMesh = malloc(sizeof(collisionMesh_t));
+        colMesh_t *colMesh = malloc(sizeof(colMesh_t));
         colMesh->numVerts = (int)numPts;
         colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
         memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));

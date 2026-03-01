@@ -739,7 +739,7 @@ Optimized version with two merge passes:
 3. Individual extrusion — any remaining triangles extruded as 5-sided brushes
 ====================
 */
-bspbrush_t *ExtrudeTrianglesToBrushes(collisionMesh_t *mesh, shaderInfo_t *si) {
+bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si) {
   bspbrush_t *hulls_list = NULL;
   float *verts = (float *)mesh->verts;
   unsigned int *indices = (unsigned int *)mesh->tris;
@@ -973,17 +973,6 @@ bspbrush_t *CombineBrushes(bspbrush_t *list, bspbrush_t *newBrushes) {
   return newBrushes;
 }
 
-/*
-====================
-FreeCollisionMesh
-====================
-*/
-void FreeCollisionMesh(collisionMesh_t *mesh) {
-  if (!mesh) return;
-  if (mesh->verts) free(mesh->verts);
-  if (mesh->tris) free(mesh->tris);
-  free(mesh);
-}
 
 /*
 ====================
@@ -993,7 +982,7 @@ Writes multiple collision meshes into a single OBJ file.
 Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)
 ====================
 */
-void WriteCollisionOBJ(collisionMesh_t **meshes, int numMeshes, const char *filename) {
+void WriteCollisionOBJ(colMesh_t **meshes, int numMeshes, const char *filename) {
   FILE *f = fopen(filename, "w");
   if (!f) {
     _printf("ERROR: Could not open %s for writing\n", filename);
@@ -1005,7 +994,7 @@ void WriteCollisionOBJ(collisionMesh_t **meshes, int numMeshes, const char *file
 
   int vertexOffset = 0;
   for (int i = 0; i < numMeshes; i++) {
-    collisionMesh_t *m = meshes[i];
+    colMesh_t *m = meshes[i];
     if (!m) continue;
 
     fprintf(f, "o mesh_%d\n", i);
@@ -1042,7 +1031,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
   int j, k;
   mapDrawSurface_t *ds;
-  collisionMesh_t *meshes[256];
+  colMesh_t *meshes[256];
   int numMeshes = 0;
   
   _printf("Instance %s: Running MeshOptimizer Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
@@ -1096,9 +1085,9 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         remap, simplifiedIndexes, simplifiedIndexCount,
         meshVerts, ds->numVerts, sizeof(float) * 3);
 
-    /* Package into collisionMesh_t */
-    collisionMesh_t *colMesh = malloc(sizeof(collisionMesh_t));
-    memset(colMesh, 0, sizeof(collisionMesh_t));
+    /* Package into colMesh_t */
+    colMesh_t *colMesh = malloc(sizeof(colMesh_t));
+    memset(colMesh, 0, sizeof(colMesh_t));
     colMesh->numVerts = (int)uniqueVerts;
     colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
 
@@ -1108,7 +1097,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     colMesh->numTris = (int)(simplifiedIndexCount / 3);
     colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
 
-    meshopt_remapIndexBuffer(colMesh->tris, simplifiedIndexes,
+    meshopt_remapIndexBuffer((unsigned int *)colMesh->tris, simplifiedIndexes,
                              simplifiedIndexCount, remap);
 
     /* 3. Extrude using the shared function */

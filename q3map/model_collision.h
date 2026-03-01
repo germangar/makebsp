@@ -5,27 +5,37 @@
 
 /* 
 =====================================================================
-Unified Collision Mesh Format
-Used as an intermediate representation between simplifiers and extruders/HACD.
-Memory layout matches MeshLib and MeshOptimizer for zero-copy/fast-copy.
+Unified Collision Mesh/Hull Formats
 ===================================================================== 
 */
 
 typedef int colTri_t[3];
 
-typedef struct {
+// Represents complex decimated model geometry (non-convex)
+typedef struct colMesh_s {
     vec3_t   *verts;
     int       numVerts;
     colTri_t *tris;
     int       numTris;
-} collisionMesh_t;
+} colMesh_t;
+
+// Represents a small convex hull from decomposition
+typedef struct colHull_s {
+    vec3_t   *verts;
+    int       numVerts;
+    colTri_t *tris;
+    int       numTris;
+} colHull_t;
 
 /* Memory management */
-void FreeCollisionMesh(collisionMesh_t *mesh);
+void FreeCollisionMesh(colMesh_t *mesh);
+void FreeCollisionHull(colHull_t *hull);
 
-/* Shared extrusion logic (from model_moptimizer.c) */
-bspbrush_t *ExtrudeTrianglesToBrushes(collisionMesh_t *mesh, shaderInfo_t *si);
+/* Shared logic */
+bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si);
+bspbrush_t *BrushesFromHulls(colHull_t **hulls, int numHulls, shaderInfo_t *si);
+bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si);
 bspbrush_t *CombineBrushes(bspbrush_t *list, bspbrush_t *newBrushes);
-void WriteCollisionOBJ(collisionMesh_t **meshes, int numMeshes, const char *filename);
+void WriteCollisionOBJ(colMesh_t **meshes, int numMeshes, const char *filename);
 
 #endif
