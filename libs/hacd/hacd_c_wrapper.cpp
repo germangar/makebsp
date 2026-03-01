@@ -62,6 +62,14 @@ void hacd_set_add_faces_points(HACD_Wrapper* hacd, bool addFacesPoints) {
     hacd->hacd.SetAddFacesPoints(addFacesPoints);
 }
 
+void hacd_set_cc_connect_dist(HACD_Wrapper* hacd, double dist) {
+    hacd->hacd.SetConnectDist(dist);
+}
+
+void hacd_set_disable_normalize(HACD_Wrapper* hacd, bool disable) {
+    hacd->hacd.SetDisableNormalize(disable);
+}
+
 bool hacd_compute(HACD_Wrapper* hacd, bool fullCH) {
     return hacd->hacd.Compute(fullCH);
 }

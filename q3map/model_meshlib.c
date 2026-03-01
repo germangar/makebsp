@@ -24,6 +24,9 @@ Called from model_collision.c for MC_OBJECT category.
 #include "qbsp.h"
 #include "model_collision.h"
 
+/* HACD Wrapper */
+#include "hacd_c_wrapper.h"
+
 /* MRMeshC headers */
 #include "MRMeshFwd.h"
 #include "MRVector3.h"
@@ -38,6 +41,53 @@ Called from model_collision.c for MC_OBJECT category.
 #include "MRString.h"
 #include "MRBitSet.h"
 #include "MRVector.h"
+
+static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
+    bspbrush_t *list = NULL;
+    size_t numClusters = hacd_get_nclusters(hacd);
+    colHull_t **hulls = malloc(numClusters * sizeof(colHull_t *));
+    int validHulls = 0;
+    
+    for (size_t i = 0; i < numClusters; i++) {
+        size_t nPoints = hacd_get_npoints_ch(hacd, i);
+        size_t nTris = hacd_get_ntriangles_ch(hacd, i);
+        
+        HACD_Vec3 *points = malloc(nPoints * sizeof(HACD_Vec3));
+        HACD_Triangle *tris = malloc(nTris * sizeof(HACD_Triangle));
+        
+        if (hacd_get_ch(hacd, i, points, tris)) {
+            colHull_t *hull = malloc(sizeof(colHull_t));
+            hull->numVerts = (int)nPoints;
+            hull->verts = malloc(nPoints * sizeof(vec3_t));
+            for (size_t v = 0; v < nPoints; v++) {
+                hull->verts[v][0] = (float)points[v].x;
+                hull->verts[v][1] = (float)points[v].y;
+                hull->verts[v][2] = (float)points[v].z;
+            }
+            hull->numTris = (int)nTris;
+            hull->tris = malloc(nTris * sizeof(colTri_t));
+            for (size_t t = 0; t < nTris; t++) {
+                hull->tris[t][0] = tris[t].v1;
+                hull->tris[t][1] = tris[t].v2;
+                hull->tris[t][2] = tris[t].v3;
+            }
+            hulls[validHulls++] = hull;
+        }
+        free(points);
+        free(tris);
+    }
+    
+    if (validHulls > 0) {
+        list = BrushesFromHulls(hulls, validHulls, si);
+    }
+    
+    for (int i = 0; i < validHulls; i++) {
+        FreeCollisionHull(hulls[i]);
+    }
+    free(hulls);
+    
+    return list;
+}
 
 /*
 ====================
@@ -287,10 +337,51 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
            }
         }
 
-        /* Call the shared extruder */
+        /* Call HACD extruder */
         shaderInfo_t *si = (shader != NULL) ? shader : ds->shaderInfo;
-        bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
-        hulls_list = CombineBrushes(hulls_list, surfBrushes);
+
+        HACD_Vec3 *hacdPts = malloc(colMesh->numVerts * sizeof(HACD_Vec3));
+        for (int i = 0; i < colMesh->numVerts; i++) {
+            hacdPts[i].x = colMesh->verts[i][0];
+            hacdPts[i].y = colMesh->verts[i][1];
+            hacdPts[i].z = colMesh->verts[i][2];
+        }
+
+        HACD_Triangle *hacdTris = malloc(colMesh->numTris * sizeof(HACD_Triangle));
+        for (int i = 0; i < colMesh->numTris; i++) {
+            hacdTris[i].v1 = colMesh->tris[i][0];
+            hacdTris[i].v2 = colMesh->tris[i][1];
+            hacdTris[i].v3 = colMesh->tris[i][2];
+        }
+
+        HACD_Wrapper *hacd = hacd_new();
+        hacd_set_points(hacd, hacdPts, colMesh->numVerts);
+        hacd_set_triangles(hacd, hacdTris, colMesh->numTris);
+        
+        hacd_set_disable_normalize(hacd, false);
+        hacd_set_compacity_weight(hacd, 0.0001); 
+        hacd_set_volume_weight(hacd, 0.0000);    
+        hacd_set_cc_connect_dist(hacd, 0.0);
+        
+        size_t targetClusters = 1;
+        hacd_set_nclusters(hacd, targetClusters); 
+        hacd_set_concavity(hacd, 100000.0); 
+        hacd_set_add_extra_dist_points(hacd, true); 
+        hacd_set_add_faces_points(hacd, true);      
+        
+        _printf("  Running HACD on %d verts, %d tris (Threshold: %.1f, Min Hulls: %zu)\n", 
+                colMesh->numVerts, colMesh->numTris, 100.0, targetClusters);
+                
+        if (hacd_compute(hacd, false)) {
+            bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, si);
+            hulls_list = CombineBrushes(hulls_list, surfBrushes);
+        } else {
+            _printf("  WARNING: HACD computation failed for this mesh.\n");
+        }
+
+        hacd_delete(hacd);
+        free(hacdPts);
+        free(hacdTris);
 
         /* Accumulate for OBJ export */
         if (numMeshes < 256) {

@@ -30,6 +30,8 @@ void hacd_set_compacity_weight(HACD_Wrapper* hacd, double alpha);
 void hacd_set_volume_weight(HACD_Wrapper* hacd, double beta);
 void hacd_set_add_extra_dist_points(HACD_Wrapper* hacd, bool addExtraDistPoints);
 void hacd_set_add_faces_points(HACD_Wrapper* hacd, bool addFacesPoints);
+void hacd_set_cc_connect_dist(HACD_Wrapper* hacd, double dist);
+void hacd_set_disable_normalize(HACD_Wrapper* hacd, bool disable);
 
 bool hacd_compute(HACD_Wrapper* hacd, bool fullCH);
 

@@ -353,6 +353,7 @@ HACD::HACD(void)
 	m_normals = 0;
 	m_nTriangles = 0;
 	m_nPoints = 0;
+	m_disableNormalize = false;
 	m_nClusters = 0;
 	m_concavity = 0.0;
 	m_diag = 1.0;

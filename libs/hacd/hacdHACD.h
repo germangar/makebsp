@@ -206,6 +206,9 @@ public:
 	HACD(void);
 	//! Destructor.
 	~HACD(void);
+	
+	//! Disable automatic shifting and scaling to 1000.0 size bounding box
+	void SetDisableNormalize(bool disable) { m_disableNormalize = disable; }
 
 private:
 	//! Gives the edge index.
@@ -258,6 +261,7 @@ private:
 	Vec3<Real> *m_normals;          //>! pointer the normals array
 	size_t m_nTriangles;            //>! number of triangles in the original mesh
 	size_t m_nPoints;               //>! number of vertices in the original mesh
+	bool m_disableNormalize;        //>! flag to disable normalization
 	size_t m_nClusters;             //>! number of clusters
 	size_t m_nMinClusters;          //>! minimum number of clusters
 	double m_ccConnectDist;         //>! maximum allowed distance to connect CCs
