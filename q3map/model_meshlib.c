@@ -35,6 +35,7 @@ Called from model_collision.c for MC_OBJECT category.
 #include "MRMeshDecimate.h"
 #include "MRMeshSave.h"
 #include "MRString.h"
+#include "MRBitSet.h"
 #include "MRVector.h"
 
 /*
@@ -52,7 +53,8 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
                                     int *indexes, int numIndexes,
                                     const char *debugName) {
   int i;
-  int numTriangles = numIndexes / 3;
+  int inputTris = numIndexes / 3;
+  int numTriangles = inputTris;
 
   /* --- Step 1: Build MRMesh from triangles --- */
   MRVector3f *mrVerts = malloc(numVerts * sizeof(MRVector3f));
@@ -137,7 +139,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   {
     MRDecimateSettings settings = mrDecimateSettingsNew();
     settings.strategy = MRDecimateStrategyMinimizeError;
-    settings.maxError = 2.0f;           /* max distance deviation in world units */
+    settings.maxError = 4.0f;           /* max distance deviation in world units */
     settings.maxTriangleAspectRatio = 20.0f;
     settings.tinyEdgeLength = 0.01f;
     settings.stabilizer = 0.001f;
@@ -145,8 +147,16 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
     settings.packMesh = true;
 
     MRDecimateResult result = mrDecimateMesh(mesh, &settings);
+    
+    /* Get final face count */
+    const MRMeshTopology *finalTopo = mrMeshTopology(mesh);
+    size_t finalFaces = mrBitSetCount((const MRBitSet *)mrMeshTopologyGetValidFaces(finalTopo));
+    double reduction = inputTris > 0 ? (1.0 - (double)finalFaces / inputTris) * 100.0 : 0.0;
+
     _printf("  Decimated: %d verts deleted, %d faces deleted, error=%.3f\n",
             result.vertsDeleted, result.facesDeleted, result.errorIntroduced);
+    _printf("  Summary: %d original tris -> %zu remaining tris (%.1f%% reduction)\n",
+            inputTris, finalFaces, reduction);
   }
 
   /* --- Step 7: Export debug OBJ (Q3 Z-up → OBJ Y-up) --- */
@@ -176,7 +186,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
           /* Only write valid faces */
           MRThreeVertIds *face = &tri->data[fi];
           if ((*face)[0].id >= 0 && (*face)[1].id >= 0 && (*face)[2].id >= 0) {
-            fprintf(objFile, "f %d %d %d\n",
+            fprintf(objFile, "f %d %d %d\n", 
                     (*face)[0].id + 1, (*face)[1].id + 1, (*face)[2].id + 1);
           }
         }
@@ -184,9 +194,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
       }
 
       fclose(objFile);
-      _printf("  DEBUG: Wrote healed/decimated mesh to %s (%zu verts)\n", objPath, numPts);
-    } else {
-      _printf("  WARNING: Could not open %s for writing\n", objPath);
+      // _printf("  DEBUG: Wrote healed/decimated mesh to %s (%zu verts)\n", objPath, numPts);
     }
   }
 

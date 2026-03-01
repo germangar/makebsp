@@ -334,7 +334,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
      polygon points to ensure consistency with MapPlaneFromPoints */
   int frontPlane = MapPlaneFromPoints(pts[0], pts[1], pts[2]);
   if (frontPlane == -1) {
-    _printf("    WARNING: ExtrudePolygon failed (front plane degenerate, %d verts)\n", N);
+    // _printf("    WARNING: ExtrudePolygon failed (front plane degenerate, %d verts)\n", N);
     free(pts);
     return NULL;
   }
@@ -353,7 +353,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
   /* Back plane: reversed winding (use first, last, and second back points) */
   int backPlane = MapPlaneFromPoints(bpts[0], bpts[N - 1], bpts[1]);
   if (backPlane == -1) {
-    _printf("    WARNING: ExtrudePolygon failed (back plane degenerate, %d verts)\n", N);
+    // _printf("    WARNING: ExtrudePolygon failed (back plane degenerate, %d verts)\n", N);
     free(pts);
     free(bpts);
     return NULL;
@@ -390,19 +390,19 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
   free(bpts);
   
   if (!planesOk || frontPlane == -1 || backPlane == -1) {
-    _printf("    WARNING: ExtrudePolygon failed (edge plane degenerate, %d verts)\n", N);
+    // _printf("    WARNING: ExtrudePolygon failed (edge plane degenerate, %d verts)\n", N);
     FreeBrush(b);
     return NULL;
   }
   
   if (!CreateBrushWindings(b)) {
-    _printf("    WARNING: ExtrudePolygon failed (CreateBrushWindings, %d verts)\n", N);
+    // _printf("    WARNING: ExtrudePolygon failed (CreateBrushWindings, %d verts)\n", N);
     FreeBrush(b);
     return NULL;
   }
   
   if (!BoundBrush(b)) {
-    _printf("    WARNING: ExtrudePolygon failed (BoundBrush, %d verts)\n", N);
+    // _printf("    WARNING: ExtrudePolygon failed (BoundBrush, %d verts)\n", N);
     FreeBrush(b);
     return NULL;
   }
@@ -431,10 +431,13 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
   int N = fanTriCount;
   int numSides = 2 * N;  /* N front faces + N back faces */
   
+  /*
   if (numSides > MAX_BRUSH_SIDES) {
     _printf("    WARNING: ExtrudeFan failed (numSides %d > MAX_BRUSH_SIDES)\n", numSides);
     return NULL;
   }
+  */
+  if (numSides > MAX_BRUSH_SIDES) return NULL;
   
   /* Get hub position */
   vec3_t hub;
@@ -458,7 +461,7 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
   VectorSubtract(centroid, hub, axis);
   float axisLen = VectorNormalize(axis, axis);
   if (axisLen < 0.001f) {
-    _printf("    WARNING: ExtrudeFan failed (axis too short, hub=%d)\n", hubIdx);
+    // _printf("    WARNING: ExtrudeFan failed (axis too short, hub=%d)\n", hubIdx);
     return NULL;
   }
   
@@ -477,7 +480,7 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
   /* Reject flat fans: hub must protrude at least 30% of ring radius.
      Flat fans (like vertices on plank sides) produce thin diamonds that spike. */
   if (maxRadius > 0.001f && axisLen < maxRadius * 0.3f) {
-    _printf("    WARNING: ExtrudeFan rejected (flat fan: axisLen=%.3f, radius=%.3f, hub=%d, ring=%d)\n", axisLen, maxRadius, hubIdx, ringCount);
+    // _printf("    WARNING: ExtrudeFan rejected (flat fan: axisLen=%.3f, radius=%.3f, hub=%d, ring=%d)\n", axisLen, maxRadius, hubIdx, ringCount);
     return NULL;
   }
   
@@ -537,19 +540,19 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
   }
   
   if (!planesOk) {
-    _printf("    WARNING: ExtrudeFan failed (plane degenerate, hub=%d, ring=%d)\n", hubIdx, ringCount);
+    // _printf("    WARNING: ExtrudeFan failed (plane degenerate, hub=%d, ring=%d)\n", hubIdx, ringCount);
     FreeBrush(b);
     return NULL;
   }
   
   if (!CreateBrushWindings(b)) {
-    _printf("    WARNING: ExtrudeFan failed (CreateBrushWindings, hub=%d, ring=%d)\n", hubIdx, ringCount);
+    // _printf("    WARNING: ExtrudeFan failed (CreateBrushWindings, hub=%d, ring=%d)\n", hubIdx, ringCount);
     FreeBrush(b);
     return NULL;
   }
   
   if (!BoundBrush(b)) {
-    _printf("    WARNING: ExtrudeFan failed (BoundBrush, hub=%d, ring=%d)\n", hubIdx, ringCount);
+    // _printf("    WARNING: ExtrudeFan failed (BoundBrush, hub=%d, ring=%d)\n", hubIdx, ringCount);
     FreeBrush(b);
     return NULL;
   }
@@ -873,10 +876,12 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(float *verts, unsigned int *indices
   free(vertTriOffset);
   free(adjTriangles);
   
+  /*
   if (fanBrushCount > 0) {
     _printf("  Fan merge: %d triangles -> %d diamond brushes\n", 
             fanTriConsumed, fanBrushCount);
   }
+  */
   
   /* 2. Merge coplanar adjacent triangles into polygons (remaining non-fan tris) */
   int remaining = 0;
@@ -923,10 +928,12 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(float *verts, unsigned int *indices
     if (polys[i].numVerts > 3)
       mergedCount++;
   }
+  /*
   if (mergedCount > 0) {
     _printf("  Coplanar merge: %d remaining -> %d polygons (%d merged)\n", 
             remaining, numPolys, mergedCount);
   }
+  */
   
   /* 3. Extrude each remaining polygon into a brush */
   int failedPolys = 0;
@@ -939,9 +946,7 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(float *verts, unsigned int *indices
       failedPolys++;
     }
   }
-  if (failedPolys > 0) {
-    _printf("  WARNING: %d polygons failed extrusion (triangles lost!)\n", failedPolys);
-  }
+
   
   free(tris);
   free(polys);
@@ -992,7 +997,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     float optimization_target = 0.2f;
     
     size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
-    float target_error = 4.0f;  /* absolute units — max vertex displacement */
+    float target_error = 3.0f;  /* absolute units — max vertex displacement */
     
     unsigned int *simplifiedIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
     size_t simplifiedIndexCount = meshopt_simplify(
@@ -1005,7 +1010,12 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL
     );
     
-    _printf("Instance %s: Simplified from %i to %zu indices\n", inst->modelName, ds->numIndexes, simplifiedIndexCount);
+    int inputTris = ds->numIndexes / 3;
+    size_t finalTris = simplifiedIndexCount / 3;
+    double reduction = inputTris > 0 ? (1.0 - (double)finalTris / inputTris) * 100.0 : 0.0;
+
+    _printf("  Mesh #%d: Simplified from %i to %zu indices\n", j, ds->numIndexes, simplifiedIndexCount);
+    _printf("    Summary: %d original tris -> %zu remaining tris (%.1f%% reduction)\n", inputTris, finalTris, reduction);
 
     /* DEBUG: dump simplified mesh as OBJ for visualization */
     {
@@ -1024,7 +1034,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
           fprintf(objFile, "f %u %u %u\n", simplifiedIndexes[fi]+1, simplifiedIndexes[fi+1]+1, simplifiedIndexes[fi+2]+1);
         }
         fclose(objFile);
-        _printf("  DEBUG: Wrote simplified mesh to %s\n", objPath);
+        _printf("    DEBUG: Wrote simplified mesh to %s\n", objPath);
       }
     }
 
@@ -1062,7 +1072,6 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     free(simplifiedIndexes);
     free(remap);
     free(weldedIndexes);
-    free(weldedVerts);
   }
 
   return hulls_list;
