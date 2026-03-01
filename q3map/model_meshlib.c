@@ -22,6 +22,7 @@ Called from model_collision.c for MC_OBJECT category.
 */
 
 #include "qbsp.h"
+#include "model_collision.h"
 
 /* MRMeshC headers */
 #include "MRMeshFwd.h"
@@ -216,6 +217,7 @@ HACD decomposition will be added after visual verification.
 bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   int j, k;
   mapDrawSurface_t *ds;
+  bspbrush_t *hulls_list = NULL;
 
   _printf("Instance %s: Running MeshLib Pipeline (%s)\n",
           inst->modelName, CategoryString(inst->category));
@@ -230,7 +232,7 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
       continue;
     }
 
-    /* Extract vertex data as flat float array */
+    /* Extract vertex data as flat float array for MeshLib */
     float *meshVerts = malloc(ds->numVerts * 3 * sizeof(float));
     int *meshIndexes = malloc(ds->numIndexes * sizeof(int));
 
@@ -251,7 +253,47 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
                                           inst->modelName);
 
     if (healed) {
-      /* TODO: Extract healed mesh data and feed into HACD */
+      /* Extract data from MRMesh into unified collisionMesh_t */
+      const MRVector3f *pts = mrMeshPoints(healed);
+      size_t numPts = mrMeshPointsNum(healed);
+      const MRMeshTopology *topo = mrMeshTopology(healed);
+      MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
+
+      if (tri && tri->size > 0) {
+        collisionMesh_t *colMesh = malloc(sizeof(collisionMesh_t));
+        colMesh->numVerts = (int)numPts;
+        colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
+        memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
+
+        /* MeshLib triangulation might contain invalid faces (id < 0) after decimation.
+           We must filter them or ensure they are packed. */
+        int validTriCount = 0;
+        for (size_t fi = 0; fi < tri->size; fi++) {
+          if (tri->data[fi][0].id >= 0) validTriCount++;
+        }
+
+        colMesh->numTris = validTriCount;
+        colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
+        
+        int triIdx = 0;
+        for (size_t fi = 0; fi < tri->size; fi++) {
+           if (tri->data[fi][0].id >= 0) {
+             colMesh->tris[triIdx][0] = tri->data[fi][0].id;
+             colMesh->tris[triIdx][1] = tri->data[fi][1].id;
+             colMesh->tris[triIdx][2] = tri->data[fi][2].id;
+             triIdx++;
+           }
+        }
+
+        /* Call the shared extruder */
+        shaderInfo_t *si = (shader != NULL) ? shader : ds->shaderInfo;
+        bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
+        hulls_list = CombineBrushes(hulls_list, surfBrushes);
+
+        FreeCollisionMesh(colMesh);
+        mrTriangulationFree(tri);
+      }
+
       mrMeshFree(healed);
     }
 
@@ -259,9 +301,8 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     free(meshIndexes);
   }
 
-  _printf("Instance %s: MeshLib pipeline complete (OBJ exported, no brushes yet)\n",
-          inst->modelName);
+  _printf("Instance %s: MeshLib pipeline complete (%s)\n",
+          inst->modelName, hulls_list ? "Brushes generated" : "No brushes");
 
-  /* Return NULL for now — no brushes until HACD is integrated */
-  return NULL;
+  return hulls_list;
 }

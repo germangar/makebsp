@@ -9,6 +9,7 @@ This file is part of Quake III Arena source code.
 
 #include "../common/cmdlib.h"
 #include "qbsp.h"
+#include "model_collision.h"
 
 #define WRITE_COLLISION_MAP qtrue
 

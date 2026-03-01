@@ -1,4 +1,5 @@
 #include "qbsp.h"
+#include "model_collision.h"
 #include "../libs/meshoptimizer/src/meshoptimizer.h"
 
 /*
@@ -738,9 +739,12 @@ Optimized version with two merge passes:
 3. Individual extrusion — any remaining triangles extruded as 5-sided brushes
 ====================
 */
-static bspbrush_t *ExtrudeTrianglesToBrushes(float *verts, unsigned int *indices, int numIndices, shaderInfo_t *si) {
+bspbrush_t *ExtrudeTrianglesToBrushes(collisionMesh_t *mesh, shaderInfo_t *si) {
   bspbrush_t *hulls_list = NULL;
-  int numTris = numIndices / 3;
+  float *verts = (float *)mesh->verts;
+  unsigned int *indices = (unsigned int *)mesh->tris;
+  int numIndices = mesh->numTris * 3;
+  int numTris = mesh->numTris;
   
   if (numTris == 0)
     return NULL;
@@ -957,6 +961,32 @@ static bspbrush_t *ExtrudeTrianglesToBrushes(float *verts, unsigned int *indices
 
 /*
 ====================
+CombineBrushes
+====================
+*/
+bspbrush_t *CombineBrushes(bspbrush_t *list, bspbrush_t *newBrushes) {
+  if (!newBrushes) return list;
+  if (!list) return newBrushes;
+  bspbrush_t *tail = newBrushes;
+  while (tail->next) tail = tail->next;
+  tail->next = list;
+  return newBrushes;
+}
+
+/*
+====================
+FreeCollisionMesh
+====================
+*/
+void FreeCollisionMesh(collisionMesh_t *mesh) {
+  if (!mesh) return;
+  if (mesh->verts) free(mesh->verts);
+  if (mesh->tris) free(mesh->tris);
+  free(mesh);
+}
+
+/*
+====================
 GenerateMOCollision
 
 Processes a model instance, optimizes its meshes via meshoptimizer,
@@ -969,7 +999,7 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   mapDrawSurface_t *ds;
   
   _printf("Instance %s: Running MeshOptimizer Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
-  
+
   for (j = 0; j < inst->numDrawSurfs; j++) {
     ds = inst->drawSurfs[j];
     if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
@@ -979,11 +1009,24 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     if (ds->numVerts == 0 || ds->numIndexes == 0) {
       continue;
     }
-    
-    /* Extract vertices for optimization */
+
+    _printf("Mesh #%d\n", j);
+
+    /* --- meshoptimizer pipeline --- */
+    float optimization_target = 0.2f;
+    size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
+    float target_error = 3.0f; /* absolute units — max vertex displacement */
+
+    /* Extract raw data for meshopt */
     float *meshVerts = malloc(ds->numVerts * 3 * sizeof(float));
     unsigned int *meshIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
-    
+    if (!meshVerts || !meshIndexes) {
+       _printf("ERROR: out of memory in GenerateMOCollision\n");
+       if (meshVerts) free(meshVerts);
+       if (meshIndexes) free(meshIndexes);
+       continue;
+    }
+
     for (k = 0; k < ds->numVerts; k++) {
       meshVerts[k * 3 + 0] = (float)ds->verts[k].xyz[0];
       meshVerts[k * 3 + 1] = (float)ds->verts[k].xyz[1];
@@ -993,85 +1036,47 @@ bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
       meshIndexes[k] = (unsigned int)ds->indexes[k];
     }
 
-    /* 1. Simplify the mesh to reduce triangle count */
-    float optimization_target = 0.2f;
-    
-    size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
-    float target_error = 3.0f;  /* absolute units — max vertex displacement */
-    
     unsigned int *simplifiedIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
     size_t simplifiedIndexCount = meshopt_simplify(
-        simplifiedIndexes, 
-        meshIndexes, ds->numIndexes, 
-        meshVerts, ds->numVerts, 
-        sizeof(float) * 3, 
-        target_index_count, 
-        target_error, 
-        meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL
-    );
-    
-    int inputTris = ds->numIndexes / 3;
-    size_t finalTris = simplifiedIndexCount / 3;
-    double reduction = inputTris > 0 ? (1.0 - (double)finalTris / inputTris) * 100.0 : 0.0;
+        simplifiedIndexes, meshIndexes, ds->numIndexes,
+        meshVerts, ds->numVerts, sizeof(float) * 3,
+        target_index_count, target_error, 
+        meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL);
 
-    _printf("  Mesh #%d: Simplified from %i to %zu indices\n", j, ds->numIndexes, simplifiedIndexCount);
-    _printf("    Summary: %d original tris -> %zu remaining tris (%.1f%% reduction)\n", inputTris, finalTris, reduction);
-
-    /* DEBUG: dump simplified mesh as OBJ for visualization */
-    {
-      char objPath[1024];
-      sprintf(objPath, "%s_simplified.obj", inst->modelName);
-      FILE *objFile = fopen(objPath, "w");
-      if (objFile) {
-        fprintf(objFile, "# Simplified mesh: %s\n", inst->modelName);
-        fprintf(objFile, "# Original: %d indices, Simplified: %zu indices\n", ds->numIndexes, simplifiedIndexCount);
-        fprintf(objFile, "# Target error: %f units, Up axis: Y (Quake Z mapped to OBJ Y)\n", target_error);
-        for (int vi = 0; vi < ds->numVerts; vi++) {
-          /* Swap Q3 Z-up to standard Y-up (X=X, Y=Z, Z=-Y) */
-          fprintf(objFile, "v %f %f %f\n", meshVerts[vi*3+0], meshVerts[vi*3+2], -meshVerts[vi*3+1]);
-        }
-        for (size_t fi = 0; fi + 2 < simplifiedIndexCount; fi += 3) {
-          fprintf(objFile, "f %u %u %u\n", simplifiedIndexes[fi]+1, simplifiedIndexes[fi+1]+1, simplifiedIndexes[fi+2]+1);
-        }
-        fclose(objFile);
-        _printf("    DEBUG: Wrote simplified mesh to %s\n", objPath);
-      }
-    }
-
-    /* 2. Weld duplicate vertices so shared edges have matching indices.
-       This is critical for fan detection — meshoptimizer may leave spatially-
-       identical vertices with different indices. Since these meshes are only
-       used for collision brushes and discarded after, this is perfectly safe. */
+    /* 2. Weld duplicate vertices so shared edges have matching indices. */
     unsigned int *remap = malloc(ds->numVerts * sizeof(unsigned int));
     size_t uniqueVerts = meshopt_generateVertexRemap(
         remap, simplifiedIndexes, simplifiedIndexCount,
-        meshVerts, ds->numVerts, sizeof(float) * 3
-    );
-    
-    unsigned int *weldedIndexes = malloc(simplifiedIndexCount * sizeof(unsigned int));
-    meshopt_remapIndexBuffer(weldedIndexes, simplifiedIndexes, simplifiedIndexCount, remap);
-    
-    float *weldedVerts = malloc(uniqueVerts * 3 * sizeof(float));
-    meshopt_remapVertexBuffer(weldedVerts, meshVerts, ds->numVerts, sizeof(float) * 3, remap);
-    
-    /* 3. Extrude with fan merging + coplanar merging */
-    bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(weldedVerts, weldedIndexes, (int)simplifiedIndexCount, shader);
+        meshVerts, ds->numVerts, sizeof(float) * 3);
+
+    /* Package into collisionMesh_t */
+    collisionMesh_t *colMesh = malloc(sizeof(collisionMesh_t));
+    memset(colMesh, 0, sizeof(collisionMesh_t));
+    colMesh->numVerts = (int)uniqueVerts;
+    colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
+
+    meshopt_remapVertexBuffer(colMesh->verts, meshVerts, ds->numVerts,
+                              sizeof(float) * 3, remap);
+
+    colMesh->numTris = (int)(simplifiedIndexCount / 3);
+    colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
+
+    meshopt_remapIndexBuffer(colMesh->tris, simplifiedIndexes,
+                             simplifiedIndexCount, remap);
+
+    /* 3. Extrude using the shared function */
+    shaderInfo_t *si = (shader != NULL) ? shader : ds->shaderInfo;
+    bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
     
     /* Append to main list */
-    if (surfBrushes) {
-      bspbrush_t *tail = surfBrushes;
-      while (tail->next) {
-        tail = tail->next;
-      }
-      tail->next = hulls_list;
-      hulls_list = surfBrushes;
-    }
-    
-    free(meshVerts);
-    free(meshIndexes);
-    free(simplifiedIndexes);
+    hulls_list = CombineBrushes(hulls_list, surfBrushes);
+
+    /* Cleanup */
+    FreeCollisionMesh(colMesh);
     free(remap);
-    free(weldedIndexes);
+    free(simplifiedIndexes);
+    free(meshIndexes);
+    free(meshVerts);
   }
 
   return hulls_list;

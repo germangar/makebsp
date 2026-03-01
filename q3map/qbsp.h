@@ -1,3 +1,6 @@
+#ifndef QBSP_H
+#define QBSP_H
+
 /*
 ===========================================================================
 Copyright (C) 1999-2005 Id Software, Inc.
@@ -485,3 +488,5 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree);
 extern int g_bBrushPrimit;
 
 void ComputeAxisBase(vec3_t normal, vec3_t texX, vec3_t texY);
+
+#endif
