@@ -212,6 +212,7 @@ extern qboolean coplanar;
 extern qboolean nofog;
 extern qboolean testExpand;
 extern qboolean showseams;
+extern qboolean use_meshoptimizer;
 
 extern vec_t microvolume;
 
@@ -428,6 +429,8 @@ typedef enum {
   MC_SHELL
 } modelCategory_t;
 
+#define MAX_MODEL_COLLISION_MESHES 256
+
 typedef struct modelInstance_s {
   char modelName[MAX_QPATH];
   int numDrawSurfs;
@@ -435,6 +438,9 @@ typedef struct modelInstance_s {
   entity_t *creator;            // Reference to the entity that created this instance
   float triangle_density;
   modelCategory_t category;
+
+  int num_collision_meshes;
+  struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes
 } modelInstance_t;
 
 extern int c_triangleModels;
@@ -458,7 +464,7 @@ void CreateTriangleModelCollision(void);
 
 
 bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, shaderInfo_t *shader);
-bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader);
+bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader);
 bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader);
 
 int CSGMergeBrushList(bspbrush_t **pList);

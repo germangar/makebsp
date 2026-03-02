@@ -89,319 +89,96 @@ static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
     return list;
 }
 
-/*
-====================
-HealAndDecimateMesh
-
-Takes raw vertex/triangle data from a draw surface,
-constructs an MRMesh, heals it, decimates it, and
-writes the result as an OBJ file for debugging.
-
-Returns the MRMesh (caller must free with mrMeshFree).
-====================
-*/
-static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
-                                    int *indexes, int numIndexes,
-                                    const char *debugName) {
-  int i;
-  int inputTris = numIndexes / 3;
-  int numTriangles = inputTris;
-
-  /* --- Step 1: Build MRMesh from triangles --- */
-  MRVector3f *mrVerts = malloc(numVerts * sizeof(MRVector3f));
-  MRThreeVertIds *mrTris = malloc(numTriangles * sizeof(MRThreeVertIds));
-
-  for (i = 0; i < numVerts; i++) {
-    mrVerts[i].x = verts[i * 3 + 0];
-    mrVerts[i].y = verts[i * 3 + 1];
-    mrVerts[i].z = verts[i * 3 + 2];
-  }
-
-  for (i = 0; i < numTriangles; i++) {
-    mrTris[i][0].id = indexes[i * 3 + 0];
-    mrTris[i][1].id = indexes[i * 3 + 1];
-    mrTris[i][2].id = indexes[i * 3 + 2];
-  }
-
-  MRMesh *mesh = mrMeshFromTrianglesDuplicatingNonManifoldVertices(
-      mrVerts, (size_t)numVerts,
-      mrTris, (size_t)numTriangles
-  );
-
-  free(mrVerts);
-  free(mrTris);
-
-  if (!mesh) {
-    _printf("  WARNING: MRMesh construction failed\n");
-    return NULL;
-  }
-
-  size_t origPoints = mrMeshPointsNum(mesh);
-  const MRMeshTopology *topo = mrMeshTopology(mesh);
-  int origHoles = mrMeshTopologyFindNumHoles(topo, NULL);
-  _printf("  MRMesh constructed: %zu verts, %d holes\n", origPoints, origHoles);
-
-  /* --- Step 2: Vertex Welding --- */
-  int welded = mrMeshBuilderUniteCloseVertices(mesh, 0.001f, false, NULL);
-  if (welded > 0) {
-    _printf("  Welded %d close vertices\n", welded);
-    mrMeshInvalidateCaches(mesh, true);
-  }
-
-  /* --- Step 3: Fix multiple edges (manifold repair) --- */
-  findAndFixMultipleEdges(mesh);
-
-  /* --- Step 4: Fix degeneracies --- */
-  {
-    MRString *errStr = NULL;
-    MRFixMeshDegeneraciesParams params = mrFixMeshDegeneraciesParamsNew();
-    params.maxDeviation = 0.5f;
-    params.tinyEdgeLength = 0.01f;
-    params.criticalTriAspectRatio = 20000.0f;
-    params.maxAngleChange = 3.14159f / 6.0f;  /* 30 degrees */
-    params.mode = MRFixMeshDegeneraciesParamsModeRemeshPatch;
-    mrFixMeshDegeneracies(mesh, &params, &errStr);
-    if (errStr) {
-      _printf("  WARNING: fixDegeneracies: %s\n", mrStringData(errStr));
-      mrStringFree(errStr);
-    }
-  }
-
-  /* --- Step 5: Fill holes --- */
-  {
-    MREdgePath *holeEdges = mrMeshFindHoleRepresentiveEdges(mesh);
-    if (holeEdges && holeEdges->size > 0) {
-      _printf("  Filling %zu holes\n", holeEdges->size);
-      MRFillHoleParams fillParams = mrFillHoleParamsNew();
-      mrFillHoles(mesh, holeEdges->data, holeEdges->size, &fillParams);
-      mrEdgePathFree(holeEdges);
-    } else if (holeEdges) {
-      mrEdgePathFree(holeEdges);
-    }
-  }
-
-  /* Verify holes after filling */
-  topo = mrMeshTopology(mesh);
-  int remainingHoles = mrMeshTopologyFindNumHoles(topo, NULL);
-  _printf("  After healing: %zu verts, %d remaining holes\n",
-          mrMeshPointsNum(mesh), remainingHoles);
-
-  /* --- Step 6: Decimate --- */
-  {
-    MRDecimateSettings settings = mrDecimateSettingsNew();
-    settings.strategy = MRDecimateStrategyMinimizeError;
-    settings.maxError = 4.0f;           /* max distance deviation in world units */
-    settings.maxTriangleAspectRatio = 20.0f;
-    settings.tinyEdgeLength = 0.01f;
-    settings.stabilizer = 0.001f;
-    settings.optimizeVertexPos = true;
-    settings.packMesh = true;
-
-    MRDecimateResult result = mrDecimateMesh(mesh, &settings);
-    
-    /* Get final face count */
-    const MRMeshTopology *finalTopo = mrMeshTopology(mesh);
-    size_t finalFaces = mrBitSetCount((const MRBitSet *)mrMeshTopologyGetValidFaces(finalTopo));
-    double reduction = inputTris > 0 ? (1.0 - (double)finalFaces / inputTris) * 100.0 : 0.0;
-
-    _printf("  Decimated: %d verts deleted, %d faces deleted, error=%.3f\n",
-            result.vertsDeleted, result.facesDeleted, result.errorIntroduced);
-    _printf("  Summary: %d original tris -> %zu remaining tris (%.1f%% reduction)\n",
-            inputTris, finalFaces, reduction);
-  }
-
-
-
-  return mesh;
-}
 
 /*
 ====================
 GenerateMLCollision
 
-Generates collision brushes for a model instance using the
-Enhanced Collision Pipeline (MeshLib heal/decimate + future HACD decompose).
-
-Currently: processes each draw surface mesh through MeshLib healing
-and decimation, exports debug OBJ, and returns an empty brush list.
-HACD decomposition will be added after visual verification.
-
+Generates collision brushes for a model instance using the pre-extracted
+MeshLib colMesh_t geometries. It feeds these directly into HACD.
 ====================
 */
 bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
-  int j, k;
-  mapDrawSurface_t *ds;
   bspbrush_t *hulls_list = NULL;
-  colMesh_t *meshes[256];
-  int numMeshes = 0;
 
-  _printf("Instance %s: Running MeshLib Pipeline (%s)\n",
+  _printf("Instance %s: Running MeshLib/HACD Pipeline (%s)\n",
           inst->modelName, CategoryString(inst->category));
 
-  for (j = 0; j < inst->numDrawSurfs; j++) {
-    ds = inst->drawSurfs[j];
-    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
-      continue;
-    }
-
-    if (ds->numVerts == 0 || ds->numIndexes == 0) {
-      continue;
-    }
-
-    /* Extract vertex data as flat float array for MeshLib */
-    float *meshVerts = malloc(ds->numVerts * 3 * sizeof(float));
-    int *meshIndexes = malloc(ds->numIndexes * sizeof(int));
-
-    for (k = 0; k < ds->numVerts; k++) {
-      meshVerts[k * 3 + 0] = (float)ds->verts[k].xyz[0];
-      meshVerts[k * 3 + 1] = (float)ds->verts[k].xyz[1];
-      meshVerts[k * 3 + 2] = (float)ds->verts[k].xyz[2];
-    }
-    for (k = 0; k < ds->numIndexes; k++) {
-      meshIndexes[k] = ds->indexes[k];
-    }
-
-    _printf("  Mesh %d: %d verts, %d tris\n", j, ds->numVerts, ds->numIndexes / 3);
-
-    /* Run the MeshLib healing + decimation pipeline */
-    MRMesh *healed = HealAndDecimateMesh(meshVerts, ds->numVerts,
-                                          meshIndexes, ds->numIndexes,
-                                          inst->modelName);
-
-    if (healed) {
-      /* Extract data from MRMesh into unified colMesh_t */
-      const MRVector3f *pts = mrMeshPoints(healed);
-      size_t numPts = mrMeshPointsNum(healed);
-      const MRMeshTopology *topo = mrMeshTopology(healed);
-      MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
-
-      if (tri && tri->size > 0) {
-        colMesh_t *colMesh = malloc(sizeof(colMesh_t));
-        colMesh->numVerts = (int)numPts;
-        colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
-        memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
-
-        /* MeshLib triangulation might contain invalid faces (id < 0) after decimation.
-           We must filter them or ensure they are packed. */
-        int validTriCount = 0;
-        for (size_t fi = 0; fi < tri->size; fi++) {
-          if (tri->data[fi][0].id >= 0) validTriCount++;
-        }
-
-        colMesh->numTris = validTriCount;
-        colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
-        
-        int triIdx = 0;
-        for (size_t fi = 0; fi < tri->size; fi++) {
-           if (tri->data[fi][0].id >= 0) {
-             colMesh->tris[triIdx][0] = tri->data[fi][0].id;
-             colMesh->tris[triIdx][1] = tri->data[fi][1].id;
-             colMesh->tris[triIdx][2] = tri->data[fi][2].id;
-             triIdx++;
-           }
-        }
-
-        /* Call HACD extruder */
-        shaderInfo_t *si = (shader != NULL) ? shader : ds->shaderInfo;
-
-        HACD_Vec3 *hacdPts = malloc(colMesh->numVerts * sizeof(HACD_Vec3));
-        for (int i = 0; i < colMesh->numVerts; i++) {
-            hacdPts[i].x = colMesh->verts[i][0];
-            hacdPts[i].y = colMesh->verts[i][1];
-            hacdPts[i].z = colMesh->verts[i][2];
-        }
-
-        HACD_Triangle *hacdTris = malloc(colMesh->numTris * sizeof(HACD_Triangle));
-        for (int i = 0; i < colMesh->numTris; i++) {
-            hacdTris[i].v1 = colMesh->tris[i][0];
-            hacdTris[i].v2 = colMesh->tris[i][1];
-            hacdTris[i].v3 = colMesh->tris[i][2];
-        }
-
-        HACD_Wrapper *hacd = hacd_new();
-        hacd_set_points(hacd, hacdPts, colMesh->numVerts);
-        hacd_set_triangles(hacd, hacdTris, colMesh->numTris);
-        
-        /* --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
-        Good wood-bridge settings: 
-        disable_normalize=false, 
-        compacity=0.0001, 
-        volume=0.0, 
-        cc_connect_dist=0.0, 
-        nclusters=1, 
-        concavity=100000.0, 
-        extra_dist_points=true, 
-        add_faces_points=true
-         --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
-        */
-        
-        /* --- Unnormalized Equivalence Scaling ---
-           HACD's default behavior normalizes all models to a 2000.0 unit bounding box diagonal.
-           This secretes scale factors that vary per-model. By disabling normalization and 
-           dividing our distance thresholds by the scale factor that our baseline 'wood-bridge' 
-           model used (1.8308), we can apply these precise unnormalized physical distances 
-           consistently to ALL models. 
-           Change this to 1.0 and disable_normalize to false to test native HACD behavior. */
-        double hacd_scale_factor = 1.8308; // The "magic number" from wood-bridge (2000.0 / 1092.38)
-        
-        hacd_set_disable_normalize(hacd, true);
-        hacd_set_compacity_weight(hacd, 0.0001); 
-        hacd_set_volume_weight(hacd, 0.0000);    
-        hacd_set_cc_connect_dist(hacd, 0.0 / hacd_scale_factor);
-        
-        size_t targetClusters = 1;
-        hacd_set_nclusters(hacd, targetClusters); 
-        hacd_set_concavity(hacd, 100000.0 / hacd_scale_factor); 
-        hacd_set_add_extra_dist_points(hacd, true); 
-        hacd_set_add_faces_points(hacd, true);      
-        
-        _printf("  Running HACD on %d verts, %d tris (Threshold: %.1f, Min Hulls: %zu)\n", 
-                colMesh->numVerts, colMesh->numTris, 100.0, targetClusters);
-                
-        if (hacd_compute(hacd, false)) {
-            bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, si);
-            hulls_list = CombineBrushes(hulls_list, surfBrushes);
-        } else {
-            _printf("  WARNING: HACD computation failed for this mesh.\n");
-        }
-
-        hacd_delete(hacd);
-        free(hacdPts);
-        free(hacdTris);
-
-        /* Accumulate for OBJ export */
-        if (numMeshes < 256) {
-          meshes[numMeshes++] = colMesh;
-        } else {
-          FreeCollisionMesh(colMesh);
-        }
-
-        mrTriangulationFree(tri);
-      }
-
-      mrMeshFree(healed);
-    }
-
-    free(meshVerts);
-    free(meshIndexes);
+  if (inst->num_collision_meshes == 0) {
+    return NULL;
   }
 
-  /* Unified OBJ export at the end */
-  if (numMeshes > 0) {
-    char objPath[1024];
-    strcpy(objPath, inst->modelName);
-    char *ext = strrchr(objPath, '.');
-    if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL) {
-      *ext = '\0';
-    }
-    strcat(objPath, "_mlib.obj");
-    
-    WriteCollisionOBJ(meshes, numMeshes, objPath);
+  for (int j = 0; j < inst->num_collision_meshes; j++) {
+    colMesh_t *colMesh = inst->collision_meshes[j];
+    if (!colMesh || colMesh->numTris == 0) continue;
 
-    /* Cleanup accumulated meshes */
-    for (int i = 0; i < numMeshes; i++) {
-        FreeCollisionMesh(meshes[i]);
+    /* Call HACD extruder */
+    shaderInfo_t *si = (shader != NULL) ? shader : NULL;
+
+    HACD_Vec3 *hacdPts = malloc(colMesh->numVerts * sizeof(HACD_Vec3));
+    for (int i = 0; i < colMesh->numVerts; i++) {
+        hacdPts[i].x = colMesh->verts[i][0];
+        hacdPts[i].y = colMesh->verts[i][1];
+        hacdPts[i].z = colMesh->verts[i][2];
     }
+
+    HACD_Triangle *hacdTris = malloc(colMesh->numTris * sizeof(HACD_Triangle));
+    for (int i = 0; i < colMesh->numTris; i++) {
+        hacdTris[i].v1 = colMesh->tris[i][0];
+        hacdTris[i].v2 = colMesh->tris[i][1];
+        hacdTris[i].v3 = colMesh->tris[i][2];
+    }
+
+    HACD_Wrapper *hacd = hacd_new();
+    hacd_set_points(hacd, hacdPts, colMesh->numVerts);
+    hacd_set_triangles(hacd, hacdTris, colMesh->numTris);
+    
+    /* --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+    Good wood-bridge settings: 
+    disable_normalize=false, 
+    compacity=0.0001, 
+    volume=0.0, 
+    cc_connect_dist=0.0, 
+    nclusters=1, 
+    concavity=100000.0, 
+    extra_dist_points=true, 
+    add_faces_points=true
+     --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+    */
+    
+    /* --- Unnormalized Equivalence Scaling ---
+       HACD's default behavior normalizes all models to a 2000.0 unit bounding box diagonal.
+       This secretes scale factors that vary per-model. By disabling normalization and 
+       dividing our distance thresholds by the scale factor that our baseline 'wood-bridge' 
+       model used (1.8308), we can apply these precise unnormalized physical distances 
+       consistently to ALL models. 
+       Change this to 1.0 and disable_normalize to false to test native HACD behavior. */
+    double hacd_scale_factor = 1.8308; // The "magic number" from wood-bridge (2000.0 / 1092.38)
+    
+    hacd_set_disable_normalize(hacd, true);
+    hacd_set_compacity_weight(hacd, 0.0001); 
+    hacd_set_volume_weight(hacd, 0.0000);    
+    hacd_set_cc_connect_dist(hacd, 0.0 / hacd_scale_factor);
+    
+    size_t targetClusters = 1;
+    hacd_set_nclusters(hacd, targetClusters); 
+    hacd_set_concavity(hacd, 100000.0 / hacd_scale_factor); 
+    hacd_set_add_extra_dist_points(hacd, true); 
+    hacd_set_add_faces_points(hacd, true);      
+    
+    _printf("  Running HACD on %d verts, %d tris (Threshold: %.1f, Min Hulls: %zu)\n", 
+            colMesh->numVerts, colMesh->numTris, 100.0, targetClusters);
+            
+    if (hacd_compute(hacd, false)) {
+        bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, si);
+        hulls_list = CombineBrushes(hulls_list, surfBrushes);
+    } else {
+        _printf("  WARNING: HACD computation failed for this mesh.\n");
+    }
+
+    hacd_delete(hacd);
+    free(hacdPts);
+    free(hacdTris);
   }
 
   _printf("Instance %s: MeshLib pipeline complete (%s)\n",
@@ -409,3 +186,4 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
 
   return hulls_list;
 }
+

@@ -1,6 +1,5 @@
 #include "qbsp.h"
 #include "model_collision.h"
-#include "../libs/meshoptimizer/src/meshoptimizer.h"
 
 /*
 ====================
@@ -982,19 +981,19 @@ Writes multiple collision meshes into a single OBJ file.
 Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)
 ====================
 */
-void WriteCollisionOBJ(colMesh_t **meshes, int numMeshes, const char *filename) {
+void WriteCollisionOBJ(colMesh_t **collision_meshes, int num_collision_meshes, const char *filename) {
   FILE *f = fopen(filename, "w");
   if (!f) {
     _printf("ERROR: Could not open %s for writing\n", filename);
     return;
   }
 
-  fprintf(f, "# Unified Collision OBJ: %d meshes\n", numMeshes);
+  fprintf(f, "# Unified Collision OBJ: %d meshes\n", num_collision_meshes);
   fprintf(f, "# Axis swap: Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)\n");
 
   int vertexOffset = 0;
-  for (int i = 0; i < numMeshes; i++) {
-    colMesh_t *m = meshes[i];
+  for (int i = 0; i < num_collision_meshes; i++) {
+    colMesh_t *m = collision_meshes[i];
     if (!m) continue;
 
     fprintf(f, "o mesh_%d\n", i);
@@ -1021,122 +1020,38 @@ void WriteCollisionOBJ(colMesh_t **meshes, int numMeshes, const char *filename) 
 
 /*
 ====================
-GenerateMOCollision
+GenerateExtrusionCollision
 
-Processes a model instance, optimizes its meshes via meshoptimizer,
-and passes the geometry to the extrusion helper.
+Processes a model instance using its pre-extracted, decimated meshes,
+and passes the geometry generically to the extrusion helper without caring about origin.
 ====================
 */
-bspbrush_t *GenerateMOCollision(modelInstance_t *inst, shaderInfo_t *shader) {
+bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
-  int j, k;
-  mapDrawSurface_t *ds;
-  colMesh_t *meshes[256];
-  int numMeshes = 0;
-  
-  _printf("Instance %s: Running MeshOptimizer Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
 
-  for (j = 0; j < inst->numDrawSurfs; j++) {
-    ds = inst->drawSurfs[j];
-    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
-      continue;
-    }
+  _printf("Instance %s: Running Generic Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
 
-    if (ds->numVerts == 0 || ds->numIndexes == 0) {
-      continue;
-    }
+  if (inst->num_collision_meshes == 0) {
+    return NULL;
+  }
+
+  for (int j = 0; j < inst->num_collision_meshes; j++) {
+    colMesh_t *colMesh = inst->collision_meshes[j];
+    if (!colMesh || colMesh->numTris == 0) continue;
 
     _printf("Mesh #%d\n", j);
 
-    /* --- meshoptimizer pipeline --- */
-    float optimization_target = 0.2f;
-    size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
-    float target_error = 3.0f; /* absolute units — max vertex displacement */
-
-    /* Extract raw data for meshopt */
-    float *meshVerts = malloc(ds->numVerts * 3 * sizeof(float));
-    unsigned int *meshIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
-    if (!meshVerts || !meshIndexes) {
-       _printf("ERROR: out of memory in GenerateMOCollision\n");
-       if (meshVerts) free(meshVerts);
-       if (meshIndexes) free(meshIndexes);
-       continue;
-    }
-
-    for (k = 0; k < ds->numVerts; k++) {
-      meshVerts[k * 3 + 0] = (float)ds->verts[k].xyz[0];
-      meshVerts[k * 3 + 1] = (float)ds->verts[k].xyz[1];
-      meshVerts[k * 3 + 2] = (float)ds->verts[k].xyz[2];
-    }
-    for (k = 0; k < ds->numIndexes; k++) {
-      meshIndexes[k] = (unsigned int)ds->indexes[k];
-    }
-
-    unsigned int *simplifiedIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
-    size_t simplifiedIndexCount = meshopt_simplify(
-        simplifiedIndexes, meshIndexes, ds->numIndexes,
-        meshVerts, ds->numVerts, sizeof(float) * 3,
-        target_index_count, target_error, 
-        meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL);
-
-    /* 2. Weld duplicate vertices so shared edges have matching indices. */
-    unsigned int *remap = malloc(ds->numVerts * sizeof(unsigned int));
-    size_t uniqueVerts = meshopt_generateVertexRemap(
-        remap, simplifiedIndexes, simplifiedIndexCount,
-        meshVerts, ds->numVerts, sizeof(float) * 3);
-
-    /* Package into colMesh_t */
-    colMesh_t *colMesh = malloc(sizeof(colMesh_t));
-    memset(colMesh, 0, sizeof(colMesh_t));
-    colMesh->numVerts = (int)uniqueVerts;
-    colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
-
-    meshopt_remapVertexBuffer(colMesh->verts, meshVerts, ds->numVerts,
-                              sizeof(float) * 3, remap);
-
-    colMesh->numTris = (int)(simplifiedIndexCount / 3);
-    colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
-
-    meshopt_remapIndexBuffer((unsigned int *)colMesh->tris, simplifiedIndexes,
-                             simplifiedIndexCount, remap);
-
     /* 3. Extrude using the shared function */
-    shaderInfo_t *si = (shader != NULL) ? shader : ds->shaderInfo;
+    shaderInfo_t *si = (shader != NULL) ? shader : NULL; // Uses caulk if shader passed, otherwise wait for fix below
+
+    // We lost per-surface shader info by pre-extracting them generically.
+    // For now we will just use the default shader passed in (usually caulk).
     bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
-    
+
     /* Append to main list */
     hulls_list = CombineBrushes(hulls_list, surfBrushes);
-
-    /* Accumulate for OBJ export */
-    if (numMeshes < 256) {
-      meshes[numMeshes++] = colMesh;
-    } else {
-      FreeCollisionMesh(colMesh);
-    }
-
-    free(remap);
-    free(simplifiedIndexes);
-    free(meshIndexes);
-    free(meshVerts);
-  }
-
-  /* Unified OBJ export at the end */
-  if (numMeshes > 0) {
-    char objPath[1024];
-    strcpy(objPath, inst->modelName);
-    char *ext = strrchr(objPath, '.');
-    if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL) {
-      *ext = '\0';
-    }
-    strcat(objPath, "_mopt.obj");
-    
-    WriteCollisionOBJ(meshes, numMeshes, objPath);
-
-    /* Cleanup accumulated meshes */
-    for (int i = 0; i < numMeshes; i++) {
-        FreeCollisionMesh(meshes[i]);
-    }
   }
 
   return hulls_list;
 }
+

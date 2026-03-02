@@ -12,7 +12,6 @@ This file is part of Quake III Arena source code.
 #include "../libs/assimp/include/assimp/scene.h"
 #include "qbsp.h"
 
-static FILE *modelsInfoFile;
 
 int c_triangleModels;
 int c_triangleSurfaces;
@@ -186,20 +185,7 @@ void LoadTriangleModels(void) {
   vec3_t origin, angles;
   float scale;
   vec3_t scale_vec;
-  char infoName[1024];
-  char base[1024];
   float rotationMatrix[3][3];
-
-  _printf("----- LoadTriangleModels (Assimp) -----\n");
-
-  numModelInstances = 0; // Reset instances
-
-  ExtractFileBase(source, base);
-  sprintf(infoName, "%s_modelsinfo.txt", base);
-  modelsInfoFile = fopen(infoName, "w");
-  if (modelsInfoFile) {
-    fprintf(modelsInfoFile, "Output for map: %s\n\n", source);
-  }
 
   for (entity_num = 1; entity_num < num_entities; entity_num++) {
     entity = &entities[entity_num];
@@ -239,16 +225,6 @@ void LoadTriangleModels(void) {
       strncpy(inst->modelName, model, MAX_QPATH - 1);
       inst->modelName[MAX_QPATH - 1] = '\0';
       inst->creator = entity;
-
-      if (modelsInfoFile) {
-        fprintf(modelsInfoFile, "Entity %i (Model: %s) {\n", entity_num, model);
-        fprintf(modelsInfoFile, "  Origin: %.2f %.2f %.2f\n", origin[0],
-                origin[1], origin[2]);
-        fprintf(modelsInfoFile, "  Angles: %.2f %.2f %.2f\n", angles[0],
-                angles[1], angles[2]);
-        fprintf(modelsInfoFile, "  Scale: %.2f %.2f %.2f\n", scale_vec[0],
-                scale_vec[1], scale_vec[2]);
-      }
 
       inst->numDrawSurfs = scene->mNumMeshes;
       inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * inst->numDrawSurfs);
@@ -359,17 +335,9 @@ void LoadTriangleModels(void) {
           ds->indexes[j * 3 + 2] = face->mIndices[2];
         }
       }
-
-      if (modelsInfoFile) {
-        fprintf(modelsInfoFile, "}\n");
-      }
     }
   }
 
-  if (modelsInfoFile) {
-    fclose(modelsInfoFile);
-    modelsInfoFile = NULL;
-  }
   _printf("----- LoadTriangleModels finished -----\n");
 }
 
