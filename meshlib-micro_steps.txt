@@ -1,0 +1,39 @@
+4. Dependency Investigation:
+----------------------------
+- MeshLib is a header-heavy, template-driven C++20 library.
+- Core classes (Mesh, MeshTopology, Vector, BitSet) are tightly coupled.
+- TBB (Threading Building Blocks) is the primary external dependency for parallelization.
+- Parallel-Hashmap (phmap) is used for efficient mapping but can be replaced by std::unordered_map with some effort.
+- "Verbatim" requirement: To keep the code verbatim, one must include the entire `MRMesh` source/header tree, as templates like `Vector<T, I>` and `BitSet` are used in almost every file.
+
+5. Feasibility Summary:
+-----------------------
+- It IS FEASIBLE to create a stripped version of MeshLib.
+- Recommendation: Instead of a "micro" library in a few files, create a "MeshLib-Lite" build:
+    a) Keep the following directories under `source/`:
+       - `MRMesh/`: The heart of the library.
+       - `MRMeshC/`: The C wrapper API.
+       - `MRPch/`: Precompiled headers and binding macros.
+    b) Remove or exclude:
+       - `MRViewer/`, `MRVoxels/`, `MRCuda/`, `MRPython/`, etc.
+       - All third-party dependencies not used by `MRMesh`.
+    c) Parallelization:
+       - If performance is not critical, TBB can be shimmed (replaced by a few headers that map ParallelFor to serial loops).
+       - If performance is critical, keep a minimal TBB build.
+    d) Verbatim Copy:
+       - The core files can be copied verbatim into the project's own tree.
+       - The `config.h` and other build-generated headers must be manually managed.
+
+6. Required Files (Core):
+-------------------------
+- MRMesh/MRMesh.h, .cpp
+- MRMesh/MRMeshTopology.h, .cpp
+- MRMesh/MRMeshBuilder.h, .cpp
+- MRMesh/MRMeshDecimate.h, .cpp
+- MRMesh/MRMeshFixer.h, .cpp
+- MRMesh/MRMeshFillHole.h, .cpp
+- MRMesh/MRBitSet.h, .cpp
+- MRMesh/MRId.h, .cpp
+- MRMesh/MRVector.h, .cpp
+- MRMesh/MRParallelFor.h (shimmed or kept)
+- [Plus supporting headers for math, boxes, buffers, etc.]
