@@ -321,6 +321,16 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         hacd_set_points(hacd, hacdPts, colMesh->numVerts);
         hacd_set_triangles(hacd, hacdTris, colMesh->numTris);
         
+        /* --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+        Good wood-bridge settings: 
+        disable_normalize=false, 
+        compacity=0.0001, 
+        volume=0.0, 
+        cc_connect_dist=0.0, 
+        nclusters=1, 
+        concavity=100000.0, 
+        extra_dist_points=true, 
+        add_faces_points=true*/
         hacd_set_disable_normalize(hacd, false);
         hacd_set_compacity_weight(hacd, 0.0001); 
         hacd_set_volume_weight(hacd, 0.0000);    

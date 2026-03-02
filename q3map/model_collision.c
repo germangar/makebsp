@@ -16,7 +16,10 @@ This file is part of Quake III Arena source code.
 #define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
 
 #define MAX_FUNC_CLIPS 16       // Max number of func_static groups
-#define MIN_FUNC_CLIP_DENSITY 0.000001 // Minimum density for a func_static group
+#define DENSITY_UNIT_SIZE 128.0f // Standard cube dimension for density calculation
+#define DENSITY_STANDARD_VOLUME (DENSITY_UNIT_SIZE * DENSITY_UNIT_SIZE * DENSITY_UNIT_SIZE)
+#define MIN_FUNC_CLIP_DENSITY 0.0f // Minimum standardized density for a func_static group
+#define MIN_FUNC_CLIP_BRUSHCOUNT 0 // Minimum brush count for a func_static group
 #define MAX_CLIP_ENTITY_GROUPS MAX_MODEL_INSTANCES // Max number of clip entity groups
 typedef struct {
   entity_t *entity;
@@ -172,23 +175,28 @@ static void PrepareClipEntityGroups(void) {
   qsort(clip_entity_groups, num_clip_entity_groups, sizeof(clip_entity_group_t),
         CompareDensity);
 
-  // Step 3: Identify the split point for overflow or low density
-  int splitPoint = num_clip_entity_groups;
-
-  // First check: density-based filtering
+  // Step 3: Partition groups by criteria (Density AND Brush Count)
+  // Move eligible groups to the front of the array.
+  int eligibleCount = 0;
   for (i = 0; i < num_clip_entity_groups; i++) {
-    if (clip_entity_groups[i].brush_density < MIN_FUNC_CLIP_DENSITY) {
-      splitPoint = i;
-      break;
+    if (clip_entity_groups[i].brush_density >= MIN_FUNC_CLIP_DENSITY &&
+        clip_entity_groups[i].numBrushes >= MIN_FUNC_CLIP_BRUSHCOUNT) {
+      if (i != eligibleCount) {
+        clip_entity_group_t temp = clip_entity_groups[eligibleCount];
+        clip_entity_groups[eligibleCount] = clip_entity_groups[i];
+        clip_entity_groups[i] = temp;
+      }
+      eligibleCount++;
     }
   }
 
-  // Second check: limit to MAX_FUNC_CLIPS
+  // Step 4: Identify the split point (top candidates, capped by count)
+  int splitPoint = eligibleCount;
   if (splitPoint > MAX_FUNC_CLIPS) {
     splitPoint = MAX_FUNC_CLIPS;
   }
 
-  // Step 4: Merge overflow/low-density groups into a single func_group
+  // Step 5: Merge overflow/ineligible groups into a single func_group
   if (splitPoint < num_clip_entity_groups) {
     _printf("Merging %i groups (overflow or low density) into a single func_group\n",
             num_clip_entity_groups - splitPoint);
@@ -304,7 +312,7 @@ static void CategorizeModel(modelInstance_t *inst) {
   float volume = size[0] * size[1] * size[2];
   
   if (volume > 1.0f) {
-    inst->triangle_density = ((float)totalTriangles / volume) * 2097152.0f; 
+    inst->triangle_density = ((float)totalTriangles / volume) * DENSITY_STANDARD_VOLUME; 
   } else {
     inst->triangle_density = 0.0f; 
   }
@@ -611,6 +619,12 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     entity_t *ent = malloc(sizeof(entity_t));
     memset(ent, 0, sizeof(entity_t));
     SetKeyValue(ent, "classname", "func_static");
+    SetKeyValue(ent, "misc_model", inst->modelName);
+    {
+      char triangle_density_str[32];
+      sprintf(triangle_density_str, "%.8f", inst->triangle_density);
+      SetKeyValue(ent, "triangle_density", triangle_density_str);
+    }
     ent->brushes = hulls_list;
 
     group->entity = ent;
@@ -628,7 +642,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     VectorSubtract(group->maxs, group->mins, size);
     float volume = size[0] * size[1] * size[2];
     if (volume > 1.0f) {
-      group->brush_density = (float)numHulls / volume;
+      group->brush_density = ((float)numHulls / volume) * DENSITY_STANDARD_VOLUME;
     } else {
       group->brush_density = 0;
     }
