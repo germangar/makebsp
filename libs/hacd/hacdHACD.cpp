@@ -322,8 +322,8 @@ void HACD::NormalizeData()
 	m_barycenter /= static_cast<Real>(m_nPoints);
 	m_diag = (max - min).GetNorm();
 	const Real invDiag = static_cast<Real>(2.0 * m_scale / m_diag);
-	if (m_diag != 0.0)
-	{
+
+	if (m_diag != 0.0)	{
 		for (size_t v = 0; v < m_nPoints; v++)
 		{
 			m_points[v] = (m_points[v] - m_barycenter) * invDiag;

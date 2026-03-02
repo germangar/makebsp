@@ -225,6 +225,7 @@ Enhanced Collision Pipeline (MeshLib heal/decimate + future HACD decompose).
 Currently: processes each draw surface mesh through MeshLib healing
 and decimation, exports debug OBJ, and returns an empty brush list.
 HACD decomposition will be added after visual verification.
+
 ====================
 */
 bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
@@ -330,15 +331,27 @@ bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         nclusters=1, 
         concavity=100000.0, 
         extra_dist_points=true, 
-        add_faces_points=true*/
-        hacd_set_disable_normalize(hacd, false);
+        add_faces_points=true
+         --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+        */
+        
+        /* --- Unnormalized Equivalence Scaling ---
+           HACD's default behavior normalizes all models to a 2000.0 unit bounding box diagonal.
+           This secretes scale factors that vary per-model. By disabling normalization and 
+           dividing our distance thresholds by the scale factor that our baseline 'wood-bridge' 
+           model used (1.8308), we can apply these precise unnormalized physical distances 
+           consistently to ALL models. 
+           Change this to 1.0 and disable_normalize to false to test native HACD behavior. */
+        double hacd_scale_factor = 1.8308; // The "magic number" from wood-bridge (2000.0 / 1092.38)
+        
+        hacd_set_disable_normalize(hacd, true);
         hacd_set_compacity_weight(hacd, 0.0001); 
         hacd_set_volume_weight(hacd, 0.0000);    
-        hacd_set_cc_connect_dist(hacd, 0.0);
+        hacd_set_cc_connect_dist(hacd, 0.0 / hacd_scale_factor);
         
         size_t targetClusters = 1;
         hacd_set_nclusters(hacd, targetClusters); 
-        hacd_set_concavity(hacd, 100000.0); 
+        hacd_set_concavity(hacd, 100000.0 / hacd_scale_factor); 
         hacd_set_add_extra_dist_points(hacd, true); 
         hacd_set_add_faces_points(hacd, true);      
         
