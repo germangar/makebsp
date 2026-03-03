@@ -13,38 +13,29 @@
 #include "MRAABBTreePolyline.h"
 #include "MRPolyline.h"
 #include "MRMeshOrPoints.h"
+#include "MRPrecisePredicates3.h"
 
 namespace MR {
+
+Vector3f findTriangleSegmentIntersectionPrecise( const Vector3f& fv0, const Vector3f& fv1, const Vector3f& fv2, const Vector3f& ev0, const Vector3f& ev1, CoordinateConverters )
+{
+    Vector3f n = cross(fv1 - fv0, fv2 - fv0).normalized();
+    float d = dot(ev1 - ev0, n);
+    if ( std::abs( d ) < 1e-6f ) return ev0;
+    float t = dot( fv0 - ev0, n ) / d;
+    return ev0 + t * ( ev1 - ev0 );
+}
+
+TriangleSegmentIntersectResult doTriangleSegmentIntersect( const std::array<PreciseVertCoords, 5> & ) { return { .doIntersect = true, .dIsLeftFromABC = false }; }
+
+ConvertToIntVector getToIntConverter( const Box3d& ) { return [](const Vector3f& v) { return Vector3i( (int)v.x, (int)v.y, (int)v.z ); }; }
+ConvertToFloatVector getToFloatConverter( const Box3d& ) { return [](const Vector3i& v) { return Vector3f( (float)v.x, (float)v.y, (float)v.z ); }; }
 
 // STUB: MeshOrPoints
 Box3f MeshOrPoints::getObjBoundingBox() const { return {}; }
 
 // STUB: Polyline
 bool PolylineTopology::isLoneEdge( EdgeId a ) const { return false; }
-
-// STUB: rayMeshIntersectAll
-void rayMeshIntersectAll( const MeshPart& meshPart, const Line3d& line, MeshIntersectionCallback callback,
-                          double rayStart, double rayEnd, const IntersectionPrecomputes<double>* prec) 
-{
-}
-
-void rayMeshIntersectAll( const MeshPart& meshPart, const Line3f& line, MeshIntersectionCallback callback,
-                          float rayStart, float rayEnd, const IntersectionPrecomputes<float>* prec) 
-{
-}
-
-// STUB: expand
-void expand( const MeshTopology & topology, FaceBitSet & region, int hops )
-{
-}
-
-void expand( const MeshTopology & topology, VertBitSet & region, int hops )
-{
-}
-
-void shrink( const MeshTopology & topology, VertBitSet & region, int hops )
-{
-}
 
 namespace MeshComponents {
 void excludeFullySelectedComponents( const Mesh& mesh, VertBitSet& selection )
@@ -56,11 +47,6 @@ void excludeFullySelectedComponents( const Mesh& mesh, VertBitSet& selection )
 const AABBTreePoints& PointCloud::getAABBTree() const {
     static AABBTreePoints dummy( VertCoords{} );
     return dummy;
-}
-
-// STUB: findPointsInBall
-void findPointsInBall( const AABBTreePoints& tree, Ball3f ball, const OnPointInBallFound& foundCallback, const AffineXf3f* xf )
-{
 }
 
 // STUB: equalizeTriAreas (removes Laplacian dependency)
@@ -83,13 +69,6 @@ PreCollapseCallback meshPreCollapseVertAttribute( const Mesh& mesh, const MeshAt
 
 
 namespace MeshBuilder {
-// STUB: VertexIdentifier 
-void VertexIdentifier::reserve( size_t numTris )
-{
-}
-void VertexIdentifier::addTriangles( const std::vector<Triangle3f> & buffer )
-{
-}
 }
 
 // STUB: calcDipoles

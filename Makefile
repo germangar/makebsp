@@ -25,79 +25,124 @@ JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 MESHOPT_SRC = $(wildcard $(MESHOPT_DIR)/*.cpp)
 HACD_SRC = $(wildcard $(HACD_DIR)/*.cpp)
-ML_LITE_DIR = libs/MeshLib-Lite
-ML_CORE_DIR = $(ML_LITE_DIR)/MRMesh
-ML_C_DIR = $(ML_LITE_DIR)/MRMeshC
-ML_CORE_SRC = $(wildcard $(ML_CORE_DIR)/*.cpp)
-ML_C_SRC = $(wildcard $(ML_C_DIR)/*.cpp)
 
-# Object files divided into libraries and application
-LIB_OBJ = $(JPEG_SRC:$(JPEG_DIR)/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
-          $(PAK_SRC:$(PAK_DIR)/%.cpp=$(OBJ_DIR)/pak/%.o) \
-          $(MESHOPT_SRC:$(MESHOPT_DIR)/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
-          $(HACD_SRC:$(HACD_DIR)/%.cpp=$(OBJ_DIR)/hacd/%.o) \
-          $(ML_CORE_SRC:$(ML_CORE_DIR)/%.cpp=$(OBJ_DIR)/ml_core/MRMesh/%.o) \
-          $(ML_C_SRC:$(ML_C_DIR)/%.cpp=$(OBJ_DIR)/ml_core/MRMeshC/%.o)
+ML_LITE_CORE_SRC = \
+    libs/MeshLib-Lite/MRMesh/MRAABBTree.cpp \
+	libs/MeshLib-Lite/MRMesh/MRAABBTreeObjects.cpp \
+    libs/MeshLib-Lite/MRMesh/MRAABBTreePoints.cpp \
+    libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline.cpp \
+    libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline2.cpp \
+    libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline3.cpp \
+    libs/MeshLib-Lite/MRMesh/MRAffineXf3.cpp \
+    libs/MeshLib-Lite/MRMesh/MRBestFit.cpp \
+    libs/MeshLib-Lite/MRMesh/MRBitSet.cpp \
+    libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.cpp \
+    libs/MeshLib-Lite/MRMesh/MRCloseVertices.cpp \
+    libs/MeshLib-Lite/MRMesh/MRComputeBoundingBox.cpp \
+    libs/MeshLib-Lite/MRMesh/MREdgeLengthMesh.cpp \
+    libs/MeshLib-Lite/MRMesh/MREdgeMetric.cpp \
+    libs/MeshLib-Lite/MRMesh/MREdgePaths.cpp \
+    libs/MeshLib-Lite/MRMesh/MREdgePoint.cpp \
+	libs/MeshLib-Lite/MRMesh/MRFillHoleNicely.cpp \
+	libs/MeshLib-Lite/MRMesh/MRIOFilters.cpp \
+	libs/MeshLib-Lite/MRMesh/MRIOParsing.cpp \
+    libs/MeshLib-Lite/MRMesh/MRId.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMapEdge.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMarkedContour.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMesh.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshBuilder.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshDecimate.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshDelete.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshDelone.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshFillHole.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshFixer.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshMath.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshMetrics.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshNormals.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshPatch.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshProject.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshStubs.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshSubdivide.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshSubdivideCallbacks.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshTopology.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshTriPoint.cpp \
+    libs/MeshLib-Lite/MRMesh/MROrder.cpp \
+    libs/MeshLib-Lite/MRMesh/MRParallelFor.cpp \
+    libs/MeshLib-Lite/MRMesh/MRPartMappingAdapters.cpp \
+    libs/MeshLib-Lite/MRMesh/MRPositionVertsSmoothly.cpp \
+    libs/MeshLib-Lite/MRMesh/MRProgressReadWrite.cpp \
+    libs/MeshLib-Lite/MRMesh/MRQuadraticForm.cpp \
+    libs/MeshLib-Lite/MRMesh/MRReducePath.cpp \
+    libs/MeshLib-Lite/MRMesh/MRRegionBoundary.cpp \
+    libs/MeshLib-Lite/MRMesh/MRSaveSettings.cpp \
+    libs/MeshLib-Lite/MRMesh/MRSharedThreadSafeOwner.cpp \
+    libs/MeshLib-Lite/MRMesh/MRSpdlog.cpp \
+    libs/MeshLib-Lite/MRMesh/MRString.cpp \
+    libs/MeshLib-Lite/MRMesh/MRTbbThreadMutex.cpp \
+    libs/MeshLib-Lite/MRMesh/MRTimer.cpp \
+    libs/MeshLib-Lite/MRMesh/MRTwoLineSegmDist.cpp \
+    libs/MeshLib-Lite/MRMesh/MRIdentifyVertices.cpp \
+    libs/MeshLib-Lite/MRMesh/MRExpandShrink.cpp \
+    libs/MeshLib-Lite/MRMesh/MRPointsInBall.cpp \
+    libs/MeshLib-Lite/MRMesh/MRMeshIntersect.cpp
+
+ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
+
+# Object files
+LIB_OBJ = $(JPEG_SRC:libs/jpeg6/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
+          $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) \
+          $(MESHOPT_SRC:libs/meshoptimizer/src/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
+          $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) \
+          $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_DIR)/ml_core/MRMesh/%.o) \
+          $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_DIR)/ml_core/MRMeshC/%.o)
 
 APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
           $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o)
 
-TARGET = q3map.exe
-
-# By default, we only depend on application objects
-# Use REBUILD_LIBS=1 to force checking libraries
 ALL_OBJ = $(LIB_OBJ) $(APP_OBJ)
 
-all: $(TARGET)
+TARGET = q3map.exe
 
-# Define a specific target to build libraries
-libs: $(LIB_OBJ)
+all: $(TARGET)
 
 $(TARGET): $(ALL_OBJ)
 	$(CXX) -o $@ $(LIB_OBJ) $(APP_OBJ) $(LDFLAGS)
 
 # Compile rules
-$(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c q3map/qbsp.h
+$(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c q3map/qbsp.h
+$(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-
-$(OBJ_DIR)/jpeg6/%.o: $(JPEG_DIR)/%.cpp
+$(OBJ_DIR)/jpeg6/%.o: libs/jpeg6/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/pak/%.o: $(PAK_DIR)/%.cpp
+$(OBJ_DIR)/pak/%.o: libs/pak/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/meshoptimizer/%.o: $(MESHOPT_DIR)/%.cpp
+$(OBJ_DIR)/meshoptimizer/%.o: libs/meshoptimizer/src/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
+$(OBJ_DIR)/hacd/%.o: libs/hacd/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-obj/ml_core/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
-	mkdir -p $(@D)
+$(OBJ_DIR)/ml_core/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
+	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
-obj/ml_core/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
-	mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
-
-$(OBJ_DIR)/pmp/%.o: $(PMP_DIR)/%.cpp
+$(OBJ_DIR)/ml_core/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
 	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -std=c++20 -c $< -o $@
-
+	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
 clean:
 	rm -rf $(OBJ_DIR)
 	rm -f $(TARGET)
 
-.PHONY: all clean libs
-
+.PHONY: all clean
