@@ -49,19 +49,24 @@ int num_clip_entity_groups = 0;
 static int c_degenerate_triangles = 0;
 static int c_degenerate_hulls = 0;
 
+static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
+                                    int *indexes, int numIndexes,
+                                    const char *debugName);
+
 const char *CategoryString(modelCategory_t cat) {
   switch (cat) {
-  case MC_WALKABLE:
-    return "WALKABLE";
-  case MC_FULL:
-    return "FULL";
-  case MC_SHELL:
-    return "SHELL";
   case MC_OBJECT:
-    return "OBJECT";
-  case MC_NONE:
+    return "MC_OBJECT";
+  case MC_WALKABLE:
+    return "MC_WALKABLE";
+  case MC_WRAP:
+    return "MC_WRAP";
+  case MC_SHELL:
+    return "MC_SHELL";
+  case MC_TERRAIN:
+    return "MC_TERRAIN";
   default:
-    return "NONE";
+    return "MC_NONE";
   }
 }
 
@@ -291,8 +296,9 @@ static void CategorizeModel(modelInstance_t *inst) {
   int j, k;
   mapDrawSurface_t *ds;
   vec3_t mins, maxs, centroid;
+  float upArea = 0;
+  float upperHemisphereArea = 0;
   float totalArea = 0;
-  float groundArea = 0;
   float inwardArea = 0;
   float outwardArea = 0;
   int totalVerts = 0;
@@ -360,9 +366,12 @@ static void CategorizeModel(modelInstance_t *inst) {
 
       VectorNormalize(normal, normal);
 
-      // Ground detect
-      if (normal[2] > 0.7f) {
-        groundArea += area;
+      // Terrain and Ground detect
+      if (normal[2] > 0.707f) { // Within 45 degrees of Up (0,0,1)
+        upArea += area;
+      }
+      if (normal[2] > 0.0f) { // Upper hemisphere
+        upperHemisphereArea += area;
       }
 
       // Orientation (Centroid Dot Product)
@@ -387,7 +396,8 @@ static void CategorizeModel(modelInstance_t *inst) {
     return;
   }
 
-  float groundRatio = groundArea / totalArea;
+  float upRatio = upArea / totalArea;
+  float upperHemisphereRatio = upperHemisphereArea / totalArea;
   float outwardRatio = outwardArea / totalArea;
   float inwardRatio = inwardArea / totalArea;
   float height = maxs[2] - mins[2];
@@ -395,10 +405,12 @@ static void CategorizeModel(modelInstance_t *inst) {
 
   modelCategory_t category = MC_OBJECT;
 
-  if (groundRatio > 0.3f || (isFlat && groundRatio > 0.15f)) {
+  if (upRatio > 0.5f && upperHemisphereRatio > 0.85f) {
+    category = MC_TERRAIN;
+  } else if (upRatio > 0.3f || (isFlat && upRatio > 0.15f)) {
     category = MC_WALKABLE;
   } else if (outwardRatio > 0.8f) {
-    category = MC_FULL;
+    category = MC_WRAP;
   } else if (inwardRatio > 0.8f) {
     category = MC_SHELL;
   }
@@ -407,13 +419,109 @@ static void CategorizeModel(modelInstance_t *inst) {
 
   _printf("Instance %s: Categorized as %s\n", inst->modelName,
           CategoryString(category));
-  _printf("  Metrics: Area %.1f, Ground %.1f%%, Outward %.1f%%, Inward %.1f%%, "
+  _printf("  Metrics: Area %.1f, Up %.1f%%, UpperHemi %.1f%%, Outward %.1f%%, Inward %.1f%%, "
           "Height %.1f, Density: %.1f tris/128u^3\n",
-          totalArea, groundRatio * 100.0f, outwardRatio * 100.0f,
+          totalArea, upRatio * 100.0f, upperHemisphereRatio * 100.0f, outwardRatio * 100.0f,
           inwardRatio * 100.0f, height, inst->triangle_density);
 
 
   return;
+}
+
+/*
+====================
+GenerateCollisionTerrainExtrusion
+
+Specialized pipeline for terrains:
+1. Merges all draw surfaces into one mesh.
+2. Decimates the result using MeshLib-Lite.
+3. Extrudes the resulting decimated mesh into brushes.
+====================
+*/
+bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_t *shader) {
+  int j, k;
+  int totalVerts = 0;
+  int totalIndexes = 0;
+  float *allVerts;
+  int *allIndexes;
+  int currentVert = 0;
+  int currentIndex = 0;
+  
+  _printf("Instance %s: Generating Terrain Extrusion\n", inst->modelName);
+
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    mapDrawSurface_t *ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) continue;
+    totalVerts += ds->numVerts;
+    totalIndexes += ds->numIndexes;
+  }
+
+  if (totalVerts == 0) return NULL;
+
+  allVerts = malloc(totalVerts * 3 * sizeof(float));
+  allIndexes = malloc(totalIndexes * sizeof(int));
+
+  for (j = 0; j < inst->numDrawSurfs; j++) {
+    mapDrawSurface_t *ds = inst->drawSurfs[j];
+    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) continue;
+    int baseVert = currentVert;
+    for (k = 0; k < ds->numVerts; k++) {
+      allVerts[currentVert * 3 + 0] = (float)ds->verts[k].xyz[0];
+      allVerts[currentVert * 3 + 1] = (float)ds->verts[k].xyz[1];
+      allVerts[currentVert * 3 + 2] = (float)ds->verts[k].xyz[2];
+      currentVert++;
+    }
+    for (k = 0; k < ds->numIndexes; k++) {
+      allIndexes[currentIndex++] = ds->indexes[k] + baseVert;
+    }
+  }
+
+  MRMesh *healed = HealAndDecimateMesh(allVerts, totalVerts, allIndexes, totalIndexes, inst->modelName);
+  free(allVerts);
+  free(allIndexes);
+
+  if (!healed) return NULL;
+
+  // Convert MRMesh to colMesh_t
+  colMesh_t *colMesh = malloc(sizeof(colMesh_t));
+  memset(colMesh, 0, sizeof(colMesh_t));
+  
+  const MRVector3f *pts = mrMeshPoints(healed);
+  size_t numPts = mrMeshPointsNum(healed);
+  const MRMeshTopology *topo = mrMeshTopology(healed);
+  MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
+
+  if (tri && tri->size > 0) {
+      colMesh->numVerts = (int)numPts;
+      colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
+      memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
+
+      int validTriCount = 0;
+      for (size_t fi = 0; fi < tri->size; fi++) {
+          if (tri->data[fi][0].id >= 0) validTriCount++;
+      }
+
+      colMesh->numTris = validTriCount;
+      colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
+      
+      int triIdx = 0;
+      for (size_t fi = 0; fi < tri->size; fi++) {
+          if (tri->data[fi][0].id >= 0) {
+              colMesh->tris[triIdx][0] = tri->data[fi][0].id;
+              colMesh->tris[triIdx][1] = tri->data[fi][1].id;
+              colMesh->tris[triIdx][2] = tri->data[fi][2].id;
+              triIdx++;
+          }
+      }
+  }
+  mrMeshFree(healed);
+
+  bspbrush_t *hulls = NULL;
+  if (colMesh->numTris > 0) {
+      hulls = ExtrudeTrianglesToBrushes(colMesh, shader);
+  }
+  FreeCollisionMesh(colMesh);
+  return hulls;
 }
 
 /*
@@ -610,9 +718,11 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   _printf("Instance %s: Decomposing as %s\n", inst->modelName, CategoryString(category));
 
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
-  qboolean mergeMeshes = (category == MC_FULL) ? qtrue : qfalse;
+  qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
 
-  if (category == MC_OBJECT || category == MC_WALKABLE) {
+  if (category == MC_TERRAIN) {
+    hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
+  } else if (category == MC_OBJECT || category == MC_WALKABLE) {
     if (use_meshoptimizer) {
       hulls_list = GenerateExtrusionCollision(inst, caulk);
     } else {

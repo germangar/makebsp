@@ -425,8 +425,9 @@ typedef enum {
   MC_NONE,
   MC_OBJECT,
   MC_WALKABLE,
-  MC_FULL,
-  MC_SHELL
+  MC_WRAP,
+  MC_SHELL,
+  MC_TERRAIN
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256

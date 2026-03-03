@@ -96,7 +96,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
       mcts_max_depth = 3;
       decimate = qtrue;
       break;
-    case MC_FULL:
+    case MC_WRAP:
       threshold = 0.2f;
       resolution = 1000;
       prep_resolution = 30;
