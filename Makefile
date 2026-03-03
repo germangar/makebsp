@@ -17,6 +17,7 @@ PAK_DIR = libs/pak
 MESHOPT_DIR = libs/meshoptimizer/src
 HACD_DIR = libs/hacd
 OBJ_DIR = obj
+OBJ_LITE_DIR = obj_lite
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
@@ -88,27 +89,32 @@ ML_LITE_CORE_SRC = \
 
 ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 
-# Object files
-LIB_OBJ = $(JPEG_SRC:libs/jpeg6/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
+ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
+
+# Object files for application (always cleaned)
+APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
+          $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) \
+          $(JPEG_SRC:libs/jpeg6/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
           $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) \
           $(MESHOPT_SRC:libs/meshoptimizer/src/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
-          $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) \
-          $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_DIR)/ml_core/MRMesh/%.o) \
-          $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_DIR)/ml_core/MRMeshC/%.o)
+          $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o)
 
-APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
-          $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o)
-
-ALL_OBJ = $(LIB_OBJ) $(APP_OBJ)
+# Object files for MeshLib-Lite (persistent)
+ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) \
+              $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
 
 TARGET = q3map.exe
 
 all: $(TARGET)
 
-$(TARGET): $(ALL_OBJ)
-	$(CXX) -o $@ $(LIB_OBJ) $(APP_OBJ) $(LDFLAGS)
+$(ML_LITE_LIB): $(ML_LITE_OBJ)
+	@echo Building persistent MeshLib-Lite library...
+	ar rcs $@ $^
 
-# Compile rules
+$(TARGET): $(APP_OBJ) $(ML_LITE_LIB)
+	$(CXX) -o $@ $(APP_OBJ) $(ML_LITE_LIB) $(LDFLAGS)
+
+# Compile rules for application
 $(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -133,11 +139,12 @@ $(OBJ_DIR)/hacd/%.o: libs/hacd/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/ml_core/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
+# Compile rules for persistent MeshLib-Lite
+$(OBJ_LITE_DIR)/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
-$(OBJ_DIR)/ml_core/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
+$(OBJ_LITE_DIR)/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
@@ -145,4 +152,8 @@ clean:
 	rm -rf $(OBJ_DIR)
 	rm -f $(TARGET)
 
-.PHONY: all clean
+clean-all: clean
+	rm -rf $(OBJ_LITE_DIR)
+	rm -f $(ML_LITE_LIB)
+
+.PHONY: all clean clean-all
