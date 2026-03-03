@@ -1,4 +1,0 @@
-#pragma once
-
-#cmakedefine MRVOXELS_NO_DICOM
-#cmakedefine MRVOXELS_NO_TIFF

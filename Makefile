@@ -1,7 +1,7 @@
 CC = gcc
 CXX = g++
 CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
-         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/meshoptimizer/src -Ilibs/pmp-library/src -Ilibs/MeshLib/thirdparty/eigen \
+         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/meshoptimizer/src -Ilibs/MeshLib-Lite/eigen \
          -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite \
          -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch \

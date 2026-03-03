@@ -1,5 +1,0 @@
-<Project>    
-	<PropertyGroup>
-        	<BaseIntermediateOutputPath>..\..\source\TempOutput\c-sharp-examples\</BaseIntermediateOutputPath>
-    </PropertyGroup>
-</Project>
