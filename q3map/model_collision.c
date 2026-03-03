@@ -12,25 +12,25 @@ This file is part of Quake III Arena source code.
 #include "model_collision.h"
 
 /* HACD Wrapper */
-#include "hacd_c_wrapper.h"
+#include "../libs/hacd/hacd_c_wrapper.h"
 
 /* MeshOptimizer */
 #include "../libs/meshoptimizer/src/meshoptimizer.h"
 
 /* MRMeshC headers */
-#include "MRMeshFwd.h"
-#include "MRVector3.h"
-#include "MRId.h"
-#include "MRMesh.h"
-#include "MRMeshTopology.h"
-#include "MRMeshBuilder.h"
-#include "MRMeshFixer.h"
-#include "MRMeshFillHole.h"
-#include "MRMeshDecimate.h"
-#include "MRMeshSave.h"
-#include "MRString.h"
-#include "MRBitSet.h"
-#include "MRVector.h"
+#include "MRMeshC/MRMeshFwd.h"
+#include "MRMeshC/MRVector3.h"
+#include "MRMeshC/MRId.h"
+#include "MRMeshC/MRMesh.h"
+#include "MRMeshC/MRMeshTopology.h"
+#include "MRMeshC/MRMeshBuilder.h"
+#include "MRMeshC/MRMeshFixer.h"
+#include "MRMeshC/MRMeshFillHole.h"
+#include "MRMeshC/MRMeshDecimate.h"
+#include "MRMeshC/MRMeshSave.h"
+#include "MRMeshC/MRString.h"
+#include "MRMeshC/MRBitSet.h"
+#include "MRMeshC/MRVector.h"
 
 #define WRITE_COLLISION_MAP qtrue
 

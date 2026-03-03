@@ -28,19 +28,19 @@ Called from model_collision.c for MC_OBJECT category.
 #include "hacd_c_wrapper.h"
 
 /* MRMeshC headers */
-#include "MRMeshFwd.h"
-#include "MRVector3.h"
-#include "MRId.h"
-#include "MRMesh.h"
-#include "MRMeshTopology.h"
-#include "MRMeshBuilder.h"
-#include "MRMeshFixer.h"
-#include "MRMeshFillHole.h"
-#include "MRMeshDecimate.h"
-#include "MRMeshSave.h"
-#include "MRString.h"
-#include "MRBitSet.h"
-#include "MRVector.h"
+#include "MRMeshC/MRMeshFwd.h"
+#include "MRMeshC/MRVector3.h"
+#include "MRMeshC/MRId.h"
+#include "MRMeshC/MRMesh.h"
+#include "MRMeshC/MRMeshTopology.h"
+#include "MRMeshC/MRMeshBuilder.h"
+#include "MRMeshC/MRMeshFixer.h"
+#include "MRMeshC/MRMeshFillHole.h"
+#include "MRMeshC/MRMeshDecimate.h"
+#include "MRMeshC/MRMeshSave.h"
+#include "MRMeshC/MRString.h"
+#include "MRMeshC/MRBitSet.h"
+#include "MRMeshC/MRVector.h"
 
 static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
     bspbrush_t *list = NULL;

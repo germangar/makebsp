@@ -1,13 +1,13 @@
 CC = gcc
 CXX = g++
 CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
-         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/meshoptimizer/src -Ilibs/pmp-library/src -Ilibs/pmp-library/external/eigen-3.4.0 \
-         -Ilibs/hacd -Ilibs/MeshLib/source/MRMeshC \
-         -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0
-CXXFLAGS = $(CFLAGS)
+         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/meshoptimizer/src -Ilibs/pmp-library/src -Ilibs/MeshLib/thirdparty/eigen \
+         -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite \
+         -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0
+CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch \
+           -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap
 LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm \
-          -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lzlibstatic -lstdc++ -fopenmp \
-          -Llibs/MeshLib/build/bin -lMRMeshC -lMRMesh
+          -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lzlibstatic -lstdc++ -fopenmp
 
 # Directories
 COMMON_DIR = common
@@ -25,12 +25,19 @@ JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 MESHOPT_SRC = $(wildcard $(MESHOPT_DIR)/*.cpp)
 HACD_SRC = $(wildcard $(HACD_DIR)/*.cpp)
+ML_LITE_DIR = libs/MeshLib-Lite
+ML_CORE_DIR = $(ML_LITE_DIR)/MRMesh
+ML_C_DIR = $(ML_LITE_DIR)/MRMeshC
+ML_CORE_SRC = $(wildcard $(ML_CORE_DIR)/*.cpp)
+ML_C_SRC = $(wildcard $(ML_C_DIR)/*.cpp)
 
 # Object files divided into libraries and application
 LIB_OBJ = $(JPEG_SRC:$(JPEG_DIR)/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
           $(PAK_SRC:$(PAK_DIR)/%.cpp=$(OBJ_DIR)/pak/%.o) \
           $(MESHOPT_SRC:$(MESHOPT_DIR)/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
-          $(HACD_SRC:$(HACD_DIR)/%.cpp=$(OBJ_DIR)/hacd/%.o)
+          $(HACD_SRC:$(HACD_DIR)/%.cpp=$(OBJ_DIR)/hacd/%.o) \
+          $(ML_CORE_SRC:$(ML_CORE_DIR)/%.cpp=$(OBJ_DIR)/ml_core/MRMesh/%.o) \
+          $(ML_C_SRC:$(ML_C_DIR)/%.cpp=$(OBJ_DIR)/ml_core/MRMeshC/%.o)
 
 APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
           $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o)
@@ -74,6 +81,14 @@ $(OBJ_DIR)/meshoptimizer/%.o: $(MESHOPT_DIR)/%.cpp
 $(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+obj/ml_core/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
+	mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
+
+obj/ml_core/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
+	mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
 $(OBJ_DIR)/pmp/%.o: $(PMP_DIR)/%.cpp
 	mkdir -p $(dir $@)
