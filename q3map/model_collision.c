@@ -704,87 +704,6 @@ bspbrush_t *BrushesFromHulls(colHull_t **hulls, int numHulls, shaderInfo_t *si) 
   return list;
 }
 
-static void DecomposeModelCollision(modelInstance_t *inst) {
-  modelCategory_t category = inst->category;
-  bspbrush_t *hulls_list = NULL;
-  int numHulls = 0;
-
-  if (num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS) {
-    _printf("WARNING: MAX_CLIP_ENTITY_GROUPS reached\n");
-    return;
-  }
-
-  // Step 1: Pre-calculate thresholds and print info
-  _printf("Instance %s: Decomposing as %s\n", inst->modelName, CategoryString(category));
-
-  shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
-  qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
-
-  if (category == MC_TERRAIN) {
-    hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
-  } else if (category == MC_OBJECT || category == MC_WALKABLE) {
-    if (use_meshoptimizer) {
-      hulls_list = GenerateExtrusionCollision(inst, caulk);
-    } else {
-      hulls_list = GenerateMLCollision(inst, caulk);
-    }
-  } else {
-    hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
-  }
-
-  if (hulls_list) {
-    //CSGMergeBrushList(&hulls_list);
-  }
-
-  for (bspbrush_t *b = hulls_list; b; b = b->next) {
-    numHulls++;
-  }
-
-  _printf("Instance %s: Generated total %i convex hulls.\n", inst->modelName, numHulls);
-
-  // Step 5: Populate clip entity group
-  if (hulls_list) {
-    clip_entity_group_t *group = &clip_entity_groups[num_clip_entity_groups++];
-
-    // Create a local entity (not part of the map entities yet)
-    entity_t *ent = malloc(sizeof(entity_t));
-    memset(ent, 0, sizeof(entity_t));
-    SetKeyValue(ent, "classname", "func_static");
-    SetKeyValue(ent, "misc_model", inst->modelName);
-    {
-      char triangle_density_str[32];
-      sprintf(triangle_density_str, "%.8f", inst->triangle_density);
-      SetKeyValue(ent, "triangle_density", triangle_density_str);
-    }
-    ent->brushes = hulls_list;
-
-    group->entity = ent;
-    group->numBrushes = numHulls;
-
-    // Calculate bounds
-    ClearBounds(group->mins, group->maxs);
-    for (bspbrush_t *b = hulls_list; b; b = b->next) {
-      AddPointToBounds(b->mins, group->mins, group->maxs);
-      AddPointToBounds(b->maxs, group->mins, group->maxs);
-    }
-
-    // Calculate brush density
-    vec3_t size;
-    VectorSubtract(group->maxs, group->mins, size);
-    float volume = size[0] * size[1] * size[2];
-    if (volume > 1.0f) {
-      group->brush_density = ((float)numHulls / volume) * DENSITY_STANDARD_VOLUME;
-    } else {
-      group->brush_density = 0;
-    }
-
-    _printf("Instance %s: Created clip group with %i brushes, density %.6f\n",
-            inst->modelName, numHulls, group->brush_density);
-  }
-
-
-}
-
 /*
 ====================
 HealAndDecimateMesh
@@ -907,6 +826,51 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   }
 
   return mesh;
+}
+
+/*
+====================
+WriteCollisionOBJ
+
+Writes multiple collision meshes into a single OBJ file.
+Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)
+====================
+*/
+static void WriteCollisionOBJ(colMesh_t **collision_meshes, int num_collision_meshes, const char *filename) {
+  FILE *f = fopen(filename, "w");
+  if (!f) {
+    _printf("ERROR: Could not open %s for writing\n", filename);
+    return;
+  }
+
+  fprintf(f, "# Unified Collision OBJ: %d meshes\n", num_collision_meshes);
+  fprintf(f, "# Axis swap: Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y)\n");
+
+  int vertexOffset = 0;
+  for (int i = 0; i < num_collision_meshes; i++) {
+    colMesh_t *m = collision_meshes[i];
+    if (!m) continue;
+
+    fprintf(f, "o mesh_%d\n", i);
+    
+    /* Vertices */
+    for (int v = 0; v < m->numVerts; v++) {
+      fprintf(f, "v %f %f %f\n", m->verts[v][0], m->verts[v][2], -m->verts[v][1]);
+    }
+
+    /* Faces (1-indexed + offset) */
+    for (int t = 0; t < m->numTris; t++) {
+      fprintf(f, "f %d %d %d\n", 
+              m->tris[t][0] + vertexOffset + 1,
+              m->tris[t][1] + vertexOffset + 1,
+              m->tris[t][2] + vertexOffset + 1);
+    }
+
+    vertexOffset += m->numVerts;
+  }
+
+  fclose(f);
+  _printf("  Wrote collision debug to %s\n", filename);
 }
 
 /*
@@ -1062,6 +1026,93 @@ void FreeCollisionTris(modelInstance_t *inst) {
   }
   inst->num_collision_meshes = 0;
 }
+
+/*
+====================
+DecomposeModelCollision
+
+Generate collision hulls from the model's geometry.
+====================
+*/
+static void DecomposeModelCollision(modelInstance_t *inst) {
+  modelCategory_t category = inst->category;
+  bspbrush_t *hulls_list = NULL;
+  int numHulls = 0;
+
+  if (num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS) {
+    _printf("WARNING: MAX_CLIP_ENTITY_GROUPS reached\n");
+    return;
+  }
+
+  // Step 1: Pre-calculate thresholds and print info
+  _printf("Instance %s: Decomposing as %s\n", inst->modelName, CategoryString(category));
+
+  shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
+  qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
+
+  if (category == MC_TERRAIN) {
+    hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
+  } else if (category == MC_OBJECT || category == MC_WALKABLE) {
+    if (use_meshoptimizer) {
+      hulls_list = GenerateExtrusionCollision(inst, caulk);
+    } else {
+      hulls_list = GenerateMLCollision(inst, caulk);
+    }
+  } else {
+    hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
+  }
+
+  if (hulls_list) {
+    //CSGMergeBrushList(&hulls_list);
+  }
+
+  for (bspbrush_t *b = hulls_list; b; b = b->next) {
+    numHulls++;
+  }
+
+  _printf("Instance %s: Generated total %i convex hulls.\n", inst->modelName, numHulls);
+
+  // Step 5: Populate clip entity group
+  if (hulls_list) {
+    clip_entity_group_t *group = &clip_entity_groups[num_clip_entity_groups++];
+
+    // Create a local entity (not part of the map entities yet)
+    entity_t *ent = malloc(sizeof(entity_t));
+    memset(ent, 0, sizeof(entity_t));
+    SetKeyValue(ent, "classname", "func_static");
+    SetKeyValue(ent, "misc_model", inst->modelName);
+    {
+      char triangle_density_str[32];
+      sprintf(triangle_density_str, "%.8f", inst->triangle_density);
+      SetKeyValue(ent, "triangle_density", triangle_density_str);
+    }
+    ent->brushes = hulls_list;
+
+    group->entity = ent;
+    group->numBrushes = numHulls;
+
+    // Calculate bounds
+    ClearBounds(group->mins, group->maxs);
+    for (bspbrush_t *b = hulls_list; b; b = b->next) {
+      AddPointToBounds(b->mins, group->mins, group->maxs);
+      AddPointToBounds(b->maxs, group->mins, group->maxs);
+    }
+
+    // Calculate brush density
+    vec3_t size;
+    VectorSubtract(group->maxs, group->mins, size);
+    float volume = size[0] * size[1] * size[2];
+    if (volume > 1.0f) {
+      group->brush_density = ((float)numHulls / volume) * DENSITY_STANDARD_VOLUME;
+    } else {
+      group->brush_density = 0;
+    }
+
+    _printf("Instance %s: Created clip group with %i brushes, density %.6f\n",
+            inst->modelName, numHulls, group->brush_density);
+  }
+}
+
 
 /*
 ====================
