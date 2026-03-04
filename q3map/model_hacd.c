@@ -8,17 +8,12 @@ This file is part of Quake III Arena source code.
 */
 
 /*
-model_meshlib.c — Enhanced Collision Pipeline
+HACD generates convex hulls from meshes without voxelization.
+It works better than V-HACD when you don't want soft wrapping.
 
-Pipeline:
-  1. Extract mesh data from draw surfaces (Assimp already loaded them)
-  2. Construct MRMesh (handling non-manifold vertices)
-  3. Heal: vertex welding, fix multiple edges, fix degeneracies, fill holes
-  4. Decimate: reduce triangle count while preserving shape
-  5. Export debug OBJ for visual verification
-  6. (Future) Feed healed/decimated mesh into HACD for convex decomposition
-  
-Called from model_collision.c for MC_OBJECT category.
+The HACD library option to disable model size normalization
+was broken. We had to patch the library source code to
+reenable the hacd_set_disable_normalize functionality
 */
 
 #include "qbsp.h"
