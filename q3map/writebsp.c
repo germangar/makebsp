@@ -275,10 +275,16 @@ void BeginBSPFile( void ) {
 	// these values may actually be initialized
 	// if the file existed when loaded, so clear them explicitly
 	nummodels = 0;
+	numplanes = 0;
 	numnodes = 0;
+	numbrushes = 0;
 	numbrushsides = 0;
 	numleafsurfaces = 0;
 	numleafbrushes = 0;
+	numDrawSurfaces = 0;
+	numDrawVerts = 0;
+	numDrawIndexes = 0;
+	numFogs = 0;
 
 	// leave leaf 0 as an error, because leafs are referenced as
 	// negative number nodes
