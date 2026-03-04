@@ -11,9 +11,6 @@ This file is part of Quake III Arena source code.
 #include "qbsp.h"
 #include "model_collision.h"
 
-/* HACD Wrapper */
-#include "../libs/hacd/hacd_c_wrapper.h"
-
 /* Mesh Lib Lite*/
 #include "../libs/MeshLib-Lite/MRMeshC/MRMesh.h"
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshBuilder.h"
