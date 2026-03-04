@@ -1,7 +1,7 @@
 CC = gcc
 CXX = g++
 CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map \
-         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/meshoptimizer/src -Ilibs/MeshLib-Lite/eigen \
+         -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen \
          -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite \
          -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch \
@@ -14,7 +14,6 @@ COMMON_DIR = common
 Q3MAP_DIR = q3map
 JPEG_DIR = libs/jpeg6
 PAK_DIR = libs/pak
-MESHOPT_DIR = libs/meshoptimizer/src
 HACD_DIR = libs/hacd
 OBJ_DIR = obj
 OBJ_LITE_DIR = obj_lite
@@ -24,7 +23,6 @@ COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
 Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c $(Q3MAP_DIR)/misc_model_old.c, $(wildcard $(Q3MAP_DIR)/*.c))
 JPEG_SRC = $(wildcard $(JPEG_DIR)/*.cpp)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
-MESHOPT_SRC = $(wildcard $(MESHOPT_DIR)/*.cpp)
 HACD_SRC = $(wildcard $(HACD_DIR)/*.cpp)
 
 ML_LITE_CORE_SRC = \
@@ -96,7 +94,6 @@ APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
           $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) \
           $(JPEG_SRC:libs/jpeg6/%.cpp=$(OBJ_DIR)/jpeg6/%.o) \
           $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) \
-          $(MESHOPT_SRC:libs/meshoptimizer/src/%.cpp=$(OBJ_DIR)/meshoptimizer/%.o) \
           $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o)
 
 # Object files for MeshLib-Lite (persistent)
@@ -128,10 +125,6 @@ $(OBJ_DIR)/jpeg6/%.o: libs/jpeg6/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/pak/%.o: libs/pak/%.cpp
-	mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/meshoptimizer/%.o: libs/meshoptimizer/src/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

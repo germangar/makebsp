@@ -25,22 +25,7 @@ Called from model_collision.c for MC_OBJECT category.
 #include "model_collision.h"
 
 /* HACD Wrapper */
-#include "hacd_c_wrapper.h"
-
-/* MRMeshC headers */
-#include "MRMeshC/MRMeshFwd.h"
-#include "MRMeshC/MRVector3.h"
-#include "MRMeshC/MRId.h"
-#include "MRMeshC/MRMesh.h"
-#include "MRMeshC/MRMeshTopology.h"
-#include "MRMeshC/MRMeshBuilder.h"
-#include "MRMeshC/MRMeshFixer.h"
-#include "MRMeshC/MRMeshFillHole.h"
-#include "MRMeshC/MRMeshDecimate.h"
-#include "MRMeshC/MRMeshSave.h"
-#include "MRMeshC/MRString.h"
-#include "MRMeshC/MRBitSet.h"
-#include "MRMeshC/MRVector.h"
+#include "../libs/hacd/hacd_c_wrapper.h"
 
 static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
     bspbrush_t *list = NULL;
@@ -98,7 +83,7 @@ Generates collision brushes for a model instance using the pre-extracted
 MeshLib colMesh_t geometries. It feeds these directly into HACD.
 ====================
 */
-bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader) {
+bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
 
   _printf("Instance %s: Running MeshLib/HACD Pipeline (%s)\n",

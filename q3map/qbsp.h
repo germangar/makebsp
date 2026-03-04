@@ -212,7 +212,6 @@ extern qboolean coplanar;
 extern qboolean nofog;
 extern qboolean testExpand;
 extern qboolean showseams;
-extern qboolean use_meshoptimizer;
 
 extern vec_t microvolume;
 
@@ -461,12 +460,11 @@ extern int numModelInstances;
 // model_collision.c
 
 void CreateTriangleModelCollision(void);
-
-
+void CreateCollisionTris(modelInstance_t *inst);
 
 bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, shaderInfo_t *shader);
 bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader);
-bspbrush_t *GenerateMLCollision(modelInstance_t *inst, shaderInfo_t *shader);
+bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader);
 
 int CSGMergeBrushList(bspbrush_t **pList);
 const char *CategoryString(modelCategory_t cat);

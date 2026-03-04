@@ -49,7 +49,6 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
-qboolean use_meshoptimizer = qfalse;
 
 char outbase[32];
 
@@ -457,9 +456,6 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-showseams")) {
       showseams = qtrue;
       _printf("Showing seams on terrain.\n");
-    } else if (!strcmp(argv[i], "-meshopt")) {
-      use_meshoptimizer = qtrue;
-      _printf("Using MeshOptimizer pipeline for collision meshes.\n");
     } else if (!strcmp(argv[i], "-tmpout")) {
       strcpy(outbase, "/tmp");
     } else if (!strcmp(argv[i], "-basepath")) {

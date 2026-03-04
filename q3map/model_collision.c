@@ -14,10 +14,7 @@ This file is part of Quake III Arena source code.
 /* HACD Wrapper */
 #include "../libs/hacd/hacd_c_wrapper.h"
 
-/* MeshOptimizer */
-#include "../libs/meshoptimizer/src/meshoptimizer.h"
-
-/* MRMeshC headers */
+/* Mesh Lib Lite*/
 #include "../libs/MeshLib-Lite/MRMeshC/MRMesh.h"
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshBuilder.h"
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshFixer.h"
@@ -881,12 +878,12 @@ Runs the decimation and healing pipeline (MeshLib or MeshOptimizer)
 for a single instance, extracting cleaned `colMesh_t` objects prior to categorization.
 ====================
 */
-void CreateCollisionTris(modelInstance_t *inst, qboolean useMeshOpt) {
+void CreateCollisionTris(modelInstance_t *inst) {
   int j, k;
 
   inst->num_collision_meshes = 0;
 
-  _printf("Instance %s: Extracting Collision Tris (%s)\n", inst->modelName, useMeshOpt ? "MeshOptimizer" : "MeshLib");
+  _printf("Instance %s: Extracting Collision Tris (MeshLib)\n", inst->modelName);
 
   for (j = 0; j < inst->numDrawSurfs; j++) {
     mapDrawSurface_t *ds = inst->drawSurfs[j];
@@ -914,74 +911,41 @@ void CreateCollisionTris(modelInstance_t *inst, qboolean useMeshOpt) {
     colMesh_t *colMesh = malloc(sizeof(colMesh_t));
     memset(colMesh, 0, sizeof(colMesh_t));
 
-    /* --- MeshLib branch --- */
-    if (!useMeshOpt) {
-      MRMesh *healed = HealAndDecimateMesh(meshVerts, ds->numVerts,
-                                           meshIndexes, ds->numIndexes,
-                                           inst->modelName);
-      if (healed) {
-        const MRVector3f *pts = mrMeshPoints(healed);
-        size_t numPts = mrMeshPointsNum(healed);
-        const MRMeshTopology *topo = mrMeshTopology(healed);
-        MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
+    /* --- MeshLib path --- */
+    MRMesh *healed = HealAndDecimateMesh(meshVerts, ds->numVerts,
+                                         meshIndexes, ds->numIndexes,
+                                         inst->modelName);
+    if (healed) {
+      const MRVector3f *pts = mrMeshPoints(healed);
+      size_t numPts = mrMeshPointsNum(healed);
+      const MRMeshTopology *topo = mrMeshTopology(healed);
+      MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
 
-        if (tri && tri->size > 0) {
-          colMesh->numVerts = (int)numPts;
-          colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
-          memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
+      if (tri && tri->size > 0) {
+        colMesh->numVerts = (int)numPts;
+        colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
+        memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
 
-          int validTriCount = 0;
-          for (size_t fi = 0; fi < tri->size; fi++) {
-            if (tri->data[fi][0].id >= 0) validTriCount++;
-          }
+        int validTriCount = 0;
+        for (size_t fi = 0; fi < tri->size; fi++) {
+          if (tri->data[fi][0].id >= 0) validTriCount++;
+        }
 
-          colMesh->numTris = validTriCount;
-          colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
-          
-          int triIdx = 0;
-          for (size_t fi = 0; fi < tri->size; fi++) {
-            if (tri->data[fi][0].id >= 0) {
-              colMesh->tris[triIdx][0] = tri->data[fi][0].id;
-              colMesh->tris[triIdx][1] = tri->data[fi][1].id;
-              colMesh->tris[triIdx][2] = tri->data[fi][2].id;
-              triIdx++;
-            }
+        colMesh->numTris = validTriCount;
+        colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
+        
+        int triIdx = 0;
+        for (size_t fi = 0; fi < tri->size; fi++) {
+          if (tri->data[fi][0].id >= 0) {
+            colMesh->tris[triIdx][0] = tri->data[fi][0].id;
+            colMesh->tris[triIdx][1] = tri->data[fi][1].id;
+            colMesh->tris[triIdx][2] = tri->data[fi][2].id;
+            triIdx++;
           }
         }
-        
-        mrMeshFree(healed);
       }
-    } 
-    /* --- MeshOptimizer branch --- */
-    else {
-      float optimization_target = 0.2f;
-      size_t target_index_count = (size_t)(ds->numIndexes * optimization_target);
-      float target_error = 3.0f; /* absolute units max displacement */
-
-      unsigned int *simplifiedIndexes = malloc(ds->numIndexes * sizeof(unsigned int));
-      size_t simplifiedIndexCount = meshopt_simplify(
-          simplifiedIndexes, (unsigned int*)meshIndexes, ds->numIndexes,
-          meshVerts, ds->numVerts, sizeof(float) * 3,
-          target_index_count, target_error, 
-          meshopt_SimplifyLockBorder | meshopt_SimplifyErrorAbsolute, NULL);
-
-      unsigned int *remap = malloc(ds->numVerts * sizeof(unsigned int));
-      size_t uniqueVerts = meshopt_generateVertexRemap(
-          remap, simplifiedIndexes, simplifiedIndexCount,
-          meshVerts, ds->numVerts, sizeof(float) * 3);
-
-      colMesh->numVerts = (int)uniqueVerts;
-      colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
-      meshopt_remapVertexBuffer(colMesh->verts, meshVerts, ds->numVerts,
-                                sizeof(float) * 3, remap);
-
-      colMesh->numTris = (int)(simplifiedIndexCount / 3);
-      colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
-      meshopt_remapIndexBuffer((unsigned int *)colMesh->tris, simplifiedIndexes,
-                               simplifiedIndexCount, remap);
-
-      free(remap);
-      free(simplifiedIndexes);
+      
+      mrMeshFree(healed);
     }
 
     /* Store result if extraction succeeded */
@@ -1053,11 +1017,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
   if (category == MC_TERRAIN) {
     hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
   } else if (category == MC_OBJECT || category == MC_WALKABLE) {
-    if (use_meshoptimizer) {
-      hulls_list = GenerateExtrusionCollision(inst, caulk);
-    } else {
-      hulls_list = GenerateMLCollision(inst, caulk);
-    }
+      hulls_list = GenerateHACDCollision(inst, caulk);
   } else {
     hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
   }
@@ -1155,7 +1115,7 @@ void CreateTriangleModelCollision(void) {
     inst = &modelInstances[i];
     
     // Abstracted unified mesh processing executes unconditionally first
-    CreateCollisionTris(inst, use_meshoptimizer);
+    CreateCollisionTris(inst);
     CategorizeModel(inst);
   }
 
