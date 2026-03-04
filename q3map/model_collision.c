@@ -1137,4 +1137,50 @@ void CreateTriangleModelCollision(void) {
     sprintf(debugName, "%s_collision.map", source);
     WriteCollisionMap(debugName);
   }
+
+  /*
+  // Step 4: Map Entity Integration
+  for (i = 0; i < num_clip_entity_groups; i++) {
+    clip_entity_group_t *g = &clip_entity_groups[i];
+    if (!g->entity) continue;
+
+    const char *cls = ValueForKey(g->entity, "classname");
+
+    if (!Q_stricmp(cls, "func_group")) {
+      // Dump func_group brushes directly into worldspawn (entities[0])
+      MoveBrushesToWorld(g->entity);
+      
+      // Cleanup the temporary local entity container
+      epair_t *next_ep;
+      for (epair_t *curr_ep = g->entity->epairs; curr_ep; curr_ep = next_ep) {
+        next_ep = curr_ep->next;
+        free(curr_ep->key);
+        free(curr_ep->value);
+        free(curr_ep);
+      }
+      free(g->entity);
+      g->entity = NULL;
+    } 
+    else if (!Q_stricmp(cls, "func_static")) {
+      // Append func_static entities to the global map entities list
+      if (num_entities >= MAX_MAP_ENTITIES) {
+        Error("CreateTriangleModelCollision: num_entities == MAX_MAP_ENTITIES");
+      }
+
+      // Shallow copy transfers ownership of epairs and brushes pointers
+      entities[num_entities] = *(g->entity);
+      
+      // Update entity reference for all attached brushes
+      for (bspbrush_t *b = entities[num_entities].brushes; b; b = b->next) {
+        b->entitynum = num_entities;
+      }
+      
+      num_entities++;
+
+      // Free just the local struct container, since contents are linked now
+      free(g->entity);
+      g->entity = NULL;
+    }
+  }
+  */
 }

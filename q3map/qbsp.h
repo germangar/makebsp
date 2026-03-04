@@ -271,12 +271,14 @@ int PlaneTypeForNormal(vec3_t normal);
 bspbrush_t *FinishBrush(void);
 mapDrawSurface_t *AllocDrawSurf(void);
 mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w);
+void MoveBrushesToWorld(entity_t *mapent);
 
 //=============================================================================
 
 //=============================================================================
 
 // draw.c
+
 
 extern vec3_t draw_mins, draw_maxs;
 extern qboolean drawflag;
