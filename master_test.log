@@ -1,0 +1,552 @@
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/aselib.c -o obj/common/aselib.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/bspfile.c -o obj/common/bspfile.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/cmdlib.c -o obj/common/cmdlib.o
+common/cmdlib.c: In function 'Sys_ListFiles':
+common/cmdlib.c:1058:7: warning: variable 'extLen' set but not used [-Wunused-but-set-variable]
+ 1058 |   int extLen;
+      |       ^~~~~~
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/imagelib.c -o obj/common/imagelib.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/l3dslib.c -o obj/common/l3dslib.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/mathlib.c -o obj/common/mathlib.o
+common/mathlib.c:30: warning: ignoring '#pragma optimize ' [-Wunknown-pragmas]
+   30 | #pragma optimize( "p", on )
+      | 
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/md4.c -o obj/common/md4.o
+common/md4.c:71:13: warning: 'MD4_memcpy' declared 'static' but never defined [-Wunused-function]
+   71 | static void MD4_memcpy (POINTER, POINTER, unsigned int);
+      |             ^~~~~~~~~~
+common/md4.c:72:13: warning: 'MD4_memset' declared 'static' but never defined [-Wunused-function]
+   72 | static void MD4_memset (POINTER, int, unsigned int);
+      |             ^~~~~~~~~~
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/mutex.c -o obj/common/mutex.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/polylib.c -o obj/common/polylib.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/scriplib.c -o obj/common/scriplib.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/threads.c -o obj/common/threads.o
+mkdir -p obj/common/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c common/trilib.c -o obj/common/trilib.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/brush.c -o obj/q3map/brush.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/brush_primit.c -o obj/q3map/brush_primit.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/bsp.c -o obj/q3map/bsp.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/csg_brush.c -o obj/q3map/csg_brush.o
+q3map/csg_brush.c: In function 'CSGMergeBrushList':
+q3map/csg_brush.c:137:12: warning: variable 'b1_merged' set but not used [-Wunused-but-set-variable]
+  137 |   qboolean b1_merged;
+      |            ^~~~~~~~~
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/facebsp.c -o obj/q3map/facebsp.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/fog.c -o obj/q3map/fog.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/gldraw.c -o obj/q3map/gldraw.o
+q3map/gldraw.c: In function 'GLS_BeginScene':
+q3map/gldraw.c:168:8: warning: unused variable 'wVersionRequested' [-Wunused-variable]
+  168 |   WORD wVersionRequested;
+      |        ^~~~~~~~~~~~~~~~~
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/glfile.c -o obj/q3map/glfile.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/leakfile.c -o obj/q3map/leakfile.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/light.c -o obj/q3map/light.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/light_trace.c -o obj/q3map/light_trace.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/lightmaps.c -o obj/q3map/lightmaps.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/lightv.c -o obj/q3map/lightv.o
+q3map/lightv.c:36: warning: ignoring '#pragma optimize ' [-Wunknown-pragmas]
+   36 | #pragma optimize("p", on)
+      | 
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/map.c -o obj/q3map/map.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/mesh.c -o obj/q3map/mesh.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/misc_model.c -o obj/q3map/misc_model.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/model_coacd.c -o obj/q3map/model_coacd.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/model_collision.c -o obj/q3map/model_collision.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/model_extrude.c -o obj/q3map/model_extrude.o
+q3map/model_extrude.c: In function 'ExtrudeTrianglesToBrushes':
+q3map/model_extrude.c:745:7: warning: unused variable 'numIndices' [-Wunused-variable]
+  745 |   int numIndices = mesh->numTris * 3;
+      |       ^~~~~~~~~~
+At top level:
+q3map/model_extrude.c:165:17: warning: 'FindSharedEdge' defined but not used [-Wunused-function]
+  165 | static qboolean FindSharedEdge(clipTri_t *a, clipTri_t *b, float *verts,
+      |                 ^~~~~~~~~~~~~~
+q3map/model_extrude.c:142:17: warning: 'TrianglesAreCoplanar' defined but not used [-Wunused-function]
+  142 | static qboolean TrianglesAreCoplanar(clipTri_t *a, clipTri_t *b) {
+      |                 ^~~~~~~~~~~~~~~~~~~~
+q3map/model_extrude.c:108:13: warning: 'MakeAxialNormal' defined but not used [-Wunused-function]
+  108 | static void MakeAxialNormal(const vec3_t in, vec3_t out) {
+      |             ^~~~~~~~~~~~~~~
+q3map/model_extrude.c:12:20: warning: 'ExtrudeTrianglesToBrushesRaw' defined but not used [-Wunused-function]
+   12 | static bspbrush_t *ExtrudeTrianglesToBrushesRaw(float *verts, unsigned int *indices, int numIndices, shaderInfo_t *si) {
+      |                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/model_hacd.c -o obj/q3map/model_hacd.o
+q3map/model_hacd.c: In function 'GenerateHACDCollision':
+q3map/model_hacd.c:96:19: warning: unused variable 'si' [-Wunused-variable]
+   96 |     shaderInfo_t *si = (shader != NULL) ? shader : NULL;
+      |                   ^~
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/patch.c -o obj/q3map/patch.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/portals.c -o obj/q3map/portals.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/prtfile.c -o obj/q3map/prtfile.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/shaders.c -o obj/q3map/shaders.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/soundv.c -o obj/q3map/soundv.o
+q3map/soundv.c:39: warning: ignoring '#pragma optimize ' [-Wunknown-pragmas]
+   39 | #pragma optimize("p", on)
+      | 
+q3map/soundv.c:2563:12: warning: 'PointInLeafnum' defined but not used [-Wunused-function]
+ 2563 | static int PointInLeafnum(vec3_t point) {
+      |            ^~~~~~~~~~~~~~
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/surface.c -o obj/q3map/surface.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/terrain.c -o obj/q3map/terrain.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/tjunction.c -o obj/q3map/tjunction.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/tree.c -o obj/q3map/tree.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/vis.c -o obj/q3map/vis.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/visflow.c -o obj/q3map/visflow.o
+mkdir -p obj/q3map/
+gcc -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -c q3map/writebsp.c -o obj/q3map/writebsp.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jcomapi.cpp -o obj/jpeg6/jcomapi.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdapimin.cpp -o obj/jpeg6/jdapimin.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdapistd.cpp -o obj/jpeg6/jdapistd.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdatasrc.cpp -o obj/jpeg6/jdatasrc.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdcoefct.cpp -o obj/jpeg6/jdcoefct.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdcolor.cpp -o obj/jpeg6/jdcolor.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jddctmgr.cpp -o obj/jpeg6/jddctmgr.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdhuff.cpp -o obj/jpeg6/jdhuff.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdinput.cpp -o obj/jpeg6/jdinput.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdmainct.cpp -o obj/jpeg6/jdmainct.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdmarker.cpp -o obj/jpeg6/jdmarker.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdmaster.cpp -o obj/jpeg6/jdmaster.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdphuff.cpp -o obj/jpeg6/jdphuff.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdpostct.cpp -o obj/jpeg6/jdpostct.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdsample.cpp -o obj/jpeg6/jdsample.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jdtrans.cpp -o obj/jpeg6/jdtrans.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jerror.cpp -o obj/jpeg6/jerror.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jfdctflt.cpp -o obj/jpeg6/jfdctflt.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jidctflt.cpp -o obj/jpeg6/jidctflt.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jmemmgr.cpp -o obj/jpeg6/jmemmgr.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jmemnobs.cpp -o obj/jpeg6/jmemnobs.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jpgload.cpp -o obj/jpeg6/jpgload.o
+mkdir -p obj/jpeg6/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/jpeg6/jutils.cpp -o obj/jpeg6/jutils.o
+mkdir -p obj/pak/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/pak/pakstuff.cpp -o obj/pak/pakstuff.o
+mkdir -p obj/pak/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/pak/unzip.cpp -o obj/pak/unzip.o
+libs/pak/unzip.cpp: In function 'int unzlocal_GetCurrentFileInfoInternal(unzFile, unz_file_info*, unz_file_info_internal*, char*, uLong, void*, uLong, char*, uLong)':
+libs/pak/unzip.cpp:1650:8: warning: suggest explicit braces to avoid ambiguous 'else' [-Wdangling-else]
+ 1650 |     if (lSeek != 0)
+      |        ^
+libs/pak/unzip.cpp:1670:8: warning: suggest explicit braces to avoid ambiguous 'else' [-Wdangling-else]
+ 1670 |     if (lSeek != 0)
+      |        ^
+mkdir -p obj/hacd/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/hacd/hacdGraph.cpp -o obj/hacd/hacdGraph.o
+mkdir -p obj/hacd/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/hacd/hacdHACD.cpp -o obj/hacd/hacdHACD.o
+libs/hacd/hacdHACD.cpp: In member function 'void HACD::HACD::InitializeDualGraph()':
+libs/hacd/hacdHACD.cpp:193:53: warning: 'void* memset(void*, int, size_t)' clearing an object of type 'class HACD::Vec3<double>' with no trivial copy-assignment; use assignment or value-initialization instead [-Wclass-memaccess]
+  193 |  memset(m_normals, 0, sizeof(Vec3<Real>) * m_nPoints);
+      |                                                     ^
+In file included from libs/hacd/hacdGraph.h:19,
+                 from libs/hacd/hacdHACD.cpp:20:
+libs/hacd/hacdVector.h:27:7: note: 'class HACD::Vec3<double>' declared here
+   27 | class Vec3
+      |       ^~~~
+mkdir -p obj/hacd/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/hacd/hacdICHull.cpp -o obj/hacd/hacdICHull.o
+mkdir -p obj/hacd/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/hacd/hacdManifoldMesh.cpp -o obj/hacd/hacdManifoldMesh.o
+mkdir -p obj/hacd/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -c libs/hacd/hacd_c_wrapper.cpp -o obj/hacd/hacd_c_wrapper.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTree.cpp -o obj_lite/MRMesh/MRAABBTree.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTree.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTree.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTreeObjects.cpp -o obj_lite/MRMesh/MRAABBTreeObjects.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeObjects.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeObjects.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTreePoints.cpp -o obj_lite/MRMesh/MRAABBTreePoints.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreePoints.cpp:5:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreePoints.cpp:5:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline.cpp -o obj_lite/MRMesh/MRAABBTreePolyline.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreeBase.hpp:4,
+                 from libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline.cpp:2:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline2.cpp -o obj_lite/MRMesh/MRAABBTreePolyline2.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAABBTreePolyline3.cpp -o obj_lite/MRMesh/MRAABBTreePolyline3.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRAffineXf3.cpp -o obj_lite/MRMesh/MRAffineXf3.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRBestFit.cpp -o obj_lite/MRMesh/MRBestFit.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRBitSet.cpp -o obj_lite/MRMesh/MRBitSet.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.cpp -o obj_lite/MRMesh/MRBitSetParallelFor.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.cpp:1:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.h:5,
+                 from libs/MeshLib-Lite/MRMesh/MRBitSetParallelFor.cpp:1:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRCloseVertices.cpp -o obj_lite/MRMesh/MRCloseVertices.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRParallelFor.h:4,
+                 from libs/MeshLib-Lite/MRMesh/MRCloseVertices.cpp:6:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRParallelFor.h:4,
+                 from libs/MeshLib-Lite/MRMesh/MRCloseVertices.cpp:6:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRComputeBoundingBox.cpp -o obj_lite/MRMesh/MRComputeBoundingBox.o
+In file included from libs/MeshLib-Lite/MRMesh/MRComputeBoundingBox.cpp:8:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRComputeBoundingBox.cpp:8:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MREdgeLengthMesh.cpp -o obj_lite/MRMesh/MREdgeLengthMesh.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MREdgeMetric.cpp -o obj_lite/MRMesh/MREdgeMetric.o
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRParallelFor.h:4,
+                 from libs/MeshLib-Lite/MRMesh/MREdgeMetric.cpp:4:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRParallel.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRParallelFor.h:4,
+                 from libs/MeshLib-Lite/MRMesh/MREdgeMetric.cpp:4:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MREdgePaths.cpp -o obj_lite/MRMesh/MREdgePaths.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MREdgePoint.cpp -o obj_lite/MRMesh/MREdgePoint.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRFillHoleNicely.cpp -o obj_lite/MRMesh/MRFillHoleNicely.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRIOFilters.cpp -o obj_lite/MRMesh/MRIOFilters.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRIOParsing.cpp -o obj_lite/MRMesh/MRIOParsing.o
+In file included from libs/MeshLib-Lite/MRMesh/MRIOParsing.cpp:6:
+libs/MeshLib-Lite/MRPch/MRTBB.h:17: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   17 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:18: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   18 | #pragma warning(disable: 4459) //declaration of 'compare' hides global declaration
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:19: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   19 | #pragma warning(disable: 4464) //relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:20: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   20 | #pragma warning(disable: 4574) //'TBB_USE_DEBUG' is defined to be '0': did you mean to use '#if TBB_USE_DEBUG'?
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:21: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   21 | #pragma warning(disable: 5215) //a function parameter with a volatile qualified type is deprecated in C++20
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:22: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   22 | #pragma warning(disable: 5219) //implicit conversion from '__int64' to 'double', possible loss of data
+      | 
+libs/MeshLib-Lite/MRPch/MRTBB.h:23: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   23 | #pragma warning(disable: 5220) //a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are not trivial
+      | 
+In file included from libs/MeshLib-Lite/MRMesh/MRIOParsing.cpp:6:
+libs/MeshLib-Lite/MRPch/MRTBB.h:38: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+   38 | #pragma warning(pop)
+      | 
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRId.cpp -o obj_lite/MRMesh/MRId.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRMapEdge.cpp -o obj_lite/MRMesh/MRMapEdge.o
+mkdir -p obj_lite/MRMesh/
+g++ -O2 -Wall -I. -Icommon -Ilibs -Ilibs/jpeg6 -Ilibs/pak -Iq3map -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -std=c++20 -O1 -Wno-sign-compare -c libs/MeshLib-Lite/MRMesh/MRMarkedContour.cpp -o obj_lite/MRMesh/MRMarkedContour.o
+In file included from libs/MeshLib-Lite/MRPch/MREigenSparseCore.h:3,
+                 from libs/MeshLib-Lite/MRMesh/MRMarkedContour.cpp:5:
+libs/MeshLib-Lite/MRPch/MREigenCore.h:3: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    3 | #pragma warning(push)
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:4: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    4 | #pragma warning(disable: 4068) // unknown pragmas
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:5: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    5 | #pragma warning(disable: 4127) // conditional expression is constant
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:6: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    6 | #pragma warning(disable: 4464) // relative include path contains '..'
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:7: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    7 | #pragma warning(disable: 4643) // Forward declaring 'tuple' in namespace std is not permitted by the C++ Standard.
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:8: warning: ignoring '#pragma warning ' [-Wunknown-pragmas]
+    8 | #pragma warning(disable: 5054) // operator '|': deprecated between enumerations of different types
+      | 
+libs/MeshLib-Lite/MRPch/MREigenCore.h:22:10: fatal error: Eigen/Core: No such file or directory
+   22 | #include <Eigen/Core>
+      |          ^~~~~~~~~~~~
+compilation terminated.
+make.bat: *** [Makefile:138: obj_lite/MRMesh/MRMarkedContour.o] Error 1
