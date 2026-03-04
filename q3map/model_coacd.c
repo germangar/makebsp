@@ -186,9 +186,14 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
       1234                  // seed
     );
 
-    _printf("Instance %s: Library produced %i raw hulls\n", inst->modelName, (int)hulls.meshes_count);
-
-    bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, shader);
+    shaderInfo_t *si = shader; // default to caulk
+    for (int surfaceIdx = 0; surfaceIdx < inst->numDrawSurfs; surfaceIdx++) {
+      if (inst->drawSurfs[surfaceIdx]->shaderInfo && (inst->drawSurfs[surfaceIdx]->shaderInfo->contents & CONTENTS_SOLID)) {
+        si = inst->drawSurfs[surfaceIdx]->shaderInfo;
+        break;
+      }
+    }
+    bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, si);
     hulls_list = CombineBrushes(hulls_list, brushes);
     
     CoACD_freeMeshArray(hulls);
@@ -246,7 +251,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
 
       _printf("Instance %s: Library produced %i raw hulls (one mesh)\n", inst->modelName, (int)hulls.meshes_count);
 
-      bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, shader);
+      bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, ds->shaderInfo);
       hulls_list = CombineBrushes(hulls_list, brushes);
 
       CoACD_freeMeshArray(hulls);

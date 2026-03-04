@@ -119,15 +119,7 @@ static void WriteCollisionMap(const char *name) {
         fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
 
         FreeWinding(w);
-
-        const char *shader = "textures/common/caulk";
-        if (s->shaderInfo) {
-          shader = s->shaderInfo->shader;
-        }
-        if (!Q_strncasecmp(shader, "textures/", 9)) {
-          shader += 9;
-        }
-        fprintf(f, "%s 0 0 0 1 1\n", shader);
+        fprintf(f, "common/caulk 0 0 0 1 1\n");
       }
       fprintf(f, "}\n");
     }
@@ -479,6 +471,7 @@ bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_
   // Convert MRMesh to colMesh_t
   colMesh_t *colMesh = malloc(sizeof(colMesh_t));
   memset(colMesh, 0, sizeof(colMesh_t));
+  colMesh->shaderInfo = shader; // original material
   
   const MRVector3f *pts = mrMeshPoints(healed);
   size_t numPts = mrMeshPointsNum(healed);
@@ -635,12 +628,19 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si) {
   b = AllocBrush(numUniquePlanes);
   b->numsides = numUniquePlanes;
   b->detail = qtrue;
-  b->contents = si->contents;
+  b->contents = CONTENTS_SOLID|CONTENTS_TRANSLUCENT|CONTENTS_DETAIL;
   b->contentShader = si;
 
   for (i = 0; i < numUniquePlanes; i++) {
     b->sides[i].planenum = uniquePlanes[i];
     b->sides[i].shaderInfo = si;
+    b->sides[i].contents = b->contents;
+
+    /* Allow some surface flags to pass through */
+    int flags = si->surfaceFlags;
+    flags &= ~(SURF_HINT | SURF_POINTLIGHT | SURF_NONSOLID | SURF_LIGHTFILTER | SURF_ALPHASHADOW);
+    flags |= (SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NODLIGHT);
+    b->sides[i].surfaceFlags = flags;
   }
 
   // Try full-polygon windings from plane intersections first.
@@ -947,6 +947,7 @@ void CreateCollisionTris(modelInstance_t *inst) {
 
     /* Store result if extraction succeeded */
     if (colMesh->numTris > 0 && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
+      colMesh->shaderInfo = ds->shaderInfo;
       inst->collision_meshes[inst->num_collision_meshes++] = colMesh;
     } else {
       FreeCollisionMesh(colMesh);

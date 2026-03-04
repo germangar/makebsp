@@ -150,7 +150,7 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
             colMesh->numVerts, colMesh->numTris, 100.0, targetClusters);
             
     if (hacd_compute(hacd, false)) {
-        bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, si);
+        bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, colMesh->shaderInfo);
         hulls_list = CombineBrushes(hulls_list, surfBrushes);
     } else {
         _printf("  WARNING: HACD computation failed for this mesh.\n");

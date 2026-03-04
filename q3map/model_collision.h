@@ -17,6 +17,7 @@ typedef struct colMesh_s {
     int       numVerts;
     colTri_t *tris;
     int       numTris;
+    struct shaderInfo_s *shaderInfo;
 } colMesh_t;
 
 // Represents a small convex hull from decomposition
