@@ -1,0 +1,28 @@
+make.bat: Nothing to be done for 'all'.
+
+  Processing entity 8: models/mapmodels/wood_bridge.obj
+--- Loading Model: E:/CODE/antigravity/makebsp/models/mapmodels/wood_bridge.obj ---
+WARNING: Missing image for material: models/mapmodels/wood_bridge/Module_wood_BaseColor
+Instance models/mapmodels/wood_bridge.obj: Extracting Collision Tris (MeshLib)
+  Wrote collision debug to models/mapmodels/wood_bridge_coltris.obj
+Instance models/mapmodels/wood_bridge.obj: Categorized as OBJECT
+WARNING: CreateBrushWindings failed, using triangle fallback
+WARNING: CreateBrushWindings failed, using triangle fallback
+WARNING: CreateBrushWindings failed, using triangle fallback
+Instance models/mapmodels/container-crate-nosolid.obj: Generated total 43 convex hulls.
+Instance models/mapmodels/Support.obj: Generated total 13 convex hulls.
+Instance models/mapmodels/container-crate-nosolid.obj: Generated total 16 convex hulls.
+Instance models/mapmodels/container-crate-nosolid.obj: Generated total 17 convex hulls.
+Instance models/mapmodels/bridge-japan.obj: Generated total 35 convex hulls.
+Instance models/mapmodels/wood_bridge.obj: Decomposing as OBJECT
+Instance models/mapmodels/wood_bridge.obj: Running MeshLib/HACD Pipeline (OBJECT)
+WARNING: CreateBrushWindings failed, using triangle fallback
+WARNING: CreateBrushWindings failed, using triangle fallback
+WARNING: CreateBrushWindings failed, using triangle fallback
+Instance models/mapmodels/wood_bridge.obj: MeshLib pipeline complete (Brushes generated)
+Instance models/mapmodels/wood_bridge.obj: Generated total 163 convex hulls.
+Instance models/mapmodels/wood_bridge.obj: Created clip group with 163 brushes, density 1.897182
+Instance models/mapmodels/fence-granite/fence.obj: Generated total 15 convex hulls.
+Instance models/mapmodels/fence-granite/fence.obj: Generated total 14 convex hulls.
+Instance models/mapmodels/fence-granite/fence.obj: Generated total 15 convex hulls.
+    0 fanfaces
