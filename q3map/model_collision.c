@@ -550,6 +550,61 @@ Converts a convex hull (triangle soup) into a bspbrush_t.
 Deduplicates coplanar faces by finding unique plane indices.
 ====================
 */
+
+/*
+=================
+AddBevelsToBrush
+
+Adds any additional axial planes necessary to allow the brush being
+built to be expanded against axial bounding boxes (player box traces).
+=================
+*/
+static void AddBevelsToBrush(bspbrush_t *b) {
+  int axis, dir;
+  int i;
+  vec3_t normal;
+  float dist;
+  side_t *s;
+
+  // Add the 6 axial planes if they are not already present
+  for (axis = 0; axis < 3; axis++) {
+    for (dir = -1; dir <= 1; dir += 2) {
+      // see if the plane is already present
+      for (i = 0; i < b->numsides; i++) {
+        if (mapplanes[b->sides[i].planenum].normal[axis] == dir &&
+            mapplanes[b->sides[i].planenum].normal[(axis + 1) % 3] == 0 &&
+            mapplanes[b->sides[i].planenum].normal[(axis + 2) % 3] == 0) {
+          break;
+        }
+      }
+
+      if (i == b->numsides) { // add a new side
+        if (b->numsides == MAX_BRUSH_SIDES) {
+          _printf("WARNING: AddBevelsToBrush reached MAX_BRUSH_SIDES\n");
+          return;
+        }
+        s = &b->sides[b->numsides];
+        memset(s, 0, sizeof(*s));
+        b->numsides++;
+
+        VectorClear(normal);
+        normal[axis] = dir;
+        if (dir == 1) {
+          dist = b->maxs[axis];
+        } else {
+          dist = -b->mins[axis];
+        }
+
+        s->planenum = FindFloatPlane(normal, dist);
+        s->contents = b->sides[0].contents;
+        s->surfaceFlags = b->sides[0].surfaceFlags;
+        s->shaderInfo = b->sides[0].shaderInfo;
+        s->bevel = qtrue;
+      }
+    }
+  }
+}
+
 bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si) {
   int i, j;
   int numUniquePlanes = 0;
@@ -625,7 +680,8 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si) {
     return NULL;
   }
 
-  b = AllocBrush(numUniquePlanes);
+  // Allocate extra space for up to 6 axial bevel planes
+  b = AllocBrush(numUniquePlanes + 6);
   b->numsides = numUniquePlanes;
   b->detail = qtrue;
   b->contents = CONTENTS_SOLID|CONTENTS_TRANSLUCENT|CONTENTS_DETAIL;
@@ -664,6 +720,9 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si) {
       return NULL;
     }
   }
+
+  // Add axial bevels to prevent player snagging on seams
+  AddBevelsToBrush(b);
 
   return b;
 }
