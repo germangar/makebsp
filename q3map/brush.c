@@ -58,6 +58,7 @@ bspbrush_t *AllocBrush(int numsides) {
   memset(bb, 0, c);
   if (numthreads == 1)
     c_active_brushes++;
+  bb->original = bb;
   return bb;
 }
 
