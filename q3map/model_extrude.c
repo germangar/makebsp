@@ -32,7 +32,7 @@ static bspbrush_t *ExtrudeTrianglesToBrushesRaw(float *verts, unsigned int *indi
     if (VectorNormalize(faceNormal, faceNormal) < 0.0001f)
       continue;
 
-    bspbrush_t *b = AllocBrush(5);
+    bspbrush_t *b = AllocBrush(5 + 6);
     b->numsides = 5;
     b->detail = qtrue;
     b->contents = si->contents;
@@ -63,6 +63,8 @@ static bspbrush_t *ExtrudeTrianglesToBrushesRaw(float *verts, unsigned int *indi
     }
     if (!CreateBrushWindings(b)) { FreeBrush(b); continue; }
     if (!BoundBrush(b)) { FreeBrush(b); continue; }
+
+    AddBevelsToBrush(b);
 
     b->next = hulls_list;
     hulls_list = b;
@@ -359,8 +361,8 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     return NULL;
   }
   
-  /* Allocate brush */
-  bspbrush_t *b = AllocBrush(numSides);
+  /* Allocate brush, plus space for up to 6 bevel planes */
+  bspbrush_t *b = AllocBrush(numSides + 6);
   b->numsides = numSides;
   b->detail = qtrue;
   b->contents = si->contents;
@@ -407,6 +409,8 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     return NULL;
   }
   
+  AddBevelsToBrush(b);
+
   return b;
 }
 
@@ -502,8 +506,8 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
   vec3_t backPoint;
   VectorMA(hub, maxProj + extrudeDist, axis, backPoint);
   
-  /* Allocate brush */
-  bspbrush_t *b = AllocBrush(numSides);
+  /* Allocate brush, plus space for up to 6 bevel planes */
+  bspbrush_t *b = AllocBrush(numSides + 6);
   b->numsides = numSides;
   b->detail = qtrue;
   b->contents = si->contents;
@@ -557,6 +561,8 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
     return NULL;
   }
   
+  AddBevelsToBrush(b);
+
   return b;
 }
 
