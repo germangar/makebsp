@@ -24,11 +24,11 @@ This file is part of Quake III Arena source code.
 
 #define DIRECT_AXIAL_BRUSH_SIZE 32 // An enclosed trisoup with axial planes becomes a brush directly
 
-#define MAX_FUNC_CLIPS 16       // Max number of func_static groups
+#define MAX_FUNC_CLIPS 0       // Max number of func_static groups
 #define DENSITY_UNIT_SIZE 128.0f // Standard cube dimension for density calculation
 #define DENSITY_STANDARD_VOLUME (DENSITY_UNIT_SIZE * DENSITY_UNIT_SIZE * DENSITY_UNIT_SIZE)
-#define MIN_FUNC_CLIP_DENSITY 0.0f // Minimum standardized density for a func_static group
-#define MIN_FUNC_CLIP_BRUSHCOUNT 0 // Minimum brush count for a func_static group
+#define MIN_FUNC_CLIP_DENSITY 100.0f // Minimum standardized density for a func_static group
+#define MIN_FUNC_CLIP_BRUSHCOUNT 50 // Minimum brush count for a func_static group
 #define MAX_CLIP_ENTITY_GROUPS MAX_MODEL_INSTANCES // Max number of clip entity groups
 typedef struct {
   entity_t *entity;
@@ -1138,7 +1138,6 @@ void CreateTriangleModelCollision(void) {
     WriteCollisionMap(debugName);
   }
 
-  /*
   // Step 4: Map Entity Integration
   for (i = 0; i < num_clip_entity_groups; i++) {
     clip_entity_group_t *g = &clip_entity_groups[i];
@@ -1182,5 +1181,4 @@ void CreateTriangleModelCollision(void) {
       g->entity = NULL;
     }
   }
-  */
 }
