@@ -367,6 +367,8 @@ int EmitShader(const char *shader);
 void BeginBSPFile(void);
 void EndBSPFile(void);
 
+void EmitBrushes(bspbrush_t *brushes);
+
 void BeginModel(void);
 void EndModel(node_t *headnode);
 

@@ -1147,6 +1147,7 @@ void CreateTriangleModelCollision(void) {
 
     if (!Q_stricmp(cls, "func_group")) {
       // Dump func_group brushes directly into worldspawn (entities[0])
+      EmitBrushes(g->entity->brushes);
       MoveBrushesToWorld(g->entity);
       
       // Cleanup the temporary local entity container
@@ -1174,6 +1175,7 @@ void CreateTriangleModelCollision(void) {
         b->entitynum = num_entities;
       }
       
+      EmitBrushes(entities[num_entities].brushes);
       num_entities++;
 
       // Free just the local struct container, since contents are linked now
