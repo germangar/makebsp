@@ -511,13 +511,7 @@ bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_
   return hulls;
 }
 
-/*
-====================
-DecomposeModelCollision
 
-
-====================
-*/
 /*
 ====================
 FreeCollisionMesh
