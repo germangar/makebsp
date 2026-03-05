@@ -11,6 +11,7 @@ This file is part of Quake III Arena source code.
 #include "../libs/assimp/include/assimp/postprocess.h"
 #include "../libs/assimp/include/assimp/scene.h"
 #include "qbsp.h"
+#include "model_collision.h"
 
 
 int c_triangleModels;
@@ -226,114 +227,185 @@ void LoadTriangleModels(void) {
       inst->modelName[MAX_QPATH - 1] = '\0';
       inst->creator = entity;
 
-      inst->numDrawSurfs = scene->mNumMeshes;
-      inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * inst->numDrawSurfs);
+      inst->numDrawSurfs = 0;
+      inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
       if (!inst->drawSurfs) {
         Error("Failed to allocate drawSurfs array");
       }
+      inst->num_collision_meshes = 0;
 
       AnglesToMatrix(angles, rotationMatrix);
 
       for (int i = 0; i < scene->mNumMeshes; i++) {
         struct aiMesh *mesh = scene->mMeshes[i];
         char shaderName[MAX_QPATH];
+        ShaderForMesh(model, mesh, scene, shaderName);
+        shaderInfo_t *si = ShaderInfoForShader(shaderName);
 
-    ShaderForMesh(model, mesh, scene, shaderName);
+        // ==========================================
+        // STEP 1: Extract Raw Collision Topology
+        // ==========================================
+        if (si && (si->contents & CONTENTS_SOLID) && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
+          colMesh_t *cm = malloc(sizeof(colMesh_t));
+          memset(cm, 0, sizeof(colMesh_t));
+          cm->shaderInfo = si;
 
-    mapDrawSurface_t *ds = AllocDrawSurf();
-    inst->drawSurfs[i] = ds;
-    memset(ds, 0, sizeof(*ds));
-    ds->miscModel = qtrue;
-    ds->planeNum = -1;
+          cm->numVerts = mesh->mNumVertices;
+          cm->verts = malloc(sizeof(vec3_t) * cm->numVerts);
+          for (int j = 0; j < mesh->mNumVertices; j++) {
+            float mx = mesh->mVertices[j].x * scale_vec[0];
+            float my = mesh->mVertices[j].y * scale_vec[1];
+            float mz = mesh->mVertices[j].z * scale_vec[2];
 
-    ds->shaderInfo = ShaderInfoForShader(shaderName);
+            // Axis Swap (Assimp Y-Up -> Quake Z-Up)
+            vec3_t tx;
+            tx[0] = mx; tx[1] = -mz; tx[2] = my;
 
-    ds->numVerts = mesh->mNumVertices;
-    ds->verts = malloc(sizeof(drawVert_t) * ds->numVerts);
-        if (!ds->verts)
-          Error("Failed to allocate vertices");
-
-        ds->numIndexes = mesh->mNumFaces * 3;
-        ds->indexes = malloc(sizeof(int) * ds->numIndexes);
-        if (!ds->indexes)
-          Error("Failed to allocate indices");
-        memset(ds->indexes, 0, sizeof(int) * ds->numIndexes);
-
-        ds->lightmapNum = -1;
-        ds->fogNum = -1;
-
-        for (int j = 0; j < mesh->mNumVertices; j++) {
-          drawVert_t *dv = &ds->verts[j];
-          float mx = mesh->mVertices[j].x * scale_vec[0];
-          float my = mesh->mVertices[j].y * scale_vec[1];
-          float mz = mesh->mVertices[j].z * scale_vec[2];
-
-          // Axis Swap (Assimp Y-Up -> Quake Z-Up)
-          vec3_t tx;
-          tx[0] = mx;
-          tx[1] = -mz;
-          tx[2] = my;
-
-          // Rotation
-          dv->xyz[0] = origin[0] + (tx[0] * rotationMatrix[0][0] +
-                                    tx[1] * rotationMatrix[1][0] +
-                                    tx[2] * rotationMatrix[2][0]);
-          dv->xyz[1] = origin[1] + (tx[0] * rotationMatrix[0][1] +
-                                    tx[1] * rotationMatrix[1][1] +
-                                    tx[2] * rotationMatrix[2][1]);
-          dv->xyz[2] = origin[2] + (tx[0] * rotationMatrix[0][2] +
-                                    tx[1] * rotationMatrix[1][2] +
-                                    tx[2] * rotationMatrix[2][2]);
-
-          if (mesh->mNormals) {
-            float nx = mesh->mNormals[j].x;
-            float ny = mesh->mNormals[j].y;
-            float nz = mesh->mNormals[j].z;
-
-            // Axis Swap for Normals (No Scale!)
-            tx[0] = nx;
-            tx[1] = -nz;
-            tx[2] = ny;
-
-            dv->normal[0] =
-                (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] +
-                 tx[2] * rotationMatrix[2][0]);
-            dv->normal[1] =
-                (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] +
-                 tx[2] * rotationMatrix[2][1]);
-            dv->normal[2] =
-                (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] +
-                 tx[2] * rotationMatrix[2][2]);
+            // Rotation
+            cm->verts[j][0] = origin[0] + (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
+            cm->verts[j][1] = origin[1] + (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
+            cm->verts[j][2] = origin[2] + (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
           }
 
-          if (mesh->mTextureCoords[0]) {
-            dv->st[0] = mesh->mTextureCoords[0][j].x;
-            dv->st[1] = mesh->mTextureCoords[0][j].y;
+          // Count valid triangles
+          int validTris = 0;
+          for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+            if (mesh->mFaces[j].mNumIndices == 3) {
+              validTris++;
+            }
           }
 
-          dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
+          cm->numTris = validTris;
+          if (cm->numTris > 0) {
+            cm->tris = malloc(sizeof(colTri_t) * cm->numTris);
+            int triIdx = 0;
+            for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+              if (mesh->mFaces[j].mNumIndices == 3) {
+                cm->tris[triIdx][0] = mesh->mFaces[j].mIndices[0];
+                cm->tris[triIdx][1] = mesh->mFaces[j].mIndices[1];
+                cm->tris[triIdx][2] = mesh->mFaces[j].mIndices[2];
+                triIdx++;
+              }
+            }
+            inst->collision_meshes[inst->num_collision_meshes++] = cm;
+          } else {
+            free(cm->verts);
+            free(cm);
+          }
         }
 
-        for (int j = 0; j < (int)mesh->mNumFaces; j++) {
-          struct aiFace *face = &mesh->mFaces[j];
-          if (face->mNumIndices != 3)
-            continue;
-
-          // Robustness: Validation of indices against vertex count
-          if (face->mIndices[0] >= (unsigned int)ds->numVerts ||
-              face->mIndices[1] >= (unsigned int)ds->numVerts ||
-              face->mIndices[2] >= (unsigned int)ds->numVerts) {
-            _printf("WARNING: Mesh %i face %i has out-of-bounds indices "
-                    "(%i,%i,%i) for %i verts. Skipping.\n",
-                    i, j, face->mIndices[0], face->mIndices[1],
-                    face->mIndices[2], ds->numVerts);
-            continue;
+        // ==========================================
+        // STEP 2: Chunk Visual Geometry
+        // ==========================================
+        int currentFace = 0;
+        
+        // Vertex mapping array (old index -> new index inside this chunk)
+        int *vMap = malloc(sizeof(int) * mesh->mNumVertices);
+        
+        while (currentFace < (int)mesh->mNumFaces) {
+          if (inst->numDrawSurfs >= 1024) {
+            Error("Too many draw surfaces generated for model %s! Increase array size.", model);
           }
 
-          ds->indexes[j * 3 + 0] = face->mIndices[0];
-          ds->indexes[j * 3 + 1] = face->mIndices[1];
-          ds->indexes[j * 3 + 2] = face->mIndices[2];
+          mapDrawSurface_t *ds = AllocDrawSurf();
+          inst->drawSurfs[inst->numDrawSurfs++] = ds;
+          memset(ds, 0, sizeof(*ds));
+          ds->miscModel = qtrue;
+          ds->planeNum = -1;
+          ds->shaderInfo = si;
+          ds->lightmapNum = -1;
+          ds->fogNum = -1;
+
+          // Reset vMap for this new chunk
+          for (int v = 0; v < mesh->mNumVertices; v++) vMap[v] = -1;
+
+          // Max sizes
+          ds->verts = malloc(sizeof(drawVert_t) * MAX_SURFACE_VERTS);
+          ds->indexes = malloc(sizeof(int) * MAX_SURFACE_INDEXES);
+          ds->numVerts = 0;
+          ds->numIndexes = 0;
+
+          if (!ds->verts || !ds->indexes) Error("Failed to allocate chunk arrays");
+
+          while (currentFace < (int)mesh->mNumFaces) {
+            struct aiFace *face = &mesh->mFaces[currentFace];
+            if (face->mNumIndices != 3) {
+              currentFace++;
+              continue;
+            }
+
+            // How many NEW vertices would this face add?
+            int newVerts = 0;
+            for (int k = 0; k < 3; k++) {
+              if (vMap[face->mIndices[k]] == -1) newVerts++;
+            }
+
+            // Check limits!
+            if (ds->numVerts + newVerts > MAX_SURFACE_VERTS || ds->numIndexes + 3 > MAX_SURFACE_INDEXES) {
+              // Time for a new chunk!
+              if (ds->numIndexes == 0) {
+                 // A single triangle is bigger than the limit? Impossible, but safeguard
+                 Error("Single triangle exceeds limits?");
+              }
+              break; // Break the inner while, start a new drawSurf
+            }
+
+            // Add the face to this chunk
+            for (int k = 0; k < 3; k++) {
+              unsigned int oldIdx = face->mIndices[k];
+              if (vMap[oldIdx] == -1) {
+                // Add the vertex!
+                vMap[oldIdx] = ds->numVerts;
+                drawVert_t *dv = &ds->verts[ds->numVerts];
+                
+                float mx = mesh->mVertices[oldIdx].x * scale_vec[0];
+                float my = mesh->mVertices[oldIdx].y * scale_vec[1];
+                float mz = mesh->mVertices[oldIdx].z * scale_vec[2];
+
+                vec3_t tx;
+                tx[0] = mx; tx[1] = -mz; tx[2] = my;
+
+                dv->xyz[0] = origin[0] + (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
+                dv->xyz[1] = origin[1] + (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
+                dv->xyz[2] = origin[2] + (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
+
+                if (mesh->mNormals) {
+                  float nx = mesh->mNormals[oldIdx].x;
+                  float ny = mesh->mNormals[oldIdx].y;
+                  float nz = mesh->mNormals[oldIdx].z;
+
+                  tx[0] = nx; tx[1] = -nz; tx[2] = ny;
+
+                  dv->normal[0] = (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
+                  dv->normal[1] = (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
+                  dv->normal[2] = (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
+                }
+
+                if (mesh->mTextureCoords[0]) {
+                  dv->st[0] = mesh->mTextureCoords[0][oldIdx].x;
+                  dv->st[1] = mesh->mTextureCoords[0][oldIdx].y;
+                }
+
+                dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
+                ds->numVerts++;
+              }
+              // Add the index
+              ds->indexes[ds->numIndexes++] = vMap[oldIdx];
+            }
+            currentFace++;
+          }
+
+          // Realloc to save memory
+          if (ds->numVerts > 0) {
+            ds->verts = realloc(ds->verts, sizeof(drawVert_t) * ds->numVerts);
+            ds->indexes = realloc(ds->indexes, sizeof(int) * ds->numIndexes);
+          } else {
+            // Empty chunk
+            inst->numDrawSurfs--;
+          }
         }
+        
+        free(vMap);
       }
     }
   }

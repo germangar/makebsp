@@ -877,39 +877,42 @@ for a single instance, extracting cleaned `colMesh_t` objects prior to categoriz
 void CreateCollisionTris(modelInstance_t *inst) {
   int j, k;
 
+  int numRaw = inst->num_collision_meshes;
+  colMesh_t **rawMeshes = malloc(sizeof(colMesh_t*) * numRaw);
+  for (int i = 0; i < numRaw; i++) {
+    rawMeshes[i] = inst->collision_meshes[i];
+  }
   inst->num_collision_meshes = 0;
 
-  _printf("Instance %s: Extracting Collision Tris (MeshLib)\n", inst->modelName);
-
-  for (j = 0; j < inst->numDrawSurfs; j++) {
-    mapDrawSurface_t *ds = inst->drawSurfs[j];
-
-    if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
-      continue;
-    }
-    if (ds->numVerts == 0 || ds->numIndexes == 0) {
+  for (int i = 0; i < numRaw; i++) {
+    colMesh_t *raw = rawMeshes[i];
+    if (raw->numVerts == 0 || raw->numTris == 0) {
+      FreeCollisionMesh(raw);
       continue;
     }
 
-    /* Extract raw vertex arrays */
-    float *meshVerts = malloc(ds->numVerts * 3 * sizeof(float));
-    int *meshIndexes = malloc(ds->numIndexes * sizeof(int));
+    // Convert colMesh_t to raw arrays for HealAndDecimateMesh
+    float *meshVerts = malloc(raw->numVerts * 3 * sizeof(float));
+    int *meshIndexes = malloc(raw->numTris * 3 * sizeof(int));
 
-    for (k = 0; k < ds->numVerts; k++) {
-      meshVerts[k * 3 + 0] = (float)ds->verts[k].xyz[0];
-      meshVerts[k * 3 + 1] = (float)ds->verts[k].xyz[1];
-      meshVerts[k * 3 + 2] = (float)ds->verts[k].xyz[2];
+    for (int k = 0; k < raw->numVerts; k++) {
+      meshVerts[k * 3 + 0] = raw->verts[k][0];
+      meshVerts[k * 3 + 1] = raw->verts[k][1];
+      meshVerts[k * 3 + 2] = raw->verts[k][2];
     }
-    for (k = 0; k < ds->numIndexes; k++) {
-      meshIndexes[k] = ds->indexes[k];
+    for (int k = 0; k < raw->numTris; k++) {
+      meshIndexes[k * 3 + 0] = raw->tris[k][0];
+      meshIndexes[k * 3 + 1] = raw->tris[k][1];
+      meshIndexes[k * 3 + 2] = raw->tris[k][2];
     }
 
     colMesh_t *colMesh = malloc(sizeof(colMesh_t));
     memset(colMesh, 0, sizeof(colMesh_t));
+    colMesh->shaderInfo = raw->shaderInfo;
 
     /* --- MeshLib path --- */
-    MRMesh *healed = HealAndDecimateMesh(meshVerts, ds->numVerts,
-                                         meshIndexes, ds->numIndexes,
+    MRMesh *healed = HealAndDecimateMesh(meshVerts, raw->numVerts,
+                                         meshIndexes, raw->numTris * 3,
                                          inst->modelName);
     if (healed) {
       const MRVector3f *pts = mrMeshPoints(healed);
@@ -940,13 +943,11 @@ void CreateCollisionTris(modelInstance_t *inst) {
           }
         }
       }
-      
       mrMeshFree(healed);
     }
 
     /* Store result if extraction succeeded */
     if (colMesh->numTris > 0 && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
-      colMesh->shaderInfo = ds->shaderInfo;
       inst->collision_meshes[inst->num_collision_meshes++] = colMesh;
     } else {
       FreeCollisionMesh(colMesh);
@@ -954,7 +955,9 @@ void CreateCollisionTris(modelInstance_t *inst) {
 
     free(meshIndexes);
     free(meshVerts);
+    FreeCollisionMesh(raw); // Clean up the raw mesh!
   }
+  free(rawMeshes);
 
   /* Unified OBJ export at the end */
   if (inst->num_collision_meshes > 0) {
@@ -1013,7 +1016,7 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
 
   if (category == MC_TERRAIN) {
     hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
-  } else if (category == MC_OBJECT || category == MC_WALKABLE) {
+  } else if (category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP) {
       hulls_list = GenerateHACDCollision(inst, caulk);
   } else {
     hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);

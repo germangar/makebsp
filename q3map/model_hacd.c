@@ -22,6 +22,89 @@ reenable the hacd_set_disable_normalize functionality
 /* HACD Wrapper */
 #include "../libs/hacd/hacd_c_wrapper.h"
 
+
+/* --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+Good wood-bridge settings: 
+disable_normalize=false, 
+compacity=0.0001, 
+volume=0.0, 
+cc_connect_dist=0.0, 
+nclusters=1, 
+concavity=100000.0, 
+extra_dist_points=true, 
+add_faces_points=true
+    --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
+*/
+
+#define MS_TINY 64.0
+#define MS_SMALL 256.0
+#define MS_MEDIUM 512.0
+#define MS_LARGE 1024.0
+
+typedef struct {
+    double scaleFactor;
+    qboolean disableNormalize;
+    double compacity;
+    double volume;
+    double concavity;
+    size_t nClusters;
+    double ccConnectDist;
+    qboolean extraPoints;
+    qboolean facePoints;
+} hacdSettings_t;
+
+/* Settings for large models (like wood-bridge) - Unnormalized */
+static hacdSettings_t hacd_settings_large = {
+    1.8308,   // scaleFactor (2000 / 1092.38)
+    qtrue,    // disableNormalize
+    0.0001,   // compacity
+    0.0,      // volume
+    100000.0, // concavity
+    1,        // nClusters
+    0.0,      // ccConnectDist
+    qtrue,    // extraPoints
+    qtrue     // facePoints
+};
+
+/* Settings for small props (Medium detail) - Normalized */
+static hacdSettings_t hacd_settings_small = {
+    1.0,      // scaleFactor (standard)
+    qfalse,   // disableNormalize (let HACD handle tiny scales)
+    0.1,      // compacity
+    0.0,      // volume
+    100.0,    // concavity
+    1,        // nClusters
+    0.0,      // ccConnectDist
+    qtrue,    // extraPoints
+    qtrue     // facePoints
+};
+
+/* Settings for wrap/soft-wrap (TINY/Default) - Normalized soft wrap for stability */
+static hacdSettings_t hacd_settings_wrap = {
+    1.0,      // scaleFactor (standard)
+    qfalse,   // disableNormalize (Scale tiny models to 2000u box for stability)
+    0.0,      // compacity
+    0.0,      // volume
+    100000.0, // concavity (Merge everything into one hull)
+    1,        // nClusters
+    100.0,    // ccConnectDist (Force merge disconnected tiny parts)
+    qtrue,    // extraPoints (Helps library see the shell properly)
+    qfalse    // facePoints
+};
+
+/* Settings for wrap/soft-wrap (MC_WRAP & MS_LARGE)*/
+static hacdSettings_t hacd_settings_bigwrap = {
+    1.0,      // scaleFactor (standard)
+    qtrue,    // disableNormalize (unnormalized scaling)
+    0.1,      // compacity (Pull the hull tighter to the surface)
+    0.0,      // volume
+    100000.0, // concavity (Merge everything into one hull)
+    1,        // nClusters
+    50.0,     // ccConnectDist (Bridge minor gaps but stay tighter)
+    qtrue,    // extraPoints (Helps library see the silhouette)
+    qtrue     // facePoints (Captures interior mesh points for tighter wrap)
+};
+
 static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
     bspbrush_t *list = NULL;
     size_t numClusters = hacd_get_nclusters(hacd);
@@ -72,7 +155,7 @@ static bspbrush_t *BrushesFromHullsHACD(HACD_Wrapper *hacd, shaderInfo_t *si) {
 
 /*
 ====================
-GenerateMLCollision
+GenerateHACDCollision
 
 Generates collision brushes for a model instance using the pre-extracted
 MeshLib colMesh_t geometries. It feeds these directly into HACD.
@@ -93,7 +176,6 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     if (!colMesh || colMesh->numTris == 0) continue;
 
     /* Call HACD extruder */
-    shaderInfo_t *si = (shader != NULL) ? shader : NULL;
 
     HACD_Vec3 *hacdPts = malloc(colMesh->numVerts * sizeof(HACD_Vec3));
     for (int i = 0; i < colMesh->numVerts; i++) {
@@ -113,41 +195,49 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     hacd_set_points(hacd, hacdPts, colMesh->numVerts);
     hacd_set_triangles(hacd, hacdTris, colMesh->numTris);
     
-    /* --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
-    Good wood-bridge settings: 
-    disable_normalize=false, 
-    compacity=0.0001, 
-    volume=0.0, 
-    cc_connect_dist=0.0, 
-    nclusters=1, 
-    concavity=100000.0, 
-    extra_dist_points=true, 
-    add_faces_points=true
-     --- DON'T DELETE THIS COMMENT. IT'S IMPORTANT. ---
-    */
+    /* Calculate model size to choose settings */
+    vec3_t mins, maxs;
+    ClearBounds(mins, maxs);
+    for (int i = 0; i < colMesh->numVerts; i++) {
+        AddPointToBounds(colMesh->verts[i], mins, maxs);
+    }
+
+    vec3_t size;
+    VectorSubtract(maxs, mins, size);
+    double diagonal = VectorLength(size);
+
+    hacdSettings_t *s;
+
+    if (inst->category == MC_WRAP)
+    {
+        if (diagonal > MS_LARGE) {
+            s = &hacd_settings_bigwrap;
+            _printf("  Model Diagonal: %.1f (MC_WRAP/BIG)\n", diagonal);
+        } else {
+            s = &hacd_settings_wrap;
+            _printf("  Model Diagonal: %.1f (MC_WRAP/TINY)\n", diagonal);
+        }
+    }
+    else if (diagonal <= MS_TINY) {
+        s = &hacd_settings_wrap;
+        _printf("  Model Diagonal: %.1f (TINY)\n", diagonal);
+    } else {
+        s = &hacd_settings_large;
+        _printf("  Model Diagonal: %.1f (LARGE) -> Using unnormalized scaling\n", diagonal);
+    }
+
+    hacd_set_disable_normalize(hacd, s->disableNormalize);
+    hacd_set_compacity_weight(hacd, s->compacity); 
+    hacd_set_volume_weight(hacd, s->volume);    
+    hacd_set_cc_connect_dist(hacd, s->ccConnectDist);
+
+    hacd_set_nclusters(hacd, s->nClusters); 
+    hacd_set_concavity(hacd, s->concavity / s->scaleFactor); 
+    hacd_set_add_extra_dist_points(hacd, s->extraPoints); 
+    hacd_set_add_faces_points(hacd, s->facePoints);      
     
-    /* --- Unnormalized Equivalence Scaling ---
-       HACD's default behavior normalizes all models to a 2000.0 unit bounding box diagonal.
-       This secretes scale factors that vary per-model. By disabling normalization and 
-       dividing our distance thresholds by the scale factor that our baseline 'wood-bridge' 
-       model used (1.8308), we can apply these precise unnormalized physical distances 
-       consistently to ALL models. 
-       Change this to 1.0 and disable_normalize to false to test native HACD behavior. */
-    double hacd_scale_factor = 1.8308; // The "magic number" from wood-bridge (2000.0 / 1092.38)
-    
-    hacd_set_disable_normalize(hacd, true);
-    hacd_set_compacity_weight(hacd, 0.0001); 
-    hacd_set_volume_weight(hacd, 0.0000);    
-    hacd_set_cc_connect_dist(hacd, 0.0 / hacd_scale_factor);
-    
-    size_t targetClusters = 1;
-    hacd_set_nclusters(hacd, targetClusters); 
-    hacd_set_concavity(hacd, 100000.0 / hacd_scale_factor); 
-    hacd_set_add_extra_dist_points(hacd, true); 
-    hacd_set_add_faces_points(hacd, true);      
-    
-    _printf("  Running HACD on %d verts, %d tris (Threshold: %.1f, Min Hulls: %zu)\n", 
-            colMesh->numVerts, colMesh->numTris, 100.0, targetClusters);
+    _printf("  Running HACD on %d verts, %d tris (Concavity: %.1f, Clusters: %zu, ConnectDist: %.1f)\n", 
+            colMesh->numVerts, colMesh->numTris, s->concavity, s->nClusters, s->ccConnectDist);
             
     if (hacd_compute(hacd, false)) {
         bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, colMesh->shaderInfo);
@@ -166,4 +256,3 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
 
   return hulls_list;
 }
-

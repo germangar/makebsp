@@ -136,26 +136,6 @@ static qboolean PointsMatch(float *verts, int idxA, int idxB) {
 
 /*
 ====================
-TrianglesAreCoplanar
-
-Checks if two triangles lie on the same plane (normal and distance match).
-====================
-*/
-static qboolean TrianglesAreCoplanar(clipTri_t *a, clipTri_t *b) {
-  /* check normals are parallel (dot product ~= 1) */
-  float dot = DotProduct(a->normal, b->normal);
-  if (dot < (1.0 - COPLANAR_NORMAL_EPSILON))
-    return qfalse;
-
-  /* check plane distances match */
-  if (fabs(a->dist - b->dist) > COPLANAR_DIST_EPSILON)
-    return qfalse;
-
-  return qtrue;
-}
-
-/*
-====================
 FindSharedEdge
 
 Given two triangles, finds if they share exactly 2 vertices (a shared edge).

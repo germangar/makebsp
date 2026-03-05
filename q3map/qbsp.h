@@ -33,6 +33,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "mesh.h"
 #include "shaders.h"
 
+// Engine-specific surface limits
+#define QUAKE3_MAX_SURFACE_VERTS 1000
+#define QUAKE3_MAX_SURFACE_INDEXES 6000
+#define QFUSION_MAX_SURFACE_VERTS 65535
+#define QFUSION_MAX_SURFACE_INDEXES 393210
+
+// Currently active engine limits
+#define MAX_SURFACE_VERTS QUAKE3_MAX_SURFACE_VERTS
+#define MAX_SURFACE_INDEXES QUAKE3_MAX_SURFACE_INDEXES
+
 #define MAX_PATCH_SIZE 32
 
 #define CLIP_EPSILON 0.1
