@@ -164,8 +164,10 @@ MeshLib colMesh_t geometries. It feeds these directly into HACD.
 bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
   bspbrush_t *hulls_list = NULL;
 
+#if 0
   _printf("Instance %s: Running MeshLib/HACD Pipeline (%s)\n",
           inst->modelName, CategoryString(inst->category));
+#endif
 
   if (inst->num_collision_meshes == 0) {
     return NULL;
@@ -212,18 +214,26 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     {
         if (diagonal > MS_LARGE) {
             s = &hacd_settings_bigwrap;
+#if 0
             _printf("  Model Diagonal: %.1f (MC_WRAP/BIG)\n", diagonal);
+#endif
         } else {
             s = &hacd_settings_wrap;
+#if 0
             _printf("  Model Diagonal: %.1f (MC_WRAP/TINY)\n", diagonal);
+#endif
         }
     }
     else if (diagonal <= MS_TINY) {
         s = &hacd_settings_wrap;
+#if 0
         _printf("  Model Diagonal: %.1f (TINY)\n", diagonal);
+#endif
     } else {
         s = &hacd_settings_large;
+#if 0
         _printf("  Model Diagonal: %.1f (LARGE) -> Using unnormalized scaling\n", diagonal);
+#endif
     }
 
     hacd_set_disable_normalize(hacd, s->disableNormalize);
@@ -236,8 +246,10 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     hacd_set_add_extra_dist_points(hacd, s->extraPoints); 
     hacd_set_add_faces_points(hacd, s->facePoints);      
     
+#if 0
     _printf("  Running HACD on %d verts, %d tris (Concavity: %.1f, Clusters: %zu, ConnectDist: %.1f)\n", 
             colMesh->numVerts, colMesh->numTris, s->concavity, s->nClusters, s->ccConnectDist);
+#endif
             
     if (hacd_compute(hacd, false)) {
         bspbrush_t *surfBrushes = BrushesFromHullsHACD(hacd, colMesh->shaderInfo);
@@ -251,8 +263,10 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     free(hacdTris);
   }
 
+#if 0
   _printf("Instance %s: MeshLib pipeline complete (%s)\n",
           inst->modelName, hulls_list ? "Brushes generated" : "No brushes");
+#endif
 
   return hulls_list;
 }
