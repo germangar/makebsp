@@ -105,44 +105,40 @@ LoadShaderImage
 ===============
 */
 
+// Returns the length of the file, and sets *bTGA to qtrue if the matched extension is .tga
 int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA) {
   byte *buffer = NULL;
   int nLen = 0;
-  *bTGA = qtrue;
+  
+  // Extensions to check exactly in this order
+  const char *exts[] = { ".tga", ".TGA", ".jpg", ".JPG", ".png", ".PNG", ".bmp", ".BMP", NULL };
+  
+  char base[1024];
+  strcpy(base, filename);
+  StripExtension(base);
 
-  if (FileExists(filename)) {
-    nLen = LoadFileBlock(filename, (void **)&buffer);
-  }
-#ifdef _WIN32
-  else {
-    nLen = PakLoadAnyFile(filename, (void **)&buffer);
-  }
-#endif
+  for (int i = 0; exts[i] != NULL; i++) {
+    char testPath[1024];
+    sprintf(testPath, "%s%s", base, exts[i]);
 
-  if (buffer == NULL) {
-    nLen = strlen(filename);
-    if (nLen < 4)
-      return 0;
-    filename[nLen - 3] = 'j';
-    filename[nLen - 2] = 'p';
-    filename[nLen - 1] = 'g';
-
-    if (FileExists(filename)) {
-      nLen = LoadFileBlock(filename, (void **)&buffer);
+    if (FileExists(testPath)) {
+      nLen = LoadFileBlock(testPath, (void **)&buffer);
     }
 #ifdef _WIN32
     else {
-      nLen = PakLoadAnyFile(filename, (void **)&buffer);
+      nLen = PakLoadAnyFile(testPath, (void **)&buffer);
     }
 #endif
 
-    if (buffer) {
-      *bTGA = qfalse;
+    if (buffer != NULL) {
+      *bTGA = (Q_stricmp(exts[i], ".tga") == 0) ? qtrue : qfalse;
+      *bufferptr = buffer;
+      return nLen;
     }
   }
 
-  *bufferptr = buffer;
-  return nLen;
+  *bufferptr = NULL;
+  return 0;
 }
 
 static void LoadShaderImage(shaderInfo_t *si) {
@@ -155,7 +151,6 @@ static void LoadShaderImage(shaderInfo_t *si) {
   // look for the lightimage if it is specified
   if (si->lightimage[0]) {
     sprintf(filename, "%s%s", gamedir, si->lightimage);
-    DefaultExtension(filename, ".tga");
     nLen = LoadImageFile(filename, &buffer, &bTGA);
     if (buffer != NULL) {
       goto loadTga;
@@ -165,22 +160,14 @@ static void LoadShaderImage(shaderInfo_t *si) {
   // look for the editorimage if it is specified
   if (si->editorimage[0]) {
     sprintf(filename, "%s%s", gamedir, si->editorimage);
-    DefaultExtension(filename, ".tga");
     nLen = LoadImageFile(filename, &buffer, &bTGA);
     if (buffer != NULL) {
       goto loadTga;
     }
   }
 
-  // just try the shader name with a .tga
-  // on unix, we have case sensitivity problems...
-  sprintf(filename, "%s%s.tga", gamedir, si->shader);
-  nLen = LoadImageFile(filename, &buffer, &bTGA);
-  if (buffer != NULL) {
-    goto loadTga;
-  }
-
-  sprintf(filename, "%s%s.TGA", gamedir, si->shader);
+  // try the shader name 
+  sprintf(filename, "%s%s", gamedir, si->shader);
   nLen = LoadImageFile(filename, &buffer, &bTGA);
   if (buffer != NULL) {
     goto loadTga;
