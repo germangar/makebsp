@@ -29,7 +29,7 @@ This fork adds **automatic collision mesh generation** for `misc_model` entities
 
 ## Libraries
 
-- **jpeg6** - JPEG image loading for textures
+- **stb_image** - Image loading (PNG, JPEG, BMP, TGA, GIF, HDR, and more)
 - **assimp** - Model format loading (ASE, OBJ, etc.)
 - **hacd/coacd** - Convex hull decomposition algorithms
 - **MeshLib-Lite** - Mesh processing from MeshLab

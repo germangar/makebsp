@@ -396,6 +396,8 @@ int ReadMagic(FILE *file) {
     return FTYPE_GIF;
   if (buf[0] == 0x0a && buf[1] == 0x05 && buf[2] == 0x01 && buf[3] == 0x08)
     return FTYPE_PCX;
+  if (buf[0] == 0x89 && buf[1] == 'P' && buf[2] == 'N' && buf[3] == 'G')
+    return FTYPE_PNG;
   return FTYPE_UNKNOWN;
 }
 FILE *OpenFileReadMagic(const char *filename, int *ftype_r) {

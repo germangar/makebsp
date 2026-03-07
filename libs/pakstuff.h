@@ -61,6 +61,7 @@ typedef double Float64;
 #define FTYPE_BMP 36     /* .bmp  "BM"   */
 #define FTYPE_GIF 37     /* .gif  "GIF8" */
 #define FTYPE_PCX 38     /* .pcx  (0x0a 0x05 0x01 0x08) */
+#define FTYPE_PNG 39     /* .png  "\x89PNG" */
 #define FTYPE_ERROR -1
 
 #ifdef FAT_ENDIAN

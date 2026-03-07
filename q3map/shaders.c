@@ -32,7 +32,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "shaders.h"
 #ifdef _WIN32
-#include "../libs/jpeglib.h"
 #include "../libs/pakstuff.h"
 #endif
 
@@ -105,11 +104,6 @@ infoParm_t infoParms[] = {
 LoadShaderImage
 ===============
 */
-
-#ifdef _WIN32
-void LoadJPGBuff(unsigned char *fbuffer, size_t nLen, unsigned char **pic,
-                 int *width, int *height);
-#endif
 
 int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA) {
   byte *buffer = NULL;
@@ -207,11 +201,9 @@ static void LoadShaderImage(shaderInfo_t *si) {
 // load the image to get dimensions and color
 loadTga:
   if (bTGA) {
-    LoadTGABuffer(buffer, &si->pixels, &si->width, &si->height);
+    LoadTGABuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
   } else {
-#ifdef _WIN32
-    LoadJPGBuff(buffer, (size_t)nLen, &si->pixels, &si->width, &si->height);
-#endif
+    LoadImageFromBuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
   }
 
   free(buffer);
