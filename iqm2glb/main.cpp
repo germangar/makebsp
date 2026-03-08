@@ -3,6 +3,8 @@
 #include <fstream>
 #include <cstring>
 #include <cmath>
+#include <map>
+#include <string>
 
 #include "cgltf.h"
 #include "cgltf_write.h"
@@ -418,6 +420,35 @@ int main(int argc, char** argv) {
     skin->skeleton = root;
     skin->inverse_bind_matrices = create_accessor(out_data, view_ibms, cgltf_type_mat4, cgltf_component_type_r_32f, header.num_joints, 0);
     
+    // Materials
+    std::map<uint32_t, cgltf_material*> material_map;
+    iqmmesh* iqm_meshes_all = (iqmmesh*)(buffer.data() + header.ofs_meshes);
+    for (uint32_t i = 0; i < header.num_meshes; ++i) {
+        uint32_t mat_offset = iqm_meshes_all[i].material;
+        if (material_map.find(mat_offset) == material_map.end()) {
+            material_map[mat_offset] = nullptr;
+        }
+    }
+
+    out_data->materials_count = material_map.size();
+    out_data->materials = (cgltf_material*)calloc(out_data->materials_count, sizeof(cgltf_material));
+    
+    uint32_t cur_mat_idx = 0;
+    for (auto& pair : material_map) {
+        cgltf_material* mat = &out_data->materials[cur_mat_idx++];
+        const char* mat_name = (char*)(buffer.data() + header.ofs_text + pair.first);
+        mat->name = sanitize_name(mat_name);
+        // Default PBR to make it visible
+        mat->has_pbr_metallic_roughness = true;
+        mat->pbr_metallic_roughness.base_color_factor[0] = 1.0f;
+        mat->pbr_metallic_roughness.base_color_factor[1] = 1.0f;
+        mat->pbr_metallic_roughness.base_color_factor[2] = 1.0f;
+        mat->pbr_metallic_roughness.base_color_factor[3] = 1.0f;
+        mat->pbr_metallic_roughness.metallic_factor = 0.0f;
+        mat->pbr_metallic_roughness.roughness_factor = 1.0f;
+        pair.second = mat;
+    }
+
     // Meshes
     out_data->meshes_count = header.num_meshes;
     out_data->meshes = (cgltf_mesh*)calloc(header.num_meshes, sizeof(cgltf_mesh));
@@ -437,6 +468,7 @@ int main(int argc, char** argv) {
         mesh->primitives = (cgltf_primitive*)calloc(1, sizeof(cgltf_primitive));
         cgltf_primitive* prim = &mesh->primitives[0];
         prim->type = cgltf_primitive_type_triangles;
+        prim->material = material_map[iqm_meshes_loop[i].material];
 
         for (uint32_t j = 0; j < header.num_vertexarrays; ++j) {
             uint32_t type = iqm_va_loop[j].type;
