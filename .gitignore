@@ -20,6 +20,7 @@ iqm2glb/bigvic/
 iqm2glb/Bobot/
 iqm2glb/IQM viewer SRC/
 iqm2glb/MP_PadPork_source/
+iqm2glb/obj/
 iqm2glb/*.tga
 iqm2glb/*.jpg
 iqm2glb/tris.glb

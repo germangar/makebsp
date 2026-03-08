@@ -1,22 +1,36 @@
-# iqm2glb Makefile (cgltf implementation)
+# iqm2glb Makefile
 
-CXX = g++
+CXX      = g++
 CXXFLAGS = -O2 -Wall -std=c++17
-LDFLAGS = 
+LDFLAGS  =
 
 TARGET = iqm2glb.exe
-SRCS = main.cpp cgltf_impl.cpp cgltf_write_impl.cpp
-OBJS = $(SRCS:.cpp=.o)
+OBJDIR = obj
 
-all: $(TARGET)
+SRCS   = main.cpp \
+         iqm_loader.cpp \
+         anim_cfg.cpp \
+         glb_writer.cpp \
+         cgltf_impl.cpp \
+         cgltf_write_impl.cpp
+
+# Map source files to object files in the obj directory
+OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o))
+
+all: $(OBJDIR) $(TARGET)
+
+# Create the object directory if it doesn't exist
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-%.o: %.cpp
+# Rule for compiling .cpp to .o inside OBJDIR
+$(OBJDIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -rf $(OBJDIR) $(TARGET)
 
 .PHONY: all clean
