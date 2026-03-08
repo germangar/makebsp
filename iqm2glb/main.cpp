@@ -1,42 +1,63 @@
 #include <iostream>
 #include <string>
+#include <algorithm>
 #include "iqm_loader.h"
 #include "anim_cfg.h"
 #include "glb_writer.h"
+#include "glb_loader.h"
+#include "iqm_writer.h"
 
 int main(int argc, char** argv) {
     if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <input.iqm> <output.glb>\n";
+        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb> <output.glb/iqm>\n";
         return 1;
     }
 
-    // 1. Load the IQM model
-    IQMModel model;
-    if (!load_iqm(argv[1], model)) return 2;
+    std::string in_path = argv[1];
+    std::string out_path = argv[2];
 
-    // 2. Resolve animations: prefer animation.cfg, fall back to IQM native anims
-    std::vector<AnimationDef> animations;
-    std::string cfg_path = find_animation_cfg(argv[1]);
+    auto ends_with = [](const std::string& s, const std::string& suffix) {
+        return s.size() >= suffix.size() && 
+               std::equal(suffix.rbegin(), suffix.rend(), s.rbegin(), 
+               [](char a, char b) { return std::tolower(a) == std::tolower(b); });
+    };
 
-    if (!cfg_path.empty()) {
-        animations = parse_animation_cfg(cfg_path);
-    } else {
-        const iqmheader& h = model.header;
-        const iqmanim* iqm_anims =
-            reinterpret_cast<const iqmanim*>(model.raw_data.data() + h.ofs_anims);
-        for (uint32_t i = 0; i < h.num_anims; ++i) {
-            AnimationDef ad;
-            ad.name        = model.text + iqm_anims[i].name;
-            ad.first_frame = iqm_anims[i].first_frame;
-            ad.last_frame  = iqm_anims[i].first_frame + iqm_anims[i].num_frames - 1;
-            ad.fps         = (iqm_anims[i].framerate > 0.0f) ? iqm_anims[i].framerate : 24.0f;
-            ad.loop_frames = 0;
-            animations.push_back(ad);
+    if (ends_with(in_path, ".iqm")) {
+        Model model;
+        std::cout << "Loading IQM: " << argv[1] << "..." << std::endl;
+        if (!load_iqm(argv[1], model)) {
+            std::cerr << "Failed to load IQM: " << argv[1] << "\n";
+            return 2;
         }
-    }
+        std::cout << "Loaded IQM (" << model.meshes.size() << " meshes, " << model.joints.size() << " joints)" << std::endl;
 
-    // 3. Write GLB
-    if (!write_glb(model, animations, argv[2])) return 3;
+        std::string cfg_path = find_animation_cfg(argv[1]);
+        if (!cfg_path.empty()) {
+            std::cout << "Found animation config: " << cfg_path << std::endl;
+            model.animations = parse_animation_cfg(cfg_path);
+            std::cout << "Parsed " << model.animations.size() << " animations" << std::endl;
+        }
+
+        std::cout << "Writing GLB: " << argv[2] << "..." << std::endl;
+        if (!write_glb(model, argv[2])) {
+            std::cerr << "Failed to write GLB: " << argv[2] << "\n";
+            return 3;
+        }
+    } else if (ends_with(in_path, ".glb") || ends_with(in_path, ".gltf")) {
+        Model model;
+        if (!load_glb(argv[1], model)) {
+            std::cerr << "Failed to load GLB: " << argv[1] << "\n";
+            return 4;
+        }
+
+        if (!write_iqm(model, argv[2])) {
+            std::cerr << "Failed to write IQM: " << argv[2] << "\n";
+            return 5;
+        }
+    } else {
+        std::cerr << "Unsupported file format. Use .iqm or .glb/.gltf\n";
+        return 6;
+    }
 
     return 0;
 }

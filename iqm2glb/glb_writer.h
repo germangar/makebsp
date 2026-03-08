@@ -1,10 +1,6 @@
 #pragma once
-#include "iqm_loader.h"
-#include "anim_cfg.h"
-#include <vector>
+#include "model.h"
 
-// Write the loaded IQM model and its animations to a GLB file.
+// Write the intermediate Model representation to a GLB file.
 // Returns true on success.
-bool write_glb(const IQMModel& model,
-               const std::vector<AnimationDef>& animations,
-               const char* output_path);
+bool write_glb(const Model& model, const char* output_path);

@@ -29,8 +29,8 @@ std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
     std::vector<AnimationDef> anims;
 
     // Hardcoded leading animations
-    anims.push_back({"base",       0,  0,  0, 24.0f});
-    anims.push_back({"STAND_IDLE", 1, 39, 0, 24.0f});
+    anims.push_back({"base",       0,  0,  0, 30.0f});
+    anims.push_back({"STAND_IDLE", 1, 39, 0, 30.0f});
 
     std::ifstream f(path);
     if (!f.is_open()) return anims;
@@ -51,7 +51,7 @@ std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
         if (!std::isdigit((unsigned char)line[0])) continue;
 
         int   first = 0, last = 0, loop = 0;
-        float fps = 24.0f;
+        float fps = 30.0f;
 
         // Require at least two integers (first, last)
         if (sscanf(line.c_str(), "%d %d", &first, &last) < 2) continue;
@@ -60,7 +60,7 @@ std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
         ad.first_frame = first;
         ad.last_frame  = last;
         ad.loop_frames = 0;
-        ad.fps         = 24.0f;
+        ad.fps         = 30.0f;
 
         // Optionally parse loop + fps if all four fields are present
         if (sscanf(line.c_str(), "%d %d %d %f", &first, &last, &loop, &fps) == 4) {

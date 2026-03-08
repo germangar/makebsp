@@ -11,6 +11,8 @@ SRCS   = main.cpp \
          iqm_loader.cpp \
          anim_cfg.cpp \
          glb_writer.cpp \
+         glb_loader.cpp \
+         iqm_writer.cpp \
          cgltf_impl.cpp \
          cgltf_write_impl.cpp
 

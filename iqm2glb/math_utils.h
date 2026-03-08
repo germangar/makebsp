@@ -31,6 +31,16 @@ inline void quat_mul(const float* a, const float* b, float* r) {
     r[0] = x; r[1] = y; r[2] = z; r[3] = w;
 }
 
+inline void quat_rotate_vec(const float* q, const float* v, float* r) {
+    float t[3];
+    t[0] = 2.0f * (q[1] * v[2] - q[2] * v[1]);
+    t[1] = 2.0f * (q[2] * v[0] - q[0] * v[2]);
+    t[2] = 2.0f * (q[0] * v[1] - q[1] * v[0]);
+    r[0] = v[0] + q[3] * t[0] + (q[1] * t[2] - q[2] * t[1]);
+    r[1] = v[1] + q[3] * t[1] + (q[2] * t[0] - q[0] * t[2]);
+    r[2] = v[2] + q[3] * t[2] + (q[0] * t[1] - q[1] * t[0]);
+}
+
 inline mat4 mat4_mul(const mat4& a, const mat4& b) {
     mat4 r;
     for (int col = 0; col < 4; col++) {
