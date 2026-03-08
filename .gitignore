@@ -15,6 +15,18 @@ libs/coacd
 AGENTS.md
 .vscode/settings.json
 
+iqm2glb/iqm2glb.exe
+iqm2glb/bigvic/
+iqm2glb/Bobot/
+iqm2glb/IQM viewer SRC/
+iqm2glb/MP_PadPork_source/
+iqm2glb/*.tga
+iqm2glb/*.jpg
+iqm2glb/tris.glb
+iqm2glb/tris.iqm
+iqm2glb/default.skin
+iqm2glb/animation.cfg
+
 # MeshLib binaries and temporary files
 libs/MeshLib/build/
 libs/MeshLib/build_minimal/
