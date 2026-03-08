@@ -145,6 +145,77 @@ mat4 mat4_invert(const mat4& m) {
     return inv;
 }
 
+struct AnimationDef {
+    std::string name;
+    int first_frame;
+    int last_frame;
+    int loop_frames;
+    float fps;
+};
+
+std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
+    std::vector<AnimationDef> anims;
+    
+    // Always add hardcoded 'base' (Frame 0) and 'STAND_IDLE' (Frames 1-39)
+    anims.push_back({"base", 0, 0, 0, 24.0f});
+    std::cout << " Parsed anim: base (0-0)" << std::endl;
+    anims.push_back({"STAND_IDLE", 1, 39, 0, 24.0f});
+    std::cout << " Parsed anim: STAND_IDLE (1-39)" << std::endl;
+    
+    std::ifstream f(path);
+    if (!f.is_open()) return anims;
+    
+    std::string line;
+    while (std::getline(f, line)) {
+        // Basic trim
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        if (line.empty()) continue;
+        
+        // Skip specific commands
+        if (line.find("sex") == 0 || line.find("rootanim") == 0 || 
+            line.find("tagmask") == 0 || line.find("rotationbone") == 0) continue;
+            
+        // Check if it starts with a number (animation definition)
+        if (std::isdigit(line[0])) {
+            AnimationDef ad;
+            int first, last, loop;
+            float fps;
+            
+            // Format: first last loop fps // NAME
+            if (sscanf(line.c_str(), "%d %d", &first, &last) >= 2) {
+                ad.first_frame = first;
+                ad.last_frame = last;
+                ad.loop_frames = 0;
+                ad.fps = 24.0f;
+                // Try to get loop and fps if available
+                sscanf(line.c_str(), "%d %d %d %f", &first, &last, &loop, &fps);
+                if (line.find_first_of("0123456789", line.find_first_not_of("0123456789 \t")) != std::string::npos) {
+                   ad.loop_frames = loop;
+                   ad.fps = fps;
+                }
+                
+                size_t comment_pos = line.find("//");
+                if (comment_pos != std::string::npos) {
+                    std::string comment = line.substr(comment_pos + 2);
+                    comment.erase(0, comment.find_first_not_of(" \t"));
+                    // Take the first word of the comment as name
+                    size_t space_pos = comment.find_first_of(" \t\r\n");
+                    if (space_pos != std::string::npos) {
+                        ad.name = comment.substr(0, space_pos);
+                    } else {
+                        ad.name = comment;
+                    }
+                } else {
+                    ad.name = "unnamed_" + std::to_string(anims.size());
+                }
+                std::cout << " Parsed anim: " << ad.name << " (" << ad.first_frame << "-" << ad.last_frame << ")" << std::endl;
+                anims.push_back(ad);
+            }
+        }
+    }
+    return anims;
+}
+
 // Helper to write data to buffer and return accessor
 cgltf_accessor* create_accessor(cgltf_data* data, cgltf_buffer_view* view, cgltf_type type, cgltf_component_type comp_type, size_t count, size_t offset, bool normalized = false) {
     cgltf_accessor* acc = &data->accessors[data->accessors_count++];
@@ -182,13 +253,47 @@ int main(int argc, char** argv) {
     std::vector<char> buffer(size);
     f.read(buffer.data(), size);
 
+    // Try to load animation.cfg early to know the final animation count for allocation
+    std::string cfg_path = "";
+    std::string input_path = std::string(argv[1]);
+    size_t last_dot_cfg = input_path.find_last_of(".");
+    size_t last_slash_cfg = input_path.find_last_of("\\/");
+    std::string cfg_dir = (last_slash_cfg == std::string::npos) ? "" : input_path.substr(0, last_slash_cfg + 1);
+    
+    std::string model_cfg = (last_dot_cfg != std::string::npos) ? input_path.substr(0, last_dot_cfg) + ".cfg" : input_path + ".cfg";
+    std::string generic_cfg = cfg_dir + "animation.cfg";
+
+    std::vector<AnimationDef> final_anims;
+    if (std::ifstream(model_cfg).good()) {
+        cfg_path = model_cfg;
+    } else if (std::ifstream(generic_cfg).good()) {
+        cfg_path = generic_cfg;
+    }
+
+    if (!cfg_path.empty()) {
+        final_anims = parse_animation_cfg(cfg_path);
+        std::cout << "Successfully loaded " << final_anims.size() << " animations from " << cfg_path << std::endl;
+    } else {
+        std::cout << "No animation config found. Using native IQM animations." << std::endl;
+        iqmanim* iqm_anims_ptr = (iqmanim*)(buffer.data() + header.ofs_anims);
+        for (uint32_t i = 0; i < header.num_anims; ++i) {
+            AnimationDef ad;
+            ad.name = (char*)(buffer.data() + header.ofs_text + iqm_anims_ptr[i].name);
+            ad.first_frame = iqm_anims_ptr[i].first_frame;
+            ad.last_frame = iqm_anims_ptr[i].first_frame + iqm_anims_ptr[i].num_frames - 1;
+            ad.fps = iqm_anims_ptr[i].framerate;
+            if (ad.fps <= 0) ad.fps = 24.0f;
+            final_anims.push_back(ad);
+        }
+    }
+
 
     cgltf_data* out_data = (cgltf_data*)calloc(1, sizeof(cgltf_data));
     out_data->asset.version = (char*)"2.0";
     out_data->asset.generator = (char*)"iqm2glb-custom";
 
     // Pre-calculate and allocate accessors to keep pointers stable
-    size_t total_accessors = header.num_meshes * (header.num_vertexarrays + 1) + header.num_anims * (1 + header.num_joints * 3) + 1; // +1 for IBMs
+    size_t total_accessors = header.num_meshes * (header.num_vertexarrays + 1) + final_anims.size() * (1 + header.num_joints * 3) + 1; // +1 for IBMs
     out_data->accessors = (cgltf_accessor*)calloc(total_accessors, sizeof(cgltf_accessor));
     out_data->accessors_count = 0;
 
@@ -232,13 +337,6 @@ int main(int argc, char** argv) {
     // Pre-calculate world matrices for IBMs
     iqmjoint* iqm_joints = (iqmjoint*)(buffer.data() + header.ofs_joints);
 
-    // Root rotation matrix: -90 deg about X -> maps (x,y,z) to (x,z,-y)
-    // Column-major definition:
-    mat4 rot_x_90 = {0};
-    rot_x_90.m[0] = 1;       // col0: (1, 0, 0, 0)
-    rot_x_90.m[6] = -1;      // col1: (0, 0, -1, 0)
-    rot_x_90.m[9] = 1;       // col2: (0, 1, 0, 0)
-    rot_x_90.m[15] = 1;      // col3: (0, 0, 0, 1)
 
     std::vector<mat4> world_matrices(header.num_joints);
     std::vector<mat4> ibms(header.num_joints);
@@ -405,12 +503,8 @@ int main(int argc, char** argv) {
 
     // Animations - decode actual per-frame data from iqmpose + ofs_frames
     if (header.num_anims > 0 && header.num_frames > 0 && header.num_poses > 0) {
-        out_data->animations_count = header.num_anims;
-        out_data->animations = (cgltf_animation*)calloc(header.num_anims, sizeof(cgltf_animation));
-        
-        // Copy animation metadata out of buffer before it grows
-        std::vector<iqmanim> anims_copy(header.num_anims);
-        memcpy(anims_copy.data(), buffer.data() + header.ofs_anims, header.num_anims * sizeof(iqmanim));
+        out_data->animations_count = final_anims.size();
+        out_data->animations = (cgltf_animation*)calloc(out_data->animations_count, sizeof(cgltf_animation));
         
         std::vector<iqmpose> poses_copy(header.num_poses);
         memcpy(poses_copy.data(), buffer.data() + header.ofs_poses, header.num_poses * sizeof(iqmpose));
@@ -431,23 +525,23 @@ int main(int argc, char** argv) {
         // Copy joints for parent checks
         std::vector<iqmjoint> joints_copy(header.num_joints);
         memcpy(joints_copy.data(), buffer.data() + header.ofs_joints, header.num_joints * sizeof(iqmjoint));
-        
-        // Copy anim names
-        std::vector<std::string> anim_names(header.num_anims);
-        for (uint32_t i = 0; i < header.num_anims; ++i) {
-            anim_names[i] = (char*)(buffer.data() + header.ofs_text + anims_copy[i].name);
-        }
-        
-        for (uint32_t i = 0; i < header.num_anims; ++i) {
+
+        for (uint32_t i = 0; i < final_anims.size(); ++i) {
             cgltf_animation* anim = &out_data->animations[i];
-            anim->name = sanitize_name(anim_names[i].c_str());
+            anim->name = sanitize_name(final_anims[i].name.c_str());
             
-            float framerate = anims_copy[i].framerate;
-            uint32_t num_frames = anims_copy[i].num_frames;
-            uint32_t first_frame = anims_copy[i].first_frame;
+            float framerate = final_anims[i].fps;
+            int first_f = final_anims[i].first_frame;
+            int last_f = final_anims[i].last_frame;
+            uint32_t num_frames = (last_f >= first_f) ? (last_f - first_f + 1) : 0;
+
+            if (num_frames == 0) {
+                std::cout << "Warning: Animation " << anim->name << " has 0 frames. Skipping." << std::endl;
+                continue;
+            }
 
             std::vector<float> anim_timestamps(num_frames);
-            for(uint32_t f=0; f<num_frames; ++f) anim_timestamps[f] = f / (framerate > 0 ? framerate : 24.0f);
+            for(uint32_t f=0; f<num_frames; ++f) anim_timestamps[f] = f / framerate;
             
             size_t ts_offset = buffer.size();
             buffer.insert(buffer.end(), (char*)anim_timestamps.data(), (char*)(anim_timestamps.data() + anim_timestamps.size()));
@@ -487,7 +581,10 @@ int main(int argc, char** argv) {
                 
                 for (uint32_t f = 0; f < num_frames; ++f) {
                     // Walk through frame data to find this joint's channels
-                    const unsigned short* frame_ptr = frames_copy.data() + (first_frame + f) * frame_channels;
+                    int frame_idx = first_f + f;
+                    if (frame_idx >= (int)header.num_frames) frame_idx = header.num_frames - 1; // Clamp
+
+                    const unsigned short* frame_ptr = frames_copy.data() + frame_idx * frame_channels;
                     
                     // Skip past preceding joints' data for this frame
                     uint32_t channel_idx = 0;
