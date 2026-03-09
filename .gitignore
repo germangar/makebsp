@@ -27,6 +27,10 @@ iqm2glb/tris.glb
 iqm2glb/tris.iqm
 iqm2glb/default.skin
 iqm2glb/animation.cfg
+iqm2glb/skmodel2/
+iqm2glb/skmviewer/
+iqm2glb/bigvic_iqm
+iqm2glb/bigvic_skp
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/

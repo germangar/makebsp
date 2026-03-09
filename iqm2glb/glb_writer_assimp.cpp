@@ -202,7 +202,7 @@ bool write_glb_assimp(const Model& model, const char* filename) {
                 chan->mScalingKeys = new aiVectorKey[num_keys];
                 
                 for (uint32_t k = 0; k < num_keys; k++) {
-                    uint32_t frame_idx = ad.first_frame + k;
+                    uint32_t frame_idx = std::min(ad.first_frame + k, model.num_frames - 1);
                     float* frame = (float*)&model.frames[frame_idx * model.num_framechannels + j * 10];
                     double time = (double)k;
                     

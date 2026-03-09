@@ -16,7 +16,8 @@ SRCS   = main.cpp \
          cgltf_impl.cpp \
          cgltf_write_impl.cpp \
          glb_writer_assimp.cpp \
-         glb_loader_assimp.cpp
+         glb_loader_assimp.cpp \
+         skp_loader.cpp
 
 # Map source files to object files in the obj directory
 OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o))

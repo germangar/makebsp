@@ -5,13 +5,14 @@
 #include "anim_cfg.h"
 #include "glb_loader.h"
 #include "glb_loader_assimp.h"
+#include "skp_loader.h"
 #include "iqm_writer.h"
 #include "glb_writer.h"
 #include "glb_writer_assimp.h"
 
 int main(int argc, char** argv) {
     if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb> <output.glb/iqm>\n";
+        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm>\n";
         return 1;
     }
 
@@ -55,6 +56,22 @@ int main(int argc, char** argv) {
             return 3;
         }
         */
+    } else if (ends_with(in_path, ".skm") || ends_with(in_path, ".skp")) {
+        Model model;
+        std::cout << "Loading SKM/SKP: " << argv[1] << "..." << std::endl;
+        if (!load_skm(argv[1], model)) {
+            std::cerr << "Failed to load SKM/SKP: " << argv[1] << "\n";
+            return 2;
+        }
+        std::cout << "Loaded SKM/SKP (" << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames)" << std::endl;
+        std::cout << "Parsed " << model.animations.size() << " animations" << std::endl;
+
+        // Option 1: Assimp-based GLB Writer
+        std::cout << "Writing GLB (Assimp): " << argv[2] << "..." << std::endl;
+        if (!write_glb_assimp(model, argv[2])) {
+            std::cerr << "Failed to write GLB (Assimp): " << argv[2] << "\n";
+            return 3;
+        }
     } else if (ends_with(in_path, ".glb") || ends_with(in_path, ".gltf")) {
         Model model;
         
