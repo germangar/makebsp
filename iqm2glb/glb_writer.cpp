@@ -132,15 +132,15 @@ bool write_glb(const Model& model, const char* output_path) {
         prim->attributes[4].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec4, cgltf_component_type_r_32f, model.meshes[i].num_vertexes, weight_off + model.meshes[i].first_vertex*4*4);
 
         // Indices
-        std::vector<uint32_t> flipped(model.meshes[i].num_triangles * 3);
+        std::vector<uint32_t> standard_indices(model.meshes[i].num_triangles * 3);
         for(uint32_t t=0; t<model.meshes[i].num_triangles; ++t) {
-            flipped[t*3+0] = model.indices[model.meshes[i].first_triangle*3 + t*3+0] - model.meshes[i].first_vertex;
-            flipped[t*3+1] = model.indices[model.meshes[i].first_triangle*3 + t*3+2] - model.meshes[i].first_vertex; // flip
-            flipped[t*3+2] = model.indices[model.meshes[i].first_triangle*3 + t*3+1] - model.meshes[i].first_vertex; // flip
+            standard_indices[t*3+0] = model.indices[model.meshes[i].first_triangle*3 + t*3+0] - model.meshes[i].first_vertex;
+            standard_indices[t*3+1] = model.indices[model.meshes[i].first_triangle*3 + t*3+1] - model.meshes[i].first_vertex;
+            standard_indices[t*3+2] = model.indices[model.meshes[i].first_triangle*3 + t*3+2] - model.meshes[i].first_vertex;
         }
         size_t off = buf.size();
-        append_to_buffer(buf, &out->buffers[0], flipped.data(), flipped.size()*4);
-        prim->indices = alloc_accessor(out, &out->buffer_views[1], cgltf_type_scalar, cgltf_component_type_r_32u, flipped.size(), off - out->buffer_views[1].offset);
+        append_to_buffer(buf, &out->buffers[0], standard_indices.data(), standard_indices.size()*4);
+        prim->indices = alloc_accessor(out, &out->buffer_views[1], cgltf_type_scalar, cgltf_component_type_r_32u, standard_indices.size(), off - out->buffer_views[1].offset);
     }
     out->buffer_views[1].size = buf.size() - out->buffer_views[1].offset;
 

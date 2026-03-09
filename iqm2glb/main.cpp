@@ -3,9 +3,11 @@
 #include <algorithm>
 #include "iqm_loader.h"
 #include "anim_cfg.h"
-#include "glb_writer.h"
 #include "glb_loader.h"
+#include "glb_loader_assimp.h"
 #include "iqm_writer.h"
+#include "glb_writer.h"
+#include "glb_writer_assimp.h"
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -38,15 +40,37 @@ int main(int argc, char** argv) {
             std::cout << "Parsed " << model.animations.size() << " animations" << std::endl;
         }
 
-        std::cout << "Writing GLB: " << argv[2] << "..." << std::endl;
-        if (!write_glb(model, argv[2])) {
-            std::cerr << "Failed to write GLB: " << argv[2] << "\n";
+        // Option 1: Assimp-based GLB Writer (Default: Supports skeletal animations, PBR)
+        std::cout << "Writing GLB (Assimp): " << argv[2] << "..." << std::endl;
+        if (!write_glb_assimp(model, argv[2])) {
+            std::cerr << "Failed to write GLB (Assimp): " << argv[2] << "\n";
             return 3;
         }
+
+        /*
+        // Option 2: Original cgltf-based GLB Writer (Lighter, no animation support)
+        std::cout << "Writing GLB (cgltf): " << argv[2] << "..." << std::endl;
+        if (!write_glb(model, argv[2])) {
+            std::cerr << "Failed to write GLB (cgltf): " << argv[2] << "\n";
+            return 3;
+        }
+        */
     } else if (ends_with(in_path, ".glb") || ends_with(in_path, ".gltf")) {
         Model model;
+        
+        /*
+        // Option 1: cgltf-based GLB Loader (Default: Lean, fast)
+        std::cout << "Loading GLB (cgltf): " << argv[1] << "..." << std::endl;
         if (!load_glb(argv[1], model)) {
-            std::cerr << "Failed to load GLB: " << argv[1] << "\n";
+            std::cerr << "Failed to load GLB (cgltf): " << argv[1] << "\n";
+            return 4;
+        }
+        */
+
+        // Option 2: Assimp-based GLB Loader (Heavier, but robust & supports other formats)
+        std::cout << "Loading GLB (Assimp): " << argv[1] << "..." << std::endl;
+        if (!load_glb_assimp(argv[1], model)) {
+            std::cerr << "Failed to load GLB (Assimp): " << argv[1] << "\n";
             return 4;
         }
 

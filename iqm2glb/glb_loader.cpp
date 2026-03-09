@@ -67,24 +67,54 @@ bool load_glb(const char* path, Model& out) {
     if (result != cgltf_result_success) return false;
 
     result = cgltf_load_buffers(&options, data, path);
-    if (result != cgltf_result_success) { cgltf_free(data); return false; }
+    if (result != cgltf_result_success) { 
+        std::cerr << "cgltf_load_buffers failed for: " << path << std::endl;
+        cgltf_free(data); 
+        return false; 
+    }
 
+    std::cout << "GLB Nodes: " << data->nodes_count << ", Skins: " << data->skins_count << std::endl;
+
+    // 1. Build Full Hierarchy (All Nodes)
     std::map<cgltf_node*, int> node_to_joint;
+    out.joints.clear();
+    
+    // First pass: create all joints from all nodes to preserve hierarchy
+    for (size_t i = 0; i < data->nodes_count; ++i) {
+        cgltf_node* node = &data->nodes[i];
+        node_to_joint[node] = (int)out.joints.size();
+        
+        Joint j;
+        j.name = node->name ? node->name : "node_" + std::to_string(i);
+        j.parent = -1; // Will set in second pass
+        
+        float t[3] = {0,0,0}, r[4] = {0,0,0,1}, s[3] = {1,1,1};
+        if (node->has_translation) memcpy(t, node->translation, 12);
+        if (node->has_rotation) memcpy(r, node->rotation, 16);
+        if (node->has_scale) memcpy(s, node->scale, 12);
+        memcpy(j.translate, t, 12); memcpy(j.rotate, r, 16); memcpy(j.scale, s, 12);
+        
+        out.joints.push_back(j);
+    }
+    
+    // Second pass: set parent relationships
+    for (size_t i = 0; i < data->nodes_count; ++i) {
+        cgltf_node* node = &data->nodes[i];
+        if (node->parent) {
+            out.joints[i].parent = node_to_joint[node->parent];
+        }
+    }
+
+    // 2. Load IBMs if a skin exists
     if (data->skins_count > 0) {
         cgltf_skin* skin = &data->skins[0];
-        out.joints.resize(skin->joints_count);
-        for (size_t i = 0; i < skin->joints_count; ++i) {
-            node_to_joint[skin->joints[i]] = (int)i;
-            out.joints[i].name = skin->joints[i]->name ? skin->joints[i]->name : "joint_" + std::to_string(i);
-        }
-        for (size_t i = 0; i < skin->joints_count; ++i) {
-            cgltf_node* node = skin->joints[i];
-            out.joints[i].parent = (node->parent && node_to_joint.count(node->parent)) ? node_to_joint[node->parent] : -1;
-            float t[3] = {0,0,0}, r[4] = {0,0,0,1}, s[3] = {1,1,1};
-            if (node->has_translation) memcpy(t, node->translation, 12);
-            if (node->has_rotation) memcpy(r, node->rotation, 16);
-            if (node->has_scale) memcpy(s, node->scale, 12);
-            memcpy(out.joints[i].translate, t, 12); memcpy(out.joints[i].rotate, r, 16); memcpy(out.joints[i].scale, s, 12);
+        out.ibms.assign(out.joints.size(), mat4_identity()); // Default to identity
+        
+        if (skin->inverse_bind_matrices) {
+            for (size_t i = 0; i < skin->joints_count; ++i) {
+                int jidx = node_to_joint[skin->joints[i]];
+                cgltf_accessor_read_float(skin->inverse_bind_matrices, i, (float*)&out.ibms[jidx], 16);
+            }
         }
     }
 
@@ -120,9 +150,16 @@ bool load_glb(const char* path, Model& out) {
                         cgltf_accessor_read_float(attr->data, v, &out.texcoords[(mesh.first_vertex + v)*2], 2);
                 } else if (attr->type == cgltf_attribute_type_joints) {
                     out.joints_0.resize(mesh.first_vertex * 4 + vertex_count * 4);
+                    cgltf_skin* skin = (data->skins_count > 0) ? &data->skins[0] : nullptr;
                     for (size_t v = 0; v < vertex_count; ++v) {
                         uint32_t id[4]; cgltf_accessor_read_uint(attr->data, v, id, 4);
-                        for(int b=0; b<4; ++b) out.joints_0[(mesh.first_vertex + v)*4 + b] = (uint8_t)id[b];
+                        for(int b=0; b<4; ++b) {
+                            if (skin && id[b] < skin->joints_count) {
+                                out.joints_0[(mesh.first_vertex + v)*4 + b] = (uint8_t)node_to_joint[skin->joints[id[b]]];
+                            } else {
+                                out.joints_0[(mesh.first_vertex + v)*4 + b] = (uint8_t)id[b];
+                            }
+                        }
                     }
                 } else if (attr->type == cgltf_attribute_type_weights) {
                     out.weights_0.resize(mesh.first_vertex * 4 + vertex_count * 4);
@@ -136,8 +173,8 @@ bool load_glb(const char* path, Model& out) {
                 out.indices.resize(mesh.first_triangle * 3 + index_count);
                 for (size_t v = 0; v < index_count; v += 3) {
                     out.indices[mesh.first_triangle*3 + v + 0] = (uint32_t)cgltf_accessor_read_index(prim->indices, v + 0) + mesh.first_vertex;
-                    out.indices[mesh.first_triangle*3 + v + 1] = (uint32_t)cgltf_accessor_read_index(prim->indices, v + 2) + mesh.first_vertex;
-                    out.indices[mesh.first_triangle*3 + v + 2] = (uint32_t)cgltf_accessor_read_index(prim->indices, v + 1) + mesh.first_vertex;
+                    out.indices[mesh.first_triangle*3 + v + 1] = (uint32_t)cgltf_accessor_read_index(prim->indices, v + 1) + mesh.first_vertex;
+                    out.indices[mesh.first_triangle*3 + v + 2] = (uint32_t)cgltf_accessor_read_index(prim->indices, v + 2) + mesh.first_vertex;
                 }
                 mesh.num_triangles = index_count / 3;
             }
@@ -164,7 +201,7 @@ bool load_glb(const char* path, Model& out) {
             cgltf_animation* anim = &data->animations[i];
             float max_t = 0;
             for (size_t j = 0; j < anim->channels_count; ++j) max_t = std::max(max_t, anim->channels[j].sampler->input->max[0]);
-            uint32_t nf = (uint32_t)ceilf(max_t * fps) + 1;
+            uint32_t nf = (uint32_t)std::round(max_t * fps) + 1;
             
             AnimationDef ad;
             ad.name = anim->name ? anim->name : "anim_" + std::to_string(i);
@@ -187,7 +224,7 @@ bool load_glb(const char* path, Model& out) {
                     memcpy(ro, out.joints[ji].rotate, 16);
                     memcpy(sc, out.joints[ji].scale, 12);
                     
-                    cgltf_node* node = data->skins[0].joints[ji];
+                    cgltf_node* node = &data->nodes[ji];
                     for (size_t ci = 0; ci < anim->channels_count; ++ci) {
                         cgltf_animation_channel* chan = &anim->channels[ci];
                         if (chan->target_node != node) continue;
@@ -207,7 +244,9 @@ bool load_glb(const char* path, Model& out) {
         out.num_frames = total_frames;
     }
 
-    out.compute_bind_pose();
+    if (out.ibms.empty()) {
+        out.compute_bind_pose();
+    }
     cgltf_free(data);
     return true;
 }

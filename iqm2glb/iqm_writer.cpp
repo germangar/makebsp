@@ -35,6 +35,7 @@ bool write_iqm(const Model& model, const char* output_path) {
         
         float t[3]; memcpy(t, model.joints[i].translate, 12);
         float r[4]; memcpy(r, model.joints[i].rotate, 16);
+        quat_normalize(r);
         
         if (model.joints[i].parent == -1) {
             // Root Translation: (x, y, z) -> (x, -z, y)
@@ -93,15 +94,20 @@ bool write_iqm(const Model& model, const char* output_path) {
                 
                 float vals[10]; memcpy(vals, fin, 40);
                 
+                // Always normalize rotations to prevent drift/mashup
+                float r[4] = {vals[3], vals[4], vals[5], vals[6]};
+                quat_normalize(r);
+                vals[3] = r[0]; vals[4] = r[1]; vals[5] = r[2]; vals[6] = r[3];
+
                 if (model.joints[ji].parent == -1) {
                     // Root Translation: (x, y, z) -> (x, -z, y)
                     float tx = vals[0], ty = vals[1], tz = vals[2];
                     vals[0] = tx; vals[1] = -tz; vals[2] = ty;
                     
                     // Root Rotation: pre-multiply by +90X
-                    float r[4] = {vals[3], vals[4], vals[5], vals[6]};
+                    float r_val[4] = {vals[3], vals[4], vals[5], vals[6]};
                     float r_new[4];
-                    quat_mul(q_rot_inv, r, r_new);
+                    quat_mul(q_rot_inv, r_val, r_new);
                     quat_normalize(r_new);
                     vals[3] = r_new[0]; vals[4] = r_new[1]; vals[5] = r_new[2]; vals[6] = r_new[3];
                 }
@@ -225,8 +231,17 @@ bool write_iqm(const Model& model, const char* output_path) {
     align(4);
     hdr.num_triangles = (uint32_t)model.indices.size() / 3;
     hdr.ofs_triangles = current_offset;
-    f.write((const char*)model.indices.data(), model.indices.size() * 4);
-    current_offset += (uint32_t)(model.indices.size() * 4);
+    
+    // Flip standard CCW winding back to IQM's backward winding
+    std::vector<uint32_t> iqm_indices(model.indices.size());
+    for (uint32_t i = 0; i < hdr.num_triangles; ++i) {
+        iqm_indices[i * 3 + 0] = model.indices[i * 3 + 0];
+        iqm_indices[i * 3 + 1] = model.indices[i * 3 + 2]; // Backward flip
+        iqm_indices[i * 3 + 2] = model.indices[i * 3 + 1]; // Backward flip
+    }
+    
+    f.write((const char*)iqm_indices.data(), iqm_indices.size() * 4);
+    current_offset += (uint32_t)(iqm_indices.size() * 4);
 
     // 5. Joints
     align(4);
@@ -261,6 +276,15 @@ bool write_iqm(const Model& model, const char* output_path) {
     hdr.filesize = current_offset;
     f.seekp(0);
     f.write((const char*)&hdr, sizeof(hdr));
+
+    std::cout << "IQM Stats:" << std::endl;
+    std::cout << "  Joints: " << hdr.num_joints << " (Offset: " << hdr.ofs_joints << ")" << std::endl;
+    std::cout << "  Meshes: " << hdr.num_meshes << " (Offset: " << hdr.ofs_meshes << ")" << std::endl;
+    std::cout << "  Vertices: " << hdr.num_vertexes << " (VA Offset: " << hdr.ofs_vertexarrays << ")" << std::endl;
+    std::cout << "  Triangles: " << hdr.num_triangles << " (Offset: " << hdr.ofs_triangles << ")" << std::endl;
+    std::cout << "  Animations: " << hdr.num_anims << " (Offset: " << hdr.ofs_anims << ")" << std::endl;
+    std::cout << "  Frames: " << hdr.num_frames << " (Offset: " << hdr.ofs_frames << ")" << std::endl;
+    std::cout << "  Total Filesize: " << hdr.filesize << " bytes" << std::endl;
 
     // 6. Write animation.cfg
     if (!model.animations.empty()) {

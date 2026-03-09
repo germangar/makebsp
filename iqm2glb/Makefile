@@ -1,8 +1,8 @@
 # iqm2glb Makefile
 
 CXX      = g++
-CXXFLAGS = -O2 -Wall -std=c++17
-LDFLAGS  =
+CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/assimp/include
+LDFLAGS  = -L../libs/assimp/lib -lassimp -lzlibstatic
 
 TARGET = iqm2glb.exe
 OBJDIR = obj
@@ -14,7 +14,9 @@ SRCS   = main.cpp \
          glb_loader.cpp \
          iqm_writer.cpp \
          cgltf_impl.cpp \
-         cgltf_write_impl.cpp
+         cgltf_write_impl.cpp \
+         glb_writer_assimp.cpp \
+         glb_loader_assimp.cpp
 
 # Map source files to object files in the obj directory
 OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o))
@@ -26,7 +28,7 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lstdc++
 
 # Rule for compiling .cpp to .o inside OBJDIR
 $(OBJDIR)/%.o: %.cpp

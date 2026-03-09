@@ -10,6 +10,7 @@ bool load_iqm(const char* path, Model& out) {
     iqmheader hdr;
     f.read((char*)&hdr, sizeof(hdr));
     if (std::memcmp(hdr.magic, IQM_MAGIC, 16) != 0) return false;
+    
 
     f.seekg(0, std::ios::end);
     size_t file_size = f.tellg();
@@ -103,7 +104,12 @@ bool load_iqm(const char* path, Model& out) {
     // Indices
     out.indices.resize(hdr.num_triangles * 3);
     if (hdr.num_triangles > 0) {
-        memcpy(out.indices.data(), buffer.data() + hdr.ofs_triangles, hdr.num_triangles * 3 * sizeof(uint32_t));
+        const uint32_t* iqm_indices = (const uint32_t*)(buffer.data() + hdr.ofs_triangles);
+        for (uint32_t i = 0; i < hdr.num_triangles; ++i) {
+            out.indices[i * 3 + 0] = iqm_indices[i * 3 + 0];
+            out.indices[i * 3 + 1] = iqm_indices[i * 3 + 2]; // Standard-CCW flip
+            out.indices[i * 3 + 2] = iqm_indices[i * 3 + 1]; // Standard-CCW flip
+        }
     }
 
     // Animations (Unpack dense Y-up frames)
