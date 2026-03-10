@@ -404,6 +404,14 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             stack->properties().insert(new Fbx::Property(in.animations[ai].name + std::string("\x00\x01", 2) + "AnimStack"));
             stack->properties().insert(new Fbx::Property(""));
             
+            Fbx::Record* s_props70 = new Fbx::Record("Properties70", stack);
+            int64_t start_time = 0;
+            int64_t end_time = (int64_t)(in.animations[ai].last_frame - in.animations[ai].first_frame) * KTIME_ONE_SECOND / (int64_t)(in.animations[ai].fps > 0 ? in.animations[ai].fps : BASE_FPS);
+            add_prop70(s_props70, "LocalStart", "KTime", "Time", "", start_time);
+            add_prop70(s_props70, "LocalStop", "KTime", "Time", "", end_time);
+            add_prop70(s_props70, "ReferenceStart", "KTime", "Time", "", start_time);
+            add_prop70(s_props70, "ReferenceStop", "KTime", "Time", "", end_time);
+            
             Fbx::Record* layer = new Fbx::Record("AnimationLayer", objs);
             layer->properties().insert(new Fbx::Property(link.layer_id));
             layer->properties().insert(new Fbx::Property("BaseLayer" + std::string("\x00\x01", 2) + "AnimLayer"));
