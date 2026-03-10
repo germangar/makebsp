@@ -28,12 +28,13 @@ std::string find_animation_cfg(const std::string& iqm_path) {
 std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
     std::vector<AnimationDef> anims;
 
-    // Hardcoded leading animations
-    anims.push_back({"base",       0,  0,  0, 30.0f});
-    anims.push_back({"STAND_IDLE", 1, 39, 0, 30.0f});
-
     std::ifstream f(path);
-    if (!f.is_open()) return anims;
+    if (!f.is_open()) {
+        // Fallback: Hardcoded leading animations only if no file
+        anims.push_back({"base",       0,  0,  0, 30.0f});
+        anims.push_back({"STAND_IDLE", 1, 39, 0, 30.0f});
+        return anims;
+    }
 
     std::string line;
     while (std::getline(f, line)) {
@@ -83,6 +84,11 @@ std::vector<AnimationDef> parse_animation_cfg(const std::string& path) {
         }
 
         anims.push_back(ad);
+    }
+
+    // Ensure we have at least one "base" animation if file was empty
+    if (anims.empty()) {
+        anims.push_back({"base", 0, 0, 0, 30.0f});
     }
 
     return anims;
