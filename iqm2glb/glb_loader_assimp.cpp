@@ -152,7 +152,7 @@ bool load_glb_assimp(const char* path, Model& out) {
 
     // 3. Animations
     out.num_framechannels = (uint32_t)out.joints.size() * 10;
-    float fps = 30.0f;
+    float fps = BASE_FPS;
     for (unsigned int i = 0; i < scene->mNumAnimations; ++i) {
         aiAnimation* anim = scene->mAnimations[i];
         AnimationDef ad;

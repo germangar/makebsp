@@ -1,4 +1,5 @@
 #pragma once
+#define BASE_FPS 30.0f
 #include <string>
 #include <vector>
 #include <cstdint>

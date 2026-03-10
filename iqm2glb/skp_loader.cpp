@@ -269,7 +269,7 @@ bool load_skm(const char* path, Model& out) {
         ad.name = "all";
         ad.first_frame = 0;
         ad.last_frame = num_frames - 1;
-        ad.fps = 24.0f;
+        ad.fps = BASE_FPS;
         ad.loop_frames = 0;
         out.animations.push_back(ad);
     }

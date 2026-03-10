@@ -196,7 +196,7 @@ bool load_glb(const char* path, Model& out) {
         }
 
         uint32_t total_frames = 0;
-        float fps = 24.0f;
+        float fps = BASE_FPS;
         for (size_t i = 0; i < data->animations_count; ++i) {
             cgltf_animation* anim = &data->animations[i];
             float max_t = 0;

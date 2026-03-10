@@ -179,7 +179,7 @@ bool load_iqm(const char* path, Model& out) {
             ad.name = text_pool + iqm_anims[i].name;
             ad.first_frame = iqm_anims[i].first_frame;
             ad.last_frame = iqm_anims[i].first_frame + iqm_anims[i].num_frames - 1;
-            ad.fps = (iqm_anims[i].framerate > 0.0f) ? iqm_anims[i].framerate : 30.0f;
+            ad.fps = (iqm_anims[i].framerate > 0.0f) ? iqm_anims[i].framerate : BASE_FPS;
             ad.loop_frames = (iqm_anims[i].flags & IQM_LOOP) ? 1 : 0;
             out.animations.push_back(ad);
         }
