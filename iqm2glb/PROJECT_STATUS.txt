@@ -1,0 +1,36 @@
+# IQM2GLB PROJECT STATUS
+
+## 1. Project Overview
+A bidirectional model converter for Quake-family games (Warsow/Sovereign).
+Originally designed for IQM -> GLB, now supports multiple formats and deep hierarchy preservation.
+
+## 2. Supported Formats
+- **IQM**: Inter-Quake Model (Z-up, "Backward" CW winding).
+- **GLB/GLTF**: GL Transmission Format (Y-up, Standard CCW winding).
+- **SKM/SKP**: Warsow legacy skeletal format (Z-up, "Backward" CW winding).
+- **Universal**: Assimp-based loading/saving for future format support (OBJ, FBX, etc).
+
+## 3. Internal Representation (Intermediate Model)
+To maintain consistency across converters, all loaders/writers must adhere to:
+- **Coordinate System**: Y-up (Right-Handed).
+- **Winding Order**: Standard CCW (Counter-Clockwise).
+- **Animation**: Sample-based dense frames at 30 FPS (default).
+
+## 4. Loader/Writer Capabilities
+### Loaders:
+- **cgltf**: Fast, lean GLB/GLTF loading.
+- **Assimp**: Robust, handles complex hierarchy and sampling normalization.
+- **SKP**: Specialized loader for legacy SKM/SKP pairs.
+- **IQM**: Native IQM loader with Z-up to Y-up conversion and winding correction.
+
+### Writers:
+- **cgltf (Standard)**: Original fast GLB writer, normalized for CCW.
+- **Assimp (Universal)**: New robust GLB writer.
+- **IQM**: Native writer with Y-up to Z-up conversion and winding reversal (CCW -> CW).
+
+## 5. Critical Implementation Details
+- **Frame Drift Fix**: Use `std::round(max_t * fps) + 1` for frame count calculation to avoid floating-point inflation.
+- **GLTF Duration**: Animations must have duration > 0. For 1-frame animations, set duration to 0.001.
+- **Hierarchy Restoration**: GLB loader restores the full node tree (not just joints) to preserve animation roots.
+- **IBM Handling**: Inverse Bind Matrices (IBMs) are loaded directly from GLB to ensure skinning stability.
+- **Winding**: Internal state is strictly **Y-up CCW**. Formats like IQM are flipped during Load/Save to match.
