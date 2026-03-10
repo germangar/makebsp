@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <vector>
 #include "iqm_loader.h"
 #include "anim_cfg.h"
 #include "glb_loader.h"
@@ -9,10 +10,11 @@
 #include "iqm_writer.h"
 #include "glb_writer.h"
 #include "glb_writer_assimp.h"
+#include "fbx_writer.h"
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm>\n";
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm/fbx> [--base] [--anim]\n";
         return 1;
     }
 
@@ -25,79 +27,59 @@ int main(int argc, char** argv) {
                [](char a, char b) { return std::tolower(a) == std::tolower(b); });
     };
 
+    Model model;
+    bool loaded = false;
+
+    // Load Phase
     if (ends_with(in_path, ".iqm")) {
-        Model model;
-        std::cout << "Loading IQM: " << argv[1] << "..." << std::endl;
-        if (!load_iqm(argv[1], model)) {
-            std::cerr << "Failed to load IQM: " << argv[1] << "\n";
-            return 2;
+        std::cout << "Loading IQM: " << in_path << "..." << std::endl;
+        if (load_iqm(in_path.c_str(), model)) {
+            loaded = true;
+            std::string cfg_path = find_animation_cfg(in_path);
+            if (!cfg_path.empty()) {
+                std::cout << "Found animation config: " << cfg_path << std::endl;
+                model.animations = parse_animation_cfg(cfg_path);
+            }
         }
-        std::cout << "Loaded IQM (" << model.meshes.size() << " meshes, " << model.joints.size() << " joints)" << std::endl;
-
-        std::string cfg_path = find_animation_cfg(argv[1]);
-        if (!cfg_path.empty()) {
-            std::cout << "Found animation config: " << cfg_path << std::endl;
-            model.animations = parse_animation_cfg(cfg_path);
-            std::cout << "Parsed " << model.animations.size() << " animations" << std::endl;
-        }
-
-        // Option 1: Assimp-based GLB Writer (Default: Supports skeletal animations, PBR)
-        std::cout << "Writing GLB (Assimp): " << argv[2] << "..." << std::endl;
-        if (!write_glb_assimp(model, argv[2])) {
-            std::cerr << "Failed to write GLB (Assimp): " << argv[2] << "\n";
-            return 3;
-        }
-
-        /*
-        // Option 2: Original cgltf-based GLB Writer (Lighter, no animation support)
-        std::cout << "Writing GLB (cgltf): " << argv[2] << "..." << std::endl;
-        if (!write_glb(model, argv[2])) {
-            std::cerr << "Failed to write GLB (cgltf): " << argv[2] << "\n";
-            return 3;
-        }
-        */
     } else if (ends_with(in_path, ".skm") || ends_with(in_path, ".skp")) {
-        Model model;
-        std::cout << "Loading SKM/SKP: " << argv[1] << "..." << std::endl;
-        if (!load_skm(argv[1], model)) {
-            std::cerr << "Failed to load SKM/SKP: " << argv[1] << "\n";
-            return 2;
-        }
-        std::cout << "Loaded SKM/SKP (" << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames)" << std::endl;
-        std::cout << "Parsed " << model.animations.size() << " animations" << std::endl;
-
-        // Option 1: Assimp-based GLB Writer
-        std::cout << "Writing GLB (Assimp): " << argv[2] << "..." << std::endl;
-        if (!write_glb_assimp(model, argv[2])) {
-            std::cerr << "Failed to write GLB (Assimp): " << argv[2] << "\n";
-            return 3;
-        }
+        std::cout << "Loading SKM/SKP: " << in_path << "..." << std::endl;
+        if (load_skm(in_path.c_str(), model)) loaded = true;
     } else if (ends_with(in_path, ".glb") || ends_with(in_path, ".gltf")) {
-        Model model;
-        
-        /*
-        // Option 1: cgltf-based GLB Loader (Default: Lean, fast)
-        std::cout << "Loading GLB (cgltf): " << argv[1] << "..." << std::endl;
-        if (!load_glb(argv[1], model)) {
-            std::cerr << "Failed to load GLB (cgltf): " << argv[1] << "\n";
-            return 4;
-        }
-        */
+        std::cout << "Loading GLB (cgltf): " << in_path << "..." << std::endl;
+        if (load_glb(in_path.c_str(), model)) loaded = true;
+    }
 
-        // Option 2: Assimp-based GLB Loader (Heavier, but robust & supports other formats)
-        std::cout << "Loading GLB (Assimp): " << argv[1] << "..." << std::endl;
-        if (!load_glb_assimp(argv[1], model)) {
-            std::cerr << "Failed to load GLB (Assimp): " << argv[1] << "\n";
-            return 4;
+    if (!loaded) {
+        std::cerr << "Failed to load input file or unsupported format: " << in_path << "\n";
+        return 2;
+    }
+
+    std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
+
+    // Write Phase
+    if (ends_with(out_path, ".iqm")) {
+        std::cout << "Writing IQM: " << out_path << "..." << std::endl;
+        if (!write_iqm(model, out_path.c_str())) return 3;
+    } else if (ends_with(out_path, ".fbx")) {
+        bool write_base = true;
+        bool write_anim = true;
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--base") write_anim = false;
+            if (arg == "--anim") write_base = false;
         }
 
-        if (!write_iqm(model, argv[2])) {
-            std::cerr << "Failed to write IQM: " << argv[2] << "\n";
-            return 5;
-        }
+        if (write_base && !write_anim) std::cout << "Writing FBX (Base Pose only): " << out_path << "..." << std::endl;
+        else if (!write_base && write_anim) std::cout << "Writing FBX (Animations only): " << out_path << "..." << std::endl;
+        else std::cout << "Writing FBX (Complete): " << out_path << "..." << std::endl;
+
+        if (!write_fbx(out_path.c_str(), model, write_base, write_anim)) return 3;
+    } else if (ends_with(out_path, ".glb")) {
+        std::cout << "Writing GLB (cgltf): " << out_path << "..." << std::endl;
+        if (!write_glb(model, out_path.c_str())) return 3;
     } else {
-        std::cerr << "Unsupported file format. Use .iqm or .glb/.gltf\n";
-        return 6;
+        std::cerr << "Unsupported output format: " << out_path << "\n";
+        return 4;
     }
 
     return 0;

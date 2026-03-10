@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 
 if "%~1" == "" (
-    echo Usage: Drag and drop an .iqm or .glb/.gltf file onto this script, or run:
-    echo %~nx0 ^<input_file^>
+    echo Usage: Drag and drop an .iqm file onto this script, or run:
+    echo %~nx0 ^<input_file.iqm^>
     pause
     exit /b 1
 )
@@ -12,30 +12,36 @@ set "INPUT=%~1"
 set "EXT=%~x1"
 
 if /i "%EXT%" == ".iqm" (
-    set "OUTPUT=%~dpn1.glb"
-) else if /i "%EXT%" == ".glb" (
-    set "OUTPUT=%~dpn1.iqm"
-) else if /i "%EXT%" == ".gltf" (
-    set "OUTPUT=%~dpn1.iqm"
+    set "OUTPUT_GLB=%~dpn1.glb"
+    set "OUTPUT_FBX=%~dpn1.fbx"
 ) else (
-    echo Error: Unsupported file extension "%EXT%".
-    echo Please use .iqm, .glb, or .gltf
+    echo Error: For this test environment, please use .iqm files.
     pause
     exit /b 1
 )
 
 echo Converting: %INPUT%
-echo To:         %OUTPUT%
+echo To GLB:     %OUTPUT_GLB%
+echo To FBX:     %OUTPUT_FBX%
 echo.
 
-"%~dp0iqm2glb.exe" "%INPUT%" "%OUTPUT%"
+"%~dp0iqm2glb.exe" "%INPUT%" "%OUTPUT_GLB%"
+set GLB_ERR=!ERRORLEVEL!
 
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo Conversion FAILED with error code %ERRORLEVEL%.
+"%~dp0iqm2glb.exe" "%INPUT%" "%OUTPUT_FBX%"
+set FBX_ERR=!ERRORLEVEL!
+
+echo.
+if !GLB_ERR! NEQ 0 (
+    echo GLB Conversion FAILED with error code !GLB_ERR!.
 ) else (
-    echo.
-    echo Conversion SUCCESSFUL: %OUTPUT% generated.
+    echo GLB Conversion SUCCESSFUL: %OUTPUT_GLB% generated.
+)
+
+if !FBX_ERR! NEQ 0 (
+    echo FBX Conversion FAILED with error code !FBX_ERR!.
+) else (
+    echo FBX Conversion SUCCESSFUL: %OUTPUT_FBX% generated.
 )
 
 pause

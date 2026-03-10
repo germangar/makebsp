@@ -31,6 +31,28 @@ inline void quat_mul(const float* a, const float* b, float* r) {
     r[0] = x; r[1] = y; r[2] = z; r[3] = w;
 }
 
+// Convert quaternion to Euler angles (XYZ order) in degrees
+inline void quat_to_euler(const float* q, float* euler) {
+    float x = q[0], y = q[1], z = q[2], w = q[3];
+    
+    // roll (x-axis rotation)
+    float sinr_cosp = 2.0f * (w * x + y * z);
+    float cosr_cosp = 1.0f - 2.0f * (x * x + y * y);
+    euler[0] = std::atan2(sinr_cosp, cosr_cosp) * 180.0f / 3.14159265f;
+
+    // pitch (y-axis rotation)
+    float sinp = 2.0f * (w * y - z * x);
+    if (std::abs(sinp) >= 1.0f)
+        euler[1] = std::copysign(3.14159265f / 2.0f, sinp) * 180.0f / 3.14159265f; // use 90 degrees if out of range
+    else
+        euler[1] = std::asin(sinp) * 180.0f / 3.14159265f;
+
+    // yaw (z-axis rotation)
+    float siny_cosp = 2.0f * (w * z + x * y);
+    float cosy_cosp = 1.0f - 2.0f * (y * y + z * z);
+    euler[2] = std::atan2(siny_cosp, cosy_cosp) * 180.0f / 3.14159265f;
+}
+
 inline void quat_rotate_vec(const float* q, const float* v, float* r) {
     float t[3];
     t[0] = 2.0f * (q[1] * v[2] - q[2] * v[1]);

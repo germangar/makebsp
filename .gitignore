@@ -31,6 +31,9 @@ iqm2glb/skmodel2/
 iqm2glb/skmviewer/
 iqm2glb/bigvic_iqm
 iqm2glb/bigvic_skp
+iqm2glb/blender_exporter_src
+ufbx.c
+ufbx.h
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/

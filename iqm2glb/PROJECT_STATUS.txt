@@ -8,6 +8,7 @@ Originally designed for IQM -> GLB, now supports multiple formats and deep hiera
 - **IQM**: Inter-Quake Model (Z-up, "Backward" CW winding).
 - **GLB/GLTF**: GL Transmission Format (Y-up, Standard CCW winding).
 - **SKM/SKP**: Warsow legacy skeletal format (Z-up, "Backward" CW winding).
+- **Binary FBX**: Autodesk FBX (Y-up, Standard CCW winding).
 - **Universal**: Assimp-based loading/saving for future format support (OBJ, FBX, etc).
 
 ## 3. Internal Representation (Intermediate Model)
@@ -24,6 +25,7 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 - **IQM**: Native IQM loader with Z-up to Y-up conversion and winding correction.
 
 ### Writers:
+- **Binary FBX**: Custom binary writer with full skeletal support (NodeAttributes, BindPoses).
 - **cgltf (Standard)**: Original fast GLB writer, normalized for CCW.
 - **Assimp (Universal)**: New robust GLB writer.
 - **IQM**: Native writer with Y-up to Z-up conversion and winding reversal (CCW -> CW).
@@ -34,3 +36,9 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 - **Hierarchy Restoration**: GLB loader restores the full node tree (not just joints) to preserve animation roots.
 - **IBM Handling**: Inverse Bind Matrices (IBMs) are loaded directly from GLB to ensure skinning stability.
 - **Winding**: Internal state is strictly **Y-up CCW**. Formats like IQM are flipped during Load/Save to match.
+
+## 6. FBX Implementation Notes
+- **NodeAttributes**: Every bone Model must have a connected `LimbNode` NodeAttribute for Maya/Modern Blender compatibility.
+- **Skinning Bind Pose**: Mesh `Transform` in a Cluster is stored in **bone space** (Mesh World * inv(Bone World)).
+- **Euler Unwrapping**: Quaternions are unwrapped during export to prevent 360-degree "spaghetti" mesh artifacts.
+- **Cluster Filtering**: Joints with no vertex weights are skipped during Cluster generation to prevent importer crashes.

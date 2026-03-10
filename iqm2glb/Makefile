@@ -1,7 +1,8 @@
 # iqm2glb Makefile
 
 CXX      = g++
-CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/assimp/include
+CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/assimp/include -I../libs/fbx-file
+CFLAGS   = -O2 -Wall -I../libs/fbx-file
 LDFLAGS  = -L../libs/assimp/lib -lassimp -lzlibstatic
 
 TARGET = iqm2glb.exe
@@ -17,10 +18,13 @@ SRCS   = main.cpp \
          cgltf_write_impl.cpp \
          glb_writer_assimp.cpp \
          glb_loader_assimp.cpp \
-         skp_loader.cpp
+         skp_loader.cpp \
+         fbx_writer.cpp
 
-# Map source files to object files in the obj directory
-OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o))
+LIB_SRCS_CPP = ../libs/fbx-file/fbx.cpp
+
+OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o)) \
+         $(addprefix $(OBJDIR)/, fbx.o)
 
 all: $(OBJDIR) $(TARGET)
 
@@ -33,6 +37,9 @@ $(TARGET): $(OBJS)
 
 # Rule for compiling .cpp to .o inside OBJDIR
 $(OBJDIR)/%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/fbx.o: ../libs/fbx-file/fbx.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
