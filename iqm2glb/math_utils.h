@@ -35,22 +35,42 @@ inline void quat_mul(const float* a, const float* b, float* r) {
 inline void quat_to_euler(const float* q, float* euler) {
     float x = q[0], y = q[1], z = q[2], w = q[3];
 
-    // X-axis rotation (Pitch)
-    float sinp = 2.0f * (w * x + y * z);
-    float cosp = 1.0f - 2.0f * (x * x + y * y);
-    euler[0] = std::atan2(sinp, cosp) * 180.0f / 3.1415926535f;
+    // First convert to 3x3 rotation matrix
+    float m[3][3];
+    m[0][0] = 1.0f - 2.0f * (y*y + z*z);
+    m[0][1] = 2.0f * (x*y - z*w);
+    m[0][2] = 2.0f * (x*z + y*w);
+    m[1][0] = 2.0f * (x*y + z*w);
+    m[1][1] = 1.0f - 2.0f * (x*x + z*z);
+    m[1][2] = 2.0f * (y*z - x*w);
+    m[2][0] = 2.0f * (x*z - y*w);
+    m[2][1] = 2.0f * (y*z + x*w);
+    m[2][2] = 1.0f - 2.0f * (x*x + y*y);
 
-    // Y-axis rotation (Yaw)
-    float siny = 2.0f * (w * y - z * x);
-    if (std::abs(siny) >= 1.0f)
-        euler[1] = std::copysign(3.1415926535f / 2.0f, siny) * 180.0f / 3.1415926535f;
-    else
-        euler[1] = std::asin(siny) * 180.0f / 3.1415926535f;
-
-    // Z-axis rotation (Roll)
-    float sinr = 2.0f * (w * z + x * y);
-    float cosr = 1.0f - 2.0f * (y * y + z * z);
-    euler[2] = std::atan2(sinr, cosr) * 180.0f / 3.1415926535f;
+    // FBX XYZ order implies Rot = Rz * Ry * Rx
+    // Therefore m[0][2] = sin(Y), m[1][2] = -sin(X)cos(Y), m[2][2] = cos(X)cos(Y)
+    // Actually, std FBX XYZ (assuming column vectors v' = RzRyRx * v):
+    // m[0][2] = sin(Y) is NOT true.
+    // If v' = Rx * Ry * Rz * v (FBX "XYZ" evaluates X then Y then Z)
+    // Then m[2][0] = -sin(Y)
+    
+    // An absolutely safe approach is to use the standard "Shoemake" extraction for XYZ.
+    // For XYZ order (rotating Z first, then Y, then X):  R = Rx * Ry * Rz
+    // m20 = -sin(y)
+    float sy = -m[2][0];
+    if (sy >= 0.99999f) { // Gimbal lock (+90y)
+        euler[1] = 90.0f;
+        euler[0] = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
+        euler[2] = 0.0f;
+    } else if (sy <= -0.99999f) { // Gimbal lock (-90y)
+        euler[1] = -90.0f;
+        euler[0] = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
+        euler[2] = 0.0f;
+    } else {
+        euler[1] = std::asin(sy) * 180.0f / 3.1415926535f;
+        euler[0] = std::atan2(m[2][1], m[2][2]) * 180.0f / 3.1415926535f;
+        euler[2] = std::atan2(m[1][0], m[0][0]) * 180.0f / 3.1415926535f;
+    }
 }
 
 inline void quat_rotate_vec(const float* q, const float* v, float* r) {

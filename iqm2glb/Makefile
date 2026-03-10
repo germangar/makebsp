@@ -19,12 +19,14 @@ SRCS   = main.cpp \
          glb_writer_assimp.cpp \
          glb_loader_assimp.cpp \
          skp_loader.cpp \
-         fbx_writer.cpp
+         fbx_writer.cpp \
+         fbx_loader.cpp
 
 LIB_SRCS_CPP = ../libs/fbx-file/fbx.cpp
 
 OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o)) \
-         $(addprefix $(OBJDIR)/, fbx.o)
+         $(addprefix $(OBJDIR)/, fbx.o) \
+         $(addprefix $(OBJDIR)/, ufbx.o)
 
 all: $(OBJDIR) $(TARGET)
 
@@ -41,6 +43,9 @@ $(OBJDIR)/%.o: %.cpp
 
 $(OBJDIR)/fbx.o: ../libs/fbx-file/fbx.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/ufbx.o: ../ufbx.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET)
