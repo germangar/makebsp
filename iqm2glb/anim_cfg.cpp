@@ -1,4 +1,5 @@
 #include "anim_cfg.h"
+#include "model.h"
 #include <fstream>
 #include <iostream>
 #include <cstdio>   // sscanf
