@@ -61,38 +61,6 @@ int main(int argc, char** argv) {
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
 
-    if (model.joints.size() > 0) {
-        FILE* f = fopen((std::string(out_path) + ".dump").c_str(), "wb");
-        if (f) {
-            uint32_t nj = model.joints.size();
-            fwrite(&nj, 4, 1, f);
-            for(size_t i=0; i<nj; ++i) {
-                char nbuf[64] = {0};
-                strncpy(nbuf, model.joints[i].name.c_str(), 63);
-                fwrite(nbuf, 1, 64, f);
-                fwrite(model.joints[i].translate, 4, 3, f);
-                fwrite(model.joints[i].rotate, 4, 4, f);
-            }
-            uint32_t nf = model.num_frames;
-            uint32_t nfc = model.num_framechannels;
-            fwrite(&nf, 4, 1, f);
-            uint32_t stride = model.joints.size() * 10;
-            for(uint32_t fi=0; fi<nf; ++fi) {
-                for(size_t ji=0; ji<nj; ++ji) {
-                    const iqmpose& ip = model.poses[ji];
-                    float p[10];
-                    for(int c=0; c<10; ++c) p[c] = ip.channeloffset[c];
-                    int ch = 0;
-                    for(int i=0; i<ji; ++i) for(int c=0; c<10; ++c) if(model.poses[i].mask & (1<<c)) ch++;
-                    const float* fptr = model.frames.data() + fi * model.num_framechannels;
-                    for(int c=0; c<10; ++c) if(ip.mask & (1<<c)) p[c] += fptr[ch++] * ip.channelscale[c];
-                    fwrite(p, 4, 10, f);
-                }
-            }
-            fclose(f);
-            std::cout << "DEBUG: Dumped model pure mathematical matrices to " << out_path << ".dump\n";
-        }
-    }
 
     // Write Phase
     if (ends_with(out_path, ".iqm")) {

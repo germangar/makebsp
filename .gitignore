@@ -57,3 +57,5 @@ libMRMeshC.dll
 libMRMesh.dll
 Debugging HACD Hull Generation chat.md
 iqm2glb/tris.cfg
+iqm2glb/main.cpp
+iqm2glb/tris.fbx
