@@ -184,8 +184,6 @@ bool load_iqm(const char* path, Model& out) {
             out.animations.push_back(ad);
         }
     }
-
-    out.compute_bind_pose();
-
+    
     return true;
 }

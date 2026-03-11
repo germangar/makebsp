@@ -96,14 +96,17 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
     if (write_mesh) {
         for (size_t i = 0; i < in.joints.size(); ++i) {
             bool has_weight = false;
-            for (uint32_t v = 0; v < (uint32_t)in.positions.size() / 3; ++v) {
-                for (int k = 0; k < 4; ++k) {
-                    if (in.joints_0[v*4+k] == (uint8_t)i && in.weights_0[v*4+k] > 0.001f) {
-                        has_weight = true;
-                        break;
+            bool has_skin = (in.joints_0.size() >= (in.positions.size() / 3 * 4)) && (in.weights_0.size() >= (in.positions.size() / 3 * 4));
+            if (has_skin) {
+                for (uint32_t v = 0; v < (uint32_t)in.positions.size() / 3; ++v) {
+                    for (int k = 0; k < 4; ++k) {
+                        if (in.joints_0[v*4+k] == (uint8_t)i && in.weights_0[v*4+k] > 0.001f) {
+                            has_weight = true;
+                            break;
+                        }
                     }
+                    if (has_weight) break;
                 }
-                if (has_weight) break;
             }
             if (has_weight) num_valid_clusters++;
         }
@@ -195,7 +198,7 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         joint_to_attr_id[(int)i] = attr_id;
         Fbx::Record* attr = new Fbx::Record("NodeAttribute", objs);
         attr->properties().insert(new Fbx::Property(attr_id));
-        attr->properties().insert(new Fbx::Property("NodeAttribute::" + in.joints[i].name + std::string("\x00\x01", 2) + "NodeAttribute"));
+        attr->properties().insert(new Fbx::Property(in.joints[i].name + std::string("\x00\x01", 2) + "NodeAttribute"));
         attr->properties().insert(new Fbx::Property("LimbNode"));
         (*attr->insert(new Fbx::Record("TypeFlags")))->properties().insert(new Fbx::Property("Skeleton"));
     }
@@ -299,15 +302,18 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         (*skin_rec->insert(new Fbx::Record("Version")))->properties().insert(new Fbx::Property((int32_t)101));
         (*skin_rec->insert(new Fbx::Record("Link_DeformAcuracy")))->properties().insert(new Fbx::Property((double)50.0));
         
+        bool has_skin = (in.joints_0.size() >= (in.positions.size() / 3 * 4)) && (in.weights_0.size() >= (in.positions.size() / 3 * 4));
         for (size_t i = 0; i < in.joints.size(); ++i) {
             std::vector<int32_t> idxs;
             std::vector<double> wts;
-            for (uint32_t v = 0; v < (uint32_t)in.positions.size() / 3; ++v) {
-                for (int k = 0; k < 4; ++k) {
-                    if (in.joints_0[v*4+k] == (uint8_t)i && in.weights_0[v*4+k] > 0.001f) {
-                        idxs.push_back((int32_t)v);
-                        wts.push_back((double)in.weights_0[v*4+k]);
-                        break;
+            if (has_skin) {
+                for (uint32_t v = 0; v < (uint32_t)in.positions.size() / 3; ++v) {
+                    for (int k = 0; k < 4; ++k) {
+                        if (in.joints_0[v*4+k] == (uint8_t)i && in.weights_0[v*4+k] > 0.001f) {
+                            idxs.push_back((int32_t)v);
+                            wts.push_back((double)in.weights_0[v*4+k]);
+                            break;
+                        }
                     }
                 }
             }

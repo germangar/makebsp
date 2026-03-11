@@ -224,7 +224,5 @@ bool load_glb_assimp(const char* path, Model& out) {
     }
     out.num_frames = (uint32_t)out.frames.size() / out.num_framechannels;
 
-    if (out.ibms.empty()) out.compute_bind_pose();
-
     return true;
 }

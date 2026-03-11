@@ -242,10 +242,7 @@ bool load_glb(const char* path, Model& out) {
         }
         out.num_frames = total_frames;
     }
-
-    if (out.ibms.empty()) {
-        out.compute_bind_pose();
-    }
+    
     cgltf_free(data);
     return true;
 }

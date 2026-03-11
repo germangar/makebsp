@@ -273,8 +273,6 @@ bool load_skm(const char* path, Model& out) {
         ad.loop_frames = 0;
         out.animations.push_back(ad);
     }
-
-    out.compute_bind_pose();
-
+    
     return true;
 }

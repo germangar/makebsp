@@ -105,7 +105,8 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    // Universal Sanitization
+    // Universal Sanitization & Initialization
+    model.compute_bind_pose();
     sanitize_animations(model);
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
