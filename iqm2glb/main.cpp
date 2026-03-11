@@ -14,6 +14,33 @@
 #include "fbx_writer.h"
 #include "fbx_loader.h"
 
+void sanitize_animations(Model& model) {
+    auto it = model.animations.begin();
+    while (it != model.animations.end()) {
+        bool valid = true;
+        if (model.num_frames > 0) {
+            if (it->first_frame < 0) it->first_frame = 0;
+            if (it->last_frame >= (int)model.num_frames) {
+                std::cerr << "Animation Error: \"" << it->name << "\" last frame " << it->last_frame << " exceeds model max " << (model.num_frames - 1) << ". Clamping." << std::endl;
+                it->last_frame = (int)model.num_frames - 1;
+            }
+            if (it->first_frame > it->last_frame) {
+                std::cerr << "Animation Warning: \"" << it->name << "\" has invalid range [" << it->first_frame << ", " << it->last_frame << "]. Removing." << std::endl;
+                valid = false;
+            }
+        } else if (it->first_frame != 0 || it->last_frame != 0) {
+             // If model has no frames, only allow 0-0 range if it exists for some reason
+             valid = false;
+        }
+
+        if (valid) {
+            ++it;
+        } else {
+            it = model.animations.erase(it);
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm/fbx> [--base] [--anim] [--qfusion]\n";
@@ -47,29 +74,18 @@ int main(int argc, char** argv) {
             loaded = true;
             std::string cfg_path = find_animation_cfg(in_path);
             
-            auto add_clamped = [&](AnimationDef a) {
-                if (model.num_frames > 0 && a.last_frame >= (int)model.num_frames) {
-                    std::cerr << "Animation Error: \"" << a.name << "\" last frame " << a.last_frame << " exceeds model max " << (model.num_frames - 1) << ". Clamping." << std::endl;
-                    a.last_frame = (int)model.num_frames - 1;
-                }
-                if (a.first_frame < 0) a.first_frame = 0;
-                if (a.last_frame >= a.first_frame || model.num_frames == 0) {
-                    model.animations.push_back(a);
-                }
-            };
-
             if (!cfg_path.empty()) {
                 std::cout << "Found animation config: " << cfg_path << std::endl;
                 model.animations.clear();
                 if (qfusion) {
-                    add_clamped({"base", 0, 0, 0, BASE_FPS});
-                    add_clamped({"STAND_IDLE", 1, 39, 0, BASE_FPS});
+                    model.animations.push_back({"base", 0, 0, 0, BASE_FPS});
+                    model.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
                 }
                 std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
-                for (const auto& a : cfg_anims) add_clamped(a);
+                for (const auto& a : cfg_anims) model.animations.push_back(a);
             } else {
                 if (model.animations.empty() && model.num_frames > 0) {
-                    add_clamped({"frames", 0, (int)model.num_frames - 1, 0, BASE_FPS});
+                    model.animations.push_back({"frames", 0, (int)model.num_frames - 1, 0, BASE_FPS});
                 }
             }
         }
@@ -88,6 +104,9 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to load input file or unsupported format: " << in_path << "\n";
         return 2;
     }
+
+    // Universal Sanitization
+    sanitize_animations(model);
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
     std::cout << "Final Animations (" << model.animations.size() << "):" << std::endl;

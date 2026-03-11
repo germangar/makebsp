@@ -384,10 +384,10 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
 }
 
 // G. Animation
-    struct AnimLink { int64_t stack_id; int64_t layer_id; 
-                     struct Channel { int64_t t, r, s; };
+    struct AnimLink { int64_t stack_id = 0; int64_t layer_id = 0; 
+                     struct Channel { int64_t t = 0, r = 0, s = 0; };
                      std::vector<Channel> nodes;
-                     struct CurvePair { int64_t tx, ty, tz, rx, ry, rz, sx, sy, sz; };
+                     struct CurvePair { int64_t tx = 0, ty = 0, tz = 0, rx = 0, ry = 0, rz = 0, sx = 0, sy = 0, sz = 0; };
                      std::vector<CurvePair> curves; };
     std::vector<AnimLink> anim_links;
 
@@ -421,14 +421,10 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             link.curves.resize(in.joints.size());
 
             for (size_t ji = 0; ji < in.joints.size(); ++ji) {
-                uint32_t nf = (in.animations[ai].last_frame >= in.animations[ai].first_frame) ? 
-                              (in.animations[ai].last_frame - in.animations[ai].first_frame + 1) : 0;
+                uint32_t nf = (in.animations[ai].last_frame - in.animations[ai].first_frame + 1);
                 
-                if (nf > 100000) {
-                    std::cerr << "FBX Writer: ERROR: Animation \"" << in.animations[ai].name << "\" has too many frames (" << nf << "). Skipping." << std::endl;
-                    continue;
-                }
-                if (nf == 0) continue;
+                // Secondary safety check (should be handled by sanitize_animations in main.cpp)
+                if (nf > 1000000) continue; 
 
                 auto add_curve_node = [&](const char* name, const char* type) {
                     int64_t node_id = generate_id();
@@ -541,22 +537,25 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
     }
 
     for (const auto& link : anim_links) {
+        if (link.layer_id == 0 || link.stack_id == 0) continue;
         add_c("OO", link.layer_id, link.stack_id);
         for (size_t ji = 0; ji < in.joints.size(); ++ji) {
+            if (link.nodes[ji].t == 0) continue;
+
             add_c("OO", link.nodes[ji].t, link.layer_id);
-            add_c("OP", link.curves[ji].tx, link.nodes[ji].t, "d|X");
-            add_c("OP", link.curves[ji].ty, link.nodes[ji].t, "d|Y");
-            add_c("OP", link.curves[ji].tz, link.nodes[ji].t, "d|Z");
+            if (link.curves[ji].tx != 0) add_c("OP", link.curves[ji].tx, link.nodes[ji].t, "d|X");
+            if (link.curves[ji].ty != 0) add_c("OP", link.curves[ji].ty, link.nodes[ji].t, "d|Y");
+            if (link.curves[ji].tz != 0) add_c("OP", link.curves[ji].tz, link.nodes[ji].t, "d|Z");
             
             add_c("OO", link.nodes[ji].r, link.layer_id);
-            add_c("OP", link.curves[ji].rx, link.nodes[ji].r, "d|X");
-            add_c("OP", link.curves[ji].ry, link.nodes[ji].r, "d|Y");
-            add_c("OP", link.curves[ji].rz, link.nodes[ji].r, "d|Z");
+            if (link.curves[ji].rx != 0) add_c("OP", link.curves[ji].rx, link.nodes[ji].r, "d|X");
+            if (link.curves[ji].ry != 0) add_c("OP", link.curves[ji].ry, link.nodes[ji].r, "d|Y");
+            if (link.curves[ji].rz != 0) add_c("OP", link.curves[ji].rz, link.nodes[ji].r, "d|Z");
             
             add_c("OO", link.nodes[ji].s, link.layer_id);
-            add_c("OP", link.curves[ji].sx, link.nodes[ji].s, "d|X");
-            add_c("OP", link.curves[ji].sy, link.nodes[ji].s, "d|Y");
-            add_c("OP", link.curves[ji].sz, link.nodes[ji].s, "d|Z");
+            if (link.curves[ji].sx != 0) add_c("OP", link.curves[ji].sx, link.nodes[ji].s, "d|X");
+            if (link.curves[ji].sy != 0) add_c("OP", link.curves[ji].sy, link.nodes[ji].s, "d|Y");
+            if (link.curves[ji].sz != 0) add_c("OP", link.curves[ji].sz, link.nodes[ji].s, "d|Z");
             
             // Link curve nodes to the joints
             add_c("OP", link.nodes[ji].t, joint_to_id[ji], "Lcl Translation");

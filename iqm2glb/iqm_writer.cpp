@@ -66,13 +66,24 @@ bool write_iqm(const Model& model, const char* output_path) {
     }
 
     // 3. Prepare Animations & Poses
-    std::vector<iqmanim> iqm_anims(model.animations.size());
-    for (size_t i = 0; i < model.animations.size(); ++i) {
-        iqm_anims[i].name = write_text(text, model.animations[i].name);
-        iqm_anims[i].first_frame = model.animations[i].first_frame;
-        iqm_anims[i].num_frames = model.animations[i].last_frame - model.animations[i].first_frame + 1;
-        iqm_anims[i].framerate = model.animations[i].fps;
-        iqm_anims[i].flags = (model.animations[i].loop_frames > 0) ? IQM_LOOP : 0;
+    std::vector<iqmanim> iqm_anims;
+    if (model.qfusion && model.num_frames > 0) {
+        iqmanim ad = {};
+        ad.name = write_text(text, "frames");
+        ad.first_frame = 0;
+        ad.num_frames = model.num_frames;
+        ad.framerate = BASE_FPS;
+        ad.flags = IQM_LOOP;
+        iqm_anims.push_back(ad);
+    } else {
+        iqm_anims.resize(model.animations.size());
+        for (size_t i = 0; i < model.animations.size(); ++i) {
+            iqm_anims[i].name = write_text(text, model.animations[i].name);
+            iqm_anims[i].first_frame = model.animations[i].first_frame;
+            iqm_anims[i].num_frames = model.animations[i].last_frame - model.animations[i].first_frame + 1;
+            iqm_anims[i].framerate = model.animations[i].fps;
+            iqm_anims[i].flags = (model.animations[i].loop_frames > 0) ? IQM_LOOP : 0;
+        }
     }
 
     // We will build poses from full 10-channel precision

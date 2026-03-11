@@ -68,7 +68,6 @@ bool load_glb(const char* path, Model& out) {
 
     result = cgltf_load_buffers(&options, data, path);
     if (result != cgltf_result_success) { 
-        std::cerr << "cgltf_load_buffers failed for: " << path << std::endl;
         cgltf_free(data); 
         return false; 
     }
