@@ -43,6 +43,7 @@ struct Model {
     
     uint32_t num_frames = 0;
     uint32_t num_framechannels = 0;
+    bool qfusion = false;
 
     // Bind-pose transform cache
     std::vector<mat4> world_matrices;

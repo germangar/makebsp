@@ -421,6 +421,15 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             link.curves.resize(in.joints.size());
 
             for (size_t ji = 0; ji < in.joints.size(); ++ji) {
+                uint32_t nf = (in.animations[ai].last_frame >= in.animations[ai].first_frame) ? 
+                              (in.animations[ai].last_frame - in.animations[ai].first_frame + 1) : 0;
+                
+                if (nf > 100000) {
+                    std::cerr << "FBX Writer: ERROR: Animation \"" << in.animations[ai].name << "\" has too many frames (" << nf << "). Skipping." << std::endl;
+                    continue;
+                }
+                if (nf == 0) continue;
+
                 auto add_curve_node = [&](const char* name, const char* type) {
                     int64_t node_id = generate_id();
                     Fbx::Record* cn = new Fbx::Record("AnimationCurveNode", objs);
@@ -464,7 +473,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                 };
 
                 std::vector<double> tx, ty, tz, rx, ry, rz, sx, sy, sz;
-                uint32_t nf = in.animations[ai].last_frame - in.animations[ai].first_frame + 1;
+                // nf already calculated above
                 
                 float prev_e[3] = {0,0,0};
                 for (uint32_t k = 0; k < nf; ++k) {

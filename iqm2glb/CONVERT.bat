@@ -10,38 +10,52 @@ if "%~1" == "" (
 
 set "INPUT=%~1"
 set "EXT=%~x1"
+set "BASENAME=%~dpn1"
 
 if /i "%EXT%" == ".iqm" (
-    set "OUTPUT_GLB=%~dpn1.glb"
-    set "OUTPUT_FBX=%~dpn1.fbx"
+    set "OUT1=%BASENAME%.glb"
+    set "OUT2=%BASENAME%.fbx"
+    set "TYPE1=GLB"
+    set "TYPE2=FBX"
+) else if /i "%EXT%" == ".glb" (
+    set "OUT1=%BASENAME%.iqm"
+    set "OUT2=%BASENAME%.fbx"
+    set "TYPE1=IQM"
+    set "TYPE2=FBX"
+) else if /i "%EXT%" == ".fbx" (
+    set "OUT1=%BASENAME%.iqm"
+    set "OUT2=%BASENAME%.glb"
+    set "TYPE1=IQM"
+    set "TYPE2=GLB"
 ) else (
-    echo Error: For this test environment, please use .iqm files.
+    echo Error: Unsupported file extension: %EXT%
+    echo Please use .iqm, .glb, or .fbx files.
     pause
     exit /b 1
 )
 
 echo Converting: %INPUT%
-echo To GLB:     %OUTPUT_GLB%
-echo To FBX:     %OUTPUT_FBX%
+echo To %TYPE1%:     %OUT1%
+echo To %TYPE2%:     %OUT2%
 echo.
 
-"%~dp0iqm2glb.exe" "%INPUT%" "%OUTPUT_GLB%"
-set GLB_ERR=!ERRORLEVEL!
+"%~dp0iqm2glb.exe" "%INPUT%" "%OUT1%" --qfusion
+set ERR1=!ERRORLEVEL!
 
-"%~dp0iqm2glb.exe" "%INPUT%" "%OUTPUT_FBX%"
-set FBX_ERR=!ERRORLEVEL!
+"%~dp0iqm2glb.exe" "%INPUT%" "%OUT2%" --qfusion
+set ERR2=!ERRORLEVEL!
 
 echo.
-if !GLB_ERR! NEQ 0 (
-    echo GLB Conversion FAILED with error code !GLB_ERR!.
+if !ERR1! NEQ 0 (
+    echo %TYPE1% Conversion FAILED with error code !ERR1!.
 ) else (
-    echo GLB Conversion SUCCESSFUL: %OUTPUT_GLB% generated.
+    echo %TYPE1% Conversion SUCCESSFUL: %OUT1% generated.
 )
 
-if !FBX_ERR! NEQ 0 (
-    echo FBX Conversion FAILED with error code !FBX_ERR!.
+if !ERR2! NEQ 0 (
+    echo %TYPE2% Conversion FAILED with error code !ERR2!.
 ) else (
-    echo FBX Conversion SUCCESSFUL: %OUTPUT_FBX% generated.
+    echo %TYPE2% Conversion SUCCESSFUL: %OUT2% generated.
 )
 
 pause

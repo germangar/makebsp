@@ -239,6 +239,10 @@ bool write_glb(const Model& model, const char* output_path) {
             cgltf_animation* anim = &out->animations[ai];
             anim->name = sanitize_name(def.name.c_str());
             uint32_t nf = (def.last_frame >= def.first_frame) ? (def.last_frame - def.first_frame + 1) : 0;
+            if (nf > 1000000) {
+                std::cerr << "GLB Writer: ERROR: Animation \"" << def.name << "\" has too many frames (" << nf << "). Skipping." << std::endl;
+                continue;
+            }
             if (nf == 0) continue;
 
             std::vector<float> times(nf);

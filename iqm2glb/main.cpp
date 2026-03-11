@@ -16,7 +16,7 @@
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm/fbx> [--base] [--anim]\n";
+        std::cerr << "Usage: " << argv[0] << " <input.iqm/glb/skm> <output.glb/iqm/fbx> [--base] [--anim] [--qfusion]\n";
         return 1;
     }
 
@@ -32,15 +32,45 @@ int main(int argc, char** argv) {
     Model model;
     bool loaded = false;
 
+    bool qfusion = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--qfusion") {
+            qfusion = true;
+            model.qfusion = true;
+        }
+    }
+
     // Load Phase
     if (ends_with(in_path, ".iqm")) {
         std::cout << "Loading IQM: " << in_path << "..." << std::endl;
         if (load_iqm(in_path.c_str(), model)) {
             loaded = true;
             std::string cfg_path = find_animation_cfg(in_path);
+            
+            auto add_clamped = [&](AnimationDef a) {
+                if (model.num_frames > 0 && a.last_frame >= (int)model.num_frames) {
+                    std::cerr << "Animation Error: \"" << a.name << "\" last frame " << a.last_frame << " exceeds model max " << (model.num_frames - 1) << ". Clamping." << std::endl;
+                    a.last_frame = (int)model.num_frames - 1;
+                }
+                if (a.first_frame < 0) a.first_frame = 0;
+                if (a.last_frame >= a.first_frame || model.num_frames == 0) {
+                    model.animations.push_back(a);
+                }
+            };
+
             if (!cfg_path.empty()) {
                 std::cout << "Found animation config: " << cfg_path << std::endl;
-                model.animations = parse_animation_cfg(cfg_path);
+                model.animations.clear();
+                if (qfusion) {
+                    add_clamped({"base", 0, 0, 0, BASE_FPS});
+                    add_clamped({"STAND_IDLE", 1, 39, 0, BASE_FPS});
+                }
+                std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
+                for (const auto& a : cfg_anims) add_clamped(a);
+            } else {
+                if (model.animations.empty() && model.num_frames > 0) {
+                    add_clamped({"frames", 0, (int)model.num_frames - 1, 0, BASE_FPS});
+                }
             }
         }
     } else if (ends_with(in_path, ".skm") || ends_with(in_path, ".skp")) {
@@ -60,6 +90,10 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
+    std::cout << "Final Animations (" << model.animations.size() << "):" << std::endl;
+    for (const auto& a : model.animations) {
+        std::cout << "  - \"" << a.name << "\" (Frames " << a.first_frame << " to " << a.last_frame << ", " << a.fps << " FPS)" << std::endl;
+    }
 
 
     // Write Phase
