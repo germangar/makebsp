@@ -204,22 +204,22 @@ bool write_fbx_assimp(const char* path, const Model& model) {
     
     // 5. Export Metadata (Crucial for FBX Units/Axes)
     scene->mMetaData = new aiMetadata();
-    scene->mMetaData->mNumProperties = 8;
-    scene->mMetaData->mKeys = new aiString[scene->mMetaData->mNumProperties];
-    scene->mMetaData->mValues = new aiMetadataEntry[scene->mMetaData->mNumProperties];
-
+ 
     // FBX defaults to centimeters. If our internal space is meters, we need to tell exporters.
     // Blender's FBX importer uses UnitScaleFactor.
-    scene->mMetaData->Set(0, "UnitScaleFactor", (double)100.0); 
-    scene->mMetaData->Set(1, "OriginalUnitScaleFactor", (double)100.0);
-    
+    scene->mMetaData->Add("UnitScaleFactor", (double)100.0); 
+    scene->mMetaData->Add("OriginalUnitScaleFactor", (double)100.0);
+
+     
     // Y-up (UpAxis = 1)
-    scene->mMetaData->Set(2, "UpAxis", (int)1);
-    scene->mMetaData->Set(3, "UpAxisSign", (int)1);
-    scene->mMetaData->Set(4, "FrontAxis", (int)2);
-    scene->mMetaData->Set(5, "FrontAxisSign", (int)1);
-    scene->mMetaData->Set(6, "CoordAxis", (int)0);
-    scene->mMetaData->Set(7, "CoordAxisSign", (int)1);
+    scene->mMetaData->Add("UpAxis", (int)1);
+    scene->mMetaData->Add("UpAxisSign", (int)1);
+    scene->mMetaData->Add("OriginalUpAxis", (int)1);
+    scene->mMetaData->Add("OriginalUpAxisSign", (int)1);
+    scene->mMetaData->Add("FrontAxis", (int)2);
+    scene->mMetaData->Add("FrontAxisSign", (int)1);
+    scene->mMetaData->Add("CoordAxis", (int)0);
+    scene->mMetaData->Add("CoordAxisSign", (int)1);
 
     Assimp::Exporter exporter;
     const char* format_id = "fbx"; 
