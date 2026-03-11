@@ -414,7 +414,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             
             Fbx::Record* layer = new Fbx::Record("AnimationLayer", objs);
             layer->properties().insert(new Fbx::Property(link.layer_id));
-            layer->properties().insert(new Fbx::Property("BaseLayer" + std::string("\x00\x01", 2) + "AnimLayer"));
+            layer->properties().insert(new Fbx::Property(in.animations[ai].name + std::string("\x00\x01", 2) + "AnimLayer"));
             layer->properties().insert(new Fbx::Property(""));
 
             link.nodes.resize(in.joints.size());
@@ -437,9 +437,9 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                     return node_id;
                 };
 
-                link.nodes[ji].t = add_curve_node("Lcl Translation", "Lcl Translation");
-                link.nodes[ji].r = add_curve_node("Lcl Rotation", "Lcl Rotation");
-                link.nodes[ji].s = add_curve_node("Lcl Scaling", "Lcl Scaling");
+                link.nodes[ji].t = add_curve_node("T", "Lcl Translation");
+                link.nodes[ji].r = add_curve_node("R", "Lcl Rotation");
+                link.nodes[ji].s = add_curve_node("S", "Lcl Scaling");
 
                 auto add_curve = [&](const std::vector<double>& keys, float anim_fps) {
                     int64_t c_id = generate_id();

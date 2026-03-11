@@ -109,10 +109,6 @@ int main(int argc, char** argv) {
     sanitize_animations(model);
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
-    std::cout << "Final Animations (" << model.animations.size() << "):" << std::endl;
-    for (const auto& a : model.animations) {
-        std::cout << "  - \"" << a.name << "\" (Frames " << a.first_frame << " to " << a.last_frame << ", " << a.fps << " FPS)" << std::endl;
-    }
 
 
     // Write Phase
