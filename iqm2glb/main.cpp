@@ -12,6 +12,7 @@
 #include "glb_writer.h"
 #include "glb_writer_assimp.h"
 #include "fbx_writer.h"
+#include "fbx_writer_assimp.h"
 #include "fbx_loader.h"
 
 void sanitize_animations(Model& model) {
@@ -138,7 +139,8 @@ int main(int argc, char** argv) {
         else if (!write_base && write_anim) std::cout << "Writing FBX (Animations only): " << out_path << "..." << std::endl;
         else std::cout << "Writing FBX (Complete): " << out_path << "..." << std::endl;
 
-        if (!write_fbx(out_path.c_str(), model, write_base, write_anim)) return 3;
+        // Using Assimp writer as the primary FBX exporter
+        if (!write_fbx_assimp(out_path.c_str(), model)) return 3;
     } else if (ends_with(out_path, ".glb")) {
         std::cout << "Writing GLB (cgltf): " << out_path << "..." << std::endl;
         if (!write_glb(model, out_path.c_str())) return 3;
