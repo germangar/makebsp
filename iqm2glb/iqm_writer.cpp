@@ -283,6 +283,23 @@ bool write_iqm(const Model& model, const char* output_path) {
     f.write((const char*)out_frames.data(), out_frames.size() * 2);
     current_offset += (uint32_t)(out_frames.size() * 2);
 
+    // 9. Bounds
+    if (model.has_bounds) {
+        align(4);
+        hdr.ofs_bounds = current_offset;
+        uint32_t num_bounds = std::max(1u, model.num_frames);
+        for (uint32_t i = 0; i < num_bounds; ++i) {
+            iqmbounds b = {};
+            // Y-up to Z-up (x,y,z) -> (x,-z,y)
+            b.bbmin[0] = model.mins[0]; b.bbmin[1] = -model.maxs[2]; b.bbmin[2] = model.mins[1];
+            b.bbmax[0] = model.maxs[0]; b.bbmax[1] = -model.mins[2]; b.bbmax[2] = model.maxs[1];
+            b.xyradius = model.xyradius;
+            b.radius = model.radius;
+            f.write((const char*)&b, sizeof(iqmbounds));
+            current_offset += sizeof(iqmbounds);
+        }
+    }
+
     // Final Header Write
     hdr.filesize = current_offset;
     f.seekp(0);

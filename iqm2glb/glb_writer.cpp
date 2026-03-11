@@ -146,9 +146,10 @@ bool write_glb(const Model& model, const char* output_path) {
 
     // IBMs
     out->buffer_views[2].offset = buf.size();
-    append_to_buffer(buf, &out->buffers[0], model.ibms.data(), model.ibms.size() * sizeof(mat4));
+    const std::vector<mat4>& source_ibms = model.ibms.empty() ? model.computed_ibms : model.ibms;
+    append_to_buffer(buf, &out->buffers[0], source_ibms.data(), source_ibms.size() * sizeof(mat4));
     out->buffer_views[2].size = buf.size() - out->buffer_views[2].offset;
-    cgltf_accessor* ibm_acc = alloc_accessor(out, &out->buffer_views[2], cgltf_type_mat4, cgltf_component_type_r_32f, model.joints.size(), 0);
+    cgltf_accessor* ibm_acc = alloc_accessor(out, &out->buffer_views[2], cgltf_type_mat4, cgltf_component_type_r_32f, source_ibms.size(), 0);
 
     // Nodes
     out->nodes_count = model.joints.size() + model.meshes.size();

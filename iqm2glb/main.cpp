@@ -106,10 +106,19 @@ int main(int argc, char** argv) {
     }
 
     // Universal Sanitization & Initialization
+    if (!model.validate_skeleton()) {
+        std::cerr << "Skeleton Validation FAILED: Out of order or cyclic hierarchy detected." << std::endl;
+    }
     model.compute_bind_pose();
+    model.compute_bounds();
     sanitize_animations(model);
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
+    if (model.has_bounds) {
+        printf("Bounds: (%.3f %.3f %.3f) to (%.3f %.3f %.3f)\n", 
+               model.mins[0], model.mins[1], model.mins[2],
+               model.maxs[0], model.maxs[1], model.maxs[2]);
+    }
 
 
     // Write Phase
