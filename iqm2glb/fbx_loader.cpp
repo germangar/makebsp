@@ -246,6 +246,15 @@ bool load_fbx(const char* path, Model& out) {
                             float t[3] = { (float)t_obj.translation.x, (float)t_obj.translation.y, (float)t_obj.translation.z };
                             float r[4] = { (float)t_obj.rotation.x, (float)t_obj.rotation.y, (float)t_obj.rotation.z, (float)t_obj.rotation.w };
                             
+                            // Quaternion neighborhooding to prevent 180-degree spins
+                            if (!first_frame_quat) {
+                                float dot = r[0]*prev_quats[ji*4+0] + r[1]*prev_quats[ji*4+1] + r[2]*prev_quats[ji*4+2] + r[3]*prev_quats[ji*4+3];
+                                if (dot < 0) {
+                                    for(int k=0; k<4; ++k) r[k] = -r[k];
+                                }
+                            }
+                            memcpy(&prev_quats[ji*4], r, 16);
+                            
                             out.frames.push_back(t[0]);
                             out.frames.push_back(t[1]);
                             out.frames.push_back(t[2]);

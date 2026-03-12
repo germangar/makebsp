@@ -551,6 +551,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
 
     for (const auto& link : anim_links) {
         if (link.layer_id == 0 || link.stack_id == 0) continue;
+        add_c("OO", link.stack_id, 0); // Connect Stack to Scene Root
         add_c("OO", link.layer_id, link.stack_id);
         for (size_t ji = 0; ji < in.joints.size(); ++ji) {
             if (link.nodes[ji].t == 0) continue;

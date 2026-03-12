@@ -14,6 +14,7 @@
 #include "fbx_writer.h"
 #include "fbx_writer_assimp.h"
 #include "fbx_loader.h"
+#include "fbx_loader_assimp.h"
 
 void sanitize_animations(Model& model) {
     auto it = model.animations.begin();
