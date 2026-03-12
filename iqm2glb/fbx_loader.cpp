@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 bool load_fbx(const char* path, Model& out) {
     ufbx_load_opts opts = { 0 };
@@ -51,20 +52,13 @@ bool load_fbx(const char* path, Model& out) {
         }
     }
 
-    // Set parents and initialize poses
-    out.poses.resize(out.joints.size());
+    // Set parents
     for (size_t i = 0; i < scene->nodes.count; ++i) {
         ufbx_node* node = scene->nodes[i];
         if (node_to_joint.count(node)) {
             int ji = node_to_joint[node];
             if (node->parent && node_to_joint.count(node->parent)) {
                 out.joints[ji].parent = node_to_joint[node->parent];
-            }
-            out.poses[ji].parent = out.joints[ji].parent;
-            out.poses[ji].mask = 0x3FF; // All channels (pos3, quat4, scale3)
-            for (int k = 0; k < 10; ++k) {
-                out.poses[ji].channeloffset[k] = 0.0f;
-                out.poses[ji].channelscale[k] = 1.0f;
             }
         }
     }
@@ -180,135 +174,105 @@ bool load_fbx(const char* path, Model& out) {
         }
     }
 
-    // Phase 4 - Extract Animations
-    if (scene->anim_stacks.count > 0) {
-        int total_frames = 0;
-        out.num_framechannels = (int)out.joints.size() * 10; // pos3, quat4, scale3
+    // Phase 4 - Extract Animations (Sparse Curves)
+    for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
+        ufbx_anim_stack* stack = scene->anim_stacks[si];
         
-        // Calculate total frames first to resize timestamps
-        int estimated_total = 0;
-        for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
-            ufbx_anim_stack* stack = scene->anim_stacks[si];
-            double duration = stack->time_end - stack->time_begin;
-            if (duration <= 0) {
-                // Scan curves for duration if stack is empty
-                double t0 = 1e30, t1 = -1e30;
-                for (size_t ci = 0; ci < scene->anim_curves.count; ++ci) {
-                    if (scene->anim_curves[ci]->keyframes.count > 0) {
-                        t0 = std::min(t0, scene->anim_curves[ci]->min_time);
-                        t1 = std::max(t1, scene->anim_curves[ci]->max_time);
+        AnimationDef ad;
+        ad.name = stack->name.data;
+        ad.fps = (float)BASE_FPS;
+        ad.loop_frames = 0;
+        ad.track.bones.resize(out.joints.size());
+
+        for (size_t ji = 0; ji < out.joints.size(); ++ji) {
+            ufbx_node* node = nullptr;
+            for (auto const& [n, idx] : node_to_joint) {
+                if (idx == (int)ji) {
+                    node = n;
+                    break;
+                }
+            }
+            if (!node) continue;
+
+            BoneAnim& ba = ad.track.bones[ji];
+
+            auto get_av = [&](const char* prop_name) -> ufbx_anim_value* {
+                for (size_t li = 0; li < stack->anim->layers.count; ++li) {
+                    ufbx_anim_prop* ap = ufbx_find_anim_prop(stack->anim->layers[li], &node->element, prop_name);
+                    if (ap && ap->anim_value) return ap->anim_value;
+                }
+                return nullptr;
+            };
+
+            // Extract Translation
+            ufbx_anim_value* av_t = get_av("Lcl Translation");
+            if (av_t) {
+                std::vector<double> times;
+                for (int c = 0; c < 3; ++c) {
+                    if (av_t->curves[c]) {
+                        for (size_t ki = 0; ki < av_t->curves[c]->keyframes.count; ++ki)
+                            times.push_back(av_t->curves[c]->keyframes[ki].time);
                     }
                 }
-                duration = (t1 > t0) ? (t1 - t0) : 0.0;
+                std::sort(times.begin(), times.end());
+                times.erase(std::unique(times.begin(), times.end()), times.end());
+
+                for (double t : times) {
+                    ba.translation.times.push_back(t);
+                    ufbx_vec3 val = ufbx_evaluate_anim_value_vec3(av_t, t);
+                    ba.translation.values.push_back((float)val.x);
+                    ba.translation.values.push_back((float)val.y);
+                    ba.translation.values.push_back((float)val.z);
+                }
             }
-            estimated_total += (int)std::round(duration * BASE_FPS + 0.001) + 1;
+
+            // Extract Rotation
+            ufbx_anim_value* av_r = get_av("Lcl Rotation");
+            if (av_r) {
+                std::vector<double> times;
+                for (int c = 0; c < 3; ++c) {
+                    if (av_r->curves[c]) {
+                        for (size_t ki = 0; ki < av_r->curves[c]->keyframes.count; ++ki)
+                            times.push_back(av_r->curves[c]->keyframes[ki].time);
+                    }
+                }
+                std::sort(times.begin(), times.end());
+                times.erase(std::unique(times.begin(), times.end()), times.end());
+
+                for (double t : times) {
+                    ba.rotation.times.push_back(t);
+                    ufbx_vec3 euler = ufbx_evaluate_anim_value_vec3(av_r, t);
+                    ufbx_quat val = ufbx_euler_to_quat(euler, node->rotation_order);
+                    ba.rotation.values.push_back((float)val.x);
+                    ba.rotation.values.push_back((float)val.y);
+                    ba.rotation.values.push_back((float)val.z);
+                    ba.rotation.values.push_back((float)val.w);
+                }
+            }
+
+            // Extract Scale
+            ufbx_anim_value* av_s = get_av("Lcl Scaling");
+            if (av_s) {
+                std::vector<double> times;
+                for (int c = 0; c < 3; ++c) {
+                    if (av_s->curves[c]) {
+                        for (size_t ki = 0; ki < av_s->curves[c]->keyframes.count; ++ki)
+                            times.push_back(av_s->curves[c]->keyframes[ki].time);
+                    }
+                }
+                std::sort(times.begin(), times.end());
+                times.erase(std::unique(times.begin(), times.end()), times.end());
+
+                for (double t : times) {
+                    ba.scale.times.push_back(t);
+                    ufbx_vec3 val = ufbx_evaluate_anim_value_vec3(av_s, t);
+                    ba.scale.values.push_back((float)val.x);
+                    ba.scale.values.push_back((float)val.y);
+                    ba.scale.values.push_back((float)val.z);
+                }
+            }
         }
-        out.timestamps.resize(estimated_total);
-        
-        for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
-            ufbx_anim_stack* stack = scene->anim_stacks[si];
-            double time_begin = stack->time_begin;
-            double time_end = stack->time_end;
-
-            // Robust fallback: Scan ALL curves in the scene to find the true time range
-            if (time_end <= time_begin) {
-                time_begin = 1e30;
-                time_end = -1e30;
-                for (size_t ci = 0; ci < scene->anim_curves.count; ++ci) {
-                    ufbx_anim_curve* curve = scene->anim_curves[ci];
-                    if (curve->keyframes.count > 0) {
-                        time_begin = std::min(time_begin, curve->min_time);
-                        time_end = std::max(time_end, curve->max_time);
-                    }
-                }
-                if (time_begin > time_end) {
-                    time_begin = 0.0;
-                    time_end = 0.0;
-                }
-            }
-
-            float duration = (float)time_end - (float)time_begin;
-            int num_stack_frames = (int)std::round(duration * BASE_FPS + 0.001f) + 1;
-            
-            AnimationDef ad;
-            ad.name = stack->name.data;
-            ad.fps = (float)BASE_FPS;
-            ad.first_frame = total_frames;
-            ad.last_frame = total_frames + num_stack_frames - 1;
-            ad.loop_frames = num_stack_frames;
-            out.animations.push_back(ad);
-
-            std::vector<float> prev_quats(out.joints.size() * 4, 0.0f);
-            bool first_frame_quat = true;
-
-            for (int f = 0; f < num_stack_frames; ++f) {
-                double time = time_begin + (double)f / (double)BASE_FPS;
-                if (total_frames + f < (int)out.timestamps.size()) {
-                    out.timestamps[total_frames + f] = time;
-                }
-                
-                // Evaluate the entire scene at this time
-                ufbx_evaluate_opts ev_opts = { 0 };
-                ufbx_scene* evaluated = ufbx_evaluate_scene(scene, stack->anim, time, &ev_opts, nullptr);
-                
-                if (evaluated) {
-                    for (size_t ji = 0; ji < out.joints.size(); ++ji) {
-                        // We need the ufbx_node corresponding to this joint
-                        ufbx_node* node = nullptr;
-                        for (auto const& [n, idx] : node_to_joint) {
-                            if (idx == (int)ji) {
-                                node = n;
-                                break;
-                            }
-                        }
-
-                        if (node) {
-                            ufbx_node* eval_node = evaluated->nodes[node->typed_id];
-                            ufbx_transform t_obj = eval_node->local_transform;
-                            
-                            float t[3] = { (float)t_obj.translation.x, (float)t_obj.translation.y, (float)t_obj.translation.z };
-                            float r[4] = { (float)t_obj.rotation.x, (float)t_obj.rotation.y, (float)t_obj.rotation.z, (float)t_obj.rotation.w };
-                            float s[3] = { (float)t_obj.scale.x, (float)t_obj.scale.y, (float)t_obj.scale.z };
-                            
-                            // Quaternion neighborhooding to prevent 180-degree spins
-                            if (!first_frame_quat) {
-                                float dot = r[0]*prev_quats[ji*4+0] + r[1]*prev_quats[ji*4+1] + r[2]*prev_quats[ji*4+2] + r[3]*prev_quats[ji*4+3];
-                                if (dot < 0) {
-                                    for(int k=0; k<4; ++k) r[k] = -r[k];
-                                }
-                            } else {
-                                // Neighborhood against bind pose rotation for a stable start
-                                float dot = r[0]*out.joints[ji].rotate[0] + r[1]*out.joints[ji].rotate[1] + r[2]*out.joints[ji].rotate[2] + r[3]*out.joints[ji].rotate[3];
-                                if (dot < 0) {
-                                    for(int k=0; k<4; ++k) r[k] = -r[k];
-                                }
-                            }
-                            memcpy(&prev_quats[ji*4], r, 16);
-                            
-                            out.frames.push_back(t[0]);
-                            out.frames.push_back(t[1]);
-                            out.frames.push_back(t[2]);
-                            
-                            out.frames.push_back(r[0]);
-                            out.frames.push_back(r[1]);
-                            out.frames.push_back(r[2]);
-                            out.frames.push_back(r[3]);
-                            
-                            out.frames.push_back(s[0]);
-                            out.frames.push_back(s[1]);
-                            out.frames.push_back(s[2]);
-                        } else {
-                            // Pad if node not found
-                            for (int p = 0; p < 10; ++p) out.frames.push_back(p < 7 ? 0.0f : 1.0f);
-                        }
-                    }
-                    ufbx_free_scene(evaluated);
-                    first_frame_quat = false;
-                }
-            }
-            total_frames += num_stack_frames;
-        }
-        out.num_frames = total_frames;
+        out.animations.push_back(ad);
     }
 
     ufbx_free_scene(scene);

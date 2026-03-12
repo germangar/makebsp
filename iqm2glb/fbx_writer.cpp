@@ -407,6 +407,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
     if (write_anim) {
         for (size_t ai = 0; ai < in.animations.size(); ++ai) {
             if (anim_index >= 0 && (int)ai != anim_index) continue;
+            const AnimationDef& ad = in.animations[ai];
             
             AnimLink link;
             link.stack_id = generate_id();
@@ -414,13 +415,21 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             
             Fbx::Record* stack = new Fbx::Record("AnimationStack", objs);
             stack->properties().insert(new Fbx::Property(link.stack_id));
-            stack->properties().insert(new Fbx::Property(sanitize(in.animations[ai].name) + std::string("\x00\x01", 2) + "AnimStack"));
+            stack->properties().insert(new Fbx::Property(sanitize(ad.name) + std::string("\x00\x01", 2) + "AnimStack"));
             stack->properties().insert(new Fbx::Property(""));
             
             Fbx::Record* s_props70 = new Fbx::Record("Properties70", stack);
+            
+            // Find duration for stack headers
+            double max_t = 0;
+            for (const auto& ba : ad.track.bones) {
+                if (!ba.translation.times.empty()) max_t = std::max(max_t, ba.translation.times.back());
+                if (!ba.rotation.times.empty()) max_t = std::max(max_t, ba.rotation.times.back());
+                if (!ba.scale.times.empty()) max_t = std::max(max_t, ba.scale.times.back());
+            }
+
             int64_t start_time = 0;
-            double anim_duration = in.timestamps[in.animations[ai].last_frame] - in.timestamps[in.animations[ai].first_frame];
-            int64_t end_time = (int64_t)std::round(anim_duration * KTIME_ONE_SECOND + 0.001);
+            int64_t end_time = (int64_t)std::round(max_t * KTIME_ONE_SECOND + 0.001);
 
             add_prop70(s_props70, "LocalStart", "KTime", "Time", "", start_time);
             add_prop70(s_props70, "LocalStop", "KTime", "Time", "", end_time);
@@ -429,17 +438,15 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             
             Fbx::Record* layer = new Fbx::Record("AnimationLayer", objs);
             layer->properties().insert(new Fbx::Property(link.layer_id));
-            layer->properties().insert(new Fbx::Property(sanitize(in.animations[ai].name) + std::string("\x00\x01", 2) + "AnimLayer"));
+            layer->properties().insert(new Fbx::Property(sanitize(ad.name) + std::string("\x00\x01", 2) + "AnimLayer"));
             layer->properties().insert(new Fbx::Property(""));
 
             link.nodes.resize(in.joints.size());
             link.curves.resize(in.joints.size());
 
             for (size_t ji = 0; ji < in.joints.size(); ++ji) {
-                uint32_t nf = (in.animations[ai].last_frame - in.animations[ai].first_frame + 1);
-                
-                // Secondary safety check (should be handled by sanitize_animations in main.cpp)
-                if (nf > 1000000) continue; 
+                const BoneAnim& ba = ad.track.bones[ji];
+                if (ba.translation.times.empty() && ba.rotation.times.empty() && ba.scale.times.empty()) continue;
 
                 auto add_curve_node = [&](const char* name, const char* type) {
                     int64_t node_id = generate_id();
@@ -456,73 +463,77 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                 link.nodes[ji].r = add_curve_node("R", "Lcl Rotation");
                 link.nodes[ji].s = add_curve_node("S", "Lcl Scaling");
 
-                auto add_curve = [&](const std::vector<double>& keys, float current_anim_fps) {
+                auto add_curve = [&](const std::vector<double>& times, const std::vector<double>& values) {
+                    if (times.empty()) return (int64_t)0;
                     int64_t c_id = generate_id();
                     Fbx::Record* c = new Fbx::Record("AnimationCurve", objs);
                     c->properties().insert(new Fbx::Property(c_id));
                     c->properties().insert(new Fbx::Property(std::string("") + std::string("\x00\x01", 2) + "AnimCurve"));
                     c->properties().insert(new Fbx::Property(""));
                     
-                    std::vector<int64_t> times;
-                    uint32_t nf_keys = (uint32_t)keys.size();
-                    for (uint32_t k = 0; k < nf_keys; ++k) {
-                        int f_idx = in.animations[ai].first_frame + k;
-                        double t = in.timestamps[f_idx] - in.timestamps[in.animations[ai].first_frame];
-                        times.push_back((int64_t)std::round(t * KTIME_ONE_SECOND + 0.001));
-                    }
+                    std::vector<int64_t> fbx_times;
+                    for (double t : times) fbx_times.push_back((int64_t)std::round(t * KTIME_ONE_SECOND + 0.001));
                     
-                    (*c->insert(new Fbx::Record("KeyTime")))->properties().insert(new Fbx::Property(times.data(), (uint32_t)times.size()));
+                    (*c->insert(new Fbx::Record("KeyTime")))->properties().insert(new Fbx::Property(fbx_times.data(), (uint32_t)fbx_times.size()));
                     std::vector<float> kvals;
-                    for(double k : keys) kvals.push_back((float)k);
+                    for(double k : values) kvals.push_back((float)k);
                     (*c->insert(new Fbx::Record("KeyValueFloat")))->properties().insert(new Fbx::Property(kvals.data(), (uint32_t)kvals.size()));
 
-                    if (nf_keys > 0) {
-                        std::vector<int32_t> attr_flags = { 4 }; // 4 = Linear
-                        (*c->insert(new Fbx::Record("KeyAttrFlags")))->properties().insert(new Fbx::Property(attr_flags.data(), 1));
-                        std::vector<float> attr_data = { 0.0f, 0.0f, 0.0f, 0.0f };
-                        (*c->insert(new Fbx::Record("KeyAttrDataFloat")))->properties().insert(new Fbx::Property(attr_data.data(), 4));
-                        std::vector<int32_t> attr_refs = { (int32_t)nf };
-                        (*c->insert(new Fbx::Record("KeyAttrRefCount")))->properties().insert(new Fbx::Property(attr_refs.data(), 1));
-                    }
+                    std::vector<int32_t> attr_flags = { 4 }; // 4 = Linear
+                    (*c->insert(new Fbx::Record("KeyAttrFlags")))->properties().insert(new Fbx::Property(attr_flags.data(), 1));
+                    std::vector<float> attr_data = { 0.0f, 0.0f, 0.0f, 0.0f };
+                    (*c->insert(new Fbx::Record("KeyAttrDataFloat")))->properties().insert(new Fbx::Property(attr_data.data(), 4));
+                    std::vector<int32_t> attr_refs = { (int32_t)times.size() };
+                    (*c->insert(new Fbx::Record("KeyAttrRefCount")))->properties().insert(new Fbx::Property(attr_refs.data(), 1));
+                    
                     return c_id;
                 };
 
-                std::vector<double> tx, ty, tz, rx, ry, rz, sx, sy, sz;
-                // nf already calculated above
-                
-                float prev_e[3];
-                // Seed from the first frame of this specific animation to ensure a natural Euler branch
-                const float* first_f = &in.frames[in.animations[ai].first_frame * in.num_framechannels + ji * 10];
-                float first_q[4] = { first_f[3], first_f[4], first_f[5], first_f[6] };
-                quat_normalize(first_q);
-                quat_to_euler(first_q, prev_e);
-                
-                double current_anim_fps = in.animations[ai].fps > 0 ? in.animations[ai].fps : BASE_FPS;
-                for (uint32_t k = 0; k < nf; ++k) {
-                    uint32_t f_idx = in.animations[ai].first_frame + k;
-                    const float* f = &in.frames[f_idx * in.num_framechannels + ji * 10];
-                    tx.push_back(f[0]); ty.push_back(f[1]); tz.push_back(f[2]);
-                    
-                    float q[4] = { f[3], f[4], f[5], f[6] };
-                    quat_normalize(q);
-                    
-                    float e[3];
-                    quat_to_euler_near(q, e, prev_e);
-                    memcpy(prev_e, e, 12);
-                    
-                    rx.push_back(e[0]); ry.push_back(e[1]); rz.push_back(e[2]);
-                    sx.push_back(f[7]); sy.push_back(f[8]); sz.push_back(f[9]);
+                // Translation
+                if (!ba.translation.times.empty()) {
+                    std::vector<double> tx, ty, tz;
+                    for(size_t k=0; k<ba.translation.times.size(); ++k) {
+                        tx.push_back(ba.translation.values[k*3+0]);
+                        ty.push_back(ba.translation.values[k*3+1]);
+                        tz.push_back(ba.translation.values[k*3+2]);
+                    }
+                    link.curves[ji].tx = add_curve(ba.translation.times, tx);
+                    link.curves[ji].ty = add_curve(ba.translation.times, ty);
+                    link.curves[ji].tz = add_curve(ba.translation.times, tz);
                 }
 
-                link.curves[ji].tx = add_curve(tx, (float)current_anim_fps);
-                link.curves[ji].ty = add_curve(ty, (float)current_anim_fps);
-                link.curves[ji].tz = add_curve(tz, (float)current_anim_fps);
-                link.curves[ji].rx = add_curve(rx, (float)current_anim_fps);
-                link.curves[ji].ry = add_curve(ry, (float)current_anim_fps);
-                link.curves[ji].rz = add_curve(rz, (float)current_anim_fps);
-                link.curves[ji].sx = add_curve(sx, (float)current_anim_fps);
-                link.curves[ji].sy = add_curve(sy, (float)current_anim_fps);
-                link.curves[ji].sz = add_curve(sz, (float)current_anim_fps);
+                // Rotation (Euler conversion)
+                if (!ba.rotation.times.empty()) {
+                    std::vector<double> rx, ry, rz;
+                    float prev_e[3];
+                    // Seed from bind pose
+                    quat_to_euler(in.joints[ji].rotate, prev_e);
+                    
+                    for(size_t k=0; k<ba.rotation.times.size(); ++k) {
+                        float q[4] = { ba.rotation.values[k*4+0], ba.rotation.values[k*4+1], ba.rotation.values[k*4+2], ba.rotation.values[k*4+3] };
+                        quat_normalize(q);
+                        float e[3];
+                        quat_to_euler_near(q, e, prev_e);
+                        memcpy(prev_e, e, 12);
+                        rx.push_back(e[0]); ry.push_back(e[1]); rz.push_back(e[2]);
+                    }
+                    link.curves[ji].rx = add_curve(ba.rotation.times, rx);
+                    link.curves[ji].ry = add_curve(ba.rotation.times, ry);
+                    link.curves[ji].rz = add_curve(ba.rotation.times, rz);
+                }
+
+                // Scale
+                if (!ba.scale.times.empty()) {
+                    std::vector<double> sx, sy, sz;
+                    for(size_t k=0; k<ba.scale.times.size(); ++k) {
+                        sx.push_back(ba.scale.values[k*3+0]);
+                        sy.push_back(ba.scale.values[k*3+1]);
+                        sz.push_back(ba.scale.values[k*3+2]);
+                    }
+                    link.curves[ji].sx = add_curve(ba.scale.times, sx);
+                    link.curves[ji].sy = add_curve(ba.scale.times, sy);
+                    link.curves[ji].sz = add_curve(ba.scale.times, sz);
+                }
             }
             anim_links.push_back(link);
         }

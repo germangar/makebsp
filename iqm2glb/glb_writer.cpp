@@ -222,92 +222,67 @@ bool write_glb(const Model& model, const char* output_path) {
     }
     out->scene = &out->scenes[0];
 
-    // Animations
-    if (!model.animations.empty() && model.num_frames > 0) {
+    // Animations (Sparse Export)
+    if (!model.animations.empty()) {
         out->animations_count = model.animations.size();
         out->animations = (cgltf_animation*)calloc(out->animations_count, sizeof(cgltf_animation));
         out->buffer_views[3].offset = buf.size();
-
-        std::vector<uint32_t> chan_start(model.poses.size() + 1, 0);
-        for(size_t i=0; i<model.poses.size(); ++i) {
-            uint32_t cnt = 0;
-            for(int c=0; c<10; ++c) if(model.poses[i].mask & (1<<c)) cnt++;
-            chan_start[i+1] = chan_start[i] + cnt;
-        }
 
         for (size_t ai = 0; ai < model.animations.size(); ++ai) {
             const AnimationDef& def = model.animations[ai];
             cgltf_animation* anim = &out->animations[ai];
             anim->name = sanitize_name(def.name.c_str());
-            uint32_t nf = (def.last_frame >= def.first_frame) ? (def.last_frame - def.first_frame + 1) : 0;
-            if (nf > 1000000) {
-                std::cerr << "GLB Writer: ERROR: Animation \"" << def.name << "\" has too many frames (" << nf << "). Skipping." << std::endl;
-                continue;
+            
+            // Count active channels to allocate samplers/channels
+            size_t active_channels = 0;
+            for (const auto& ba : def.track.bones) {
+                if (!ba.translation.times.empty()) active_channels++;
+                if (!ba.rotation.times.empty()) active_channels++;
+                if (!ba.scale.times.empty()) active_channels++;
             }
-            if (nf == 0) continue;
 
-            std::vector<float> times(nf);
-            for(uint32_t f=0; f<nf; ++f) {
-                int frame_idx = (int)def.first_frame + (int)f;
-                if (frame_idx < (int)model.timestamps.size()) {
-                    times[f] = (float)(model.timestamps[frame_idx] - model.timestamps[def.first_frame]);
-                } else {
-                    times[f] = (float)f / def.fps;
-                }
-            }
-            size_t ts_off = buf.size();
-            append_to_buffer(buf, &out->buffers[0], times.data(), nf*4);
-            cgltf_accessor* time_acc = alloc_accessor(out, &out->buffer_views[3], cgltf_type_scalar, cgltf_component_type_r_32f, nf, ts_off - out->buffer_views[3].offset);
-            time_acc->has_min = time_acc->has_max = true;
-            time_acc->min[0] = times[0]; time_acc->max[0] = times[nf-1];
+            if (active_channels == 0) continue;
 
-            anim->samplers_count = model.joints.size() * 3;
-            anim->samplers = (cgltf_animation_sampler*)calloc(anim->samplers_count, sizeof(cgltf_animation_sampler));
-            anim->channels_count = model.joints.size() * 3;
-            anim->channels = (cgltf_animation_channel*)calloc(anim->channels_count, sizeof(cgltf_animation_channel));
+            anim->samplers_count = active_channels;
+            anim->samplers = (cgltf_animation_sampler*)calloc(active_channels, sizeof(cgltf_animation_sampler));
+            anim->channels_count = active_channels;
+            anim->channels = (cgltf_animation_channel*)calloc(active_channels, sizeof(cgltf_animation_channel));
 
+            uint32_t ch_idx = 0;
             for (size_t ji = 0; ji < model.joints.size(); ++ji) {
-                std::vector<float> t_data(nf*3), r_data(nf*4), s_data(nf*3);
-                for (uint32_t f = 0; f < nf; ++f) {
-                    int frame_idx = std::min((int)def.first_frame + (int)f, (int)model.num_frames - 1);
-                    const float* fptr = model.frames.data() + (size_t)frame_idx * model.num_framechannels + chan_start[ji];
-                    float p[10];
-                    const iqmpose& ip = model.poses[ji];
-                    uint32_t ch = 0;
-                    for(int c=0; c<10; ++c) {
-                        p[c] = ip.channeloffset[c];
-                        if(ip.mask & (1<<c)) p[c] += fptr[ch++] * ip.channelscale[c];
-                    }
-                    float q[4] = {p[3], p[4], p[5], p[6]}; quat_normalize(q);
+                const BoneAnim& ba = def.track.bones[ji];
+                
+                auto add_channel = [&](const AnimChannel& chan, cgltf_animation_path_type path, int components) {
+                    if (chan.times.empty()) return;
+
+                    // Times accessor
+                    size_t ts_off = buf.size();
+                    std::vector<float> f_times(chan.times.begin(), chan.times.end());
+                    append_to_buffer(buf, &out->buffers[0], f_times.data(), f_times.size() * 4);
+                    cgltf_accessor* time_acc = alloc_accessor(out, &out->buffer_views[3], cgltf_type_scalar, cgltf_component_type_r_32f, f_times.size(), ts_off - out->buffer_views[3].offset);
+                    time_acc->has_min = time_acc->has_max = true;
+                    time_acc->min[0] = f_times.front(); time_acc->max[0] = f_times.back();
+
+                    // Values accessor
+                    size_t val_off = buf.size();
+                    append_to_buffer(buf, &out->buffers[0], chan.values.data(), chan.values.size() * 4);
+                    cgltf_type type = (components == 4) ? cgltf_type_vec4 : cgltf_type_vec3;
+                    cgltf_accessor* val_acc = alloc_accessor(out, &out->buffer_views[3], type, cgltf_component_type_r_32f, chan.times.size(), val_off - out->buffer_views[3].offset);
+
+                    anim->samplers[ch_idx].input = time_acc;
+                    anim->samplers[ch_idx].output = val_acc;
+                    anim->samplers[ch_idx].interpolation = cgltf_interpolation_type_linear;
+
+                    anim->channels[ch_idx].sampler = &anim->samplers[ch_idx];
+                    anim->channels[ch_idx].target_node = &joints_start[ji];
+                    anim->channels[ch_idx].target_path = path;
                     
-                    // Neighborhood against previous frame
-                    if (f > 0) {
-                        float dot = q[0]*r_data[(f-1)*4+0] + q[1]*r_data[(f-1)*4+1] + q[2]*r_data[(f-1)*4+2] + q[3]*r_data[(f-1)*4+3];
-                        if (dot < 0) {
-                            for(int k=0; k<4; ++k) q[k] = -q[k];
-                        }
-                    } else {
-                        // For the first frame, neighborhood against the joint's base rotation
-                        float dot = q[0]*model.joints[ji].rotate[0] + q[1]*model.joints[ji].rotate[1] + q[2]*model.joints[ji].rotate[2] + q[3]*model.joints[ji].rotate[3];
-                        if (dot < 0) {
-                            for(int k=0; k<4; ++k) q[k] = -q[k];
-                        }
-                    }
-                    
-                    memcpy(&t_data[f*3], p, 3*4); memcpy(&r_data[f*4], q, 4*4); memcpy(&s_data[f*3], p+7, 3*4);
-                }
-                auto add_ch = [&](int sid, cgltf_animation_path_type path, cgltf_type type, const std::vector<float>& data) {
-                    size_t off = buf.size();
-                    append_to_buffer(buf, &out->buffers[0], data.data(), data.size()*4);
-                    anim->samplers[sid].input = time_acc;
-                    anim->samplers[sid].output = alloc_accessor(out, &out->buffer_views[3], type, cgltf_component_type_r_32f, nf, off - out->buffer_views[3].offset);
-                    anim->channels[sid].sampler = &anim->samplers[sid];
-                    anim->channels[sid].target_node = &joints_start[ji];
-                    anim->channels[sid].target_path = path;
+                    ch_idx++;
                 };
-                add_ch(ji*3+0, cgltf_animation_path_type_translation, cgltf_type_vec3, t_data);
-                add_ch(ji*3+1, cgltf_animation_path_type_rotation, cgltf_type_vec4, r_data);
-                add_ch(ji*3+2, cgltf_animation_path_type_scale, cgltf_type_vec3, s_data);
+
+                add_channel(ba.translation, cgltf_animation_path_type_translation, 3);
+                add_channel(ba.rotation, cgltf_animation_path_type_rotation, 4);
+                add_channel(ba.scale, cgltf_animation_path_type_scale, 3);
             }
         }
         out->buffer_views[3].size = buf.size() - out->buffer_views[3].offset;

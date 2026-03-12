@@ -15,6 +15,37 @@ struct Joint {
     float scale[3];
 };
 
+struct Pose {
+    float translate[3];
+    float rotate[4];
+    float scale[3];
+};
+
+struct AnimChannel {
+    std::vector<double> times;
+    std::vector<float> values; // 3 floats per key for T/S, 4 for R
+};
+
+struct BoneAnim {
+    AnimChannel translation;
+    AnimChannel rotation;
+    AnimChannel scale;
+};
+
+struct AnimationTrack {
+    std::vector<BoneAnim> bones; // One per joint in the model
+};
+
+struct AnimationDef {
+    std::string name;
+    int   first_frame; // Original range (for IQM/SKP reference)
+    int   last_frame;
+    int   loop_frames;
+    float fps;
+    
+    AnimationTrack track; // The actual sparse data
+};
+
 struct Mesh {
     std::string name;
     std::string material_name;
@@ -25,6 +56,7 @@ struct Mesh {
 struct Model {
     std::vector<Joint> joints;
     std::vector<Mesh> meshes;
+    // Animation data (Sparse Tracks)
     std::vector<AnimationDef> animations;
     
     // Vertex data
@@ -37,13 +69,6 @@ struct Model {
     // Indices (shared buffer)
     std::vector<uint32_t> indices;
 
-    // Animation frame data (floats, will be quantized by writer)
-    std::vector<float> frames;
-    std::vector<double> timestamps; // Absolute time in seconds for each frame sample
-    std::vector<iqmpose> poses; // We'll keep iqmpose for now as it's a good compact rep
-    
-    uint32_t num_frames = 0;
-    uint32_t num_framechannels = 0;
     bool qfusion = false;
 
     // Bind-pose transform cache
@@ -81,30 +106,6 @@ struct Model {
         }
     }
 
-    void compute_timestamps() {
-        if (num_frames == 0) return;
-        timestamps.assign(num_frames, -1.0); // -1 means uninitialized
-        
-        // Populate based on known animations
-        for (const auto& anim : animations) {
-            double fps = (anim.fps > 0) ? anim.fps : BASE_FPS;
-            for (int f = anim.first_frame; f <= anim.last_frame; ++f) {
-                if (f >= 0 && f < (int)num_frames) {
-                    timestamps[f] = (double)(f - anim.first_frame) / fps;
-                    // Note: This is simplified. If frames overlap sequences with different FPS,
-                    // the last animation wins. In practice, IQM frames are contiguous.
-                }
-            }
-        }
-        
-        // Fallback for any frames not covered by animations
-        double current_time = 0;
-        for (uint32_t f = 0; f < num_frames; ++f) {
-            if (timestamps[f] < 0) {
-                timestamps[f] = (double)f / BASE_FPS;
-            }
-        }
-    }
 
     void compute_bounds() {
         if (positions.empty()) return;
@@ -133,9 +134,108 @@ struct Model {
     bool validate_skeleton() {
         for (size_t i = 0; i < joints.size(); ++i) {
             if (joints[i].parent >= (int)joints.size()) return false;
-            // Detect cycles (simple check: parent must be < child for our tree-building writers)
-            // Note: IQM and FBX generally expect parents to be defined before children
         }
         return true;
+    }
+
+    // Evaluate animation at a specific time
+    void evaluate_animation(int anim_idx, double time, std::vector<Pose>& out_poses) const {
+        out_poses.resize(joints.size());
+        if (anim_idx < 0 || anim_idx >= (int)animations.size()) {
+            for (size_t i = 0; i < joints.size(); ++i) {
+                memcpy(out_poses[i].translate, joints[i].translate, 12);
+                memcpy(out_poses[i].rotate, joints[i].rotate, 16);
+                memcpy(out_poses[i].scale, joints[i].scale, 12);
+            }
+            return;
+        }
+
+        const AnimationDef& anim = animations[anim_idx];
+        for (size_t i = 0; i < joints.size(); ++i) {
+            const BoneAnim& ba = anim.track.bones[i];
+            Pose& p = out_poses[i];
+
+            // Default to bind pose
+            memcpy(p.translate, joints[i].translate, 12);
+            memcpy(p.rotate, joints[i].rotate, 16);
+            memcpy(p.scale, joints[i].scale, 12);
+
+            // Interpolate Translation
+            if (!ba.translation.times.empty()) {
+                sample_vec3(ba.translation, time, p.translate);
+            }
+            // Interpolate Rotation
+            if (!ba.rotation.times.empty()) {
+                sample_quat(ba.rotation, time, p.rotate);
+            }
+            // Interpolate Scale
+            if (!ba.scale.times.empty()) {
+                sample_vec3(ba.scale, time, p.scale);
+            }
+        }
+    }
+
+private:
+    void sample_vec3(const AnimChannel& chan, double time, float* out) const {
+        if (time <= chan.times.front()) {
+            memcpy(out, chan.values.data(), 12);
+            return;
+        }
+        if (time >= chan.times.back()) {
+            memcpy(out, &chan.values[(chan.times.size() - 1) * 3], 12);
+            return;
+        }
+
+        auto it = std::lower_bound(chan.times.begin(), chan.times.end(), time);
+        size_t idx1 = std::distance(chan.times.begin(), it);
+        size_t idx0 = idx1 - 1;
+
+        double t0 = chan.times[idx0];
+        double t1 = chan.times[idx1];
+        float factor = (float)((time - t0) / (t1 - t0));
+
+        const float* v0 = &chan.values[idx0 * 3];
+        const float* v1 = &chan.values[idx1 * 3];
+        for (int i = 0; i < 3; ++i) out[i] = v0[i] + factor * (v1[i] - v0[i]);
+    }
+
+    void sample_quat(const AnimChannel& chan, double time, float* out) const {
+        if (time <= chan.times.front()) {
+            memcpy(out, chan.values.data(), 16);
+            return;
+        }
+        if (time >= chan.times.back()) {
+            memcpy(out, &chan.values[(chan.times.size() - 1) * 4], 16);
+            return;
+        }
+
+        auto it = std::lower_bound(chan.times.begin(), chan.times.end(), time);
+        size_t idx1 = std::distance(chan.times.begin(), it);
+        size_t idx0 = idx1 - 1;
+
+        double t0 = chan.times[idx0];
+        double t1 = chan.times[idx1];
+        float factor = (float)((time - t0) / (t1 - t0));
+
+        float v0[4], v1[4];
+        memcpy(v0, &chan.values[idx0 * 4], 16);
+        memcpy(v1, &chan.values[idx1 * 4], 16);
+
+        float dot = v0[0]*v1[0] + v0[1]*v1[1] + v0[2]*v1[2] + v0[3]*v1[3];
+        if (dot < 0) {
+            dot = -dot;
+            for(int i=0; i<4; ++i) v1[i] = -v1[i];
+        }
+
+        if (dot > 0.9995f) {
+            for(int i=0; i<4; ++i) out[i] = v0[i] + factor*(v1[i]-v0[i]);
+        } else {
+            float theta0 = acosf(dot);
+            float theta = theta0 * factor;
+            float s0 = cosf(theta) - dot * sinf(theta) / sinf(theta0);
+            float s1 = sinf(theta) / sinf(theta0);
+            for(int i=0; i<4; ++i) out[i] = s0*v0[i] + s1*v1[i];
+        }
+        quat_normalize(out);
     }
 };
