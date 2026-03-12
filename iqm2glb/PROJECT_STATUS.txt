@@ -25,9 +25,9 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 - **IQM**: Native IQM loader with Z-up to Y-up conversion and winding correction.
 
 ### Writers:
-- **Binary FBX**: Custom binary writer with full skeletal support (NodeAttributes, BindPoses).
+- **Binary FBX (Legacy)**: Custom binary writer with full skeletal support.
+- **Assimp FBX (Primary)**: Finalized robust FBX exporter with flat hierarchy (Armature Root), full name sanitization, and relative timing for perfect Blender/Modern importer compatibility.
 - **cgltf (Standard)**: Original fast GLB writer, normalized for CCW.
-- **Assimp (Universal)**: New robust GLB writer.
 - **IQM**: Native writer with Y-up to Z-up conversion and winding reversal (CCW -> CW).
 
 ## 5. Critical Implementation Details
@@ -37,9 +37,10 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 - **IBM Handling**: Inverse Bind Matrices (IBMs) are loaded directly from GLB to ensure skinning stability.
 - **Winding**: Internal state is strictly **Y-up CCW**. Formats like IQM are flipped during Load/Save to match.
 
-## 6. FBX Implementation Notes
-- **NodeAttributes**: Every bone Model must have a connected `LimbNode` NodeAttribute for Maya/Modern Blender compatibility.
-- **Skinning Bind Pose**: Mesh `Transform` in a Cluster is stored in **bone space** (Mesh World * inv(Bone World)).
-- **Euler Unwrapping**: Quaternions are unwrapped during export to prevent 360-degree "spaghetti" mesh artifacts.
-- **Cluster Filtering**: Joints with no vertex weights are skipped during Cluster generation to prevent importer crashes.
-- **Euler Gimbal Lock**: XYZ Euler angles for `Lcl Rotation` must be exactly extracted using a 3x3 rotation matrix (Shoemake method) to preserve the `-90y` pitch singularity and prevent base pose mathematical drifts (e.g. flipped pelvis).
+## 6. FBX Implementation Notes (Assimp Modern)
+- **Root Hierarchy**: "Armature" is the scene root. All root joints and mesh nodes are direct children of Armature (Flat Hierarchy).
+- **Name Sanitization**: Spaces are replaced with underscores in both node names and animation channels to ensure exact binding in Blender.
+- **Scale Control**: `UnitScaleFactor` is set to 100.0 to match Blender's meter/centimeter expectations.
+- **Relative Timing**: Animation channels start at time 0.0s for every take, preventing offset issues in modern importers.
+- **Mesh/Bone Distinction**: Mesh nodes are suffixed with `_mesh` to prevent name collisions with bones of the same name.
+- **Action Consolidation**: Using a flat hierarchy allows Blender to better predict action slots, though manual selection of the "wrench" (Armature) in the outliner is the gold standard for playback.

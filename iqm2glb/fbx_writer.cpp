@@ -5,6 +5,12 @@
 #include <ctime>
 #include <algorithm>
 
+static std::string sanitize(const std::string& s) {
+    std::string res = s;
+    std::replace(res.begin(), res.end(), ' ', '_');
+    return res;
+}
+
 // FBX constants
 const int64_t KTIME_ONE_SECOND = 46186158000LL;
 
@@ -176,7 +182,7 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         
         Fbx::Record* mod = new Fbx::Record("Model", objs);
         mod->properties().insert(new Fbx::Property(j_id));
-        mod->properties().insert(new Fbx::Property(in.joints[i].name + std::string("\x00\x01", 2) + "Model"));
+        mod->properties().insert(new Fbx::Property(sanitize(in.joints[i].name) + std::string("\x00\x01", 2) + "Model"));
         mod->properties().insert(new Fbx::Property("LimbNode"));
         
         (*mod->insert(new Fbx::Record("Version")))->properties().insert(new Fbx::Property((int32_t)232));
@@ -198,7 +204,7 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         joint_to_attr_id[(int)i] = attr_id;
         Fbx::Record* attr = new Fbx::Record("NodeAttribute", objs);
         attr->properties().insert(new Fbx::Property(attr_id));
-        attr->properties().insert(new Fbx::Property(in.joints[i].name + std::string("\x00\x01", 2) + "NodeAttribute"));
+        attr->properties().insert(new Fbx::Property(sanitize(in.joints[i].name) + std::string("\x00\x01", 2) + "NodeAttribute"));
         attr->properties().insert(new Fbx::Property("LimbNode"));
         (*attr->insert(new Fbx::Record("TypeFlags")))->properties().insert(new Fbx::Property("Skeleton"));
     }
@@ -281,7 +287,8 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         // Mesh Model
         Fbx::Record* mod_mesh = new Fbx::Record("Model", objs);
         mod_mesh->properties().insert(new Fbx::Property(mesh_model_id));
-        mod_mesh->properties().insert(new Fbx::Property("Mesh" + std::string("\x00\x01", 2) + "Model"));
+        std::string m_name = (in.meshes.empty() ? "Mesh" : sanitize(in.meshes[0].name)) + "_mesh";
+        mod_mesh->properties().insert(new Fbx::Property(m_name + std::string("\x00\x01", 2) + "Model"));
         mod_mesh->properties().insert(new Fbx::Property("Mesh"));
         (*mod_mesh->insert(new Fbx::Record("Version")))->properties().insert(new Fbx::Property((int32_t)232));
         Fbx::Record* p70_mesh = new Fbx::Record("Properties70", mod_mesh);
@@ -372,7 +379,7 @@ pose->properties().insert(new Fbx::Property("BindPose"));
 (*pose->insert(new Fbx::Record("Type")))->properties().insert(new Fbx::Property("BindPose"));
 (*pose->insert(new Fbx::Record("Version")))->properties().insert(new Fbx::Property((int32_t)100));
 
-int32_t num_pose_nodes = (write_mesh ? 1 : 0) + (int32_t)in.joints.size();
+int32_t num_pose_nodes = (write_mesh ? 1 : 0) + (int32_t)in.joints.size() + 1;
 (*pose->insert(new Fbx::Record("NbPoseNodes")))->properties().insert(new Fbx::Property(num_pose_nodes));
 
 auto add_pose_node = [&](int64_t node_id, const mat4& m) {
@@ -407,7 +414,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             
             Fbx::Record* stack = new Fbx::Record("AnimationStack", objs);
             stack->properties().insert(new Fbx::Property(link.stack_id));
-            stack->properties().insert(new Fbx::Property(in.animations[ai].name + std::string("\x00\x01", 2) + "AnimStack"));
+            stack->properties().insert(new Fbx::Property(sanitize(in.animations[ai].name) + std::string("\x00\x01", 2) + "AnimStack"));
             stack->properties().insert(new Fbx::Property(""));
             
             Fbx::Record* s_props70 = new Fbx::Record("Properties70", stack);
@@ -420,7 +427,7 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             
             Fbx::Record* layer = new Fbx::Record("AnimationLayer", objs);
             layer->properties().insert(new Fbx::Property(link.layer_id));
-            layer->properties().insert(new Fbx::Property(in.animations[ai].name + std::string("\x00\x01", 2) + "AnimLayer"));
+            layer->properties().insert(new Fbx::Property(sanitize(in.animations[ai].name) + std::string("\x00\x01", 2) + "AnimLayer"));
             layer->properties().insert(new Fbx::Property(""));
 
             link.nodes.resize(in.joints.size());
@@ -525,14 +532,14 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
 
     for (size_t i = 0; i < in.joints.size(); ++i) {
         if (in.joints[i].parent >= 0) add_c("OO", joint_to_id[i], joint_to_id[in.joints[i].parent]);
-        else add_c("OO", joint_to_id[i], 0);
+        else add_c("OO", joint_to_id[i], 0); // Root joints to Scene Root (0)
 
         // Connect NodeAttribute to Joint Model
         add_c("OO", joint_to_attr_id[i], joint_to_id[i]);
     }
 
     if (write_mesh) {
-        add_c("OO", mesh_model_id, 0);
+        add_c("OO", mesh_model_id, 0); // Mesh to Scene Root (0)
         add_c("OO", mesh_geom_id, mesh_model_id);
         add_c("OO", material_id, mesh_model_id);
         add_c("OO", skin_id, mesh_geom_id);

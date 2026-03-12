@@ -83,7 +83,17 @@ int main(int argc, char** argv) {
                     model.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
                 }
                 std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
-                for (const auto& a : cfg_anims) model.animations.push_back(a);
+                for (const auto& a : cfg_anims) {
+                    bool found = false;
+                    for (auto& existing : model.animations) {
+                        if (existing.name == a.name) {
+                            existing = a;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) model.animations.push_back(a);
+                }
             } else {
                 if (model.animations.empty() && model.num_frames > 0) {
                     model.animations.push_back({"frames", 0, (int)model.num_frames - 1, 0, BASE_FPS});
@@ -139,8 +149,8 @@ int main(int argc, char** argv) {
         else if (!write_base && write_anim) std::cout << "Writing FBX (Animations only): " << out_path << "..." << std::endl;
         else std::cout << "Writing FBX (Complete): " << out_path << "..." << std::endl;
 
-        // Using Assimp writer as the primary FBX exporter
-        if (!write_fbx_assimp(out_path.c_str(), model)) return 3;
+        // Using Native writer as the primary FBX exporter
+        if (!write_fbx(out_path.c_str(), model)) return 3;
     } else if (ends_with(out_path, ".glb")) {
         std::cout << "Writing GLB (cgltf): " << out_path << "..." << std::endl;
         if (!write_glb(model, out_path.c_str())) return 3;
