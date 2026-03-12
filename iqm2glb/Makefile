@@ -20,7 +20,6 @@ SRCS   = main.cpp \
          glb_loader_assimp.cpp \
          skp_loader.cpp \
          fbx_writer.cpp \
-         fbx_writer_assimp.cpp \
          fbx_loader.cpp
 
 LIB_SRCS_CPP = ../libs/fbx-file/fbx.cpp

@@ -484,7 +484,9 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                 std::vector<double> tx, ty, tz, rx, ry, rz, sx, sy, sz;
                 // nf already calculated above
                 
-                float prev_e[3] = {0,0,0};
+                float prev_e[3];
+                quat_to_euler(in.joints[ji].rotate, prev_e); // Start from Bind Pose
+                
                 for (uint32_t k = 0; k < nf; ++k) {
                     uint32_t f_idx = in.animations[ai].first_frame + k;
                     const float* f = &in.frames[f_idx * in.num_framechannels + ji * 10];
@@ -493,19 +495,10 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                     // Normalize quaternion to ensure stable Euler conversion
                     float q[4] = { f[3], f[4], f[5], f[6] };
                     quat_normalize(q);
-                    float e[3]; quat_to_euler(q, e);
                     
-                    if (k == 0) {
-                        for (int c = 0; c < 3; ++c) prev_e[c] = e[c];
-                    } else {
-                        // Un-wrap euler angles (prevent > 180 deg jumps)
-                        for (int c = 0; c < 3; ++c) {
-                            float diff = e[c] - prev_e[c];
-                            if (diff < -180.0f) e[c] += std::ceil(-diff / 360.0f) * 360.0f;
-                            else if (diff > 180.0f) e[c] -= std::ceil(diff / 360.0f) * 360.0f;
-                            prev_e[c] = e[c];
-                        }
-                    }
+                    float e[3];
+                    quat_to_euler_near(q, e, prev_e);
+                    memcpy(prev_e, e, 12);
                     
                     rx.push_back(e[0]); ry.push_back(e[1]); rz.push_back(e[2]);
                     sx.push_back(f[7]); sy.push_back(f[8]); sz.push_back(f[9]);

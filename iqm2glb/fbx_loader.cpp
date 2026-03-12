@@ -245,6 +245,7 @@ bool load_fbx(const char* path, Model& out) {
                             
                             float t[3] = { (float)t_obj.translation.x, (float)t_obj.translation.y, (float)t_obj.translation.z };
                             float r[4] = { (float)t_obj.rotation.x, (float)t_obj.rotation.y, (float)t_obj.rotation.z, (float)t_obj.rotation.w };
+                            float s[3] = { (float)t_obj.scale.x, (float)t_obj.scale.y, (float)t_obj.scale.z };
                             
                             // Quaternion neighborhooding to prevent 180-degree spins
                             if (!first_frame_quat) {
@@ -264,9 +265,9 @@ bool load_fbx(const char* path, Model& out) {
                             out.frames.push_back(r[2]);
                             out.frames.push_back(r[3]);
                             
-                            out.frames.push_back(1.0f);
-                            out.frames.push_back(1.0f);
-                            out.frames.push_back(1.0f);
+                            out.frames.push_back(s[0]);
+                            out.frames.push_back(s[1]);
+                            out.frames.push_back(s[2]);
                         } else {
                             // Pad if node not found
                             for (int p = 0; p < 10; ++p) out.frames.push_back(p < 7 ? 0.0f : 1.0f);

@@ -47,16 +47,7 @@ inline void quat_to_euler(const float* q, float* euler) {
     m[2][1] = 2.0f * (y*z + x*w);
     m[2][2] = 1.0f - 2.0f * (x*x + y*y);
 
-    // FBX XYZ order implies Rot = Rz * Ry * Rx
-    // Therefore m[0][2] = sin(Y), m[1][2] = -sin(X)cos(Y), m[2][2] = cos(X)cos(Y)
-    // Actually, std FBX XYZ (assuming column vectors v' = RzRyRx * v):
-    // m[0][2] = sin(Y) is NOT true.
-    // If v' = Rx * Ry * Rz * v (FBX "XYZ" evaluates X then Y then Z)
-    // Then m[2][0] = -sin(Y)
-    
-    // An absolutely safe approach is to use the standard "Shoemake" extraction for XYZ.
-    // For XYZ order (rotating Z first, then Y, then X):  R = Rx * Ry * Rz
-    // m20 = -sin(y)
+    // FBX XYZ order implies R = Rz * Ry * Rx
     float sy = -m[2][0];
     if (sy >= 0.99999f) { // Gimbal lock (+90y)
         euler[1] = 90.0f;
@@ -70,6 +61,67 @@ inline void quat_to_euler(const float* q, float* euler) {
         euler[1] = std::asin(sy) * 180.0f / 3.1415926535f;
         euler[0] = std::atan2(m[2][1], m[2][2]) * 180.0f / 3.1415926535f;
         euler[2] = std::atan2(m[1][0], m[0][0]) * 180.0f / 3.1415926535f;
+    }
+}
+
+// Picks the solution nearest to prev_euler to avoid 180-degree flips through gimbal lock
+inline void quat_to_euler_near(const float* q, float* euler, const float* prev_euler) {
+    float x = q[0], y = q[1], z = q[2], w = q[3];
+    float m[3][3];
+    m[0][0] = 1.0f - 2.0f * (y*y + z*z);
+    m[0][1] = 2.0f * (x*y - z*w);
+    m[0][2] = 2.0f * (x*z + y*w);
+    m[1][0] = 2.0f * (x*y + z*w);
+    m[1][1] = 1.0f - 2.0f * (x*x + z*z);
+    m[1][2] = 2.0f * (y*z - x*w);
+    m[2][0] = 2.0f * (x*z - y*w);
+    m[2][1] = 2.0f * (y*z + x*w);
+    m[2][2] = 1.0f - 2.0f * (x*x + y*y);
+
+    float sy = -m[2][0];
+    if (sy >= 0.99999f) {
+        euler[1] = 90.0f;
+        float target_z = prev_euler[2];
+        float sum_xz = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
+        euler[2] = target_z;
+        euler[0] = sum_xz - target_z;
+    } else if (sy <= -0.99999f) {
+        euler[1] = -90.0f;
+        float target_z = prev_euler[2];
+        float diff_xz = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
+        euler[2] = target_z;
+        euler[0] = diff_xz + target_z;
+    } else {
+        float y1 = std::asin(sy) * 180.0f / 3.1415926535f;
+        float x1 = std::atan2(m[2][1], m[2][2]) * 180.0f / 3.1415926535f;
+        float z1 = std::atan2(m[1][0], m[0][0]) * 180.0f / 3.1415926535f;
+        
+        float y2 = 180.0f - y1;
+        float x2 = x1 + 180.0f;
+        float z2 = z1 + 180.0f;
+        
+        auto dist = [](float a, float b, float c, const float* p) {
+            auto d = [](float v, float pv) {
+                float dv = std::fmod(v - pv, 360.0f);
+                if (dv > 180.0f) dv -= 360.0f;
+                if (dv < -180.0f) dv += 360.0f;
+                return dv*dv;
+            };
+            return d(a, p[0]) + d(b, p[1]) + d(c, p[2]);
+        };
+        
+        if (dist(x1, y1, z1, prev_euler) < dist(x2, y2, z2, prev_euler)) {
+            euler[0] = x1; euler[1] = y1; euler[2] = z1;
+        } else {
+            euler[0] = x2; euler[1] = y2; euler[2] = z2;
+        }
+    }
+    
+    // Final un-wrapping for chosen solution
+    for (int i = 0; i < 3; ++i) {
+        float diff = euler[i] - prev_euler[i];
+        while (diff > 180.0f) { euler[i] -= 360.0f; diff -= 360.0f; }
+        while (diff < -180.0f) { euler[i] += 360.0f; diff += 360.0f; }
     }
 }
 

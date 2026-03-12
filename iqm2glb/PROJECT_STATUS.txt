@@ -8,8 +8,8 @@ Originally designed for IQM -> GLB, now supports multiple formats and deep hiera
 - **IQM**: Inter-Quake Model (Z-up, "Backward" CW winding).
 - **GLB/GLTF**: GL Transmission Format (Y-up, Standard CCW winding).
 - **SKM/SKP**: Warsow legacy skeletal format (Z-up, "Backward" CW winding).
-- **Binary FBX**: Autodesk FBX (Y-up, Standard CCW winding).
-- **Universal**: Assimp-based loading/saving for future format support (OBJ, FBX, etc).
+- **Binary FBX**: Autodesk FBX (Y-up, Standard CCW winding). Native high-performance implementation.
+- **Universal**: Assimp-based loading for supplementary formats.
 
 ## 3. Internal Representation (Intermediate Model)
 To maintain consistency across converters, all loaders/writers must adhere to:
@@ -20,13 +20,13 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 ## 4. Loader/Writer Capabilities
 ### Loaders:
 - **cgltf**: Fast, lean GLB/GLTF loading.
-- **Assimp**: Robust, handles complex hierarchy and sampling normalization.
+- **ufbx (Primary)**: Standard-grade FBX loading with full hierarchy and animation support.
+- **Assimp**: Robust, handles complex hierarchy and sampling normalization (non-FBX).
 - **SKP**: Specialized loader for legacy SKM/SKP pairs.
 - **IQM**: Native IQM loader with Z-up to Y-up conversion and winding correction.
 
 ### Writers:
-- **Binary FBX (Legacy)**: Custom binary writer with full skeletal support.
-- **Assimp FBX (Primary)**: Finalized robust FBX exporter with flat hierarchy (Armature Root), full name sanitization, and relative timing for perfect Blender/Modern importer compatibility.
+- **Binary FBX (Primary)**: Native binary writer with modern "v7-Final" standards: single-armature hierarchy, full name sanitization, and relative timing for perfect Blender compatibility.
 - **cgltf (Standard)**: Original fast GLB writer, normalized for CCW.
 - **IQM**: Native writer with Y-up to Z-up conversion and winding reversal (CCW -> CW).
 
@@ -37,10 +37,12 @@ To maintain consistency across converters, all loaders/writers must adhere to:
 - **IBM Handling**: Inverse Bind Matrices (IBMs) are loaded directly from GLB to ensure skinning stability.
 - **Winding**: Internal state is strictly **Y-up CCW**. Formats like IQM are flipped during Load/Save to match.
 
-## 6. FBX Implementation Notes (Assimp Modern)
-- **Root Hierarchy**: "Armature" is the scene root. All root joints and mesh nodes are direct children of Armature (Flat Hierarchy).
-- **Name Sanitization**: Spaces are replaced with underscores in both node names and animation channels to ensure exact binding in Blender.
+## 6. FBX Implementation Notes (Modern Standards)
+- **Joint Spinning Fixed**: Implemented "Continuous Euler Extraction" in `fbx_writer.cpp`. By picking the nearest solution and seeding from the bind pose, animation curves remain smooth through gimbal lock.
+- **Root Hierarchy**: A single clean Armature object is created in Blender by ensuring all root joints and meshes are siblings under the scene root (parent 0).
+- **BindPose Integration**: All joints and the mesh are included in the `BindPose` (`PoseNode`) to ensure Blender correctly integrates bones into the `Pose` section of the object.
+- **Name Sanitization**: Spaces are replaced with underscores (`_`) in both node names and animation channels to ensure exact binding in Blender.
+- **Mesh/Bone Distinction**: Mesh nodes are suffixed with `_mesh` to prevent name collisions with bones of the same name.
 - **Scale Control**: `UnitScaleFactor` is set to 100.0 to match Blender's meter/centimeter expectations.
 - **Relative Timing**: Animation channels start at time 0.0s for every take, preventing offset issues in modern importers.
-- **Mesh/Bone Distinction**: Mesh nodes are suffixed with `_mesh` to prevent name collisions with bones of the same name.
-- **Action Consolidation**: Using a flat hierarchy allows Blender to better predict action slots, though manual selection of the "wrench" (Armature) in the outliner is the gold standard for playback.
+- **Animation Deduplication**: Names in `animation.cfg` are used to deduplicate/override internal animations (no more `.001` intruders).
