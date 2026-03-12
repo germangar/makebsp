@@ -33,7 +33,9 @@ bool write_fbx_assimp(const char* path, const Model& model)
     // 2. Joints
     std::vector<aiNode*> joints(model.joints.size());
     for (size_t i = 0; i < model.joints.size(); ++i) {
-        joints[i] = new aiNode(model.joints[i].name);
+        std::string name = model.joints[i].name;
+        std::replace(name.begin(), name.end(), ' ', '_');
+        joints[i] = new aiNode(name);
         mat4 local = mat4_from_trs(model.joints[i].translate, model.joints[i].rotate, model.joints[i].scale);
         joints[i]->mTransformation = to_aiMatrix4x4(local);
     }
@@ -121,7 +123,9 @@ bool write_fbx_assimp(const char* path, const Model& model)
                 }
                 
                 aiBone* bone = new aiBone();
-                bone->mName = aiString(model.joints[j].name);
+                std::string bname = model.joints[j].name;
+                std::replace(bname.begin(), bname.end(), ' ', '_');
+                bone->mName = aiString(bname);
                 bone->mOffsetMatrix = to_aiMatrix4x4(ibms[j]);
                 bone->mNumWeights = (unsigned int)vWeights.size();
                 if (bone->mNumWeights > 0) {
@@ -140,6 +144,10 @@ bool write_fbx_assimp(const char* path, const Model& model)
         }
 
         aiNode* meshNode = new aiNode(m.name);
+        std::string mname = meshNode->mName.C_Str();
+        std::replace(mname.begin(), mname.end(), ' ', '_');
+        meshNode->mName = aiString(mname);
+        
         meshNode->mNumMeshes = 1;
         meshNode->mMeshes = new unsigned int[1];
         meshNode->mMeshes[0] = i;
@@ -147,14 +155,27 @@ bool write_fbx_assimp(const char* path, const Model& model)
     }
 
     scene->mRootNode = new aiNode("RootNode");
-    scene->mRootNode->mNumChildren = (unsigned int)mesh_nodes.size() + 1;
-    scene->mRootNode->mChildren = new aiNode*[scene->mRootNode->mNumChildren];
+    scene->mRootNode->mNumChildren = 1;
+    scene->mRootNode->mChildren = new aiNode*[1];
     scene->mRootNode->mChildren[0] = armatureNode;
     armatureNode->mParent = scene->mRootNode;
-    for (size_t i = 0; i < mesh_nodes.size(); ++i) {
-        scene->mRootNode->mChildren[i + 1] = mesh_nodes[i];
-        mesh_nodes[i]->mParent = scene->mRootNode;
+
+    // Nest meshes under Armature
+    unsigned int old_num = armatureNode->mNumChildren;
+    aiNode** old_children = armatureNode->mChildren;
+    
+    armatureNode->mNumChildren = old_num + (unsigned int)mesh_nodes.size();
+    armatureNode->mChildren = new aiNode*[armatureNode->mNumChildren];
+    
+    for (unsigned int i = 0; i < old_num; ++i) {
+        armatureNode->mChildren[i] = old_children[i];
     }
+    for (size_t i = 0; i < mesh_nodes.size(); ++i) {
+        armatureNode->mChildren[old_num + i] = mesh_nodes[i];
+        mesh_nodes[i]->mParent = armatureNode;
+    }
+    // Note: old_children was Allocated with new aiNode*[N], but we don't delete it here 
+    // to avoid potential issues if Assimp expects it. Actually aiNode doesn't have a destructor that cleans mChildren.
 
     // 4. Animations
     if (!model.animations.empty() && model.num_frames > 0) {
@@ -178,7 +199,9 @@ bool write_fbx_assimp(const char* path, const Model& model)
             for (unsigned int j = 0; j < anim->mNumChannels; j++) {
                 aiNodeAnim* chan = new aiNodeAnim();
                 anim->mChannels[j] = chan;
-                chan->mNodeName = aiString(model.joints[j].name);
+                std::string jname = model.joints[j].name;
+                std::replace(jname.begin(), jname.end(), ' ', '_');
+                chan->mNodeName = aiString(jname);
                 
                 chan->mNumPositionKeys = num_keys;
                 chan->mPositionKeys = new aiVectorKey[num_keys];
