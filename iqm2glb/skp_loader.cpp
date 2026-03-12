@@ -207,75 +207,86 @@ bool load_skm(const char* path, Model& out) {
         }
     }
 
-    // 3. Animations (Frames)
-    out.num_frames = num_frames;
-    out.num_framechannels = num_bones * 10;
-    out.frames.resize(num_frames * out.num_framechannels);
-    out.timestamps.resize(num_frames);
-    
-    out.poses.resize(num_bones);
-    for (uint32_t i = 0; i < num_bones; ++i) {
-        out.poses[i].parent = out.joints[i].parent;
-        out.poses[i].mask = 0x3FF; // All channels
-        for(int c=0; c<10; ++c) {
-            out.poses[i].channeloffset[c] = 0;
-            out.poses[i].channelscale[c] = 1;
-        }
-    }
-
-    double skp_fps = BASE_FPS; // Default for internal calculation before cfg parse
-
-    for (uint32_t f = 0; f < num_frames; ++f) {
-        out.timestamps[f] = (double)f / skp_fps;
-        float* fout = &out.frames[f * out.num_framechannels];
-        for (uint32_t p = 0; p < num_bones; ++p) {
-            float t[3]; std::memcpy(t, frame_poses[f][p].origin, 12);
-            float r[4]; std::memcpy(r, frame_poses[f][p].quat, 16);
-            
-            if (out.joints[p].parent == -1) {
-                float tx = t[0], ty = t[1], tz = t[2];
-                t[0] = tx; t[1] = tz; t[2] = -ty;
-                
-                float q_rot[4] = {-0.7071068f, 0.0f, 0.0f, 0.7071068f};
-                float r_new[4];
-                quat_mul(q_rot, r, r_new);
-                quat_normalize(r_new);
-                std::memcpy(r, r_new, 16);
-            }
-            
-            fout[p * 10 + 0] = t[0];
-            fout[p * 10 + 1] = t[1];
-            fout[p * 10 + 2] = t[2];
-            fout[p * 10 + 3] = r[0];
-            fout[p * 10 + 4] = r[1];
-            fout[p * 10 + 5] = r[2];
-            fout[p * 10 + 6] = r[3];
-            fout[p * 10 + 7] = 1.0f; // scale x
-            fout[p * 10 + 8] = 1.0f; // scale y
-            fout[p * 10 + 9] = 1.0f; // scale z
-        }
-    }
-
-    // Try to find animation names (SKP frames have names!)
-    for (uint32_t f = 0; f < num_frames; ++f) {
-        // SKP doesn't have "clips" but individual frame names.
-        // We can group them or just create a def for the whole thing.
-        // For now, let's create a single animation clip spanning all frames.
-    }
-    
+    // 3. Animations (Populate Sparse Tracks)
     // Check if there's a Warsow style animation.cfg
     std::string cfg_path = find_animation_cfg(skm_path);
     if (!cfg_path.empty()) {
-        out.animations = parse_animation_cfg(cfg_path);
+        std::cout << "Found animation config: " << cfg_path << std::endl;
+        std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
+        
+        if (out.qfusion) {
+            out.animations.push_back({"base", 0, 0, 0, BASE_FPS});
+            out.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
+        }
+
+        for (const auto& a : cfg_anims) {
+            bool found = false;
+            for (auto& existing : out.animations) {
+                if (existing.name == a.name) {
+                    existing = a;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) out.animations.push_back(a);
+        }
     } else {
-        // Fallback: one clip for all frames
-        AnimationDef ad;
-        ad.name = "all";
-        ad.first_frame = 0;
-        ad.last_frame = num_frames - 1;
-        ad.fps = BASE_FPS;
-        ad.loop_frames = 0;
-        out.animations.push_back(ad);
+        // Fallback: one clip for all frames or qfusion bases
+        if (out.qfusion) {
+            out.animations.push_back({"base", 0, 0, 0, BASE_FPS});
+            out.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
+        } else {
+            AnimationDef ad;
+            ad.name = "all";
+            ad.first_frame = 0;
+            ad.last_frame = num_frames - 1;
+            ad.fps = BASE_FPS;
+            ad.loop_frames = 0;
+            out.animations.push_back(ad);
+        }
+    }
+
+    double skp_fps = BASE_FPS;
+
+    for (auto& anim : out.animations) {
+        anim.track.bones.resize(num_bones);
+        for (int f = anim.first_frame; f <= anim.last_frame; ++f) {
+            if (f < 0 || f >= (int)num_frames) continue;
+            double time = (double)(f - anim.first_frame) / anim.fps;
+            
+            for (uint32_t p = 0; p < num_bones; ++p) {
+                BoneAnim& ba = anim.track.bones[p];
+                float t[3]; std::memcpy(t, frame_poses[f][p].origin, 12);
+                float r[4]; std::memcpy(r, frame_poses[f][p].quat, 16);
+                
+                if (out.joints[p].parent == -1) {
+                    float tx = t[0], ty = t[1], tz = t[2];
+                    t[0] = tx; t[1] = tz; t[2] = -ty;
+                    
+                    float q_rot[4] = {-0.7071068f, 0.0f, 0.0f, 0.7071068f};
+                    float r_new[4];
+                    quat_mul(q_rot, r, r_new);
+                    quat_normalize(r_new);
+                    std::memcpy(r, r_new, 16);
+                }
+                
+                ba.translation.times.push_back(time);
+                ba.translation.values.push_back(t[0]);
+                ba.translation.values.push_back(t[1]);
+                ba.translation.values.push_back(t[2]);
+                
+                ba.rotation.times.push_back(time);
+                ba.rotation.values.push_back(r[0]);
+                ba.rotation.values.push_back(r[1]);
+                ba.rotation.values.push_back(r[2]);
+                ba.rotation.values.push_back(r[3]);
+                
+                ba.scale.times.push_back(time);
+                ba.scale.values.push_back(1.0f);
+                ba.scale.values.push_back(1.0f);
+                ba.scale.values.push_back(1.0f);
+            }
+        }
     }
     
     return true;

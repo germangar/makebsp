@@ -65,73 +65,86 @@ bool write_iqm(const Model& model, const char* output_path) {
         iqm_meshes[i].num_triangles = model.meshes[i].num_triangles;
     }
 
-    // 3. Prepare Animations & Poses
-    std::vector<iqmanim> iqm_anims;
-    if (model.qfusion && model.num_frames > 0) {
-        iqmanim ad = {};
-        ad.name = write_text(text, "frames");
-        ad.first_frame = 0;
-        ad.num_frames = model.num_frames;
-        ad.framerate = BASE_FPS;
-        ad.flags = IQM_LOOP;
-        iqm_anims.push_back(ad);
-    } else {
-        iqm_anims.resize(model.animations.size());
-        for (size_t i = 0; i < model.animations.size(); ++i) {
-            iqm_anims[i].name = write_text(text, model.animations[i].name);
-            iqm_anims[i].first_frame = model.animations[i].first_frame;
-            iqm_anims[i].num_frames = model.animations[i].last_frame - model.animations[i].first_frame + 1;
-            iqm_anims[i].framerate = model.animations[i].fps;
-            iqm_anims[i].flags = (model.animations[i].loop_frames > 0) ? IQM_LOOP : 0;
+    // 3. Prepare Animations & Poses (Sample Sparse Tracks)
+    std::vector<iqmanim> iqm_anims(model.animations.size());
+    uint32_t total_iqm_frames = 0;
+
+    for (size_t i = 0; i < model.animations.size(); ++i) {
+        const AnimationDef& ad = model.animations[i];
+        
+        // Determine number of frames for this animation in IQM
+        double max_t = 0;
+        for (const auto& ba : ad.track.bones) {
+            if (!ba.translation.times.empty()) max_t = std::max(max_t, ba.translation.times.back());
+            if (!ba.rotation.times.empty()) max_t = std::max(max_t, ba.rotation.times.back());
+            if (!ba.scale.times.empty()) max_t = std::max(max_t, ba.scale.times.back());
         }
+
+        uint32_t nf = (uint32_t)std::ceil(max_t * ad.fps) + 1;
+        if (nf == 1 && max_t == 0) nf = 1; // Static pose
+
+        iqm_anims[i].name = write_text(text, ad.name);
+        iqm_anims[i].first_frame = total_iqm_frames;
+        iqm_anims[i].num_frames = nf;
+        iqm_anims[i].framerate = ad.fps;
+        iqm_anims[i].flags = (ad.loop_frames > 0) ? IQM_LOOP : 0;
+
+        total_iqm_frames += nf;
     }
 
     // We will build poses from full 10-channel precision
     std::vector<iqmpose> iqm_poses(model.joints.size());
     for (size_t i = 0; i < model.joints.size(); ++i) {
         iqm_poses[i].parent = model.joints[i].parent;
-        iqm_poses[i].mask = 0x3FF; // all channels active for now, we'll compress if needed
+        iqm_poses[i].mask = 0x3FF; // all channels active
     }
 
     std::vector<unsigned short> out_frames;
-    if (!model.frames.empty() && model.num_framechannels > 0) {
-        // Collect Z-up space converted frame data
-        std::vector<float> zup_frames(model.frames.size());
-        
-        for (uint32_t f = 0; f < model.num_frames; ++f) {
-            for (size_t ji = 0; ji < model.joints.size(); ++ji) {
-                const float* fin = &model.frames[f * model.num_framechannels + ji * 10];
-                float* fout = &zup_frames[f * model.num_framechannels + ji * 10];
-                
-                float vals[10]; memcpy(vals, fin, 40);
-                
-                // Always normalize rotations to prevent drift/mashup
-                float r[4] = {vals[3], vals[4], vals[5], vals[6]};
-                quat_normalize(r);
-                vals[3] = r[0]; vals[4] = r[1]; vals[5] = r[2]; vals[6] = r[3];
+    if (total_iqm_frames > 0) {
+        std::vector<float> zup_frames(total_iqm_frames * model.joints.size() * 10);
+        std::vector<Pose> evaluated_poses;
 
-                if (model.joints[ji].parent == -1) {
-                    // Root Translation: (x, y, z) -> (x, -z, y)
-                    float tx = vals[0], ty = vals[1], tz = vals[2];
-                    vals[0] = tx; vals[1] = -tz; vals[2] = ty;
-                    
-                    // Root Rotation: pre-multiply by +90X
-                    float r_val[4] = {vals[3], vals[4], vals[5], vals[6]};
-                    float r_new[4];
-                    quat_mul(q_rot_inv, r_val, r_new);
-                    quat_normalize(r_new);
-                    vals[3] = r_new[0]; vals[4] = r_new[1]; vals[5] = r_new[2]; vals[6] = r_new[3];
+        for (size_t ai = 0; ai < model.animations.size(); ++ai) {
+            const AnimationDef& ad = model.animations[ai];
+            uint32_t first = iqm_anims[ai].first_frame;
+            uint32_t count = iqm_anims[ai].num_frames;
+
+            for (uint32_t f = 0; f < count; ++f) {
+                double time = (double)f / ad.fps;
+                model.evaluate_animation((int)ai, time, evaluated_poses);
+
+                for (size_t ji = 0; ji < model.joints.size(); ++ji) {
+                    float* fout = &zup_frames[(first + f) * model.joints.size() * 10 + ji * 10];
+                    const Pose& p = evaluated_poses[ji];
+
+                    float vals[10];
+                    memcpy(vals, p.translate, 12);
+                    memcpy(&vals[3], p.rotate, 16);
+                    memcpy(&vals[7], p.scale, 12);
+
+                    if (model.joints[ji].parent == -1) {
+                        // Root Translation: (x, y, z) -> (x, -z, y)
+                        float tx = vals[0], ty = vals[1], tz = vals[2];
+                        vals[0] = tx; vals[1] = -tz; vals[2] = ty;
+                        
+                        // Root Rotation: pre-multiply by +90X
+                        float r_val[4] = {vals[3], vals[4], vals[5], vals[6]};
+                        float r_new[4];
+                        quat_mul(q_rot_inv, r_val, r_new);
+                        quat_normalize(r_new);
+                        vals[3] = r_new[0]; vals[4] = r_new[1]; vals[5] = r_new[2]; vals[6] = r_new[3];
+                    }
+                    memcpy(fout, vals, 40);
                 }
-                
-                memcpy(fout, vals, 40);
             }
         }
 
+        // Calculate channel stats for quantization
         struct ChanStat { float min = 1e30f, max = -1e30f; };
         std::vector<std::vector<ChanStat>> stats(model.joints.size(), std::vector<ChanStat>(10));
         
-        for (uint32_t f_idx = 0; f_idx < model.num_frames; ++f_idx) {
-            const float* fptr = &zup_frames[f_idx * model.num_framechannels];
+        for (uint32_t f_idx = 0; f_idx < total_iqm_frames; ++f_idx) {
+            const float* fptr = &zup_frames[f_idx * model.joints.size() * 10];
             for (size_t p = 0; p < model.joints.size(); ++p) {
                 for (int c = 0; c < 10; ++c) {
                     float val = fptr[p * 10 + c];
@@ -141,7 +154,7 @@ bool write_iqm(const Model& model, const char* output_path) {
             }
         }
         
-        out_frames.resize(model.frames.size());
+        out_frames.resize(zup_frames.size());
         for (size_t p = 0; p < model.joints.size(); ++p) {
             for (int c = 0; c < 10; ++c) {
                 float mn = stats[p][c].min, mx = stats[p][c].max;
@@ -150,9 +163,10 @@ bool write_iqm(const Model& model, const char* output_path) {
             }
         }
 
-        for (uint32_t f_idx = 0; f_idx < model.num_frames; ++f_idx) {
-            const float* fptr = &zup_frames[f_idx * model.num_framechannels];
-            unsigned short* out_fptr = &out_frames[f_idx * model.num_framechannels];
+        const size_t num_channels = model.joints.size() * 10;
+        for (uint32_t f_idx = 0; f_idx < total_iqm_frames; ++f_idx) {
+            const float* fptr = &zup_frames[f_idx * num_channels];
+            unsigned short* out_fptr = &out_frames[f_idx * num_channels];
             for (size_t p = 0; p < model.joints.size(); ++p) {
                 for (int c = 0; c < 10; ++c) {
                     float val = fptr[p * 10 + c];
@@ -277,8 +291,8 @@ bool write_iqm(const Model& model, const char* output_path) {
 
     // 8. Frames
     align(4);
-    hdr.num_frames = model.num_frames;
-    hdr.num_framechannels = model.num_framechannels;
+    hdr.num_frames = total_iqm_frames;
+    hdr.num_framechannels = (uint32_t)model.joints.size() * 10;
     hdr.ofs_frames = current_offset;
     f.write((const char*)out_frames.data(), out_frames.size() * 2);
     current_offset += (uint32_t)(out_frames.size() * 2);
@@ -287,7 +301,7 @@ bool write_iqm(const Model& model, const char* output_path) {
     if (model.has_bounds) {
         align(4);
         hdr.ofs_bounds = current_offset;
-        uint32_t num_bounds = std::max(1u, model.num_frames);
+        uint32_t num_bounds = std::max(1u, total_iqm_frames);
         for (uint32_t i = 0; i < num_bounds; ++i) {
             iqmbounds b = {};
             // Y-up to Z-up (x,y,z) -> (x,-z,y)

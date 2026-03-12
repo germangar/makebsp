@@ -112,9 +112,8 @@ bool load_iqm(const char* path, Model& out) {
         }
     }
 
-    // Animations (Unpack dense Y-up frames)
-    out.num_frames = hdr.num_frames;
-    if (hdr.num_frames > 0) {
+    // Animations (Unpack into sparse tracks)
+    if (hdr.num_frames > 0 && hdr.num_anims > 0) {
         std::vector<iqmpose> orig_poses(hdr.num_poses);
         if (hdr.num_poses > 0) memcpy(orig_poses.data(), buffer.data() + hdr.ofs_poses, hdr.num_poses * sizeof(iqmpose));
         
@@ -124,83 +123,110 @@ bool load_iqm(const char* path, Model& out) {
         }
         
         const unsigned short* orig_fdata = (const unsigned short*)(buffer.data() + hdr.ofs_frames);
-        
-        out.num_framechannels = out.joints.size() * 10;
-        out.poses.resize(out.joints.size());
-        for (size_t i = 0; i < out.joints.size(); ++i) {
-            out.poses[i].parent = out.joints[i].parent;
-            out.poses[i].mask = 0x3FF;
-            for (int c = 0; c < 10; ++c) {
-                out.poses[i].channeloffset[c] = 0.0f;
-                out.poses[i].channelscale[c] = 1.0f;
-            }
-        }
-        
-        out.frames.resize(out.num_frames * out.num_framechannels);
-        
-        std::vector<float> root_prev_q(4, 0.0f);
-        bool first_root = true;
+        const iqmanim* iqm_anims = (const iqmanim*)(buffer.data() + hdr.ofs_anims);
 
-        for (uint32_t f = 0; f < out.num_frames; ++f) {
+        // Pre-unpack all dense frames into a temp buffer for easy track "explosion"
+        std::vector<float> dense_frames(hdr.num_frames * hdr.num_poses * 10);
+        for (uint32_t f = 0; f < hdr.num_frames; ++f) {
             const unsigned short* fin = orig_fdata + f * orig_framechannels;
-            float* fout = out.frames.data() + f * out.num_framechannels;
-            
+            float* fout = dense_frames.data() + f * hdr.num_poses * 10;
             uint32_t ch_idx = 0;
             for (size_t p = 0; p < hdr.num_poses; ++p) {
                 const iqmpose& op = orig_poses[p];
                 float vals[10];
-                
                 for (int c = 0; c < 10; ++c) {
                     vals[c] = op.channeloffset[c];
                     if (op.mask & (1 << c)) vals[c] += fin[ch_idx++] * op.channelscale[c];
                 }
-                
+
                 if (out.joints[p].parent == -1) {
                     // Root Translation: (x, y, z) -> (x, z, -y)
                     float tx = vals[0], ty = vals[1], tz = vals[2];
                     vals[0] = tx; vals[1] = tz; vals[2] = -ty;
-                    
+                    // Root Rotation: pre-multiply by -90X
                     float r[4] = {vals[3], vals[4], vals[5], vals[6]};
                     float q_rot[4] = {-0.7071068f, 0.0f, 0.0f, 0.7071068f};
                     float r_new[4];
                     quat_mul(q_rot, r, r_new);
                     quat_normalize(r_new);
-                    
-                    if (!first_root) {
-                        float dot = r_new[0]*root_prev_q[0] + r_new[1]*root_prev_q[1] + r_new[2]*root_prev_q[2] + r_new[3]*root_prev_q[3];
-                        if (dot < 0) {
-                            for(int k=0; k<4; ++k) r_new[k] = -r_new[k];
-                        }
-                    } else {
-                        // Neighborhood against bind pose root rotation
-                        float bind_r[4]; memcpy(bind_r, out.joints[p].rotate, 16);
-                        float dot = r_new[0]*bind_r[0] + r_new[1]*bind_r[1] + r_new[2]*bind_r[2] + r_new[3]*bind_r[3];
-                        if (dot < 0) {
-                            for(int k=0; k<4; ++k) r_new[k] = -r_new[k];
-                        }
-                        first_root = false;
-                    }
-                    memcpy(root_prev_q.data(), r_new, 16);
-
-                    vals[3] = r_new[0]; vals[4] = r_new[1]; vals[5] = r_new[2]; vals[6] = r_new[3];
+                    memcpy(&vals[3], r_new, 16);
                 }
-                
-                memcpy(fout + p * 10, vals, 10 * sizeof(float));
+                memcpy(fout + p * 10, vals, 40);
             }
         }
-    }
 
-    // Native animations
-    if (hdr.num_anims > 0) {
-        const iqmanim* iqm_anims = (const iqmanim*)(buffer.data() + hdr.ofs_anims);
-        for (uint32_t i = 0; i < hdr.num_anims; ++i) {
+        // Animations (Unpack into sparse tracks)
+        std::string cfg_path = find_animation_cfg(path);
+        if (!cfg_path.empty()) {
+            std::cout << "Found animation config: " << cfg_path << std::endl;
+            std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
+            
+            if (out.qfusion) {
+                out.animations.push_back({"base", 0, 0, 0, BASE_FPS});
+                out.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
+            }
+
+            for (const auto& a : cfg_anims) {
+                bool found = false;
+                for (auto& existing : out.animations) {
+                    if (existing.name == a.name) {
+                        existing = a;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) out.animations.push_back(a);
+            }
+        } else {
+            for (uint32_t i = 0; i < hdr.num_anims; ++i) {
+                AnimationDef ad;
+                ad.name = text_pool + iqm_anims[i].name;
+                ad.first_frame = iqm_anims[i].first_frame;
+                ad.last_frame = iqm_anims[i].first_frame + iqm_anims[i].num_frames - 1;
+                ad.fps = (iqm_anims[i].framerate > 0.0f) ? iqm_anims[i].framerate : BASE_FPS;
+                ad.loop_frames = (iqm_anims[i].flags & IQM_LOOP) ? 1 : 0;
+                out.animations.push_back(ad);
+            }
+        }
+
+        if (out.animations.empty()) {
             AnimationDef ad;
-            ad.name = text_pool + iqm_anims[i].name;
-            ad.first_frame = iqm_anims[i].first_frame;
-            ad.last_frame = iqm_anims[i].first_frame + iqm_anims[i].num_frames - 1;
-            ad.fps = (iqm_anims[i].framerate > 0.0f) ? iqm_anims[i].framerate : BASE_FPS;
-            ad.loop_frames = (iqm_anims[i].flags & IQM_LOOP) ? 1 : 0;
+            ad.name = "base";
+            ad.first_frame = 0;
+            ad.last_frame = hdr.num_frames - 1;
+            ad.fps = BASE_FPS;
+            ad.loop_frames = 0;
             out.animations.push_back(ad);
+        }
+
+        for (auto& ad : out.animations) {
+            ad.track.bones.resize(out.joints.size());
+            for (int f = ad.first_frame; f <= ad.last_frame; ++f) {
+                if (f < 0 || f >= (int)hdr.num_frames) continue;
+                double time = (double)(f - ad.first_frame) / ad.fps;
+                float* fptr = dense_frames.data() + (size_t)f * hdr.num_poses * 10;
+                
+                for (size_t ji = 0; ji < out.joints.size(); ++ji) {
+                    BoneAnim& ba = ad.track.bones[ji];
+                    float* bptr = fptr + ji * 10;
+                    
+                    ba.translation.times.push_back(time);
+                    ba.translation.values.push_back(bptr[0]);
+                    ba.translation.values.push_back(bptr[1]);
+                    ba.translation.values.push_back(bptr[2]);
+                    
+                    ba.rotation.times.push_back(time);
+                    ba.rotation.values.push_back(bptr[3]);
+                    ba.rotation.values.push_back(bptr[4]);
+                    ba.rotation.values.push_back(bptr[5]);
+                    ba.rotation.values.push_back(bptr[6]);
+                    
+                    ba.scale.times.push_back(time);
+                    ba.scale.values.push_back(bptr[7]);
+                    ba.scale.values.push_back(bptr[8]);
+                    ba.scale.values.push_back(bptr[9]);
+                }
+            }
         }
     }
     

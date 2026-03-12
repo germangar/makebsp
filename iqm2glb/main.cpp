@@ -14,32 +14,7 @@
 #include "fbx_writer.h"
 #include "fbx_loader.h"
 
-void sanitize_animations(Model& model) {
-    auto it = model.animations.begin();
-    while (it != model.animations.end()) {
-        bool valid = true;
-        if (model.num_frames > 0) {
-            if (it->first_frame < 0) it->first_frame = 0;
-            if (it->last_frame >= (int)model.num_frames) {
-                std::cerr << "Animation Error: \"" << it->name << "\" last frame " << it->last_frame << " exceeds model max " << (model.num_frames - 1) << ". Clamping." << std::endl;
-                it->last_frame = (int)model.num_frames - 1;
-            }
-            if (it->first_frame > it->last_frame) {
-                std::cerr << "Animation Warning: \"" << it->name << "\" has invalid range [" << it->first_frame << ", " << it->last_frame << "]. Removing." << std::endl;
-                valid = false;
-            }
-        } else if (it->first_frame != 0 || it->last_frame != 0) {
-             // If model has no frames, only allow 0-0 range if it exists for some reason
-             valid = false;
-        }
-
-        if (valid) {
-            ++it;
-        } else {
-            it = model.animations.erase(it);
-        }
-    }
-}
+// Animations are validated during loading in the sparse model
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -72,32 +47,6 @@ int main(int argc, char** argv) {
         std::cout << "Loading IQM: " << in_path << "..." << std::endl;
         if (load_iqm(in_path.c_str(), model)) {
             loaded = true;
-            std::string cfg_path = find_animation_cfg(in_path);
-            
-            if (!cfg_path.empty()) {
-                std::cout << "Found animation config: " << cfg_path << std::endl;
-                model.animations.clear();
-                if (qfusion) {
-                    model.animations.push_back({"base", 0, 0, 0, BASE_FPS});
-                    model.animations.push_back({"STAND_IDLE", 1, 39, 0, BASE_FPS});
-                }
-                std::vector<AnimationDef> cfg_anims = parse_animation_cfg(cfg_path);
-                for (const auto& a : cfg_anims) {
-                    bool found = false;
-                    for (auto& existing : model.animations) {
-                        if (existing.name == a.name) {
-                            existing = a;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) model.animations.push_back(a);
-                }
-            } else {
-                if (model.animations.empty() && model.num_frames > 0) {
-                    model.animations.push_back({"frames", 0, (int)model.num_frames - 1, 0, BASE_FPS});
-                }
-            }
         }
     } else if (ends_with(in_path, ".skm") || ends_with(in_path, ".skp")) {
         std::cout << "Loading SKM/SKP: " << in_path << "..." << std::endl;
@@ -121,10 +70,16 @@ int main(int argc, char** argv) {
     }
     model.compute_bind_pose();
     model.compute_bounds();
-    sanitize_animations(model);
-    model.compute_timestamps();
 
-    std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
+    size_t total_keys = 0;
+    for(const auto& a : model.animations) {
+        for(const auto& b : a.track.bones) {
+            total_keys += b.translation.times.size() + b.rotation.times.size() + b.scale.times.size();
+        }
+    }
+
+    std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " 
+              << model.animations.size() << " animations (" << total_keys << " keys)" << std::endl;
     if (model.has_bounds) {
         printf("Bounds: (%.3f %.3f %.3f) to (%.3f %.3f %.3f)\n", 
                model.mins[0], model.mins[1], model.mins[2],

@@ -2,13 +2,7 @@
 #include <string>
 #include <vector>
 
-struct AnimationDef {
-    std::string name;
-    int   first_frame;
-    int   last_frame;
-    int   loop_frames;
-    float fps;
-};
+struct AnimationDef;
 
 // Locate an animation config alongside the given IQM path.
 // Checks <model>.cfg first, then animation.cfg in the same directory.
