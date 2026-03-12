@@ -214,8 +214,15 @@ bool load_glb(const char* path, Model& out) {
             size_t frame_start = out.frames.size();
             out.frames.resize(frame_start + (size_t)nf * out.num_framechannels);
             
+            // Resize and populate timestamps
+            if (out.timestamps.size() < (size_t)total_frames + nf) {
+                out.timestamps.resize(total_frames + nf);
+            }
+
             for (uint32_t f = 0; f < nf; ++f) {
                 float t = f / fps;
+                out.timestamps[total_frames + f] = (double)t;
+
                 float* fptr = &out.frames[frame_start + (size_t)f * out.num_framechannels];
                 for (size_t ji = 0; ji < out.joints.size(); ++ji) {
                     float tr[3], ro[4], sc[3];

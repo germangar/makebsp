@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
     model.compute_bind_pose();
     model.compute_bounds();
     sanitize_animations(model);
+    model.compute_timestamps();
 
     std::cout << "Model loaded: " << model.meshes.size() << " meshes, " << model.joints.size() << " joints, " << model.num_frames << " frames" << std::endl;
     if (model.has_bounds) {

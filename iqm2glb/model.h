@@ -39,6 +39,7 @@ struct Model {
 
     // Animation frame data (floats, will be quantized by writer)
     std::vector<float> frames;
+    std::vector<double> timestamps; // Absolute time in seconds for each frame sample
     std::vector<iqmpose> poses; // We'll keep iqmpose for now as it's a good compact rep
     
     uint32_t num_frames = 0;
@@ -77,6 +78,31 @@ struct Model {
                 world_matrices[i] = local;
             }
             computed_ibms[i] = mat4_invert(world_matrices[i]);
+        }
+    }
+
+    void compute_timestamps() {
+        if (num_frames == 0) return;
+        timestamps.assign(num_frames, -1.0); // -1 means uninitialized
+        
+        // Populate based on known animations
+        for (const auto& anim : animations) {
+            double fps = (anim.fps > 0) ? anim.fps : BASE_FPS;
+            for (int f = anim.first_frame; f <= anim.last_frame; ++f) {
+                if (f >= 0 && f < (int)num_frames) {
+                    timestamps[f] = (double)(f - anim.first_frame) / fps;
+                    // Note: This is simplified. If frames overlap sequences with different FPS,
+                    // the last animation wins. In practice, IQM frames are contiguous.
+                }
+            }
+        }
+        
+        // Fallback for any frames not covered by animations
+        double current_time = 0;
+        for (uint32_t f = 0; f < num_frames; ++f) {
+            if (timestamps[f] < 0) {
+                timestamps[f] = (double)f / BASE_FPS;
+            }
         }
     }
 

@@ -185,6 +185,26 @@ bool load_fbx(const char* path, Model& out) {
         int total_frames = 0;
         out.num_framechannels = (int)out.joints.size() * 10; // pos3, quat4, scale3
         
+        // Calculate total frames first to resize timestamps
+        int estimated_total = 0;
+        for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
+            ufbx_anim_stack* stack = scene->anim_stacks[si];
+            double duration = stack->time_end - stack->time_begin;
+            if (duration <= 0) {
+                // Scan curves for duration if stack is empty
+                double t0 = 1e30, t1 = -1e30;
+                for (size_t ci = 0; ci < scene->anim_curves.count; ++ci) {
+                    if (scene->anim_curves[ci]->keyframes.count > 0) {
+                        t0 = std::min(t0, scene->anim_curves[ci]->min_time);
+                        t1 = std::max(t1, scene->anim_curves[ci]->max_time);
+                    }
+                }
+                duration = (t1 > t0) ? (t1 - t0) : 0.0;
+            }
+            estimated_total += (int)std::round(duration * BASE_FPS + 0.001) + 1;
+        }
+        out.timestamps.resize(estimated_total);
+        
         for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
             ufbx_anim_stack* stack = scene->anim_stacks[si];
             double time_begin = stack->time_begin;
@@ -208,7 +228,7 @@ bool load_fbx(const char* path, Model& out) {
             }
 
             float duration = (float)time_end - (float)time_begin;
-            int num_stack_frames = (int)std::round(duration * BASE_FPS) + 1;
+            int num_stack_frames = (int)std::round(duration * BASE_FPS + 0.001f) + 1;
             
             AnimationDef ad;
             ad.name = stack->name.data;
@@ -223,6 +243,9 @@ bool load_fbx(const char* path, Model& out) {
 
             for (int f = 0; f < num_stack_frames; ++f) {
                 double time = time_begin + (double)f / (double)BASE_FPS;
+                if (total_frames + f < (int)out.timestamps.size()) {
+                    out.timestamps[total_frames + f] = time;
+                }
                 
                 // Evaluate the entire scene at this time
                 ufbx_evaluate_opts ev_opts = { 0 };
@@ -250,6 +273,12 @@ bool load_fbx(const char* path, Model& out) {
                             // Quaternion neighborhooding to prevent 180-degree spins
                             if (!first_frame_quat) {
                                 float dot = r[0]*prev_quats[ji*4+0] + r[1]*prev_quats[ji*4+1] + r[2]*prev_quats[ji*4+2] + r[3]*prev_quats[ji*4+3];
+                                if (dot < 0) {
+                                    for(int k=0; k<4; ++k) r[k] = -r[k];
+                                }
+                            } else {
+                                // Neighborhood against bind pose rotation for a stable start
+                                float dot = r[0]*out.joints[ji].rotate[0] + r[1]*out.joints[ji].rotate[1] + r[2]*out.joints[ji].rotate[2] + r[3]*out.joints[ji].rotate[3];
                                 if (dot < 0) {
                                     for(int k=0; k<4; ++k) r[k] = -r[k];
                                 }

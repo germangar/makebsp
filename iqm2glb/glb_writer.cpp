@@ -247,7 +247,14 @@ bool write_glb(const Model& model, const char* output_path) {
             if (nf == 0) continue;
 
             std::vector<float> times(nf);
-            for(uint32_t f=0; f<nf; ++f) times[f] = f / def.fps;
+            for(uint32_t f=0; f<nf; ++f) {
+                int frame_idx = (int)def.first_frame + (int)f;
+                if (frame_idx < (int)model.timestamps.size()) {
+                    times[f] = (float)(model.timestamps[frame_idx] - model.timestamps[def.first_frame]);
+                } else {
+                    times[f] = (float)f / def.fps;
+                }
+            }
             size_t ts_off = buf.size();
             append_to_buffer(buf, &out->buffers[0], times.data(), nf*4);
             cgltf_accessor* time_acc = alloc_accessor(out, &out->buffer_views[3], cgltf_type_scalar, cgltf_component_type_r_32f, nf, ts_off - out->buffer_views[3].offset);
@@ -272,6 +279,21 @@ bool write_glb(const Model& model, const char* output_path) {
                         if(ip.mask & (1<<c)) p[c] += fptr[ch++] * ip.channelscale[c];
                     }
                     float q[4] = {p[3], p[4], p[5], p[6]}; quat_normalize(q);
+                    
+                    // Neighborhood against previous frame
+                    if (f > 0) {
+                        float dot = q[0]*r_data[(f-1)*4+0] + q[1]*r_data[(f-1)*4+1] + q[2]*r_data[(f-1)*4+2] + q[3]*r_data[(f-1)*4+3];
+                        if (dot < 0) {
+                            for(int k=0; k<4; ++k) q[k] = -q[k];
+                        }
+                    } else {
+                        // For the first frame, neighborhood against the joint's base rotation
+                        float dot = q[0]*model.joints[ji].rotate[0] + q[1]*model.joints[ji].rotate[1] + q[2]*model.joints[ji].rotate[2] + q[3]*model.joints[ji].rotate[3];
+                        if (dot < 0) {
+                            for(int k=0; k<4; ++k) q[k] = -q[k];
+                        }
+                    }
+                    
                     memcpy(&t_data[f*3], p, 3*4); memcpy(&r_data[f*4], q, 4*4); memcpy(&s_data[f*3], p+7, 3*4);
                 }
                 auto add_ch = [&](int sid, cgltf_animation_path_type path, cgltf_type type, const std::vector<float>& data) {

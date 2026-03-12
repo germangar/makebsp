@@ -211,6 +211,7 @@ bool load_skm(const char* path, Model& out) {
     out.num_frames = num_frames;
     out.num_framechannels = num_bones * 10;
     out.frames.resize(num_frames * out.num_framechannels);
+    out.timestamps.resize(num_frames);
     
     out.poses.resize(num_bones);
     for (uint32_t i = 0; i < num_bones; ++i) {
@@ -222,7 +223,10 @@ bool load_skm(const char* path, Model& out) {
         }
     }
 
+    double skp_fps = BASE_FPS; // Default for internal calculation before cfg parse
+
     for (uint32_t f = 0; f < num_frames; ++f) {
+        out.timestamps[f] = (double)f / skp_fps;
         float* fout = &out.frames[f * out.num_framechannels];
         for (uint32_t p = 0; p < num_bones; ++p) {
             float t[3]; std::memcpy(t, frame_poses[f][p].origin, 12);

@@ -138,6 +138,9 @@ bool load_iqm(const char* path, Model& out) {
         
         out.frames.resize(out.num_frames * out.num_framechannels);
         
+        std::vector<float> root_prev_q(4, 0.0f);
+        bool first_root = true;
+
         for (uint32_t f = 0; f < out.num_frames; ++f) {
             const unsigned short* fin = orig_fdata + f * orig_framechannels;
             float* fout = out.frames.data() + f * out.num_framechannels;
@@ -157,12 +160,28 @@ bool load_iqm(const char* path, Model& out) {
                     float tx = vals[0], ty = vals[1], tz = vals[2];
                     vals[0] = tx; vals[1] = tz; vals[2] = -ty;
                     
-                    // Root Rotation: pre-multiply by -90X
                     float r[4] = {vals[3], vals[4], vals[5], vals[6]};
                     float q_rot[4] = {-0.7071068f, 0.0f, 0.0f, 0.7071068f};
                     float r_new[4];
                     quat_mul(q_rot, r, r_new);
                     quat_normalize(r_new);
+                    
+                    if (!first_root) {
+                        float dot = r_new[0]*root_prev_q[0] + r_new[1]*root_prev_q[1] + r_new[2]*root_prev_q[2] + r_new[3]*root_prev_q[3];
+                        if (dot < 0) {
+                            for(int k=0; k<4; ++k) r_new[k] = -r_new[k];
+                        }
+                    } else {
+                        // Neighborhood against bind pose root rotation
+                        float bind_r[4]; memcpy(bind_r, out.joints[p].rotate, 16);
+                        float dot = r_new[0]*bind_r[0] + r_new[1]*bind_r[1] + r_new[2]*bind_r[2] + r_new[3]*bind_r[3];
+                        if (dot < 0) {
+                            for(int k=0; k<4; ++k) r_new[k] = -r_new[k];
+                        }
+                        first_root = false;
+                    }
+                    memcpy(root_prev_q.data(), r_new, 16);
+
                     vals[3] = r_new[0]; vals[4] = r_new[1]; vals[5] = r_new[2]; vals[6] = r_new[3];
                 }
                 
