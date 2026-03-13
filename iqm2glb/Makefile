@@ -1,8 +1,8 @@
 # iqm2glb Makefile
 
 CXX      = g++
-CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/fbx-file
-CFLAGS   = -O2 -Wall -I../libs/fbx-file
+CXXFLAGS = -O2 -Wall -std=c++17 -Ilibs
+CFLAGS   = -O2 -Wall -Ilibs
 LDFLAGS  =
 
 TARGET = iqm2glb.exe
@@ -20,8 +20,6 @@ SRCS   = main.cpp \
          fbx_writer.cpp \
          fbx_loader.cpp
 
-LIB_SRCS_CPP = ../libs/fbx-file/fbx.cpp
-
 OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o)) \
          $(addprefix $(OBJDIR)/, fbx.o) \
          $(addprefix $(OBJDIR)/, ufbx.o) \
@@ -29,25 +27,29 @@ OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o)) \
 
 all: $(OBJDIR) $(TARGET)
 
-# Create the object directory if it doesn't exist
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -lstdc++
 
-# Rule for compiling .cpp to .o inside OBJDIR
 $(OBJDIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJDIR)/fbx.o: ../libs/fbx-file/fbx.cpp
+$(OBJDIR)/fbx.o: libs/fbx.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJDIR)/ufbx.o: ../ufbx.c
+$(OBJDIR)/ufbx.o: libs/ufbx.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/miniz.o: ../libs/fbx-file/miniz.c
+$(OBJDIR)/miniz.o: libs/miniz.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/cgltf_impl.o: libs/cgltf_impl.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/cgltf_write_impl.o: libs/cgltf_write_impl.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(OBJDIR) $(TARGET)

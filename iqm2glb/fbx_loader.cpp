@@ -1,5 +1,5 @@
 #include "fbx_loader.h"
-#include "../ufbx.h"
+#include "ufbx.h"
 #include <iostream>
 #include <vector>
 #include <map>
