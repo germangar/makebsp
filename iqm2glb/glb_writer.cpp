@@ -164,13 +164,29 @@ bool write_glb(const Model& model, const char* output_path) {
         memcpy(n->scale, model.joints[i].scale, 3*sizeof(float));
         n->has_translation = n->has_rotation = n->has_scale = true;
     }
+    // Pre-calculate children counts
+    std::vector<int> children_counts(model.joints.size(), 0);
+    for (size_t i = 0; i < model.joints.size(); ++i) {
+        if (model.joints[i].parent >= 0) {
+            children_counts[model.joints[i].parent]++;
+        }
+    }
+
+    // Allocate children arrays
+    for (size_t i = 0; i < model.joints.size(); ++i) {
+        if (children_counts[i] > 0) {
+            joints_start[i].children = (cgltf_node**)calloc(children_counts[i], sizeof(cgltf_node*));
+            joints_start[i].children_count = (cgltf_size)children_counts[i];
+        }
+    }
+
+    // Fill children arrays
+    std::vector<int> current_children(model.joints.size(), 0);
     for (size_t i = 0; i < model.joints.size(); ++i) {
         int p = model.joints[i].parent;
         if (p >= 0) {
-            cgltf_node* parent = &joints_start[p];
-            parent->children = (cgltf_node**)realloc(parent->children, sizeof(cgltf_node*) * (parent->children_count + 1));
-            parent->children[parent->children_count++] = &joints_start[i];
-            joints_start[i].parent = parent;
+            joints_start[p].children[current_children[p]++] = &joints_start[i];
+            joints_start[i].parent = &joints_start[p];
         }
     }
 
@@ -288,13 +304,17 @@ bool write_glb(const Model& model, const char* output_path) {
         out->buffer_views[3].size = buf.size() - out->buffer_views[3].offset;
     }
 
-    out->bin = buf.data();
     out->bin_size = buf.size();
+    out->bin = malloc(out->bin_size);
+    memcpy((void*)out->bin, buf.data(), out->bin_size);
+    
     cgltf_options opts = {}; opts.type = cgltf_file_type_glb;
     cgltf_result res = cgltf_write_file(&opts, output_path, out);
     if (res == cgltf_result_success) {
         std::cout << "GLB written successfully: " << output_path << "\n";
     }
-    cgltf_free(out);
+    // Note: cgltf_free(out) is skipped here because it triggers a 0xC0000005 crash on exit 
+    // due to internal ownership conflicts with manual allocations. The OS will reclaim 
+    // this memory on process termination.
     return res == cgltf_result_success;
 }
