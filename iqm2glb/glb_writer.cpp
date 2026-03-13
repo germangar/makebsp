@@ -40,8 +40,8 @@ bool write_glb(const Model& model, const char* output_path) {
     std::vector<char> buf;
     
     cgltf_data* out = (cgltf_data*)calloc(1, sizeof(cgltf_data));
-    out->asset.version = (char*)"2.0";
-    out->asset.generator = (char*)"iqm2glb";
+    out->asset.version = strdup("2.0");
+    out->asset.generator = strdup("iqm2glb");
 
     size_t total_acc = (model.meshes.size() * 6 + 1 + model.animations.size() * (1 + model.joints.size() * 3)) * 2;
     out->accessors = (cgltf_accessor*)calloc(total_acc, sizeof(cgltf_accessor));
@@ -77,7 +77,7 @@ bool write_glb(const Model& model, const char* output_path) {
     // Materials
     std::map<std::string, cgltf_material*> mat_map;
     for (auto& m : model.meshes) mat_map[m.material_name] = nullptr;
-    out->materials_count = mat_map.size();
+    out->materials_count = (cgltf_size)mat_map.size();
     out->materials = (cgltf_material*)calloc(out->materials_count, sizeof(cgltf_material));
     uint32_t mat_idx = 0;
     for (auto& kv : mat_map) {
@@ -93,7 +93,7 @@ bool write_glb(const Model& model, const char* output_path) {
     }
 
     // Meshes logic
-    out->meshes_count = model.meshes.size();
+    out->meshes_count = (cgltf_size)model.meshes.size();
     out->meshes = (cgltf_mesh*)calloc(out->meshes_count, sizeof(cgltf_mesh));
     for (size_t i = 0; i < model.meshes.size(); ++i) {
         cgltf_mesh* mesh = &out->meshes[i];
@@ -107,7 +107,7 @@ bool write_glb(const Model& model, const char* output_path) {
         prim->attributes_count = 5;
         prim->attributes = (cgltf_attribute*)calloc(5, sizeof(cgltf_attribute));
         
-        prim->attributes[0].name = (char*)"POSITION"; prim->attributes[0].type = cgltf_attribute_type_position;
+        prim->attributes[0].name = strdup("POSITION"); prim->attributes[0].type = cgltf_attribute_type_position;
         prim->attributes[0].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec3, cgltf_component_type_r_32f, model.meshes[i].num_vertexes, pos_off + model.meshes[i].first_vertex*3*4);
         prim->attributes[0].data->has_min = prim->attributes[0].data->has_max = true;
         for(int k=0; k<3; ++k) prim->attributes[0].data->min[k] = prim->attributes[0].data->max[k] = model.positions[model.meshes[i].first_vertex*3 + k];
@@ -119,16 +119,16 @@ bool write_glb(const Model& model, const char* output_path) {
             }
         }
 
-        prim->attributes[1].name = (char*)"NORMAL"; prim->attributes[1].type = cgltf_attribute_type_normal;
+        prim->attributes[1].name = strdup("NORMAL"); prim->attributes[1].type = cgltf_attribute_type_normal;
         prim->attributes[1].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec3, cgltf_component_type_r_32f, model.meshes[i].num_vertexes, norm_off + model.meshes[i].first_vertex*3*4);
 
-        prim->attributes[2].name = (char*)"TEXCOORD_0"; prim->attributes[2].type = cgltf_attribute_type_texcoord;
+        prim->attributes[2].name = strdup("TEXCOORD_0"); prim->attributes[2].type = cgltf_attribute_type_texcoord;
         prim->attributes[2].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec2, cgltf_component_type_r_32f, model.meshes[i].num_vertexes, uv_off + model.meshes[i].first_vertex*2*4);
 
-        prim->attributes[3].name = (char*)"JOINTS_0"; prim->attributes[3].type = cgltf_attribute_type_joints;
+        prim->attributes[3].name = strdup("JOINTS_0"); prim->attributes[3].type = cgltf_attribute_type_joints;
         prim->attributes[3].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec4, cgltf_component_type_r_8u, model.meshes[i].num_vertexes, joint_off + model.meshes[i].first_vertex*4);
 
-        prim->attributes[4].name = (char*)"WEIGHTS_0"; prim->attributes[4].type = cgltf_attribute_type_weights;
+        prim->attributes[4].name = strdup("WEIGHTS_0"); prim->attributes[4].type = cgltf_attribute_type_weights;
         prim->attributes[4].data = alloc_accessor(out, &out->buffer_views[0], cgltf_type_vec4, cgltf_component_type_r_32f, model.meshes[i].num_vertexes, weight_off + model.meshes[i].first_vertex*4*4);
 
         // Indices
@@ -152,7 +152,7 @@ bool write_glb(const Model& model, const char* output_path) {
     cgltf_accessor* ibm_acc = alloc_accessor(out, &out->buffer_views[2], cgltf_type_mat4, cgltf_component_type_r_32f, source_ibms.size(), 0);
 
     // Nodes
-    out->nodes_count = model.joints.size() + model.meshes.size();
+    out->nodes_count = (cgltf_size)(model.joints.size() + model.meshes.size());
     out->nodes = (cgltf_node*)calloc(out->nodes_count, sizeof(cgltf_node));
 
     cgltf_node* joints_start = &out->nodes[0];
@@ -178,7 +178,7 @@ bool write_glb(const Model& model, const char* output_path) {
     out->skins_count = 1;
     out->skins = (cgltf_skin*)calloc(1, sizeof(cgltf_skin));
     out->skins[0].name = sanitize_name("IQMSkin");
-    out->skins[0].joints_count = model.joints.size();
+    out->skins[0].joints_count = (cgltf_size)model.joints.size();
     out->skins[0].joints = (cgltf_node**)calloc(model.joints.size(), sizeof(cgltf_node*));
     for(size_t i=0; i<model.joints.size(); ++i) out->skins[0].joints[i] = &joints_start[i];
     
@@ -215,7 +215,7 @@ bool write_glb(const Model& model, const char* output_path) {
         scene_roots.push_back(&mesh_nodes[i]);
     }
 
-    out->scenes[0].nodes_count = scene_roots.size();
+    out->scenes[0].nodes_count = (cgltf_size)scene_roots.size();
     out->scenes[0].nodes = (cgltf_node**)calloc(scene_roots.size(), sizeof(cgltf_node*));
     for (size_t i = 0; i < scene_roots.size(); ++i) {
         out->scenes[0].nodes[i] = scene_roots[i];
@@ -224,7 +224,7 @@ bool write_glb(const Model& model, const char* output_path) {
 
     // Animations (Sparse Export)
     if (!model.animations.empty()) {
-        out->animations_count = model.animations.size();
+        out->animations_count = (cgltf_size)model.animations.size();
         out->animations = (cgltf_animation*)calloc(out->animations_count, sizeof(cgltf_animation));
         out->buffer_views[3].offset = buf.size();
 
@@ -243,9 +243,9 @@ bool write_glb(const Model& model, const char* output_path) {
 
             if (active_channels == 0) continue;
 
-            anim->samplers_count = active_channels;
+            anim->samplers_count = (cgltf_size)active_channels;
             anim->samplers = (cgltf_animation_sampler*)calloc(active_channels, sizeof(cgltf_animation_sampler));
-            anim->channels_count = active_channels;
+            anim->channels_count = (cgltf_size)active_channels;
             anim->channels = (cgltf_animation_channel*)calloc(active_channels, sizeof(cgltf_animation_channel));
 
             uint32_t ch_idx = 0;
@@ -295,5 +295,6 @@ bool write_glb(const Model& model, const char* output_path) {
     if (res == cgltf_result_success) {
         std::cout << "GLB written successfully: " << output_path << "\n";
     }
+    cgltf_free(out);
     return res == cgltf_result_success;
 }

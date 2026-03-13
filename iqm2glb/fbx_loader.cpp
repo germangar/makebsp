@@ -25,31 +25,31 @@ bool load_fbx(const char* path, Model& out) {
               << scene->meshes.count << " meshes, "
               << scene->anim_stacks.count << " animations." << std::endl;
 
-    // Phase 1.5 - Extract Skeleton
+    // Phase 1.5 - Extract Skeleton (Full Hierarchy)
     std::map<ufbx_node*, int> node_to_joint;
     for (size_t i = 0; i < scene->nodes.count; ++i) {
         ufbx_node* node = scene->nodes[i];
         
-        // In FBX, nodes with attributes like LimbNode or Null are often bones.
-        if (node->bone || (node->attrib && node->attrib->type == UFBX_ELEMENT_BONE)) {
-            Joint j;
-            j.name = node->name.data;
-            j.parent = -1; // Set later
-            
-            // Local TRS - ufbx already converted to our Y-up target space
-            float t[3] = { (float)node->local_transform.translation.x, (float)node->local_transform.translation.y, (float)node->local_transform.translation.z };
-            float r[4] = { (float)node->local_transform.rotation.x, (float)node->local_transform.rotation.y, (float)node->local_transform.rotation.z, (float)node->local_transform.rotation.w };
-            
-            memcpy(j.translate, t, 12);
-            memcpy(j.rotate, r, 16);
-            
-            j.scale[0] = (float)node->local_transform.scale.x;
-            j.scale[1] = (float)node->local_transform.scale.y;
-            j.scale[2] = (float)node->local_transform.scale.z;
-            
-            node_to_joint[node] = (int)out.joints.size();
-            out.joints.push_back(j);
-        }
+        // Include all spatial nodes (not cameras/lights, though they can have transforms)
+        // We skip attribute-only nodes that aren't usually meaningful in our skeletal system
+        // but ufbx_node itself is always a spatial transform.
+        Joint j;
+        j.name = node->name.data;
+        j.parent = -1; // Set later
+        
+        // Local TRS - ufbx already converted to our Y-up target space
+        float t[3] = { (float)node->local_transform.translation.x, (float)node->local_transform.translation.y, (float)node->local_transform.translation.z };
+        float r[4] = { (float)node->local_transform.rotation.x, (float)node->local_transform.rotation.y, (float)node->local_transform.rotation.z, (float)node->local_transform.rotation.w };
+        
+        memcpy(j.translate, t, 12);
+        memcpy(j.rotate, r, 16);
+        
+        j.scale[0] = (float)node->local_transform.scale.x;
+        j.scale[1] = (float)node->local_transform.scale.y;
+        j.scale[2] = (float)node->local_transform.scale.z;
+        
+        node_to_joint[node] = (int)out.joints.size();
+        out.joints.push_back(j);
     }
 
     // Set parents
@@ -123,14 +123,14 @@ bool load_fbx(const char* path, Model& out) {
                     for (int w = 0; w < actual_weights; ++w) {
                         ufbx_skin_weight sw = skin->weights[s_vert.weight_begin + w];
                         ufbx_node* joint_node = skin->clusters[sw.cluster_index]->bone_node;
-                        if (node_to_joint.count(joint_node)) {
+                        if (joint_node && node_to_joint.count(joint_node)) {
                             joints[w] = (uint8_t)node_to_joint[joint_node];
                             weights[w] = (float)sw.weight;
                             total_w += weights[w];
                         }
                     }
                     // Normalize
-                    if (total_w > 0.001f) {
+                    if (total_w > 1e-6f) {
                         for (int w = 0; w < 4; ++w) weights[w] /= total_w;
                     }
                 }
@@ -174,10 +174,21 @@ bool load_fbx(const char* path, Model& out) {
         }
     }
 
-    // Phase 4 - Extract Animations (Sparse Curves)
+    // Phase 4 - Extract Animations (Robust Baking)
     for (size_t si = 0; si < scene->anim_stacks.count; ++si) {
         ufbx_anim_stack* stack = scene->anim_stacks[si];
         
+        ufbx_bake_opts bake_opts = { 0 };
+        // We handle coordinate space in load_opts, so bake should just follow.
+        // We want to preserve the original times as much as possible, but bake
+        // helps resolve the complex FBX transform chain (pivots, pre/post rotations).
+        
+        ufbx_baked_anim* baked_anim = ufbx_bake_anim(scene, stack->anim, &bake_opts, &error);
+        if (!baked_anim) {
+            std::cerr << "Warning: Failed to bake animation stack " << stack->name.data << std::endl;
+            continue;
+        }
+
         AnimationDef ad;
         ad.name = stack->name.data;
         ad.fps = (float)BASE_FPS;
@@ -194,85 +205,53 @@ bool load_fbx(const char* path, Model& out) {
             }
             if (!node) continue;
 
+            ufbx_baked_node* baked_node = ufbx_find_baked_node(baked_anim, node);
+            if (!baked_node) continue;
+
             BoneAnim& ba = ad.track.bones[ji];
 
-            auto get_av = [&](const char* prop_name) -> ufbx_anim_value* {
-                for (size_t li = 0; li < stack->anim->layers.count; ++li) {
-                    ufbx_anim_prop* ap = ufbx_find_anim_prop(stack->anim->layers[li], &node->element, prop_name);
-                    if (ap && ap->anim_value) return ap->anim_value;
-                }
-                return nullptr;
-            };
-
             // Extract Translation
-            ufbx_anim_value* av_t = get_av("Lcl Translation");
-            if (av_t) {
-                std::vector<double> times;
-                for (int c = 0; c < 3; ++c) {
-                    if (av_t->curves[c]) {
-                        for (size_t ki = 0; ki < av_t->curves[c]->keyframes.count; ++ki)
-                            times.push_back(av_t->curves[c]->keyframes[ki].time);
-                    }
-                }
-                std::sort(times.begin(), times.end());
-                times.erase(std::unique(times.begin(), times.end()), times.end());
-
-                for (double t : times) {
-                    ba.translation.times.push_back(t);
-                    ufbx_vec3 val = ufbx_evaluate_anim_value_vec3(av_t, t);
-                    ba.translation.values.push_back((float)val.x);
-                    ba.translation.values.push_back((float)val.y);
-                    ba.translation.values.push_back((float)val.z);
-                }
+            for (size_t ki = 0; ki < baked_node->translation_keys.count; ++ki) {
+                ufbx_baked_vec3 k = baked_node->translation_keys[ki];
+                ba.translation.times.push_back(k.time);
+                ba.translation.values.push_back((float)k.value.x);
+                ba.translation.values.push_back((float)k.value.y);
+                ba.translation.values.push_back((float)k.value.z);
             }
 
-            // Extract Rotation
-            ufbx_anim_value* av_r = get_av("Lcl Rotation");
-            if (av_r) {
-                std::vector<double> times;
-                for (int c = 0; c < 3; ++c) {
-                    if (av_r->curves[c]) {
-                        for (size_t ki = 0; ki < av_r->curves[c]->keyframes.count; ++ki)
-                            times.push_back(av_r->curves[c]->keyframes[ki].time);
-                    }
+            // Extract Rotation (with bind-pose relative hemispheric stabilization)
+            float prev_q[4];
+            memcpy(prev_q, out.joints[ji].rotate, 16); // Start from bind pose hemisphere
+            
+            for (size_t ki = 0; ki < baked_node->rotation_keys.count; ++ki) {
+                ufbx_baked_quat k = baked_node->rotation_keys[ki];
+                ba.rotation.times.push_back(k.time);
+                
+                float q[4] = {(float)k.value.x, (float)k.value.y, (float)k.value.z, (float)k.value.w};
+                // Enforce consistency with previous key (or bind pose for the first key)
+                float dot = q[0]*prev_q[0] + q[1]*prev_q[1] + q[2]*prev_q[2] + q[3]*prev_q[3];
+                if (dot < 0) {
+                    q[0] = -q[0]; q[1] = -q[1]; q[2] = -q[2]; q[3] = -q[3];
                 }
-                std::sort(times.begin(), times.end());
-                times.erase(std::unique(times.begin(), times.end()), times.end());
 
-                for (double t : times) {
-                    ba.rotation.times.push_back(t);
-                    ufbx_vec3 euler = ufbx_evaluate_anim_value_vec3(av_r, t);
-                    ufbx_quat val = ufbx_euler_to_quat(euler, node->rotation_order);
-                    ba.rotation.values.push_back((float)val.x);
-                    ba.rotation.values.push_back((float)val.y);
-                    ba.rotation.values.push_back((float)val.z);
-                    ba.rotation.values.push_back((float)val.w);
-                }
+                memcpy(prev_q, q, 16);
+                ba.rotation.values.push_back(q[0]);
+                ba.rotation.values.push_back(q[1]);
+                ba.rotation.values.push_back(q[2]);
+                ba.rotation.values.push_back(q[3]);
             }
 
             // Extract Scale
-            ufbx_anim_value* av_s = get_av("Lcl Scaling");
-            if (av_s) {
-                std::vector<double> times;
-                for (int c = 0; c < 3; ++c) {
-                    if (av_s->curves[c]) {
-                        for (size_t ki = 0; ki < av_s->curves[c]->keyframes.count; ++ki)
-                            times.push_back(av_s->curves[c]->keyframes[ki].time);
-                    }
-                }
-                std::sort(times.begin(), times.end());
-                times.erase(std::unique(times.begin(), times.end()), times.end());
-
-                for (double t : times) {
-                    ba.scale.times.push_back(t);
-                    ufbx_vec3 val = ufbx_evaluate_anim_value_vec3(av_s, t);
-                    ba.scale.values.push_back((float)val.x);
-                    ba.scale.values.push_back((float)val.y);
-                    ba.scale.values.push_back((float)val.z);
-                }
+            for (size_t ki = 0; ki < baked_node->scale_keys.count; ++ki) {
+                ufbx_baked_vec3 k = baked_node->scale_keys[ki];
+                ba.scale.times.push_back(k.time);
+                ba.scale.values.push_back((float)k.value.x);
+                ba.scale.values.push_back((float)k.value.y);
+                ba.scale.values.push_back((float)k.value.z);
             }
         }
         out.animations.push_back(ad);
+        ufbx_free_baked_anim(baked_anim);
     }
 
     ufbx_free_scene(scene);

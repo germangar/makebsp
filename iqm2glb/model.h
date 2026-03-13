@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <iostream>
 #include "iqm.h"
 #include "math_utils.h"
 #include "anim_cfg.h"
@@ -134,8 +135,61 @@ struct Model {
     bool validate_skeleton() {
         for (size_t i = 0; i < joints.size(); ++i) {
             if (joints[i].parent >= (int)joints.size()) return false;
+            if (joints[i].parent >= (int)i) return false; // Not topologically sorted
         }
         return true;
+    }
+
+    void reorder_skeleton() {
+        if (validate_skeleton()) return;
+
+        std::vector<Joint> old_joints = joints;
+        std::vector<int> old_to_new(old_joints.size(), -1);
+        std::vector<Joint> new_joints;
+        new_joints.reserve(old_joints.size());
+
+        // Simple breadth-first or depth-first would work, let's just do iterative passes
+        while (new_joints.size() < old_joints.size()) {
+            size_t added_this_pass = 0;
+            for (size_t i = 0; i < old_joints.size(); ++i) {
+                if (old_to_new[i] != -1) continue;
+                
+                int p = old_joints[i].parent;
+                if (p == -1 || old_to_new[p] != -1) {
+                    old_to_new[i] = (int)new_joints.size();
+                    Joint j = old_joints[i];
+                    if (p != -1) j.parent = old_to_new[p];
+                    new_joints.push_back(j);
+                    added_this_pass++;
+                }
+            }
+            if (added_this_pass == 0) {
+                // Cycle detected or disconnected component with invalid parent
+                break;
+            }
+        }
+
+        if (new_joints.size() < old_joints.size()) {
+            std::cerr << "Warning: Cyclic or invalid hierarchy detected during reorder. Some joints lost." << std::endl;
+        }
+
+        joints = new_joints;
+
+        // Must also re-map joint indices in vertex data
+        for (size_t i = 0; i < joints_0.size(); ++i) {
+            joints_0[i] = (uint8_t)old_to_new[joints_0[i]];
+        }
+
+        // And in animations
+        for (auto& ad : animations) {
+            std::vector<BoneAnim> new_bones(joints.size());
+            for (size_t i = 0; i < old_joints.size(); ++i) {
+                if (old_to_new[i] != -1) {
+                    new_bones[old_to_new[i]] = ad.track.bones[i];
+                }
+            }
+            ad.track.bones = new_bones;
+        }
     }
 
     // Evaluate animation at a specific time

@@ -8,15 +8,15 @@
 #include <algorithm>
 
 static void transform_vec(const mat4& m, const float* in, float* out, float weight) {
-    out[0] += (m.m[0] * in[0] + m.m[4] * in[1] + m.m[8] * in[2] + m.m[12] * weight);
-    out[1] += (m.m[1] * in[0] + m.m[5] * in[1] + m.m[9] * in[2] + m.m[13] * weight);
-    out[2] += (m.m[2] * in[0] + m.m[6] * in[1] + m.m[10] * in[2] + m.m[14] * weight);
+    out[0] += (m.m[0] * in[0] + m.m[4] * in[1] + m.m[8] * in[2] + m.m[12]) * weight;
+    out[1] += (m.m[1] * in[0] + m.m[5] * in[1] + m.m[9] * in[2] + m.m[13]) * weight;
+    out[2] += (m.m[2] * in[0] + m.m[6] * in[1] + m.m[10] * in[2] + m.m[14]) * weight;
 }
 
-static void rotate_vec(const mat4& m, const float* in, float* out) {
-    out[0] += (m.m[0] * in[0] + m.m[4] * in[1] + m.m[8] * in[2]);
-    out[1] += (m.m[1] * in[0] + m.m[5] * in[1] + m.m[9] * in[2]);
-    out[2] += (m.m[2] * in[0] + m.m[6] * in[1] + m.m[10] * in[2]);
+static void rotate_vec(const mat4& m, const float* in, float* out, float weight) {
+    out[0] += (m.m[0] * in[0] + m.m[4] * in[1] + m.m[8] * in[2]) * weight;
+    out[1] += (m.m[1] * in[0] + m.m[5] * in[1] + m.m[9] * in[2]) * weight;
+    out[2] += (m.m[2] * in[0] + m.m[6] * in[1] + m.m[10] * in[2]) * weight;
 }
 
 bool load_skm(const char* path, Model& out) {
@@ -157,7 +157,7 @@ bool load_skm(const char* path, Model& out) {
             for (uint32_t i = 0; i < num_influences; ++i) {
                 if (influences[i].bonenum < num_bones) {
                     transform_vec(zup_world_matrices[influences[i].bonenum], influences[i].origin, zup_pos, influences[i].influence);
-                    rotate_vec(zup_world_matrices[influences[i].bonenum], influences[i].normal, zup_norm);
+                    rotate_vec(zup_world_matrices[influences[i].bonenum], influences[i].normal, zup_norm, influences[i].influence);
                     sorted_influences.push_back({(int)influences[i].bonenum, influences[i].influence});
                 }
             }
@@ -246,7 +246,6 @@ bool load_skm(const char* path, Model& out) {
         }
     }
 
-    double skp_fps = BASE_FPS;
 
     for (auto& anim : out.animations) {
         anim.track.bones.resize(num_bones);

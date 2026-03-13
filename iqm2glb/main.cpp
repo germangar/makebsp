@@ -3,6 +3,7 @@
 #include <cstring>
 #include <algorithm>
 #include <vector>
+#include <fstream>
 #include "iqm_loader.h"
 #include "anim_cfg.h"
 #include "glb_loader.h"
@@ -15,6 +16,25 @@
 #include "fbx_loader.h"
 
 // Animations are validated during loading in the sparse model
+
+static std::string get_unique_path(const std::string& path) {
+    std::ifstream f(path.c_str());
+    if (!f.good()) return path;
+    f.close();
+
+    size_t dot = path.find_last_of('.');
+    std::string base = (dot == std::string::npos) ? path : path.substr(0, dot);
+    std::string ext = (dot == std::string::npos) ? "" : path.substr(dot);
+
+    int counter = 1;
+    while (true) {
+        std::string new_path = base + "_" + std::to_string(counter) + ext;
+        std::ifstream nf(new_path.c_str());
+        if (!nf.good()) return new_path;
+        nf.close();
+        counter++;
+    }
+}
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -34,10 +54,8 @@ int main(int argc, char** argv) {
     Model model;
     bool loaded = false;
 
-    bool qfusion = false;
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--qfusion") {
-            qfusion = true;
             model.qfusion = true;
         }
     }
@@ -66,7 +84,8 @@ int main(int argc, char** argv) {
 
     // Universal Sanitization & Initialization
     if (!model.validate_skeleton()) {
-        std::cerr << "Skeleton Validation FAILED: Out of order or cyclic hierarchy detected." << std::endl;
+        std::cout << "Reordering skeleton for topological consistency..." << std::endl;
+        model.reorder_skeleton();
     }
     model.compute_bind_pose();
     model.compute_bounds();
@@ -88,10 +107,12 @@ int main(int argc, char** argv) {
 
 
     // Write Phase
-    if (ends_with(out_path, ".iqm")) {
-        std::cout << "Writing IQM: " << out_path << "..." << std::endl;
-        if (!write_iqm(model, out_path.c_str())) return 3;
-    } else if (ends_with(out_path, ".fbx")) {
+    std::string unique_out = get_unique_path(out_path);
+
+    if (ends_with(unique_out, ".iqm")) {
+        std::cout << "Writing IQM: " << unique_out << "..." << std::endl;
+        if (!write_iqm(model, unique_out.c_str())) return 3;
+    } else if (ends_with(unique_out, ".fbx")) {
         bool write_base = true;
         bool write_anim = true;
         for (int i = 1; i < argc; ++i) {
@@ -100,17 +121,17 @@ int main(int argc, char** argv) {
             if (arg == "--anim") write_base = false;
         }
 
-        if (write_base && !write_anim) std::cout << "Writing FBX (Base Pose only): " << out_path << "..." << std::endl;
-        else if (!write_base && write_anim) std::cout << "Writing FBX (Animations only): " << out_path << "..." << std::endl;
-        else std::cout << "Writing FBX (Complete): " << out_path << "..." << std::endl;
+        if (write_base && !write_anim) std::cout << "Writing FBX (Base Pose only): " << unique_out << "..." << std::endl;
+        else if (!write_base && write_anim) std::cout << "Writing FBX (Animations only): " << unique_out << "..." << std::endl;
+        else std::cout << "Writing FBX (Complete): " << unique_out << "..." << std::endl;
 
         // Using Native writer as the primary FBX exporter
-        if (!write_fbx(out_path.c_str(), model)) return 3;
-    } else if (ends_with(out_path, ".glb")) {
-        std::cout << "Writing GLB (cgltf): " << out_path << "..." << std::endl;
-        if (!write_glb(model, out_path.c_str())) return 3;
+        if (!write_fbx(unique_out.c_str(), model)) return 3;
+    } else if (ends_with(unique_out, ".glb")) {
+        std::cout << "Writing GLB (cgltf): " << unique_out << "..." << std::endl;
+        if (!write_glb(model, unique_out.c_str())) return 3;
     } else {
-        std::cerr << "Unsupported output format: " << out_path << "\n";
+        std::cerr << "Unsupported output format: " << unique_out << "\n";
         return 4;
     }
 

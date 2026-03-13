@@ -379,7 +379,7 @@ pose->properties().insert(new Fbx::Property("BindPose"));
 (*pose->insert(new Fbx::Record("Type")))->properties().insert(new Fbx::Property("BindPose"));
 (*pose->insert(new Fbx::Record("Version")))->properties().insert(new Fbx::Property((int32_t)100));
 
-int32_t num_pose_nodes = (write_mesh ? 1 : 0) + (int32_t)in.joints.size() + 1;
+int32_t num_pose_nodes = (write_mesh ? 1 : 0) + (int32_t)in.joints.size();
 (*pose->insert(new Fbx::Record("NbPoseNodes")))->properties().insert(new Fbx::Property(num_pose_nodes));
 
 auto add_pose_node = [&](int64_t node_id, const mat4& m) {
