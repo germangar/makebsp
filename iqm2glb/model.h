@@ -174,6 +174,15 @@ struct Model {
         }
 
         joints = new_joints;
+        
+        // Also re-map IBMs
+        std::vector<mat4> new_ibms(joints.size());
+        for (size_t i = 0; i < old_joints.size(); ++i) {
+            if (old_to_new[i] != -1) {
+                new_ibms[old_to_new[i]] = ibms[i];
+            }
+        }
+        ibms = new_ibms;
 
         // Must also re-map joint indices in vertex data
         for (size_t i = 0; i < joints_0.size(); ++i) {
@@ -229,7 +238,7 @@ struct Model {
         }
     }
 
-private:
+    // Public sampling helpers for writers/exporters
     void sample_vec3(const AnimChannel& chan, double time, float* out) const {
         if (time <= chan.times.front()) {
             memcpy(out, chan.values.data(), 12);

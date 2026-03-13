@@ -12,6 +12,7 @@ bool load_fbx(const char* path, Model& out) {
     opts.target_unit_meters = 1.0f;
     // Internal coordinate system: Y-up, Right-Handed (CCW winding).
     opts.target_axes = ufbx_axes_right_handed_y_up;
+    opts.allow_unsafe = true; // For robustness with some weird FBX files
 
     ufbx_error error;
     ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
@@ -210,44 +211,52 @@ bool load_fbx(const char* path, Model& out) {
 
             BoneAnim& ba = ad.track.bones[ji];
 
-            // Extract Translation
-            for (size_t ki = 0; ki < baked_node->translation_keys.count; ++ki) {
-                ufbx_baked_vec3 k = baked_node->translation_keys[ki];
-                ba.translation.times.push_back(k.time);
-                ba.translation.values.push_back((float)k.value.x);
-                ba.translation.values.push_back((float)k.value.y);
-                ba.translation.values.push_back((float)k.value.z);
-            }
-
-            // Extract Rotation (with bind-pose relative hemispheric stabilization)
+            // Extract TRS (with bind-pose relative hemispheric and scale stabilization)
             float prev_q[4];
             memcpy(prev_q, out.joints[ji].rotate, 16); // Start from bind pose hemisphere
             
-            for (size_t ki = 0; ki < baked_node->rotation_keys.count; ++ki) {
-                ufbx_baked_quat k = baked_node->rotation_keys[ki];
-                ba.rotation.times.push_back(k.time);
+            double duration = stack->time_end - stack->time_begin;
+            int num_frames = (int)(duration * BASE_FPS) + 1;
+
+            for (int fi = 0; fi < num_frames; ++fi) {
+                double key_time = (double)fi / (double)BASE_FPS;
                 
-                float q[4] = {(float)k.value.x, (float)k.value.y, (float)k.value.z, (float)k.value.w};
-                // Enforce consistency with previous key (or bind pose for the first key)
+                // Use raw evaluate_transform instead of baked node for maximum stability
+                ufbx_transform tr = ufbx_evaluate_transform(stack->anim, node, key_time);
+                
+                float t[3] = {(float)tr.translation.x, (float)tr.translation.y, (float)tr.translation.z};
+                float q[4] = {(float)tr.rotation.x, (float)tr.rotation.y, (float)tr.rotation.z, (float)tr.rotation.w};
+                float s[3] = {(float)tr.scale.x, (float)tr.scale.y, (float)tr.scale.z};
+                
+                stabilize_trs(t, q, s);
+                
+                // Enforce hemispheric consistency
                 float dot = q[0]*prev_q[0] + q[1]*prev_q[1] + q[2]*prev_q[2] + q[3]*prev_q[3];
                 if (dot < 0) {
                     q[0] = -q[0]; q[1] = -q[1]; q[2] = -q[2]; q[3] = -q[3];
+                    dot = -dot;
+                }
+
+                if (fi > 0 && dot < 0.707f) {
                 }
 
                 memcpy(prev_q, q, 16);
+                
+                ba.translation.times.push_back((float)key_time);
+                ba.translation.values.push_back(t[0]);
+                ba.translation.values.push_back(t[1]);
+                ba.translation.values.push_back(t[2]);
+
+                ba.rotation.times.push_back((float)key_time);
                 ba.rotation.values.push_back(q[0]);
                 ba.rotation.values.push_back(q[1]);
                 ba.rotation.values.push_back(q[2]);
                 ba.rotation.values.push_back(q[3]);
-            }
 
-            // Extract Scale
-            for (size_t ki = 0; ki < baked_node->scale_keys.count; ++ki) {
-                ufbx_baked_vec3 k = baked_node->scale_keys[ki];
-                ba.scale.times.push_back(k.time);
-                ba.scale.values.push_back((float)k.value.x);
-                ba.scale.values.push_back((float)k.value.y);
-                ba.scale.values.push_back((float)k.value.z);
+                ba.scale.times.push_back((float)key_time);
+                ba.scale.values.push_back(s[0]);
+                ba.scale.values.push_back(s[1]);
+                ba.scale.values.push_back(s[2]);
             }
         }
         out.animations.push_back(ad);

@@ -4,6 +4,10 @@
 #include <map>
 #include <ctime>
 #include <algorithm>
+#include <string>
+#include <vector>
+#include <cmath>
+#include <cstring>
 
 static std::string sanitize(const std::string& s) {
     std::string res = s;
@@ -190,10 +194,16 @@ bool write_fbx(const char* path, const Model& in, bool write_mesh, bool write_an
         
         add_prop70_3d(p70, "Lcl Translation", "Lcl Translation", "", "A", (double)in.joints[i].translate[0], (double)in.joints[i].translate[1], (double)in.joints[i].translate[2]);
         
-        float euler[3]; quat_to_euler(in.joints[i].rotate, euler);
+        float t[3], q[4], s[3];
+        memcpy(t, in.joints[i].translate, 12);
+        memcpy(q, in.joints[i].rotate, 16);
+        memcpy(s, in.joints[i].scale, 12);
+        stabilize_trs(t, q, s);
+
+        float euler[3]; quat_to_euler(q, euler);
         add_prop70_3d(p70, "Lcl Rotation", "Lcl Rotation", "", "A", (double)euler[0], (double)euler[1], (double)euler[2]);
         
-        add_prop70_3d(p70, "Lcl Scaling", "Lcl Scaling", "", "A", (double)in.joints[i].scale[0], (double)in.joints[i].scale[1], (double)in.joints[i].scale[2]);
+        add_prop70_3d(p70, "Lcl Scaling", "Lcl Scaling", "", "A", (double)s[0], (double)s[1], (double)s[2]);
         add_prop70(p70, "RotationOrder", "enum", "", "", (int32_t)0);
         
         (*mod->insert(new Fbx::Record("Shading")))->properties().insert(new Fbx::Property(true));
@@ -445,6 +455,9 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             link.curves.resize(in.joints.size());
 
             for (size_t ji = 0; ji < in.joints.size(); ++ji) {
+                if (std::string(in.joints[ji].name).find("elvis") != std::string::npos) {
+                    std::cout << "WRITER processing joint: " << in.joints[ji].name << std::endl;
+                }
                 const BoneAnim& ba = ad.track.bones[ji];
                 if (ba.translation.times.empty() && ba.rotation.times.empty() && ba.scale.times.empty()) continue;
 
@@ -506,12 +519,25 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                 if (!ba.rotation.times.empty()) {
                     std::vector<double> rx, ry, rz;
                     float prev_e[3];
-                    // Seed from bind pose
                     quat_to_euler(in.joints[ji].rotate, prev_e);
-                    
+
+                    float prev_q_writer[4];
+                    memcpy(prev_q_writer, in.joints[ji].rotate, 16);
+
                     for(size_t k=0; k<ba.rotation.times.size(); ++k) {
-                        float q[4] = { ba.rotation.values[k*4+0], ba.rotation.values[k*4+1], ba.rotation.values[k*4+2], ba.rotation.values[k*4+3] };
-                        quat_normalize(q);
+                        double time = ba.rotation.times[k];
+                        float t[3], q[4], s[3];
+                        in.sample_vec3(ba.translation, time, t);
+                        in.sample_quat(ba.rotation, time, q);
+                        in.sample_vec3(ba.scale, time, s);
+
+                        stabilize_trs(t, q, s);
+                        
+                        // Enforce consistent hemisphere for the writer's Euler conversion
+                        float dot = q[0]*prev_q_writer[0] + q[1]*prev_q_writer[1] + q[2]*prev_q_writer[2] + q[3]*prev_q_writer[3];
+                        if (dot < 0) { q[0] = -q[0]; q[1] = -q[1]; q[2] = -q[2]; q[3] = -q[3]; }
+                        memcpy(prev_q_writer, q, 16);
+
                         float e[3];
                         quat_to_euler_near(q, e, prev_e);
                         memcpy(prev_e, e, 12);
@@ -526,9 +552,14 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
                 if (!ba.scale.times.empty()) {
                     std::vector<double> sx, sy, sz;
                     for(size_t k=0; k<ba.scale.times.size(); ++k) {
-                        sx.push_back(ba.scale.values[k*3+0]);
-                        sy.push_back(ba.scale.values[k*3+1]);
-                        sz.push_back(ba.scale.values[k*3+2]);
+                        double time = ba.scale.times[k];
+                        float t[3], q[4], s[3];
+                        in.sample_vec3(ba.translation, time, t);
+                        in.sample_quat(ba.rotation, time, q);
+                        in.sample_vec3(ba.scale, time, s);
+                        
+                        stabilize_trs(t, q, s);
+                        sx.push_back(s[0]); sy.push_back(s[1]); sz.push_back(s[2]);
                     }
                     link.curves[ji].sx = add_curve(ba.scale.times, sx);
                     link.curves[ji].sy = add_curve(ba.scale.times, sy);

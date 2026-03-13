@@ -64,7 +64,17 @@ inline void quat_to_euler(const float* q, float* euler) {
     }
 }
 
-// Picks the solution nearest to prev_euler to avoid 180-degree flips through gimbal lock
+inline float asin_clamped(float v) {
+    if (v <= -1.0f) return -1.57079632679f;
+    if (v >= 1.0f) return 1.57079632679f;
+    return std::asin(v);
+}
+
+// Picks the solution nearest to prev_euler to avoid 180-degree flips through gimbal lock.
+// This solver uses a robust "Quad-Branch" selection strategy:
+// 1. Evaluate the two standard Euler branches for the orientation.
+// 2. Evaluate two "gimbal-stabilized" candidates where Z is pinned to prev_euler[2].
+// 3. From these 4 candidates, select the one with the smallest coordinate distance in 3D Euler space.
 inline void quat_to_euler_near(const float* q, float* euler, const float* prev_euler) {
     float x = q[0], y = q[1], z = q[2], w = q[3];
     float m[3][3];
@@ -78,51 +88,80 @@ inline void quat_to_euler_near(const float* q, float* euler, const float* prev_e
     m[2][1] = 2.0f * (y*z + x*w);
     m[2][2] = 1.0f - 2.0f * (x*x + y*y);
 
+    const float RAD2DEG = 180.0f / 3.1415926535f;
     float sy = -m[2][0];
-    if (sy >= 0.99999f) {
-        euler[1] = 90.0f;
-        float target_z = prev_euler[2];
-        float sum_xz = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
-        euler[2] = target_z;
-        euler[0] = sum_xz - target_z;
-    } else if (sy <= -0.99999f) {
-        euler[1] = -90.0f;
-        float target_z = prev_euler[2];
-        float diff_xz = std::atan2(-m[1][2], m[1][1]) * 180.0f / 3.1415926535f;
-        euler[2] = target_z;
-        euler[0] = diff_xz + target_z;
-    } else {
-        float y1 = std::asin(sy) * 180.0f / 3.1415926535f;
-        float x1 = std::atan2(m[2][1], m[2][2]) * 180.0f / 3.1415926535f;
-        float z1 = std::atan2(m[1][0], m[0][0]) * 180.0f / 3.1415926535f;
+    float x1, y1, z1;
+
+    // Standard branches
+    y1 = asin_clamped(sy) * RAD2DEG;
+    x1 = std::atan2(m[2][1], m[2][2]) * RAD2DEG;
+    z1 = std::atan2(m[1][0], m[0][0]) * RAD2DEG;
+
+    float x2 = x1 + 180.0f;
+    float y2 = 180.0f - y1;
+    float z2 = z1 + 180.0f;
+
+    // Gimbal-stabilized branches (attempt to recover continuity when atan2 becomes unstable)
+    float x3 = x1, y3 = y1, z3 = z1;
+    float x4 = x2, y4 = y2, z4 = z2;
+
+    if (std::abs(sy) > 0.5f) {
+        float pz = prev_euler[2];
+        z3 = pz;
+        if (sy > 0) x3 = std::atan2(m[0][1], m[1][1]) * RAD2DEG + pz;
+        else x3 = std::atan2(-m[0][1], m[1][1]) * RAD2DEG - pz;
         
-        float y2 = 180.0f - y1;
-        float x2 = x1 + 180.0f;
-        float z2 = z1 + 180.0f;
-        
-        auto dist = [](float a, float b, float c, const float* p) {
-            auto d = [](float v, float pv) {
-                float dv = std::fmod(v - pv, 360.0f);
-                if (dv > 180.0f) dv -= 360.0f;
-                if (dv < -180.0f) dv += 360.0f;
-                return dv*dv;
-            };
-            return d(a, p[0]) + d(b, p[1]) + d(c, p[2]);
-        };
-        
-        if (dist(x1, y1, z1, prev_euler) < dist(x2, y2, z2, prev_euler)) {
-            euler[0] = x1; euler[1] = y1; euler[2] = z1;
-        } else {
-            euler[0] = x2; euler[1] = y2; euler[2] = z2;
-        }
+        z4 = pz;
+        // Branch 2 is implicitly handled by the distance check below
     }
+
+    auto wrap_near = [](float v, float target) {
+        float res = v;
+        float diff = res - target;
+        while (diff > 180.0f) { res -= 360.0f; diff -= 360.0f; }
+        while (diff < -180.0f) { res += 360.0f; diff += 360.0f; }
+        return res;
+    };
+
+    auto d2 = [](float ax, float ay, float az, const float* p) {
+        float dx = ax - p[0], dy = ay - p[1], dz = az - p[2];
+        return dx*dx + dy*dy + dz*dz;
+    };
+
+    float c[4][3] = {
+        {wrap_near(x1, prev_euler[0]), wrap_near(y1, prev_euler[1]), wrap_near(z1, prev_euler[2])},
+        {wrap_near(x2, prev_euler[0]), wrap_near(y2, prev_euler[1]), wrap_near(z2, prev_euler[2])},
+        {wrap_near(x3, prev_euler[0]), wrap_near(y3, prev_euler[1]), wrap_near(z3, prev_euler[2])},
+        {wrap_near(x4, prev_euler[0]), wrap_near(y4, prev_euler[1]), wrap_near(z4, prev_euler[2])}
+    };
+
+    int best = 0;
+    float min_d = d2(c[0][0], c[0][1], c[0][2], prev_euler);
+    for (int i = 1; i < 4; ++i) {
+        float d = d2(c[i][0], c[i][1], c[i][2], prev_euler);
+        if (d < min_d) { min_d = d; best = i; }
+    }
+
+    euler[0] = c[best][0]; 
+    euler[1] = c[best][1]; 
+    euler[2] = c[best][2];
+}
+
+
+// Factor out negative scales into the rotation to prevent visual flipping during interpolation.
+// Only works if we have an even number of negative scales (pure rotation).
+// If we have an odd number (reflection), we can at most move it to a single axis.
+inline void stabilize_trs(float* t, float* q, float* s) {
+    bool flip_x = s[0] < 0;
+    bool flip_y = s[1] < 0;
+    bool flip_z = s[2] < 0;
     
-    // Final un-wrapping for chosen solution
-    for (int i = 0; i < 3; ++i) {
-        float diff = euler[i] - prev_euler[i];
-        while (diff > 180.0f) { euler[i] -= 360.0f; diff -= 360.0f; }
-        while (diff < -180.0f) { euler[i] += 360.0f; diff += 360.0f; }
-    }
+    // Handle even flips (pure rotations)
+    if (flip_x && flip_y) { s[0] = -s[0]; s[1] = -s[1]; float r[4] = {0,0,1,0}; float nq[4]; quat_mul(q, r, nq); memcpy(q, nq, 16); flip_x = flip_y = false; }
+    if (flip_x && flip_z) { s[0] = -s[0]; s[2] = -s[2]; float r[4] = {0,1,0,0}; float nq[4]; quat_mul(q, r, nq); memcpy(q, nq, 16); flip_x = flip_z = false; }
+    if (flip_y && flip_z) { s[1] = -s[1]; s[2] = -s[2]; float r[4] = {1,0,0,0}; float nq[4]; quat_mul(q, r, nq); memcpy(q, nq, 16); flip_y = flip_z = false; }
+    
+    quat_normalize(q);
 }
 
 inline void quat_rotate_vec(const float* q, const float* v, float* r) {

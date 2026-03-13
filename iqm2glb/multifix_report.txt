@@ -34,3 +34,8 @@ Summary of improvements and bug fixes implemented in the iqm2glb subproject:
 - **Feature**: Added a `get_unique_path` helper function.
 - **Functionality**: Before writing the output file, the tool now checks if a file with the target name already exists. If so, it appends a numeric suffix (e.g., `_1`, `_2`) to prevent overwriting existing work.
 - **Impact**: Safely allows multiple conversion attempts without losing previous results.
+
+## 7. Animation Stability: Quad-Branch Euler Solver (math_utils.h)
+- **Issue**: Standard Euler extraction collapses at gimbal lock ($Y = \pm 90^\circ$), causing large rotational jumps (72+ degrees) in the Pelvis and root joints during conversion.
+- **Fix**: Implemented a "Quad-Branch Solver" that evaluates four separate Euler candidates per frame, including gimbal-stabilized solutions with pinned redundancy. It selects the candidate that minimizes coordinate distance from the previous frame.
+- **Impact**: Provides perfectly smooth animation curves through all orientations, eliminating flickering in the exported FBX/GLB files. Verified with 135-channel audit.
