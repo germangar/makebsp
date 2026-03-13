@@ -319,14 +319,14 @@ bool write_iqm(const Model& model, const char* output_path) {
     f.seekp(0);
     f.write((const char*)&hdr, sizeof(hdr));
 
-    std::cout << "IQM Stats:" << std::endl;
+    /*std::cout << "IQM Stats:" << std::endl;
     std::cout << "  Joints: " << hdr.num_joints << " (Offset: " << hdr.ofs_joints << ")" << std::endl;
     std::cout << "  Meshes: " << hdr.num_meshes << " (Offset: " << hdr.ofs_meshes << ")" << std::endl;
     std::cout << "  Vertices: " << hdr.num_vertexes << " (VA Offset: " << hdr.ofs_vertexarrays << ")" << std::endl;
     std::cout << "  Triangles: " << hdr.num_triangles << " (Offset: " << hdr.ofs_triangles << ")" << std::endl;
     std::cout << "  Animations: " << hdr.num_anims << " (Offset: " << hdr.ofs_anims << ")" << std::endl;
     std::cout << "  Frames: " << hdr.num_frames << " (Offset: " << hdr.ofs_frames << ")" << std::endl;
-    std::cout << "  Total Filesize: " << hdr.filesize << " bytes" << std::endl;
+    std::cout << "  Total Filesize: " << hdr.filesize << " bytes" << std::endl;*/
 
     // 6. Write animation.cfg
     if (!model.animations.empty()) {

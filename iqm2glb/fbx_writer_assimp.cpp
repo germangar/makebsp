@@ -1,3 +1,5 @@
+#include "math_utils.h"
+#if ENABLE_ASSIMP
 #include "fbx_writer_assimp.h"
 #include <assimp/scene.h>
 #include <assimp/exporter.hpp>
@@ -233,3 +235,4 @@ bool write_fbx_assimp(const char* path, const Model& model)
     delete scene;
     return true;
 }
+#endif

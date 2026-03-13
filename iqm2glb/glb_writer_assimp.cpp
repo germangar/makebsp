@@ -1,3 +1,5 @@
+#include "math_utils.h"
+#if ENABLE_ASSIMP
 #include "glb_writer_assimp.h"
 #include <assimp/scene.h>
 #include <assimp/exporter.hpp>
@@ -236,3 +238,4 @@ bool write_glb_assimp(const Model& model, const char* filename) {
     delete scene; 
     return true;
 }
+#endif

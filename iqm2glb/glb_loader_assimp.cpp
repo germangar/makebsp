@@ -1,3 +1,5 @@
+#include "math_utils.h"
+#if ENABLE_ASSIMP
 #include "glb_loader_assimp.h"
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -226,3 +228,4 @@ bool load_glb_assimp(const char* path, Model& out) {
 
     return true;
 }
+#endif

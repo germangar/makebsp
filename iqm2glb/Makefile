@@ -1,9 +1,9 @@
 # iqm2glb Makefile
 
 CXX      = g++
-CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/assimp/include -I../libs/fbx-file
+CXXFLAGS = -O2 -Wall -std=c++17 -I../libs/fbx-file
 CFLAGS   = -O2 -Wall -I../libs/fbx-file
-LDFLAGS  = -L../libs/assimp/lib -lassimp -lzlibstatic
+LDFLAGS  =
 
 TARGET = iqm2glb.exe
 OBJDIR = obj
@@ -24,7 +24,8 @@ LIB_SRCS_CPP = ../libs/fbx-file/fbx.cpp
 
 OBJS   = $(addprefix $(OBJDIR)/, $(SRCS:.cpp=.o)) \
          $(addprefix $(OBJDIR)/, fbx.o) \
-         $(addprefix $(OBJDIR)/, ufbx.o)
+         $(addprefix $(OBJDIR)/, ufbx.o) \
+         $(addprefix $(OBJDIR)/, miniz.o)
 
 all: $(OBJDIR) $(TARGET)
 
@@ -43,6 +44,9 @@ $(OBJDIR)/fbx.o: ../libs/fbx-file/fbx.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/ufbx.o: ../ufbx.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/miniz.o: ../libs/fbx-file/miniz.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:

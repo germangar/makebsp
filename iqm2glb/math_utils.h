@@ -1,6 +1,8 @@
 #pragma once
 #include <cmath>
 
+#define ENABLE_ASSIMP 0
+
 // Column-major 4x4 matrix (matches glTF / OpenGL convention)
 // m[col*4 + row]
 struct mat4 {

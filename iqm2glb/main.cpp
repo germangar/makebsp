@@ -6,12 +6,17 @@
 #include <fstream>
 #include "iqm_loader.h"
 #include "anim_cfg.h"
+#include "math_utils.h"
 #include "glb_loader.h"
+#if ENABLE_ASSIMP
 #include "glb_loader_assimp.h"
+#endif
 #include "skp_loader.h"
 #include "iqm_writer.h"
 #include "glb_writer.h"
+#if ENABLE_ASSIMP
 #include "glb_writer_assimp.h"
+#endif
 #include "fbx_writer.h"
 #include "fbx_loader.h"
 

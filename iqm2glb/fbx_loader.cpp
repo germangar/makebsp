@@ -22,9 +22,9 @@ bool load_fbx(const char* path, Model& out) {
         return false;
     }
 
-    std::cout << "FBX Scene loaded: " << scene->nodes.count << " nodes, " 
+    /*std::cout << "FBX Scene loaded: " << scene->nodes.count << " nodes, " 
               << scene->meshes.count << " meshes, "
-              << scene->anim_stacks.count << " animations." << std::endl;
+              << scene->anim_stacks.count << " animations." << std::endl;*/
 
     // Phase 1.5 - Extract Skeleton (Full Hierarchy)
     std::map<ufbx_node*, int> node_to_joint;

@@ -455,10 +455,9 @@ for (size_t i = 0; i < in.joints.size(); ++i) {
             link.curves.resize(in.joints.size());
 
             for (size_t ji = 0; ji < in.joints.size(); ++ji) {
-                if (std::string(in.joints[ji].name).find("elvis") != std::string::npos) {
+                /*if (std::string(in.joints[ji].name).find("elvis") != std::string::npos) {
                     std::cout << "WRITER processing joint: " << in.joints[ji].name << std::endl;
-                }
-                const BoneAnim& ba = ad.track.bones[ji];
+                }*/                const BoneAnim& ba = ad.track.bones[ji];
                 if (ba.translation.times.empty() && ba.rotation.times.empty() && ba.scale.times.empty()) continue;
 
                 auto add_curve_node = [&](const char* name, const char* type) {
