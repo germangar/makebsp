@@ -26,9 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 extern HWND hwndOut;
 #endif
 
-char source[1024];
 char tempsource[1024];
-char name[1024];
 
 vec_t microvolume = 1.0;
 qboolean glview;
@@ -349,9 +347,6 @@ void OnlyTextures(void) { // FIXME!!!
 main
 ============
 */
-int LightMain(int argc, char **argv);
-int VLightMain(int argc, char **argv);
-int VSoundMain(int argc, char **argv);
 int VisMain(int argc, char **argv);
 
 int main(int argc, char **argv) {
@@ -368,18 +363,6 @@ int main(int argc, char **argv) {
   // check for general program options
   if (!strcmp(argv[1], "-info")) {
     Bspinfo(argc - 2, argv + 2);
-    return 0;
-  }
-  if (!strcmp(argv[1], "-light")) {
-    LightMain(argc - 1, argv + 1);
-    return 0;
-  }
-  if (!strcmp(argv[1], "-vlight")) {
-    VLightMain(argc - 1, argv + 1);
-    return 0;
-  }
-  if (!strcmp(argv[1], "-vsound")) {
-    VSoundMain(argc - 1, argv + 1);
     return 0;
   }
   if (!strcmp(argv[1], "-vis")) {

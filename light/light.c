@@ -50,7 +50,7 @@ qboolean lightmapBorder;
 
 qboolean noSurfaces;
 
-int samplesize = 16; // sample size in units
+extern int samplesize; // sample size in units
 int novertexlighting = 0;
 int nogridlighting = 0;
 

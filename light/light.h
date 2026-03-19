@@ -27,9 +27,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/polylib.h"
 #include "../common/scriplib.h"
 #include "../common/threads.h"
-
-#include "mesh.h"
-#include "shaders.h"
+#include "../shared/globals.h"
+#include "../shared/mesh.h"
+#include "../shared/shaders.h"
 
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 

@@ -1,18 +1,21 @@
 CC = gcc
 CXX = g++
-CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map \
+CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight \
          -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen \
          -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite \
          -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 \
          -DSTB_IMAGE_IMPLEMENTATION
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch \
            -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap
-LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm \
-          -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lzlibstatic -lstdc++ -fopenmp
+BASE_LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm -lstdc++ -fopenmp
+Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lz
+LIGHT_LDFLAGS = $(BASE_LDFLAGS)
 
 # Directories
 COMMON_DIR = common
 Q3MAP_DIR = q3map
+SHARED_DIR = shared
+LIGHT_DIR = light
 PAK_DIR = libs/pak
 HACD_DIR = libs/hacd
 OBJ_DIR = obj
@@ -20,7 +23,9 @@ OBJ_LITE_DIR = obj_lite
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
+SHARED_SRC = $(wildcard $(SHARED_DIR)/*.c)
 Q3MAP_SRC = $(filter-out $(Q3MAP_DIR)/nodraw.c $(Q3MAP_DIR)/misc_model_old.c, $(wildcard $(Q3MAP_DIR)/*.c))
+LIGHT_SRC = $(wildcard $(LIGHT_DIR)/*.c)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 HACD_SRC = $(wildcard $(HACD_DIR)/*.cpp)
 
@@ -88,33 +93,52 @@ ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 
 ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
 
-# Object files for application (always cleaned)
-APP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
-          $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) \
-          $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) \
-          $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o)
+# Object files for Q3MAP (BSP/VIS)
+Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
+            $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) \
+            $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) \
+            $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) \
+            $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o)
+
+# Object files for LIGHT
+LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) \
+            $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) \
+            $(LIGHT_SRC:$(LIGHT_DIR)/%.c=$(OBJ_DIR)/light/%.o) \
+            $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for MeshLib-Lite (persistent)
 ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) \
               $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
 
-TARGET = q3map.exe
+Q3MAP_TARGET = q3map.exe
+LIGHT_TARGET = light.exe
 
-all: $(TARGET)
+all: $(Q3MAP_TARGET) $(LIGHT_TARGET)
 
 $(ML_LITE_LIB): $(ML_LITE_OBJ)
 	@echo Building persistent MeshLib-Lite library...
 	ar rcs $@ $^
 
-$(TARGET): $(APP_OBJ) $(ML_LITE_LIB)
-	$(CXX) -o $@ $(APP_OBJ) $(ML_LITE_LIB) $(LDFLAGS)
+$(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB)
+	$(CXX) -o $@ $(Q3MAP_OBJ) $(ML_LITE_LIB) $(Q3MAP_LDFLAGS)
 
-# Compile rules for application
+$(LIGHT_TARGET): $(LIGHT_OBJ)
+	$(CXX) -o $@ $(LIGHT_OBJ) $(LIGHT_LDFLAGS)
+
+# Compile rules
 $(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(OBJ_DIR)/shared/%.o: $(SHARED_DIR)/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/light/%.o: $(LIGHT_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -137,7 +161,7 @@ $(OBJ_LITE_DIR)/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
 
 clean:
 	rm -rf $(OBJ_DIR)
-	rm -f $(TARGET)
+	rm -f $(Q3MAP_TARGET) $(LIGHT_TARGET)
 
 clean-all: clean
 	rm -rf $(OBJ_LITE_DIR)

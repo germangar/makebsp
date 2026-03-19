@@ -31,8 +31,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/scriplib.h"
 #include "../common/threads.h"
 
-#include "mesh.h"
-#include "shaders.h"
+#include "../shared/mesh.h"
+#include "../shared/shaders.h"
 
 #ifdef _WIN32
 // Improve floating-point consistency.
