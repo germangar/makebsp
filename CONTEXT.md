@@ -1,42 +1,54 @@
-# Q3Map - Quake 3 BSP Compiler
+# Q3Map & Light - Quake 3 BSP Compilers
 
-This is a **modified Q3Map compiler** - the official map-to-BSP compiler from Quake III Arena (GPL licensed). It's used to compile `.map` files (text-based level geometry) into `.bsp` files (binary format used by the Quake 3 engine).
+This is a **modified compiler suite** based on the official map-to-BSP compiler from Quake III Arena (GPL licensed). It is used to compile `.map` files (text-based level geometry) into `.bsp` files (binary format used by the Quake 3 engine).
 
-## Core Functionality
+## Architecture & Split
 
-The compiler performs standard BSP compilation stages:
+The compiler has been split into two distinct executables to improve build times and separate concerns. `q3map.exe` handles the heavy geometry and collision processing, while `light.exe` focuses purely on high-performance raytracing and shadow generation without dragging in heavy 3D geometry libraries.
 
-| File | Purpose |
+### 1. `q3map/` (BSP & VIS Generation)
+Produces **`q3map.exe`**. Handles parsing `.map` files, generating the BSP tree, performing CSG boolean operations, calculating the Potentially Visible Set (VIS), and generating automatic collision meshes for 3D models. It links against heavy libraries like Assimp, HACD, CoACD, and MeshLib-Lite.
+
+| Core Files | Purpose |
 |------|---------|
-| `map.c` | Map parsing - reads .map files, parses entities, brushes, patches |
-| `csg_brush.c` | CSG operations - brush boolean operations (subtract, merge) |
-| `bsp.c`, `tree.c` | BSP generation - builds the BSP tree structure |
-| `vis.c`, `visflow.c`, `portals.c` | Visibility - potentially-visible-set calculation |
-| `light.c`, `lightmaps.c`, `lightv.c` | Lightmapping - calculates light maps |
-| `surface.c`, `patch.c`, `facebsp.c` | Surface generation - creates draw surfaces |
-| `misc_model.c`, `glfile.c` | Model loading - loads .ase/.obj models |
+| `bsp.c`, `tree.c` | BSP generation and main entry dispatcher (`-bsp`, `-vis`, `-info`). |
+| `map.c`, `brush.c` | Map parsing and brush geometry creation. |
+| `csg_brush.c` | CSG operations - brush boolean operations (subtract, merge). |
+| `vis.c`, `visflow.c` | Visibility - potentially-visible-set (PVS) calculation. |
+| `surface.c`, `patch.c`| Surface generation - creates map draw surfaces. |
+| `lightmaps.c` | **Lightmap Layout:** Allocates Atlas space and UVs (Does *not* render light). |
+| `model_*.c` | Automatic collision hull generation (CoACD, HACD, Extrusion). |
+
+### 2. `light/` (Lighting Generation)
+Produces **`light.exe`**. Loads a compiled `.bsp` file and performs raytracing to fill the lightmap data allocated during the BSP phase. It is a lean, fast executable that only depends on standard math and raytracing logic.
+
+| Core Files | Purpose |
+|------|---------|
+| `main.c` | Entry dispatcher (`-light`, `-vlight`, `-vsound`). |
+| `light.c` | Primary lightmap rendering, shadow raytracing, and radiosity. |
+| `lightv.c` | Fast vertex-lighting and dynamic grid lighting. |
+| `light_trace.c` | Collision detection and occlusion testing for light rays. |
+
+### 3. `shared/` (Common Utilities)
+Contains code required by both the BSP generation and Lighting phases.
+
+| Core Files | Purpose |
+|------|---------|
+| `globals.c/h` | Shared runtime variables (e.g., `samplesize`, `source`). |
+| `mesh.c/h` | Math for subdividing curved Bezier patches into triangles. |
+| `shaders.c/h` | Parsing `.shader` files for surface properties (translucency, light emission). |
 
 ## Key Enhancements (Fork-Specific)
 
-This fork adds **automatic collision mesh generation** for `misc_model` entities:
-
-| File | Purpose |
-|------|---------|
-| `model_coacd.c` | Uses CoACD library for convex decomposition |
-| `model_hacd.c` | Alternative convex decomposition via HACD library |
-| `model_collision.c` | Converts collision hulls to brush geometry and exports to map files |
-| `model_extrude.c` | Extrudes collision geometry |
-
-## Libraries
-
-- **stb_image** - Image loading (PNG, JPEG, BMP, TGA, GIF, HDR, and more)
-- **assimp** - Model format loading (ASE, OBJ, etc.)
-- **hacd/coacd** - Convex hull decomposition algorithms
-- **MeshLib-Lite** - Mesh processing from MeshLab
+This fork adds **automatic collision mesh generation** for `misc_model` entities during the BSP phase:
+- **Assimp** is used to load complex 3D models (.obj, .ase, etc.).
+- **MeshLib-Lite** cleans and heals model topologies.
+- **HACD / CoACD** generates optimized convex collision hulls which are automatically converted into invisible structural BSP brushes.
 
 ## Output
 
-- `q3map.exe` - The compiled Windows executable
+- `q3map.exe` - BSP and VIS compiler.
+- `light.exe` - Lighting compiler.
 
 ## License
 
