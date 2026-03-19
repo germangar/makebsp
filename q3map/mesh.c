@@ -20,7 +20,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
-#include "qbsp.h"
+#include <stdlib.h>
+#include "../common/cmdlib.h"
+#include "../common/mathlib.h"
+#include "../common/bspfile.h"
+#include "mesh.h"
 
 
 /*
