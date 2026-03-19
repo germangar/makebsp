@@ -292,7 +292,7 @@ void HACD::InitializeDualGraph()
 
 void HACD::NormalizeData()
 {
-	if (m_nPoints == 0)
+	if (m_nPoints == 0 || m_disableNormalize)
 	{
 		return;
 	}
@@ -332,7 +332,7 @@ void HACD::NormalizeData()
 }
 void HACD::DenormalizeData()
 {
-	if (m_nPoints == 0)
+	if (m_nPoints == 0 || m_disableNormalize)
 	{
 		return;
 	}
@@ -698,8 +698,11 @@ bool HACD::Compute(bool fullCH, bool exportDistPoints)
 		msg << "\t max. distance to connect CCs   \t" << m_ccConnectDist << std::endl;
 		(*m_callBack)(msg.str().c_str(), 0.0, 0.0, nV);
 	}
-	if (m_callBack) (*m_callBack)("+ Normalizing Data\n", 0.0, 0.0, nV);
-	NormalizeData();
+	if (!m_disableNormalize)
+	{
+		if (m_callBack) (*m_callBack)("+ Normalizing Data\n", 0.0, 0.0, nV);
+		NormalizeData();
+	}
 	if (m_callBack) (*m_callBack)("+ Creating Graph\n", 0.0, 0.0, nV);
 	CreateGraph();
 	// Compute the surfaces and perimeters of all the faces
@@ -716,8 +719,11 @@ bool HACD::Compute(bool fullCH, bool exportDistPoints)
 	// we simplify the graph
 	if (m_callBack) (*m_callBack)("+ Simplification ...\n", 0.0, 0.0, m_nTriangles);
 	Simplify();
-	if (m_callBack) (*m_callBack)("+ Denormalizing Data\n", 0.0, 0.0, m_nClusters);
-	DenormalizeData();
+	if (!m_disableNormalize)
+	{
+		if (m_callBack) (*m_callBack)("+ Denormalizing Data\n", 0.0, 0.0, m_nClusters);
+		DenormalizeData();
+	}
 	if (m_callBack) (*m_callBack)("+ Computing final convex-hulls\n", 0.0, 0.0, m_nClusters);
 	delete[] m_convexHulls;
 	m_convexHulls = new ICHull[m_nClusters];

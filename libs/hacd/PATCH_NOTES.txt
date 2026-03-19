@@ -1,0 +1,16 @@
+# HACD Patch Notes
+
+## Fixed: broken "disable normalization" flag
+The original HACD library (and previous local versions) included a `m_disableNormalize` member and a `SetDisableNormalize` setter, but the implementation of `NormalizeData()`, `DenormalizeData()`, and `Compute()` ignored this flag and always performed normalization.
+
+**Changes:**
+- Added guards to `NormalizeData()` and `DenormalizeData()` in `hacdHACD.cpp` to return immediately if `m_disableNormalize` is true.
+- Updated `HACD::Compute()` to skip normalization/denormalization steps and logs when the flag is set.
+
+## Added: C-API for Scale Factor
+Exposed the internal normalization scale factor (default 1000.0) to the C wrapper.
+
+**New Function:**
+- `void hacd_set_scale_factor(HACD_Wrapper* hacd, double scale);`
+
+This allows external callers (like `q3map`) to control the strictness of the decomposition without manually scaling input parameters.

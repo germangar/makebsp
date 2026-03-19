@@ -70,6 +70,10 @@ void hacd_set_disable_normalize(HACD_Wrapper* hacd, bool disable) {
     hacd->hacd.SetDisableNormalize(disable);
 }
 
+void hacd_set_scale_factor(HACD_Wrapper* hacd, double scale) {
+    hacd->hacd.SetScaleFactor(scale);
+}
+
 bool hacd_compute(HACD_Wrapper* hacd, bool fullCH) {
     return hacd->hacd.Compute(fullCH);
 }

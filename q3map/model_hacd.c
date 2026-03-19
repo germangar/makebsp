@@ -242,7 +242,8 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
     hacd_set_cc_connect_dist(hacd, s->ccConnectDist);
 
     hacd_set_nclusters(hacd, s->nClusters); 
-    hacd_set_concavity(hacd, s->concavity / s->scaleFactor); 
+    hacd_set_scale_factor(hacd, s->scaleFactor * 1000.0);
+    hacd_set_concavity(hacd, s->concavity); 
     hacd_set_add_extra_dist_points(hacd, s->extraPoints); 
     hacd_set_add_faces_points(hacd, s->facePoints);      
     
