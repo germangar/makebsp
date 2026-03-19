@@ -122,10 +122,6 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
       return NULL;
   }
 
-#if 0
-  _printf("Instance %s: Decomposing as %s (threshold %.2f)\n", 
-          inst->modelName, CategoryString(category), threshold);
-#endif
 
   if (mergeMeshes) {
     // ALL model vertexes callculated at once (meshes merged)
@@ -251,9 +247,6 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
         1234                  // seed
       );
 
-#if 0
-      _printf("Instance %s: Library produced %i raw hulls (one mesh)\n", inst->modelName, (int)hulls.meshes_count);
-#endif
 
       bspbrush_t *brushes = BrushesFromHullsCoACD(hulls, ds->shaderInfo);
       hulls_list = CombineBrushes(hulls_list, brushes);

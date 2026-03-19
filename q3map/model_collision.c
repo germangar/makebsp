@@ -403,14 +403,6 @@ static void CategorizeModel(modelInstance_t *inst) {
   
   inst->category = category;
 
-#if 0
-  _printf("Instance %s: Categorized as %s\n", inst->modelName,
-          CategoryString(category));
-  _printf("  Metrics: Area %.1f, Up %.1f%%, UpperHemi %.1f%%, Outward %.1f%%, Inward %.1f%%, "
-          "Height %.1f, Density: %.1f tris/128u^3\n",
-          totalArea, upRatio * 100.0f, upperHemisphereRatio * 100.0f, outwardRatio * 100.0f,
-          inwardRatio * 100.0f, height, inst->triangle_density);
-#endif
 
 
   return;
@@ -435,9 +427,6 @@ bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_
   int currentVert = 0;
   int currentIndex = 0;
   
-#if 0
-  _printf("Instance %s: Generating Terrain Extrusion\n", inst->modelName);
-#endif
 
   for (j = 0; j < inst->numDrawSurfs; j++) {
     mapDrawSurface_t *ds = inst->drawSurfs[j];
@@ -693,12 +682,6 @@ bspbrush_t *BrushesFromHulls(colHull_t **hulls, int numHulls, shaderInfo_t *si) 
     }
   }
 
-#if 0
-  if (c_degenerate_triangles > 0 || c_degenerate_hulls > 0) {
-    _printf("  Degenerate geometry skipped during hull conversion: %i triangles, %i hulls\n",
-            c_degenerate_triangles, c_degenerate_hulls);
-  }
-#endif
 
   return list;
 }
@@ -753,16 +736,10 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   size_t origPoints = mrMeshPointsNum(mesh);
   const MRMeshTopology *topo = mrMeshTopology(mesh);
   int origHoles = mrMeshTopologyFindNumHoles(topo, NULL);
-#if 0
-  _printf("  MRMesh constructed: %zu verts, %d holes\n", origPoints, origHoles);
-#endif
 
   /* --- Step 2: Vertex Welding --- */
   int welded = mrMeshBuilderUniteCloseVertices(mesh, 0.001f, false, NULL);
   if (welded > 0) {
-#if 0
-    _printf("  Welded %d close vertices\n", welded);
-#endif
     mrMeshInvalidateCaches(mesh, true);
   }
 
@@ -789,9 +766,6 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   {
     MREdgePath *holeEdges = mrMeshFindHoleRepresentiveEdges(mesh);
     if (holeEdges && holeEdges->size > 0) {
-#if 0
-      _printf("  Filling %zu holes\n", holeEdges->size);
-#endif
       MRFillHoleParams fillParams = mrFillHoleParamsNew();
       mrFillHoles(mesh, holeEdges->data, holeEdges->size, &fillParams);
       mrEdgePathFree(holeEdges);
@@ -803,10 +777,6 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   /* Verify holes after filling */
   topo = mrMeshTopology(mesh);
   int remainingHoles = mrMeshTopologyFindNumHoles(topo, NULL);
-#if 0
-  _printf("  After healing: %zu verts, %d remaining holes\n",
-          mrMeshPointsNum(mesh), remainingHoles);
-#endif
 
   /* --- Step 6: Decimate --- */
   {
@@ -826,12 +796,6 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
     size_t finalFaces = mrBitSetCount((const MRBitSet *)mrMeshTopologyGetValidFaces(finalTopo));
     double reduction = inputTris > 0 ? (1.0 - (double)finalFaces / inputTris) * 100.0 : 0.0;
 
-#if 0
-    _printf("  Decimated: %d verts deleted, %d faces deleted, error=%.3f\n",
-            result.vertsDeleted, result.facesDeleted, result.errorIntroduced);
-    _printf("  Summary: %d original tris -> %zu remaining tris (%.1f%% reduction)\n",
-            inputTris, finalFaces, reduction);
-#endif
   }
 
   return mesh;
@@ -879,9 +843,6 @@ static void WriteCollisionOBJ(colMesh_t **collision_meshes, int num_collision_me
   }
 
   fclose(f);
-#if 0
-  _printf("  Wrote collision debug to %s\n", filename);
-#endif
 }
 
 /*
@@ -1026,10 +987,6 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     return;
   }
 
-#if 0
-  // Step 1: Pre-calculate thresholds and print info
-  _printf("Instance %s: Decomposing as %s\n", inst->modelName, CategoryString(category));
-#endif
 
   shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
   qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
@@ -1050,9 +1007,6 @@ static void DecomposeModelCollision(modelInstance_t *inst) {
     numHulls++;
   }
 
-#if 0
-  _printf("Instance %s: Generated total %i convex hulls.\n", inst->modelName, numHulls);
-#endif
 
   // Step 5: Populate clip entity group
   if (hulls_list) {
