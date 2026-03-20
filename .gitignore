@@ -9,31 +9,14 @@ libs/assimp_src/
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
 
+
 paklog.txt
 modeltest_modelsinfo.txt
 libs/coacd
 AGENTS.md
 .vscode/settings.json
 
-iqm2glb/iqm2glb.exe
-iqm2glb/bigvic/
-iqm2glb/Bobot/
-iqm2glb/IQM viewer SRC/
-iqm2glb/MP_PadPork_source/
-iqm2glb/obj/
-iqm2glb/*.tga
-iqm2glb/*.jpg
-iqm2glb/tris.glb
-iqm2glb/tris.iqm
-iqm2glb/default.skin
-iqm2glb/animation.cfg
-iqm2glb/skmodel2/
-iqm2glb/skmviewer/
-iqm2glb/bigvic_iqm
-iqm2glb/bigvic_skp
-iqm2glb/blender_exporter_src
-ufbx.c
-ufbx.h
+*.bmp
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/
@@ -64,3 +47,4 @@ iqm2glb/tris1.iqm
 iqm2glb/2026-03-13 00-53-09.mkv
 iqm2glb/tris.skm
 iqm2glb/tris.skp
+

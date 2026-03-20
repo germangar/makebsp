@@ -137,7 +137,7 @@ byte *LoadAlphaMap(int *num_layers, int *alphawidth, int *alphaheight) {
       }
     }
   } else {
-    Load256Image(ExpandGamePath(alphamapname), &alphamap, NULL, &width,
+    LoadImage(ExpandGamePath(alphamapname), &alphamap, &width,
                  &height);
     size = width * height;
     for (i = 0; i < size; i++) {

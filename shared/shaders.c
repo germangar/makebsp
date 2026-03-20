@@ -188,7 +188,7 @@ static void LoadShaderImage(shaderInfo_t *si) {
 // load the image to get dimensions and color
 loadTga:
   if (bTGA) {
-    LoadTGABuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
+    LoadImageFromBuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
   } else {
     LoadImageFromBuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
   }

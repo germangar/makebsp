@@ -21,23 +21,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "qtypes.h"
 
-void LoadLBM(const char *filename, byte **picture, byte **palette);
-void WriteLBMfile(const char *filename, byte *data, int width, int height,
-                  byte *palette);
-void LoadPCX(const char *filename, byte **picture, byte **palette, int *width,
-             int *height);
-void WritePCXfile(const char *filename, byte *data, int width, int height,
-                  byte *palette);
-
-// loads / saves either lbm or pcx, depending on extension
-void Load256Image(const char *name, byte **pixels, byte **palette, int *width,
-                  int *height);
-void Save256Image(const char *name, byte *pixels, byte *palette, int width,
-                  int height);
+void LoadImage(const char *name, byte **pixels, int *width, int *height);
+void SaveImage(const char *name, byte *pixels, int width, int height, int components);
 
 void LoadTGA(const char *filename, byte **pixels, int *width, int *height);
-void LoadTGABuffer(byte *buffer, int buflen, byte **pic, int *width, int *height);
-void WriteTGA(const char *filename, byte *data, int width, int height);
+void SaveTGA(const char *filename, byte *data, int width, int height, int components);
+
+void LoadBMP(const char *filename, byte **pixels, int *width, int *height);
+void SaveBMP(const char *filename, byte *data, int width, int height, int components);
+
+void LoadPNG(const char *filename, byte **pixels, int *width, int *height);
+void SavePNG(const char *filename, byte *data, int width, int height, int components);
 
 void Load32BitImage(const char *name, unsigned **pixels, int *width,
                     int *height);

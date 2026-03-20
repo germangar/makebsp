@@ -49,6 +49,7 @@ qboolean extraWide;
 qboolean lightmapBorder;
 
 qboolean noSurfaces;
+qboolean debugLightmaps;
 
 extern int samplesize; // sample size in units
 int novertexlighting = 0;
@@ -239,6 +240,57 @@ void CountLightmaps(void) {
 
   qprintf("%5i drawSurfaces\n", numDrawSurfaces);
   qprintf("%5i lightmaps\n", count);
+}
+
+/*
+===============
+VisualizeLightmapAllocation
+===============
+*/
+void VisualizeLightmapAllocation(void) {
+  int i, x, y, k, p;
+  dsurface_t *ds;
+  byte color[3];
+  char filename[1024];
+  int numPages;
+
+  _printf("--- VisualizeLightmapAllocation ---\n");
+
+  // clear lightBytes (quantized output) to a slightly different grey for contrast
+  memset(lightBytes, 24, numLightBytes);
+
+  for (i = 0; i < numDrawSurfaces; i++) {
+    ds = &drawSurfaces[i];
+    if (ds->lightmapNum < 0)
+      continue;
+
+    // generate a unique color for this surface based on index
+    // avoid too dark or too bright colors
+    color[0] = (i * 123) % 200 + 55;
+    color[1] = (i * 456) % 200 + 55;
+    color[2] = (i * 789) % 200 + 55;
+
+    for (y = 0; y < ds->lightmapHeight; y++) {
+      for (x = 0; x < ds->lightmapWidth; x++) {
+        p = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+                LIGHTMAP_WIDTH +
+            (ds->lightmapX + x);
+        k = p * 3;
+        lightBytes[k] = color[0];
+        lightBytes[k + 1] = color[1];
+        lightBytes[k + 2] = color[2];
+      }
+    }
+  }
+
+  // export pages to BMP
+  numPages = numLightBytes / (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3);
+  for (i = 0; i < numPages; i++) {
+    sprintf(filename, "lm_%04i.bmp", i);
+    _printf("Writing %s...\n", filename);
+    SaveBMP(filename, lightBytes + (i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3),
+            LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
+  }
 }
 
 /*
@@ -2072,6 +2124,9 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-dump")) {
       dump = qtrue;
       _printf("Dumping occlusion maps\n");
+    } else if (!strcmp(argv[i], "-debug_lightmaps")) {
+      debugLightmaps = qtrue;
+      _printf("Lightmap debug visualization enabled\n");
     } else {
       break;
     }
@@ -2093,7 +2148,8 @@ int LightMain(int argc, char **argv) {
             "   nogrid         = don't calculate light grid for dynamic model "
             "lighting\n"
             "   novertex       = don't calculate vertex lighting\n"
-            "   samplesize <N> = set the lightmap pixel size to NxN units\n");
+            "   samplesize <N> = set the lightmap pixel size to NxN units\n"
+            "   debug_lightmaps = visualize lightmap allocation and export BMPs\n");
     exit(0);
   }
 
@@ -2133,6 +2189,15 @@ int LightMain(int argc, char **argv) {
   SetEntityOrigins();
 
   CountLightmaps();
+
+  if (debugLightmaps) {
+    VisualizeLightmapAllocation();
+    _printf("writing %s\n", source);
+    WriteBSPFile(source);
+    end = I_FloatTime();
+    _printf("%5.0f seconds elapsed\n", end - start);
+    return 0;
+  }
 
   CreateSurfaceLights();
 
