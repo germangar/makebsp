@@ -1280,7 +1280,8 @@ void TraceLtm(int num) {
   int i, j, k;
   int x, y;
   int position, numPositions;
-  vec3_t base, origin, normal;
+  double base[3], origin_d[3];
+  vec3_t origin, normal;
   traceWork_t *tw;
   tw = malloc(sizeof(traceWork_t));
   if (!tw)
@@ -1337,6 +1338,8 @@ void TraceLtm(int num) {
     tw->patchshadows = qtrue;
   else
     tw->patchshadows = patchshadows;
+
+  tw->ignoreSurface = num;
 
   if (ds->surfaceType == MST_PATCH) {
     srcMesh.width = ds->patchWidth;
@@ -1426,28 +1429,35 @@ void TraceLtm(int num) {
       if (ds->patchWidth) {
         numPositions = 9;
         VectorCopy(mesh->verts[j * mesh->width + i].normal, normal);
-        // VectorNormalize( normal, normal );
         // push off of the curve a bit
-        VectorMA(mesh->verts[j * mesh->width + i].xyz, 1, normal, base);
+        for (k = 0; k < 3; k++) {
+          base[k] = (double)mesh->verts[j * mesh->width + i].xyz[k] +
+                    (double)normal[k] * SAMPLE_NUDGE;
+        }
 
         MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
       } else {
         numPositions = 9;
         for (k = 0; k < 3; k++) {
-          base[k] = lightmapOrigin[k] + normal[k] + i * lightmapVecs[0][k] +
-                    j * lightmapVecs[1][k];
+          base[k] = (double)lightmapOrigin[k] +
+                    (double)normal[k] * SAMPLE_NUDGE +
+                    (double)i * lightmapVecs[0][k] +
+                    (double)j * lightmapVecs[1][k];
         }
       }
-      VectorAdd(base, surfaceOrigin[num], base);
+      for (k = 0; k < 3; k++) {
+        base[k] += surfaceOrigin[num][k];
+      }
 
       // we may need to slightly nudge the sample point
       // if directly on a wall
       for (position = 0; position < numPositions; position++) {
         // calculate lightmap sample position
         for (k = 0; k < 3; k++) {
-          origin[k] = base[k] +
-                      +(nudge[0][position] / 16) * lightmapVecs[0][k] +
-                      (nudge[1][position] / 16) * lightmapVecs[1][k];
+          origin_d[k] = base[k] +
+                        ((double)nudge[0][position] / 16.0) * lightmapVecs[0][k] +
+                        ((double)nudge[1][position] / 16.0) * lightmapVecs[1][k];
+          origin[k] = (float)origin_d[k];
         }
 
         if (notrace) {
@@ -1733,6 +1743,8 @@ void TraceGrid(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
+
+  tw->ignoreSurface = -1;
 
   mod = num;
   z = mod / (gridBounds[0] * gridBounds[1]);
@@ -2075,6 +2087,7 @@ void VertexLightingThread(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
+  tw->ignoreSurface = num;
 
   ds = &drawSurfaces[num];
 
@@ -2111,6 +2124,7 @@ void TriSoupLightingThread(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
+  tw->ignoreSurface = num;
 
   ds = &drawSurfaces[num];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);

@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "light.h"
 
 #define CURVE_FACET_ERROR 8
+#define TRACE_EPSILON 0.001
 
 int c_totalTrace;
 int c_cullTrace, c_testTrace;
@@ -478,9 +479,9 @@ Shader is needed for translucent surfaces
 */
 void TraceAgainstFacet(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet) {
   int j;
-  float d1, d2, d, f;
+  double d1, d2, dist;
+  float d, f;
   vec3_t point;
-  float dist;
 
   // ignore degenerate facets
   if (facet->numBoundaries < 3) {
@@ -490,18 +491,22 @@ void TraceAgainstFacet(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet) {
   dist = facet->surface[3];
 
   // compare the trace endpoints against the facet plane
-  d1 = DotProduct(tr->start, facet->surface) - dist;
-  if (d1 > -1 && d1 < 1) {
+  d1 = (double)tr->start[0] * facet->surface[0] +
+       (double)tr->start[1] * facet->surface[1] +
+       (double)tr->start[2] * facet->surface[2] - dist;
+  if (d1 > -SELF_SHADOW_EPSILON && d1 < SELF_SHADOW_EPSILON) {
     return; // don't self intersect
   }
-  d2 = DotProduct(tr->end, facet->surface) - dist;
-  if (d2 > -1 && d2 < 1) {
+  d2 = (double)tr->end[0] * facet->surface[0] +
+       (double)tr->end[1] * facet->surface[1] +
+       (double)tr->end[2] * facet->surface[2] - dist;
+  if (d2 > -SELF_SHADOW_EPSILON && d2 < SELF_SHADOW_EPSILON) {
     return; // don't self intersect
   }
 
   // calculate the intersection fraction
-  f = (d1 - ON_EPSILON) / (d1 - d2);
-  if (f <= 0) {
+  f = d1 / (d1 - d2);
+  if (f < TRACE_EPSILON) {
     return;
   }
   if (f >= tr->trace->hitFraction) {
@@ -550,8 +555,6 @@ void TraceAgainstFacet(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet) {
 
 ===============================================================
 */
-
-#define TRACE_ON_EPSILON 0.1
 
 typedef struct tnode_s {
   int type;
@@ -629,34 +632,35 @@ PointInSolid
 */
 qboolean PointInSolid_r(vec3_t start, int node) {
   tnode_t *tnode;
-  float front;
+  double front;
 
   while (!(node & (1 << 31))) {
     tnode = &tnodes[node];
     switch (tnode->type) {
     case PLANE_X:
-      front = start[0] - tnode->dist;
+      front = (double)start[0] - tnode->dist;
       break;
     case PLANE_Y:
-      front = start[1] - tnode->dist;
+      front = (double)start[1] - tnode->dist;
       break;
     case PLANE_Z:
-      front = start[2] - tnode->dist;
+      front = (double)start[2] - tnode->dist;
       break;
     default:
-      front = (start[0] * tnode->normal[0] + start[1] * tnode->normal[1] +
-               start[2] * tnode->normal[2]) -
+      front = ((double)start[0] * tnode->normal[0] +
+               (double)start[1] * tnode->normal[1] +
+               (double)start[2] * tnode->normal[2]) -
               tnode->dist;
       break;
     }
 
-    if (front == 0) {
+    if (front > -TRACE_EPSILON && front < TRACE_EPSILON) {
       // exactly on node, must check both sides
       return (qboolean)(PointInSolid_r(start, tnode->children[0]) |
                         PointInSolid_r(start, tnode->children[1]));
     }
 
-    if (front > 0) {
+    if (front >= TRACE_EPSILON) {
       node = tnode->children[0];
     } else {
       node = tnode->children[1];
@@ -687,10 +691,9 @@ Returns qtrue if something is hit and tracing can stop
 int TraceLine_r(int node, const vec3_t start, const vec3_t stop,
                 traceWork_t *tw) {
   tnode_t *tnode;
-  float front, back;
-  vec3_t mid;
-  float frac;
+  double d1, d2, frac;
   int side;
+  vec3_t mid;
   int r;
 
   if (node & (1 << 31)) {
@@ -710,40 +713,43 @@ int TraceLine_r(int node, const vec3_t start, const vec3_t stop,
   }
 
   tnode = &tnodes[node];
+
   switch (tnode->type) {
   case PLANE_X:
-    front = start[0] - tnode->dist;
-    back = stop[0] - tnode->dist;
+    d1 = (double)start[0] - tnode->dist;
+    d2 = (double)stop[0] - tnode->dist;
     break;
   case PLANE_Y:
-    front = start[1] - tnode->dist;
-    back = stop[1] - tnode->dist;
+    d1 = (double)start[1] - tnode->dist;
+    d2 = (double)stop[1] - tnode->dist;
     break;
   case PLANE_Z:
-    front = start[2] - tnode->dist;
-    back = stop[2] - tnode->dist;
+    d1 = (double)start[2] - tnode->dist;
+    d2 = (double)stop[2] - tnode->dist;
     break;
   default:
-    front = (start[0] * tnode->normal[0] + start[1] * tnode->normal[1] +
-             start[2] * tnode->normal[2]) -
-            tnode->dist;
-    back = (stop[0] * tnode->normal[0] + stop[1] * tnode->normal[1] +
-            stop[2] * tnode->normal[2]) -
-           tnode->dist;
+    d1 = ((double)start[0] * tnode->normal[0] +
+          (double)start[1] * tnode->normal[1] +
+          (double)start[2] * tnode->normal[2]) -
+         tnode->dist;
+    d2 = ((double)stop[0] * tnode->normal[0] +
+          (double)stop[1] * tnode->normal[1] +
+          (double)stop[2] * tnode->normal[2]) -
+         tnode->dist;
     break;
   }
 
-  if (front >= -TRACE_ON_EPSILON && back >= -TRACE_ON_EPSILON) {
+  if (d1 >= TRACE_EPSILON && d2 >= TRACE_EPSILON) {
     return TraceLine_r(tnode->children[0], start, stop, tw);
   }
 
-  if (front < TRACE_ON_EPSILON && back < TRACE_ON_EPSILON) {
+  if (d1 <= -TRACE_EPSILON && d2 <= -TRACE_EPSILON) {
     return TraceLine_r(tnode->children[1], start, stop, tw);
   }
 
-  side = front < 0;
+  side = d1 < 0;
 
-  frac = front / (front - back);
+  frac = d1 / (d1 - d2);
 
   mid[0] = start[0] + (stop[0] - start[0]) * frac;
   mid[1] = start[1] + (stop[1] - start[1]) * frac;
@@ -755,7 +761,6 @@ int TraceLine_r(int node, const vec3_t start, const vec3_t stop,
     return r;
   }
 
-  //	trace->planeNum = tnode->planeNum;
   return TraceLine_r(tnode->children[!side], mid, stop, tw);
 }
 
@@ -915,6 +920,10 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 
       test = surfaceTest[surfaceNum];
       if (!test) {
+        continue;
+      }
+      // skip the surface we are currently lighting to prevent self-shadowing
+      if (surfaceNum == tw->ignoreSurface) {
         continue;
       }
       //
