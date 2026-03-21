@@ -25,7 +25,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../common/bspfile.h"
 #include "../common/cmdlib.h"
-#include "../common/imagelib.h"
 #include "../common/mathlib.h"
 #include "../common/polylib.h"
 #include "../common/scriplib.h"
@@ -34,15 +33,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
 
-// Engine-specific surface limits
-#define QUAKE3_MAX_SURFACE_VERTS 1000
-#define QUAKE3_MAX_SURFACE_INDEXES 6000
-#define QFUSION_MAX_SURFACE_VERTS 65535
-#define QFUSION_MAX_SURFACE_INDEXES 393210
-
 // Currently active engine limits
-#define MAX_SURFACE_VERTS QUAKE3_MAX_SURFACE_VERTS
-#define MAX_SURFACE_INDEXES QUAKE3_MAX_SURFACE_INDEXES
+#define MAX_SURFACE_VERTS (g_game->maxSurfaceVerts)
+#define MAX_SURFACE_INDEXES (g_game->maxSurfaceIndexes)
+
+#define MAX_MAP_DRAW_VERTS_LIMIT (g_game->maxMapDrawVerts)
+#define MAX_MAP_DRAW_SURFS_LIMIT (g_game->maxMapDrawSurfs)
+#define MAX_MAP_NODES_LIMIT (g_game->maxMapNodes)
+#define MAX_MAP_LEAFS_LIMIT (g_game->maxMapLeafs)
+#define MAX_MAP_PLANES_LIMIT (g_game->maxMapPlanes)
+#define MAX_MAP_BRUSHES_LIMIT (g_game->maxMapBrushes)
+#define MAX_MAP_DRAW_INDEXES_LIMIT (g_game->maxMapDrawIndexes)
 
 #define MAX_PATCH_SIZE 32
 
@@ -409,6 +410,7 @@ void PatchMapDrawSurfs(entity_t *e);
 // lightmap.c
 
 void AllocateLightmaps(entity_t *e);
+void AllocateLightmapForPatch(mapDrawSurface_t *ds);
 
 //=============================================================================
 

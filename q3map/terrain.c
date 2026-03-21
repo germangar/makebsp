@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
+#include "../common/imagelib.h"
 #include <assert.h>
 
 #define SURF_WIDTH 2048
@@ -137,7 +138,7 @@ byte *LoadAlphaMap(int *num_layers, int *alphawidth, int *alphaheight) {
       }
     }
   } else {
-    LoadImage(ExpandGamePath(alphamapname), &alphamap, &width,
+    Q_LoadImage(ExpandGamePath(alphamapname), &alphamap, &width,
                  &height);
     size = width * height;
     for (i = 0; i < size; i++) {
@@ -253,13 +254,13 @@ static void SideAsTriFan(terrainSurf_t *surf, int *index, int num) {
     VectorAdd(mid->xyz, v->xyz, mid->xyz);
     mid->st[0] += v->st[0];
     mid->st[1] += v->st[1];
-    mid->lightmap[0] += v->lightmap[0];
-    mid->lightmap[1] += v->lightmap[1];
+    mid->lightmap[0][0] += v->lightmap[0][0];
+    mid->lightmap[0][1] += v->lightmap[0][1];
 
-    colorSum[0] += v->color[0];
-    colorSum[1] += v->color[1];
-    colorSum[2] += v->color[2];
-    colorSum[3] += v->color[3];
+    colorSum[0] += v->color[0][0];
+    colorSum[1] += v->color[0][1];
+    colorSum[2] += v->color[0][2];
+    colorSum[3] += v->color[0][3];
   }
 
   mid->xyz[0] /= num;
@@ -269,13 +270,13 @@ static void SideAsTriFan(terrainSurf_t *surf, int *index, int num) {
   mid->st[0] /= num;
   mid->st[1] /= num;
 
-  mid->lightmap[0] /= num;
-  mid->lightmap[1] /= num;
+  mid->lightmap[0][0] /= num;
+  mid->lightmap[0][1] /= num;
 
-  mid->color[0] = colorSum[0] / num;
-  mid->color[1] = colorSum[1] / num;
-  mid->color[2] = colorSum[2] / num;
-  mid->color[3] = colorSum[3] / num;
+  mid->color[0][0] = colorSum[0] / num;
+  mid->color[0][1] = colorSum[1] / num;
+  mid->color[0][2] = colorSum[2] / num;
+  mid->color[0][3] = colorSum[3] / num;
 
   // fill in indices in trifan order
   if (surf->numIndexes + num * 3 > surf->maxIndexes) {
@@ -403,10 +404,10 @@ void CreateTerrainSurface(terrainSurf_t *surf, shaderInfo_t *shader) {
     out->st[1] = surf->verts[i].st[1];
 
     // the colors will be set by the lighting pass
-    out->color[0] = 255;
-    out->color[1] = 255;
-    out->color[2] = 255;
-    out->color[3] = surf->verts[i].color[3];
+    out->color[0][0] = 255;
+    out->color[0][1] = 255;
+    out->color[0][2] = 255;
+    out->color[0][3] = surf->verts[i].color[0][3];
 
     // calculate the vertex normal
     VectorClear(out->normal);
@@ -470,9 +471,9 @@ void EmitTerrainVerts(side_t *side, terrainSurf_t *surf, int maxlayer,
 
     // set the final alpha value--0 for texture 1, 255 for texture 2
     if (alpha[i] < maxlayer) {
-      vert->color[3] = 0;
+      vert->color[0][3] = 0;
     } else {
-      vert->color[3] = 255;
+      vert->color[0][3] = 255;
     }
 
     vert->xyz[0] = floor(side->winding->p[i][0] + 0.1f);
@@ -837,9 +838,9 @@ void EmitTerrainVerts2(terrainSurf_t *surf, terrainVert_t **verts,
     vert = &surf->verts[surf->numVerts];
 
     if (alpha[i]) {
-      vert->color[3] = 255;
+      vert->color[0][3] = 255;
     } else {
-      vert->color[3] = 0;
+      vert->color[0][3] = 0;
     }
 
     vert->xyz[0] = floor(verts[i]->xyz[0] + 0.1f);

@@ -49,6 +49,7 @@ LerpDrawVert
 ============
 */
 void LerpDrawVert( drawVert_t *a, drawVert_t *b, drawVert_t *out ) {
+	int i;
 	out->xyz[0] = 0.5 * (a->xyz[0] + b->xyz[0]);
 	out->xyz[1] = 0.5 * (a->xyz[1] + b->xyz[1]);
 	out->xyz[2] = 0.5 * (a->xyz[2] + b->xyz[2]);
@@ -56,13 +57,15 @@ void LerpDrawVert( drawVert_t *a, drawVert_t *b, drawVert_t *out ) {
 	out->st[0] = 0.5 * (a->st[0] + b->st[0]);
 	out->st[1] = 0.5 * (a->st[1] + b->st[1]);
 
-	out->lightmap[0] = 0.5 * (a->lightmap[0] + b->lightmap[0]);
-	out->lightmap[1] = 0.5 * (a->lightmap[1] + b->lightmap[1]);
+	for (i = 0; i < 4; i++) {
+		out->lightmap[i][0] = 0.5 * (a->lightmap[i][0] + b->lightmap[i][0]);
+		out->lightmap[i][1] = 0.5 * (a->lightmap[i][1] + b->lightmap[i][1]);
 
-	out->color[0] = (a->color[0] + b->color[0]) >> 1;
-	out->color[1] = (a->color[1] + b->color[1]) >> 1;
-	out->color[2] = (a->color[2] + b->color[2]) >> 1;
-	out->color[3] = (a->color[3] + b->color[3]) >> 1;
+		out->color[i][0] = (a->color[i][0] + b->color[i][0]) >> 1;
+		out->color[i][1] = (a->color[i][1] + b->color[i][1]) >> 1;
+		out->color[i][2] = (a->color[i][2] + b->color[i][2]) >> 1;
+		out->color[i][3] = (a->color[i][3] + b->color[i][3]) >> 1;
+	}
 }
 
 
@@ -291,81 +294,83 @@ SubdivideMesh
 
 =================
 */
-mesh_t *SubdivideMesh( mesh_t in, float maxError, float minLength ) {
-	int			i, j, k, l;
-	drawVert_t	prev, next, mid;
-	vec3_t		prevxyz, nextxyz, midxyz;
-	vec3_t		delta;
-	float		len;
-	mesh_t		out;
-	drawVert_t	expand[MAX_EXPANDED_AXIS][MAX_EXPANDED_AXIS];
+mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
+	int i, j, k, l;
+	drawVert_t prev, next, mid;
+	vec3_t prevxyz, nextxyz, midxyz;
+	vec3_t delta;
+	float len;
+	mesh_t out;
+	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+
+	if (!expand) {
+		Error("SubdivideMesh: malloc failed for expand buffer");
+	}
 
 	out.width = in.width;
 	out.height = in.height;
 
-	for ( i = 0 ; i < in.width ; i++ ) {
-		for ( j = 0 ; j < in.height ; j++ ) {
-			expand[j][i] = in.verts[j*in.width+i];
+	for (i = 0; i < in.width; i++) {
+		for (j = 0; j < in.height; j++) {
+			expand[j][i] = in.verts[j * in.width + i];
 		}
 	}
 
-	for ( i = 0 ; i < in.height ; i++ ) {
+	for (i = 0; i < in.height; i++) {
 		originalHeights[i] = i;
 	}
-	for ( i = 0 ; i < in.width ; i++ ) {
+	for (i = 0; i < in.width; i++) {
 		originalWidths[i] = i;
 	}
 
 	// horizontal subdivisions
-	for ( j = 0 ; j + 2 < out.width ; j += 2 ) {
+	for (j = 0; j + 2 < out.width; j += 2) {
 		// check subdivided midpoints against control points
-		for ( i = 0 ; i < out.height ; i++ ) {
-			for ( l = 0 ; l < 3 ; l++ ) {
-				prevxyz[l] = expand[i][j+1].xyz[l] - expand[i][j].xyz[l]; 
-				nextxyz[l] = expand[i][j+2].xyz[l] - expand[i][j+1].xyz[l]; 
-				midxyz[l] = (expand[i][j].xyz[l] + expand[i][j+1].xyz[l] * 2
-						+ expand[i][j+2].xyz[l] ) * 0.25;
+		for (i = 0; i < out.height; i++) {
+			for (l = 0; l < 3; l++) {
+				prevxyz[l] = expand[i][j + 1].xyz[l] - expand[i][j].xyz[l];
+				nextxyz[l] = expand[i][j + 2].xyz[l] - expand[i][j + 1].xyz[l];
+				midxyz[l] = (expand[i][j].xyz[l] + expand[i][j + 1].xyz[l] * 2 + expand[i][j + 2].xyz[l]) * 0.25;
 			}
 
 			// if the span length is too long, force a subdivision
-			if ( VectorLength( prevxyz ) > minLength 
-				|| VectorLength( nextxyz ) > minLength ) {
+			if (VectorLength(prevxyz) > minLength || VectorLength(nextxyz) > minLength) {
 				break;
 			}
 
 			// see if this midpoint is off far enough to subdivide
-			VectorSubtract( expand[i][j+1].xyz, midxyz, delta );
-			len = VectorLength( delta );
-			if ( len > maxError ) {
+			VectorSubtract(expand[i][j + 1].xyz, midxyz, delta);
+			len = VectorLength(delta);
+			if (len > maxError) {
 				break;
 			}
 		}
 
-		if ( out.width + 2 >= MAX_EXPANDED_AXIS ) {
-			break;	// can't subdivide any more
+		if (out.width + 2 >= MAX_EXPANDED_AXIS) {
+			break; // can't subdivide any more
 		}
 
-		if ( i == out.height ) {
-			continue;	// didn't need subdivision
+		if (i == out.height) {
+			continue; // didn't need subdivision
 		}
 
 		// insert two columns and replace the peak
 		out.width += 2;
 
-		for ( k = out.width - 1 ; k > j + 3 ; k-- ) {
-			originalWidths[k] = originalWidths[k-2];
+		for (k = out.width - 1; k > j + 3; k--) {
+			originalWidths[k] = originalWidths[k - 2];
 		}
-		originalWidths[j+3] = originalWidths[j+1];
-		originalWidths[j+2] = originalWidths[j+1];
-		originalWidths[j+1] = originalWidths[j];
+		originalWidths[j + 3] = originalWidths[j + 1];
+		originalWidths[j + 2] = originalWidths[j + 1];
+		originalWidths[j + 1] = originalWidths[j];
 
-		for ( i = 0 ; i < out.height ; i++ ) {
-			LerpDrawVert( &expand[i][j], &expand[i][j+1], &prev );
-			LerpDrawVert( &expand[i][j+1], &expand[i][j+2], &next );
-			LerpDrawVert( &prev, &next, &mid );
+		for (i = 0; i < out.height; i++) {
+			LerpDrawVert(&expand[i][j], &expand[i][j + 1], &prev);
+			LerpDrawVert(&expand[i][j + 1], &expand[i][j + 2], &next);
+			LerpDrawVert(&prev, &next, &mid);
 
-			for ( k = out.width - 1 ; k > j + 3 ; k-- ) {
-				expand[i][k] = expand[i][k-2];
+			for (k = out.width - 1; k > j + 3; k--) {
+				expand[i][k] = expand[i][k - 2];
 			}
 			expand[i][j + 1] = prev;
 			expand[i][j + 2] = mid;
@@ -378,58 +383,56 @@ mesh_t *SubdivideMesh( mesh_t in, float maxError, float minLength ) {
 	}
 
 	// vertical subdivisions
-	for ( j = 0 ; j + 2 < out.height ; j += 2 ) {
+	for (j = 0; j + 2 < out.height; j += 2) {
 		// check subdivided midpoints against control points
-		for ( i = 0 ; i < out.width ; i++ ) {
-			for ( l = 0 ; l < 3 ; l++ ) {
-				prevxyz[l] = expand[j+1][i].xyz[l] - expand[j][i].xyz[l]; 
-				nextxyz[l] = expand[j+2][i].xyz[l] - expand[j+1][i].xyz[l]; 
-				midxyz[l] = (expand[j][i].xyz[l] + expand[j+1][i].xyz[l] * 2
-						+ expand[j+2][i].xyz[l] ) * 0.25;
+		for (i = 0; i < out.width; i++) {
+			for (l = 0; l < 3; l++) {
+				prevxyz[l] = expand[j + 1][i].xyz[l] - expand[j][i].xyz[l];
+				nextxyz[l] = expand[j + 2][i].xyz[l] - expand[j + 1][i].xyz[l];
+				midxyz[l] = (expand[j][i].xyz[l] + expand[j + 1][i].xyz[l] * 2 + expand[j + 2][i].xyz[l]) * 0.25;
 			}
 
 			// if the span length is too long, force a subdivision
-			if ( VectorLength( prevxyz ) > minLength 
-				|| VectorLength( nextxyz ) > minLength ) {
+			if (VectorLength(prevxyz) > minLength || VectorLength(nextxyz) > minLength) {
 				break;
 			}
 			// see if this midpoint is off far enough to subdivide
-			VectorSubtract( expand[j+1][i].xyz, midxyz, delta );
-			len = VectorLength( delta );
-			if ( len > maxError ) {
+			VectorSubtract(expand[j + 1][i].xyz, midxyz, delta);
+			len = VectorLength(delta);
+			if (len > maxError) {
 				break;
 			}
 		}
 
-		if ( out.height + 2 >= MAX_EXPANDED_AXIS ) {
-			break;	// can't subdivide any more
+		if (out.height + 2 >= MAX_EXPANDED_AXIS) {
+			break; // can't subdivide any more
 		}
 
-		if ( i == out.width ) {
-			continue;	// didn't need subdivision
+		if (i == out.width) {
+			continue; // didn't need subdivision
 		}
 
 		// insert two columns and replace the peak
 		out.height += 2;
 
-		for ( k = out.height - 1 ; k > j + 3 ; k-- ) {
-			originalHeights[k] = originalHeights[k-2];
+		for (k = out.height - 1; k > j + 3; k--) {
+			originalHeights[k] = originalHeights[k - 2];
 		}
-		originalHeights[j+3] = originalHeights[j+1];
-		originalHeights[j+2] = originalHeights[j+1];
-		originalHeights[j+1] = originalHeights[j];
+		originalHeights[j + 3] = originalHeights[j + 1];
+		originalHeights[j + 2] = originalHeights[j + 1];
+		originalHeights[j + 1] = originalHeights[j];
 
-		for ( i = 0 ; i < out.width ; i++ ) {
-			LerpDrawVert( &expand[j][i], &expand[j+1][i], &prev );
-			LerpDrawVert( &expand[j+1][i], &expand[j+2][i], &next );
-			LerpDrawVert( &prev, &next, &mid );
+		for (i = 0; i < out.width; i++) {
+			LerpDrawVert(&expand[j][i], &expand[j + 1][i], &prev);
+			LerpDrawVert(&expand[j + 1][i], &expand[j + 2][i], &next);
+			LerpDrawVert(&prev, &next, &mid);
 
-			for ( k = out.height - 1 ; k > j + 3 ; k-- ) {
-				expand[k][i] = expand[k-2][i];
+			for (k = out.height - 1; k > j + 3; k--) {
+				expand[k][i] = expand[k - 2][i];
 			}
-			expand[j+1][i] = prev;
-			expand[j+2][i] = mid;
-			expand[j+3][i] = next;
+			expand[j + 1][i] = prev;
+			expand[j + 2][i] = mid;
+			expand[j + 3][i] = next;
 		}
 
 		// back up and recheck this set again, it may need more subdivision
@@ -440,11 +443,13 @@ mesh_t *SubdivideMesh( mesh_t in, float maxError, float minLength ) {
 	// collapse the verts
 
 	out.verts = &expand[0][0];
-	for ( i = 1 ; i < out.height ; i++ ) {
-		memmove( &out.verts[i*out.width], expand[i], out.width * sizeof(drawVert_t) );
+	for (i = 1; i < out.height; i++) {
+		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
 	}
 
-	return CopyMesh(&out);
+	mesh_t *result = CopyMesh(&out);
+	free(expand);
+	return result;
 }
 
 /*
@@ -468,77 +473,81 @@ void ProjectPointOntoVector( vec3_t point, vec3_t vStart, vec3_t vEnd, vec3_t vP
 RemoveLinearMeshColumsRows
 ================
 */
-mesh_t *RemoveLinearMeshColumnsRows( mesh_t *in ) {
+mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 	int i, j, k;
 	float len, maxLength;
 	vec3_t proj, dir;
 	mesh_t out;
-	drawVert_t	expand[MAX_EXPANDED_AXIS][MAX_EXPANDED_AXIS];
+	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+
+	if (!expand) {
+		Error("RemoveLinearMeshColumnsRows: malloc failed for expand buffer");
+	}
 
 	out.width = in->width;
 	out.height = in->height;
 
-	for ( i = 0 ; i < in->width ; i++ ) {
-		for ( j = 0 ; j < in->height ; j++ ) {
-			expand[j][i] = in->verts[j*in->width+i];
+	for (i = 0; i < in->width; i++) {
+		for (j = 0; j < in->height; j++) {
+			expand[j][i] = in->verts[j * in->width + i];
 		}
 	}
 
-	for ( j = 1 ; j < out.width - 1; j++ ) {
+	for (j = 1; j < out.width - 1; j++) {
 		maxLength = 0;
-		for ( i = 0 ; i < out.height ; i++ ) {
-			ProjectPointOntoVector(expand[i][j].xyz, expand[i][j-1].xyz, expand[i][j+1].xyz, proj);
+		for (i = 0; i < out.height; i++) {
+			ProjectPointOntoVector(expand[i][j].xyz, expand[i][j - 1].xyz, expand[i][j + 1].xyz, proj);
 			VectorSubtract(expand[i][j].xyz, proj, dir);
 			len = VectorLength(dir);
 			if (len > maxLength) {
 				maxLength = len;
 			}
 		}
-		if (maxLength < 0.1)
-		{
+		if (maxLength < 0.1) {
 			out.width--;
-			for ( i = 0 ; i < out.height ; i++ ) {
+			for (i = 0; i < out.height; i++) {
 				for (k = j; k < out.width; k++) {
-					expand[i][k] = expand[i][k+1];
+					expand[i][k] = expand[i][k + 1];
 				}
 			}
 			for (k = j; k < out.width; k++) {
-				originalWidths[k] = originalWidths[k+1];
+				originalWidths[k] = originalWidths[k + 1];
 			}
 			j--;
 		}
 	}
-	for ( j = 1 ; j < out.height - 1; j++ ) {
+	for (j = 1; j < out.height - 1; j++) {
 		maxLength = 0;
-		for ( i = 0 ; i < out.width ; i++ ) {
-			ProjectPointOntoVector(expand[j][i].xyz, expand[j-1][i].xyz, expand[j+1][i].xyz, proj);
+		for (i = 0; i < out.width; i++) {
+			ProjectPointOntoVector(expand[j][i].xyz, expand[j - 1][i].xyz, expand[j + 1][i].xyz, proj);
 			VectorSubtract(expand[j][i].xyz, proj, dir);
 			len = VectorLength(dir);
 			if (len > maxLength) {
 				maxLength = len;
 			}
 		}
-		if (maxLength < 0.1)
-		{
+		if (maxLength < 0.1) {
 			out.height--;
-			for ( i = 0 ; i < out.width ; i++ ) {
+			for (i = 0; i < out.width; i++) {
 				for (k = j; k < out.height; k++) {
-					expand[k][i] = expand[k+1][i];
+					expand[k][i] = expand[k + 1][i];
 				}
 			}
 			for (k = j; k < out.height; k++) {
-				originalHeights[k] = originalHeights[k+1];
+				originalHeights[k] = originalHeights[k + 1];
 			}
 			j--;
 		}
 	}
 	// collapse the verts
 	out.verts = &expand[0][0];
-	for ( i = 1 ; i < out.height ; i++ ) {
-		memmove( &out.verts[i*out.width], expand[i], out.width * sizeof(drawVert_t) );
+	for (i = 1; i < out.height; i++) {
+		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
 	}
 
-	return CopyMesh(&out);
+	mesh_t *result = CopyMesh(&out);
+	free(expand);
+	return result;
 }
 
 /*
@@ -547,6 +556,7 @@ LerpDrawVertAmount
 ============
 */
 void LerpDrawVertAmount( drawVert_t *a, drawVert_t *b, float amount, drawVert_t *out ) {
+	int i;
 	out->xyz[0] = a->xyz[0] + amount * (b->xyz[0] - a->xyz[0]);
 	out->xyz[1] = a->xyz[1] + amount * (b->xyz[1] - a->xyz[1]);
 	out->xyz[2] = a->xyz[2] + amount * (b->xyz[2] - a->xyz[2]);
@@ -554,13 +564,15 @@ void LerpDrawVertAmount( drawVert_t *a, drawVert_t *b, float amount, drawVert_t 
 	out->st[0] = a->st[0] + amount * (b->st[0] - a->st[0]);
 	out->st[1] = a->st[1] + amount * (b->st[1] - a->st[1]);
 
-	out->lightmap[0] = a->lightmap[0] + amount * (b->lightmap[0] - a->lightmap[0]);
-	out->lightmap[1] = a->lightmap[1] + amount * (b->lightmap[1] - a->lightmap[1]);
+	for (i = 0; i < 4; i++) {
+		out->lightmap[i][0] = a->lightmap[i][0] + amount * (b->lightmap[i][0] - a->lightmap[i][0]);
+		out->lightmap[i][1] = a->lightmap[i][1] + amount * (b->lightmap[i][1] - a->lightmap[i][1]);
 
-	out->color[0] = a->color[0] + amount * (b->color[0] - a->color[0]);
-	out->color[1] = a->color[1] + amount * (b->color[1] - a->color[1]);
-	out->color[2] = a->color[2] + amount * (b->color[2] - a->color[2]);
-	out->color[3] = a->color[3] + amount * (b->color[3] - a->color[3]);
+		out->color[i][0] = a->color[i][0] + amount * (b->color[i][0] - a->color[i][0]);
+		out->color[i][1] = a->color[i][1] + amount * (b->color[i][1] - a->color[i][1]);
+		out->color[i][2] = a->color[i][2] + amount * (b->color[i][2] - a->color[i][2]);
+		out->color[i][3] = a->color[i][3] + amount * (b->color[i][3] - a->color[i][3]);
+	}
 
 	out->normal[0] = a->normal[0] + amount * (b->normal[0] - a->normal[0]);
 	out->normal[1] = a->normal[1] + amount * (b->normal[1] - a->normal[1]);
@@ -573,114 +585,123 @@ void LerpDrawVertAmount( drawVert_t *a, drawVert_t *b, float amount, drawVert_t 
 SubdivideMeshQuads
 =================
 */
-mesh_t *SubdivideMeshQuads( mesh_t *in, float minLength, int maxsize, int widthtable[], int heighttable[]) {
-	int			i, j, k, w, h, maxsubdivisions, subdivisions;
-	vec3_t		dir;
-	float		length, maxLength, amount;
-	mesh_t		out;
-	drawVert_t	expand[MAX_EXPANDED_AXIS][MAX_EXPANDED_AXIS];
+mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthtable[], int heighttable[]) {
+	int i, j, k, w, h, maxsubdivisions, subdivisions;
+	vec3_t dir;
+	float length, maxLength, amount;
+	mesh_t out;
+	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+
+	if (!expand) {
+		Error("SubdivideMeshQuads: malloc failed for expand buffer");
+	}
 
 	out.width = in->width;
 	out.height = in->height;
 
-	for ( i = 0 ; i < in->width ; i++ ) {
-		for ( j = 0 ; j < in->height ; j++ ) {
-			expand[j][i] = in->verts[j*in->width+i];
+	for (i = 0; i < in->width; i++) {
+		for (j = 0; j < in->height; j++) {
+			expand[j][i] = in->verts[j * in->width + i];
 		}
 	}
 
-	if (maxsize > MAX_EXPANDED_AXIS)
+	if (maxsize > MAX_EXPANDED_AXIS) {
 		Error("SubdivideMeshQuads: maxsize > MAX_EXPANDED_AXIS");
+	}
 
 	// horizontal subdivisions
 
 	maxsubdivisions = (maxsize - in->width) / (in->width - 1);
 
-	for ( w = 0, j = 0 ; w < in->width - 1; w++, j += subdivisions + 1) {
+	for (w = 0, j = 0; w < in->width - 1; w++, j += subdivisions + 1) {
 		maxLength = 0;
-		for ( i = 0 ; i < out.height ; i++ ) {
-			VectorSubtract(expand[i][j+1].xyz, expand[i][j].xyz, dir);
-			length = VectorLength( dir );
+		for (i = 0; i < out.height; i++) {
+			VectorSubtract(expand[i][j + 1].xyz, expand[i][j].xyz, dir);
+			length = VectorLength(dir);
 			if (length > maxLength) {
 				maxLength = length;
 			}
 		}
-		
-		subdivisions = (int) (maxLength / minLength);
-		if (subdivisions > maxsubdivisions)
+
+		subdivisions = (int)(maxLength / minLength);
+		if (subdivisions > maxsubdivisions) {
 			subdivisions = maxsubdivisions;
+		}
 
 		widthtable[w] = subdivisions + 1;
-		if (subdivisions <= 0)
+		if (subdivisions <= 0) {
 			continue;
+		}
 
 		out.width += subdivisions;
 
-		for ( k = out.width - 1; k >= j + subdivisions; k-- ) {
-			originalWidths[k] = originalWidths[k-subdivisions];
+		for (k = out.width - 1; k >= j + subdivisions; k--) {
+			originalWidths[k] = originalWidths[k - subdivisions];
 		}
 		for (k = 1; k <= subdivisions; k++) {
-			originalWidths[j+k] = originalWidths[j];
+			originalWidths[j + k] = originalWidths[j];
 		}
 
-		for ( i = 0 ; i < out.height ; i++ ) {
-			for ( k = out.width - 1 ; k > j + subdivisions; k-- ) {
-				expand[i][k] = expand[i][k-subdivisions];
+		for (i = 0; i < out.height; i++) {
+			for (k = out.width - 1; k > j + subdivisions; k--) {
+				expand[i][k] = expand[i][k - subdivisions];
 			}
-			for (k = 1; k <= subdivisions; k++)
-			{
-				amount = (float) k / (subdivisions + 1);
-				LerpDrawVertAmount(&expand[i][j], &expand[i][j+subdivisions+1], amount, &expand[i][j+k]);
+			for (k = 1; k <= subdivisions; k++) {
+				amount = (float)k / (subdivisions + 1);
+				LerpDrawVertAmount(&expand[i][j], &expand[i][j + subdivisions + 1], amount, &expand[i][j + k]);
 			}
 		}
 	}
 
 	maxsubdivisions = (maxsize - in->height) / (in->height - 1);
 
-	for ( h = 0, j = 0 ; h < in->height - 1; h++, j += subdivisions + 1) {
+	for (h = 0, j = 0; h < in->height - 1; h++, j += subdivisions + 1) {
 		maxLength = 0;
-		for ( i = 0 ; i < out.width ; i++ ) {
-			VectorSubtract(expand[j+1][i].xyz, expand[j][i].xyz, dir);
-			length = VectorLength( dir );
-			if (length  > maxLength) {
+		for (i = 0; i < out.width; i++) {
+			VectorSubtract(expand[j + 1][i].xyz, expand[j][i].xyz, dir);
+			length = VectorLength(dir);
+			if (length > maxLength) {
 				maxLength = length;
 			}
 		}
-		
-		subdivisions = (int) (maxLength / minLength);
-		if (subdivisions > maxsubdivisions)
+
+		subdivisions = (int)(maxLength / minLength);
+		if (subdivisions > maxsubdivisions) {
 			subdivisions = maxsubdivisions;
+		}
 
 		heighttable[h] = subdivisions + 1;
-		if (subdivisions <= 0)
+		if (subdivisions <= 0) {
 			continue;
+		}
 
 		out.height += subdivisions;
 
-		for ( k = out.height - 1; k >= j + subdivisions; k-- ) {
-			originalHeights[k] = originalHeights[k-subdivisions];
+		for (k = out.height - 1; k >= j + subdivisions; k--) {
+			originalHeights[k] = originalHeights[k - subdivisions];
 		}
 		for (k = 1; k <= subdivisions; k++) {
-			originalHeights[j+k] = originalHeights[j];
+			originalHeights[j + k] = originalHeights[j];
 		}
 
-		for ( i = 0 ; i < out.width ; i++ ) {
-			for ( k = out.height - 1 ; k > j + subdivisions; k-- ) {
-				expand[k][i] = expand[k-subdivisions][i];
+		for (i = 0; i < out.width; i++) {
+			for (k = out.height - 1; k > j + subdivisions; k--) {
+				expand[k][i] = expand[k - subdivisions][i];
 			}
-			for (k = 1; k <= subdivisions; k++)
-			{
-				amount = (float) k / (subdivisions + 1);
-				LerpDrawVertAmount(&expand[j][i], &expand[j+subdivisions+1][i], amount, &expand[j+k][i]);
+			for (k = 1; k <= subdivisions; k++) {
+				amount = (float)k / (subdivisions + 1);
+				LerpDrawVertAmount(&expand[j][i], &expand[j + subdivisions + 1][i], amount, &expand[j + k][i]);
 			}
 		}
 	}
 
 	// collapse the verts
 	out.verts = &expand[0][0];
-	for ( i = 1 ; i < out.height ; i++ ) {
-		memmove( &out.verts[i*out.width], expand[i], out.width * sizeof(drawVert_t) );
+	for (i = 1; i < out.height; i++) {
+		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
 	}
 
-	return CopyMesh(&out);
+	mesh_t *result = CopyMesh(&out);
+	free(expand);
+	return result;
 }

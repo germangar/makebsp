@@ -92,8 +92,8 @@ void EmitLeaf (node_t *node)
 	drawSurfRef_t		*dsr;
 
 	// emit a leaf
-	if (numleafs >= MAX_MAP_LEAFS)
-		Error ("MAX_MAP_LEAFS");
+	if (numleafs >= MAX_MAP_LEAFS_LIMIT)
+		Error ("MAX_MAP_LEAFS_LIMIT");
 
 	leaf_p = &dleafs[numleafs];
 	numleafs++;
@@ -158,8 +158,8 @@ int EmitDrawNode_r (node_t *node)
 	}
 
 	// emit a node	
-	if (numnodes == MAX_MAP_NODES)
-		Error ("MAX_MAP_NODES");
+	if (numnodes >= MAX_MAP_NODES_LIMIT)
+		Error ("MAX_MAP_NODES_LIMIT");
 	n = &dnodes[numnodes];
 	numnodes++;
 
@@ -324,8 +324,8 @@ void EmitBrushes ( bspbrush_t *brushes ) {
 	dbrushside_t	*cp;
 
 	for ( b = brushes ; b ; b = b->next ) {
-		if ( numbrushes == MAX_MAP_BRUSHES ) {
-			Error( "MAX_MAP_BRUSHES" );
+		if ( numbrushes >= MAX_MAP_BRUSHES_LIMIT ) {
+			Error( "MAX_MAP_BRUSHES_LIMIT" );
 		}
 		b->outputNumber = numbrushes;
 		db = &dbrushes[numbrushes];

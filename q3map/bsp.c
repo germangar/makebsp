@@ -444,7 +444,14 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-basepath")) {
       strcpy(qdir, argv[++i]);
     } else if (!strcmp(argv[i], "-game")) {
-      strcpy(gamedir, argv[++i]);
+      char *arg = argv[++i];
+      int j;
+      for (j = 0; games[j].arg; j++) {
+        if (!strcmp(games[j].arg, arg)) {
+          g_game = &games[j];
+          break;
+        }
+      }
     } else if (!strcmp(argv[i], "-fakemap")) {
       fakemap = qtrue;
       _printf("will generate fakemap.map\n");
@@ -464,6 +471,12 @@ int main(int argc, char **argv) {
     Error("usage: q3map [options] mapfile");
 
   start = I_FloatTime();
+
+  if (samplesize == 0) {
+    samplesize = g_game->defaultSampleSize;
+    _printf("Defaulting lightmap sample size to %dx%d units\n", samplesize,
+            samplesize);
+  }
 
   ThreadSetDefault();
   // numthreads = 1;		// multiple threads aren't helping because of

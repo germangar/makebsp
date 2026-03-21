@@ -1,0 +1,94 @@
+
+# Quake 3 (IBSP) vs. QFusion (RBSP/FBSP) BSP Format Specifications
+
+## 1. High-Level Summary
+
+The primary difference between the IBSP (Quake 3) and RBSP (QFusion) formats lies in their lighting capabilities. RBSP introduces a more complex, compressed light grid system and expands data structures to support multiple lightmap layers for effects like dynamic lighting. While the maximum number of most map elements (like vertices and faces) remains the same, the structures for those elements are larger in RBSP to accommodate the extra lighting data. Based on the q3map2 reference compiler, both formats use the same set of content and surface flags.
+
+---
+
+## 2. Format Details
+
+### 2.1. Quake 3 Format (IBSP)
+
+-   **Identifier**: `IBSP`
+-   **Version**: `46` (Standard Q3) or `47` (Quake Live)
+-   **Lumps**: 
+    -   Standard (v46): 17 lumps.
+    -   Quake Live (v47): 18 lumps (adds `LUMP_ADVERTISEMENTS` at index 17).
+-   **Data Structures**:
+    -   `dheader_t`: Contains 17 or 18 `lump_t` entries.
+    -   `drawVert_t`: Standard vertex (44 bytes).
+        -   `xyz` (12), `st` (8), `lightmap` (8), `normal` (12), `color` (4).
+    -   `dsurface_t`: Defines surfaces with a single lightmap layer.
+-   **Light Grid**:
+    -   Handled by `LUMP_LIGHTGRID` (15).
+    -   8 bytes per point: `ambient` (3), `directed` (3), `latLong` (2).
+    -   Stored as a flat, uncompressed array.
+
+### 2.2. QFusion Format (RBSP / FBSP)
+
+-   **Identifier**: `RBSP` (SoF2/JK2/JA) or `FBSP` (QFusion)
+-   **Version**: `1`
+-   **Lumps**: 18 lumps.
+    -   `LUMP_LIGHTGRID` (15): Becomes a palette of unique light points.
+    -   `LUMP_VISIBILITY` (16)
+    -   **`LUMP_LIGHTARRAY` (17, NEW)**: Contains an array of `unsigned short` indices into the palette.
+-   **Data Structures (Expanded for 4 Lightmap Layers)**:
+    -   `bspDrawVert_t`: Extended vertex (80 bytes).
+        -   `xyz` (12), `st` (8), `lightmap[4][2]` (32), `normal` (12), `color[4][4]` (16).
+    -   `bspGridPoint_t`: Extended grid point (30 bytes).
+        -   `ambient[4][3]` (12), `directed[4][3]` (12), `styles[4]` (4), `latLong[2]` (2).
+    -   `bspDrawSurface_t`: Extended surface structure.
+-   **Light Grid Compression**:
+    -   Uses a two-lump system (`LUMP_LIGHTGRID` + `LUMP_LIGHTARRAY`) to reduce file size while increasing data per point.
+    -   Max `0xFFFF` (65,535) unique points in palette.
+    -   Max `0x100000` (1,048,576) total grid points in array.
+
+---
+
+## 3. Lighting Feature Differences
+
+QFusion (and other RBSP games) often enable advanced lighting features in the compiler:
+
+-   **Deluxemaps (Light Direction Maps)**:
+    -   Calculates the primary light direction for every luxel.
+    -   Stored as an additional lightmap layer (luxels + deluxels).
+    -   Used by engines for per-pixel lighting effects (bump mapping).
+-   **sRGB Color Space**:
+    -   Internal lighting calculations performed in linear space.
+    -   Lightmaps saved with sRGB gamma correction.
+    -   Textures sampled using sRGB-to-Linear conversion.
+-   **Half-Lambert Attenuation**:
+    -   Softens the lighting transition on curved surfaces.
+    -   Formula: `dot = (dot * 0.5 + 0.5)^2`.
+-   **Larger Lightmaps**:
+    -   Default size increased from 128x128 to 512x512.
+
+---
+
+## 4. BSP File Limits (MAX_MAP_*)
+
+These limits are generally shared. RBSP increases structure sizes, not necessarily total counts.
+
+| Constant               | Limit                | Hex Value  | Description                                |
+| ---------------------- | -------------------- | ---------- | ------------------------------------------ |
+| `MAX_MAP_ENTITIES`     | 2,048                | `0x800`    | Maximum number of entities.                |
+| `MAX_MAP_BRUSHES`      | 32,768               | `0x8000`   | Total brushes in the map.                  |
+| `MAX_MAP_PLANES`       | 524,288              | `0x80000`  | Splitting planes.                          |
+| `MAX_MAP_DRAW_VERTS`   | 524,288              | `0x80000`  | Vertices used by drawable surfaces.        |
+| `MAX_MAP_DRAW_SURFS`   | 131,072              | `0x20000`  | Total drawable surfaces.                   |
+| `MAX_MAP_LIGHTING`     | 8,388,608 bytes      | `0x800000` | Raw lightmap texture data.                 |
+| `MAX_MAP_LIGHTGRID`    | 1,048,576 points     | `0x100000` | Light grid volume points (for RBSP array). |
+
+---
+
+## 5. Content and Surface Flags
+
+Standard Quake 3 flags are used for both formats.
+
+### 5.1. Content Flags (`CONTENTS_`)
+(See previous version for detailed table)
+
+### 5.2. Surface Flags (`SURF_`)
+(See previous version for detailed table)

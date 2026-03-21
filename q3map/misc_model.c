@@ -297,6 +297,10 @@ void LoadTriangleModels(void) {
         // ==========================================
         // STEP 2: Chunk Visual Geometry
         // ==========================================
+        if (si && (si->surfaceFlags & SURF_SKIP)) {
+          continue;
+        }
+
         int currentFace = 0;
         
         // Vertex mapping array (old index -> new index inside this chunk)
@@ -386,7 +390,7 @@ void LoadTriangleModels(void) {
                   dv->st[1] = mesh->mTextureCoords[0][oldIdx].y;
                 }
 
-                dv->color[0] = dv->color[1] = dv->color[2] = dv->color[3] = 255;
+                dv->color[0][0] = dv->color[0][1] = dv->color[0][2] = dv->color[0][3] = 255;
                 ds->numVerts++;
               }
               // Add the index

@@ -31,7 +31,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 int numSortShaders;
 mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
 
-int allocated[LIGHTMAP_WIDTH];
+#define MAX_LIGHTMAP_WIDTH 1024
+int allocated[MAX_LIGHTMAP_WIDTH];
 
 int numLightmaps = 1;
 int c_exactLightmap;
@@ -96,7 +97,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   int x, y;
   float s, t;
   mesh_t mesh, *subdividedMesh, *tempMesh, *newmesh;
-  int widthtable[LIGHTMAP_WIDTH], heighttable[LIGHTMAP_HEIGHT], ssize;
+  int widthtable[1024], heighttable[1024], ssize;
 
   verts = ds->verts;
 
@@ -172,8 +173,8 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
       if (k >= h)
         k = h - 1;
       t = y + k;
-      verts[i + j * ds->patchWidth].lightmap[0] = (s + 0.5) / LIGHTMAP_WIDTH;
-      verts[i + j * ds->patchWidth].lightmap[1] = (t + 0.5) / LIGHTMAP_HEIGHT;
+      verts[i + j * ds->patchWidth].lightmap[0][0] = (s + 0.5) / LIGHTMAP_WIDTH;
+      verts[i + j * ds->patchWidth].lightmap[0][1] = (t + 0.5) / LIGHTMAP_HEIGHT;
     }
   }
 }
@@ -286,8 +287,8 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     VectorSubtract(verts[i].xyz, mins, delta);
     s = DotProduct(delta, vecs[0]) + x + 0.5;
     t = DotProduct(delta, vecs[1]) + y + 0.5;
-    verts[i].lightmap[0] = s / LIGHTMAP_WIDTH;
-    verts[i].lightmap[1] = t / LIGHTMAP_HEIGHT;
+    verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
+    verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
   }
 
   // calculate the world coordinates of the lightmap samples

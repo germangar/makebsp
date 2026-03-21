@@ -36,7 +36,7 @@ LOAD IMAGE
 ============================================================================
 */
 
-void LoadImage(const char *name, byte **pixels, int *width, int *height) {
+void Q_LoadImage(const char *name, byte **pixels, int *width, int *height) {
   int x, y, n;
   char ext[128];
 
@@ -55,19 +55,19 @@ void LoadImage(const char *name, byte **pixels, int *width, int *height) {
 }
 
 void LoadTGA(const char *filename, byte **pixels, int *width, int *height) {
-  LoadImage(filename, pixels, width, height);
+  Q_LoadImage(filename, pixels, width, height);
 }
 
 void LoadBMP(const char *filename, byte **pixels, int *width, int *height) {
-  LoadImage(filename, pixels, width, height);
+  Q_LoadImage(filename, pixels, width, height);
 }
 
 void LoadPNG(const char *filename, byte **pixels, int *width, int *height) {
-  LoadImage(filename, pixels, width, height);
+  Q_LoadImage(filename, pixels, width, height);
 }
 
 void Load32BitImage(const char *name, unsigned **pixels, int *width, int *height) {
-  LoadImage(name, (byte **)pixels, width, height);
+  Q_LoadImage(name, (byte **)pixels, width, height);
 }
 
 void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height) {

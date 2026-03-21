@@ -63,7 +63,10 @@ extern int numLightBytes;
 extern byte lightBytes[MAX_MAP_LIGHTING];
 
 extern int numGridPoints;
-extern byte gridData[MAX_MAP_LIGHTGRID];
+extern bspGridPoint_t gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];
+
+extern int numLightArray;
+extern unsigned short lightArray[MAX_MAP_LIGHTGRID / 2];
 
 extern int numVisBytes;
 extern byte visBytes[MAX_MAP_VISIBILITY];

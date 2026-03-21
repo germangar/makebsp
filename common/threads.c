@@ -58,6 +58,9 @@ int GetThreadWork(void) {
 
   r = dispatch;
   dispatch++;
+  if (dispatch == workcount && pacifier) {
+    _printf(" [waiting for threads]");
+  }
   ThreadUnlock();
 
   return r;

@@ -311,6 +311,8 @@ typedef struct {
 
 #define BSP_IDENT	(('P'<<24)+('S'<<16)+('B'<<8)+'I')
 		// little-endian "IBSP"
+#define FBSP_IDENT	(('P'<<24)+('S'<<16)+('B'<<8)+'F')
+		// little-endian "FBSP"
 
 #define BSP_VERSION			46
 
@@ -318,27 +320,27 @@ typedef struct {
 // there shouldn't be any problem with increasing these values at the
 // expense of more memory allocation in the utilities
 #define	MAX_MAP_MODELS		0x400
-#define	MAX_MAP_BRUSHES		0x8000
+#define	MAX_MAP_BRUSHES		0x20000
 #define	MAX_MAP_ENTITIES	0x800
 #define	MAX_MAP_ENTSTRING	0x40000
 #define	MAX_MAP_SHADERS		0x400
 
 #define	MAX_MAP_AREAS		0x100	// MAX_MAP_AREA_BYTES in q_shared must match!
 #define	MAX_MAP_FOGS		0x100
-#define	MAX_MAP_PLANES		0x80000
-#define	MAX_MAP_NODES		0x20000
-#define	MAX_MAP_BRUSHSIDES	0x20000
-#define	MAX_MAP_LEAFS		0x20000
-#define	MAX_MAP_LEAFFACES	0x20000
-#define	MAX_MAP_LEAFBRUSHES 0x40000
-#define	MAX_MAP_PORTALS		0x20000
-#define	MAX_MAP_LIGHTING	0x800000
-#define	MAX_MAP_LIGHTGRID	0x800000
-#define	MAX_MAP_VISIBILITY	0x200000
+#define	MAX_MAP_PLANES		0x100000
+#define	MAX_MAP_NODES		0x100000
+#define	MAX_MAP_BRUSHSIDES	0x100000
+#define	MAX_MAP_LEAFS		0x100000
+#define	MAX_MAP_LEAFFACES	0x100000
+#define	MAX_MAP_LEAFBRUSHES 0x100000
+#define	MAX_MAP_PORTALS		0x100000
+#define	MAX_MAP_LIGHTING	0x2000000
+#define	MAX_MAP_LIGHTGRID	0x2000000 // Increased for FBSP
+#define	MAX_MAP_VISIBILITY	0x400000
 
-#define	MAX_MAP_DRAW_SURFS	0x20000
-#define	MAX_MAP_DRAW_VERTS	0x80000
-#define	MAX_MAP_DRAW_INDEXES	0x80000
+#define	MAX_MAP_DRAW_SURFS	0x40000
+#define	MAX_MAP_DRAW_VERTS	0x100000
+#define	MAX_MAP_DRAW_INDEXES	0x100000
 
 
 // key / value pair sizes in the entities lump
@@ -349,8 +351,7 @@ typedef struct {
 #define	ANGLE_UP			-1
 #define	ANGLE_DOWN			-2
 
-#define	LIGHTMAP_WIDTH		128
-#define	LIGHTMAP_HEIGHT		128
+
 
 #define MAX_WORLD_COORD		( 128*1024 )
 #define MIN_WORLD_COORD		( -128*1024 )
@@ -380,7 +381,8 @@ typedef struct {
 #define	LUMP_LIGHTMAPS		14
 #define	LUMP_LIGHTGRID		15
 #define	LUMP_VISIBILITY		16
-#define	HEADER_LUMPS		17
+#define	LUMP_LIGHTARRAY		17
+#define	HEADER_LUMPS		18
 
 typedef struct {
 	int			ident;
@@ -434,6 +436,13 @@ typedef struct {
 	int			shaderNum;
 } dbrushside_t;
 
+// FBSP/RBSP extended brushside (12 bytes) — includes surfacenum for QFusion
+typedef struct {
+	int			planeNum;
+	int			shaderNum;
+	int			surfaceNum;
+} rdbrushside_t;
+
 typedef struct {
 	int			firstSide;
 	int			numSides;
@@ -449,9 +458,9 @@ typedef struct {
 typedef struct {
 	vec3_t		xyz;
 	float		st[2];
-	float		lightmap[2];
+	float		lightmap[4][2];
 	vec3_t		normal;
-	byte		color[4];
+	byte		color[4][4];
 } drawVert_t;
 
 typedef enum {
@@ -473,8 +482,10 @@ typedef struct {
 	int			firstIndex;
 	int			numIndexes;
 
-	int			lightmapNum;
-	int			lightmapX, lightmapY;
+	byte		lightmapStyles[4];
+	byte		vertexStyles[4];
+	int			lightmapNum[4];
+	int			lightmapOffset[4][2];
 	int			lightmapWidth, lightmapHeight;
 
 	vec3_t		lightmapOrigin;
@@ -483,6 +494,19 @@ typedef struct {
 	int			patchWidth;
 	int			patchHeight;
 } dsurface_t;
+
+typedef struct {
+	byte		ambient[3];
+	byte		directed[3];
+	byte		latLong[2];
+} v46GridPoint_t;
+
+typedef struct {
+	byte		ambient[4][3];
+	byte		directed[4][3];
+	byte		styles[4];
+	byte		latLong[2];
+} bspGridPoint_t;
 
 
 #endif

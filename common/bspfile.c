@@ -24,8 +24,39 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "mathlib.h"
 #include "bspfile.h"
 #include "scriplib.h"
+#include "globals.h"
 
 void GetLeafNums (void);
+
+typedef struct {
+	vec3_t		xyz;
+	float		st[2];
+	float		lightmap[2];
+	vec3_t		normal;
+	byte		color[4];
+} ibspDrawVert_t;
+
+typedef struct {
+	int			shaderNum;
+	int			fogNum;
+	int			surfaceType;
+
+	int			firstVert;
+	int			numVerts;
+
+	int			firstIndex;
+	int			numIndexes;
+
+	int			lightmapNum;
+	int			lightmapX, lightmapY;
+	int			lightmapWidth, lightmapHeight;
+
+	vec3_t		lightmapOrigin;
+	vec3_t		lightmapVecs[3];
+
+	int			patchWidth;
+	int			patchHeight;
+} ibspSurface_t;
 
 //=============================================================================
 
@@ -63,7 +94,10 @@ int			numLightBytes;
 byte		lightBytes[MAX_MAP_LIGHTING];
 
 int			numGridPoints;
-byte		gridData[MAX_MAP_LIGHTGRID];
+bspGridPoint_t	gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];
+
+int			numLightArray;
+unsigned short lightArray[MAX_MAP_LIGHTGRID / 2];
 
 int			numVisBytes;
 byte		visBytes[MAX_MAP_VISIBILITY];
@@ -106,7 +140,7 @@ Byte swaps all data in a bsp file.
 =============
 */
 void SwapBSPFile( void ) {
-	int				i;
+	int				i, j;
 	
 	// models	
 	SwapBlock( (int *)dmodels, nummodels * sizeof( dmodels[0] ) );
@@ -144,8 +178,10 @@ void SwapBSPFile( void ) {
 
 	// drawverts (don't swap colors )
 	for ( i = 0 ; i < numDrawVerts ; i++ ) {
-		drawVerts[i].lightmap[0] = LittleFloat( drawVerts[i].lightmap[0] );
-		drawVerts[i].lightmap[1] = LittleFloat( drawVerts[i].lightmap[1] );
+		for ( j = 0 ; j < 4 ; j++ ) {
+			drawVerts[i].lightmap[j][0] = LittleFloat( drawVerts[i].lightmap[j][0] );
+			drawVerts[i].lightmap[j][1] = LittleFloat( drawVerts[i].lightmap[j][1] );
+		}
 		drawVerts[i].st[0] = LittleFloat( drawVerts[i].st[0] );
 		drawVerts[i].st[1] = LittleFloat( drawVerts[i].st[1] );
 		drawVerts[i].xyz[0] = LittleFloat( drawVerts[i].xyz[0] );
@@ -160,22 +196,47 @@ void SwapBSPFile( void ) {
 	SwapBlock( (int *)drawIndexes, numDrawIndexes * sizeof( drawIndexes[0] ) );
 
 	// drawsurfs
-	SwapBlock( (int *)drawSurfaces, numDrawSurfaces * sizeof( drawSurfaces[0] ) );
+	for ( i = 0 ; i < numDrawSurfaces ; i++ ) {
+		drawSurfaces[i].shaderNum = LittleLong( drawSurfaces[i].shaderNum );
+		drawSurfaces[i].fogNum = LittleLong( drawSurfaces[i].fogNum );
+		drawSurfaces[i].surfaceType = LittleLong( drawSurfaces[i].surfaceType );
+		drawSurfaces[i].firstVert = LittleLong( drawSurfaces[i].firstVert );
+		drawSurfaces[i].numVerts = LittleLong( drawSurfaces[i].numVerts );
+		drawSurfaces[i].firstIndex = LittleLong( drawSurfaces[i].firstIndex );
+		drawSurfaces[i].numIndexes = LittleLong( drawSurfaces[i].numIndexes );
+		for ( j = 0 ; j < 4 ; j++ ) {
+			drawSurfaces[i].lightmapNum[j] = LittleLong( drawSurfaces[i].lightmapNum[j] );
+			drawSurfaces[i].lightmapOffset[j][0] = LittleLong( drawSurfaces[i].lightmapOffset[j][0] );
+			drawSurfaces[i].lightmapOffset[j][1] = LittleLong( drawSurfaces[i].lightmapOffset[j][1] );
+		}
+		drawSurfaces[i].lightmapWidth = LittleLong( drawSurfaces[i].lightmapWidth );
+		drawSurfaces[i].lightmapHeight = LittleLong( drawSurfaces[i].lightmapHeight );
+		for ( j = 0 ; j < 3 ; j++ ) {
+			drawSurfaces[i].lightmapOrigin[j] = LittleFloat( drawSurfaces[i].lightmapOrigin[j] );
+			drawSurfaces[i].lightmapVecs[0][j] = LittleFloat( drawSurfaces[i].lightmapVecs[0][j] );
+			drawSurfaces[i].lightmapVecs[1][j] = LittleFloat( drawSurfaces[i].lightmapVecs[1][j] );
+			drawSurfaces[i].lightmapVecs[2][j] = LittleFloat( drawSurfaces[i].lightmapVecs[2][j] );
+		}
+		drawSurfaces[i].patchWidth = LittleLong( drawSurfaces[i].patchWidth );
+		drawSurfaces[i].patchHeight = LittleLong( drawSurfaces[i].patchHeight );
+	}
 
 	// fogs
 	for ( i = 0 ; i < numFogs ; i++ ) {
 		dfogs[i].brushNum = LittleLong( dfogs[i].brushNum );
 		dfogs[i].visibleSide = LittleLong( dfogs[i].visibleSide );
 	}
+
+	// lightgrid (no swap for bytes)
+
+	// lightarray
+	for ( i = 0 ; i < numLightArray ; i++ ) {
+		lightArray[i] = LittleShort( lightArray[i] );
+	}
 }
 
 
 
-/*
-=============
-CopyLump
-=============
-*/
 int CopyLump( dheader_t	*header, int lump, void *dest, int size ) {
 	int		length, ofs;
 
@@ -186,7 +247,9 @@ int CopyLump( dheader_t	*header, int lump, void *dest, int size ) {
 		Error ("LoadBSPFile: odd lump size");
 	}
 
-	memcpy( dest, (byte *)header + ofs, length );
+	if ( dest ) {
+		memcpy( dest, (byte *)header + ofs, length );
+	}
 
 	return length / size;
 }
@@ -198,18 +261,34 @@ LoadBSPFile
 */
 void	LoadBSPFile( const char *filename ) {
 	dheader_t	*header;
+	int			i, j, k;
+	int			ident, version;
 
 	// load the file header
 	LoadFile (filename, (void **)&header);
 
-	// swap the header
-	SwapBlock( (int *)header, sizeof(*header) );
+	ident = LittleLong( header->ident );
+	version = LittleLong( header->version );
 
-	if ( header->ident != BSP_IDENT ) {
-		Error( "%s is not a IBSP file", filename );
+	if ( ident == FBSP_IDENT ) {
+		if ( version != 1 ) {
+			Error( "%s is version %i, not 1", filename, version );
+		}
+		g_game = &games[1]; // qfusion
+	} else if ( ident == BSP_IDENT ) {
+		if ( version != 29 && version != 46 && version != 47 ) {
+			Error( "%s is version %i, not 46", filename, version );
+		}
+		g_game = &games[0]; // quake3
+	} else {
+		Error( "%s is not a BSP file (ident: %c%c%c%c)", filename, 
+			ident&0xFF, (ident>>8)&0xFF, (ident>>16)&0xFF, (ident>>24)&0xFF );
 	}
-	if ( header->version != BSP_VERSION ) {
-		Error( "%s is version %i, not %i", filename, header->version, BSP_VERSION );
+
+	// swap the header
+	for ( i = 0 ; i < g_game->lumpCount ; i++ ) {
+		header->lumps[i].fileofs = LittleLong( header->lumps[i].fileofs );
+		header->lumps[i].filelen = LittleLong( header->lumps[i].filelen );
 	}
 
 	numShaders = CopyLump( header, LUMP_SHADERS, dshaders, sizeof(dshader_t) );
@@ -220,18 +299,112 @@ void	LoadBSPFile( const char *filename ) {
 	numleafsurfaces = CopyLump( header, LUMP_LEAFSURFACES, dleafsurfaces, sizeof(dleafsurfaces[0]) );
 	numleafbrushes = CopyLump( header, LUMP_LEAFBRUSHES, dleafbrushes, sizeof(dleafbrushes[0]) );
 	numbrushes = CopyLump( header, LUMP_BRUSHES, dbrushes, sizeof(dbrush_t) );
-	numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, dbrushsides, sizeof(dbrushside_t) );
-	numDrawVerts = CopyLump( header, LUMP_DRAWVERTS, drawVerts, sizeof(drawVert_t) );
-	numDrawSurfaces = CopyLump( header, LUMP_SURFACES, drawSurfaces, sizeof(dsurface_t) );
+
+	if ( ident == FBSP_IDENT ) {
+		numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, NULL, sizeof(rdbrushside_t) );
+		rdbrushside_t *rbs = malloc( numbrushsides * sizeof(rdbrushside_t) );
+		CopyLump( header, LUMP_BRUSHSIDES, rbs, sizeof(rdbrushside_t) );
+		for ( i = 0 ; i < numbrushsides ; i++ ) {
+			dbrushsides[i].planeNum = rbs[i].planeNum;
+			dbrushsides[i].shaderNum = rbs[i].shaderNum;
+		}
+		free( rbs );
+
+		numDrawVerts = CopyLump( header, LUMP_DRAWVERTS, drawVerts, sizeof(drawVert_t) );
+		numDrawSurfaces = CopyLump( header, LUMP_SURFACES, drawSurfaces, sizeof(dsurface_t) );
+		numGridPoints = CopyLump( header, LUMP_LIGHTGRID, gridData, sizeof(bspGridPoint_t) );
+		numLightArray = CopyLump( header, LUMP_LIGHTARRAY, lightArray, 2 );
+	} else {
+		numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, dbrushsides, sizeof(dbrushside_t) );
+
+		// up-convert IBSP
+		ibspDrawVert_t *iv;
+		int numiv = CopyLump( header, LUMP_DRAWVERTS, NULL, sizeof(ibspDrawVert_t) );
+		iv = malloc( numiv * sizeof(ibspDrawVert_t) );
+		CopyLump( header, LUMP_DRAWVERTS, iv, sizeof(ibspDrawVert_t) );
+		numDrawVerts = numiv;
+		for ( i = 0 ; i < numiv ; i++ ) {
+			memset( &drawVerts[i], 0, sizeof(drawVerts[i]) );
+			VectorCopy( iv[i].xyz, drawVerts[i].xyz );
+			drawVerts[i].st[0] = iv[i].st[0];
+			drawVerts[i].st[1] = iv[i].st[1];
+			drawVerts[i].lightmap[0][0] = iv[i].lightmap[0];
+			drawVerts[i].lightmap[0][1] = iv[i].lightmap[1];
+			VectorCopy( iv[i].normal, drawVerts[i].normal );
+			for ( j = 0 ; j < 4 ; j++ ) {
+				drawVerts[i].color[0][j] = iv[i].color[j];
+			}
+			// initialize auxiliary layers
+			for ( j = 1 ; j < 4 ; j++ ) {
+				drawVerts[i].lightmap[j][0] = 0;
+				drawVerts[i].lightmap[j][1] = 0;
+				for ( k = 0 ; k < 4 ; k++ ) {
+					drawVerts[i].color[j][k] = 255;
+				}
+			}
+		}
+		free( iv );
+
+		ibspSurface_t *is;
+		int numis = CopyLump( header, LUMP_SURFACES, NULL, sizeof(ibspSurface_t) );
+		is = malloc( numis * sizeof(ibspSurface_t) );
+		CopyLump( header, LUMP_SURFACES, is, sizeof(ibspSurface_t) );
+		numDrawSurfaces = numis;
+		for ( i = 0 ; i < numis ; i++ ) {
+			memset( &drawSurfaces[i], 0, sizeof(drawSurfaces[i]) );
+			drawSurfaces[i].shaderNum = is[i].shaderNum;
+			drawSurfaces[i].fogNum = is[i].fogNum;
+			drawSurfaces[i].surfaceType = is[i].surfaceType;
+			drawSurfaces[i].firstVert = is[i].firstVert;
+			drawSurfaces[i].numVerts = is[i].numVerts;
+			drawSurfaces[i].firstIndex = is[i].firstIndex;
+			drawSurfaces[i].numIndexes = is[i].numIndexes;
+			
+			drawSurfaces[i].lightmapNum[0] = is[i].lightmapNum;
+			drawSurfaces[i].lightmapStyles[0] = 0;      // LS_NORMAL
+			drawSurfaces[i].vertexStyles[0] = 0;
+			for ( j = 1 ; j < 4 ; j++ ) {
+				drawSurfaces[i].lightmapNum[j] = -1;
+				drawSurfaces[i].lightmapStyles[j] = 0xFF;  // LS_NONE
+				drawSurfaces[i].vertexStyles[j] = 0xFF;
+			}
+			drawSurfaces[i].lightmapOffset[0][0] = is[i].lightmapX;
+			drawSurfaces[i].lightmapOffset[0][1] = is[i].lightmapY;
+			drawSurfaces[i].lightmapWidth = is[i].lightmapWidth;
+			drawSurfaces[i].lightmapHeight = is[i].lightmapHeight;
+			VectorCopy( is[i].lightmapOrigin, drawSurfaces[i].lightmapOrigin );
+			for ( j = 0 ; j < 3 ; j++ ) VectorCopy( is[i].lightmapVecs[j], drawSurfaces[i].lightmapVecs[j] );
+			drawSurfaces[i].patchWidth = is[i].patchWidth;
+			drawSurfaces[i].patchHeight = is[i].patchHeight;
+		}
+		free( is );
+
+		v46GridPoint_t *ig;
+		int numig = CopyLump( header, LUMP_LIGHTGRID, NULL, 8 );
+		ig = malloc( numig * 8 );
+		CopyLump( header, LUMP_LIGHTGRID, ig, 8 );
+		numGridPoints = numig;
+		for ( i = 0 ; i < numig ; i++ ) {
+			memset( &gridData[i], 0, sizeof(gridData[i]) );
+			VectorCopy( ig[i].ambient, gridData[i].ambient[0] );
+			VectorCopy( ig[i].directed, gridData[i].directed[0] );
+			gridData[i].latLong[0] = ig[i].latLong[0];
+			gridData[i].latLong[1] = ig[i].latLong[1];
+			gridData[i].styles[0] = 0;      // LS_NORMAL
+			gridData[i].styles[1] = 0xFF;   // LS_NONE
+			gridData[i].styles[2] = 0xFF;
+			gridData[i].styles[3] = 0xFF;
+		}
+		free( ig );
+		numLightArray = 0;
+	}
+
 	numFogs = CopyLump( header, LUMP_FOGS, dfogs, sizeof(dfog_t) );
 	numDrawIndexes = CopyLump( header, LUMP_DRAWINDEXES, drawIndexes, sizeof(drawIndexes[0]) );
 
 	numVisBytes = CopyLump( header, LUMP_VISIBILITY, visBytes, 1 );
 	numLightBytes = CopyLump( header, LUMP_LIGHTMAPS, lightBytes, 1 );
 	entdatasize = CopyLump( header, LUMP_ENTITIES, dentdata, 1);
-
-	numGridPoints = CopyLump( header, LUMP_LIGHTGRID, gridData, 8 );
-
 
 	free( header );		// everything has been copied out
 		
@@ -241,6 +414,61 @@ void	LoadBSPFile( const char *filename ) {
 
 
 //============================================================================
+
+#define LG_EPSILON 4
+
+qboolean GridPointEqual(bspGridPoint_t *p1, bspGridPoint_t *p2) {
+	int i, j;
+
+	for (i = 0; i < 4; i++) {
+		if (p1->styles[i] != p2->styles[i]) return qfalse;
+		for (j = 0; j < 3; j++) {
+			if (abs((int)p1->ambient[i][j] - (int)p2->ambient[i][j]) > LG_EPSILON) return qfalse;
+			if (abs((int)p1->directed[i][j] - (int)p2->directed[i][j]) > LG_EPSILON) return qfalse;
+		}
+	}
+
+	for (i = 0; i < 2; i++) {
+		int d = abs((int)p1->latLong[i] - (int)p2->latLong[i]);
+		if (d > LG_EPSILON && d < (255 - LG_EPSILON)) return qfalse;
+	}
+
+	return qtrue;
+}
+
+void CompressGrid(void) {
+	int i, j;
+	bspGridPoint_t *palette;
+	int numPalette = 0;
+
+	if (g_game->bspVersion != 1) return;
+	if (numGridPoints == 0) return;
+
+	_printf("--- CompressGrid ---\n");
+
+	numLightArray = numGridPoints; // Store original grid count
+	palette = malloc(numGridPoints * sizeof(bspGridPoint_t));
+
+	for (i = 0; i < numGridPoints; i++) {
+		for (j = 0; j < numPalette; j++) {
+			if (GridPointEqual(&gridData[i], &palette[j])) {
+				break;
+			}
+		}
+		if (j == numPalette) {
+			j = numPalette++;
+			palette[j] = gridData[i];
+		}
+		lightArray[i] = (unsigned short)j;
+	}
+
+	_printf("%i points compressed to %i unique points\n", numGridPoints, numPalette);
+
+	memcpy(gridData, palette, numPalette * sizeof(bspGridPoint_t));
+	numGridPoints = numPalette;
+
+	free(palette);
+}
 
 /*
 =============
@@ -267,36 +495,124 @@ Swaps the bsp file in place, so it should not be referenced again
 void	WriteBSPFile( const char *filename ) {		
 	dheader_t	outheader, *header;
 	FILE		*bspfile;
+	int			i, j;
+
+	_printf( "--- WriteBSPFile ---\n" );
 
 	header = &outheader;
 	memset( header, 0, sizeof(dheader_t) );
 	
+	// identifier and version from g_game
+	header->ident = LittleLong( *(int *)g_game->bspIdent );
+	header->version = LittleLong( g_game->bspVersion );
+	
+	// swap everything in place (internal format)
 	SwapBSPFile();
 
-	header->ident = LittleLong( BSP_IDENT );
-	header->version = LittleLong( BSP_VERSION );
-	
 	bspfile = SafeOpenWrite( filename );
 	SafeWrite( bspfile, header, sizeof(dheader_t) );	// overwritten later
 
-	AddLump( bspfile, header, LUMP_SHADERS, dshaders, numShaders*sizeof(dshader_t) );
-	AddLump( bspfile, header, LUMP_PLANES, dplanes, numplanes*sizeof(dplane_t) );
-	AddLump( bspfile, header, LUMP_LEAFS, dleafs, numleafs*sizeof(dleaf_t) );
-	AddLump( bspfile, header, LUMP_NODES, dnodes, numnodes*sizeof(dnode_t) );
-	AddLump( bspfile, header, LUMP_BRUSHES, dbrushes, numbrushes*sizeof(dbrush_t) );
-	AddLump( bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides*sizeof(dbrushside_t) );
-	AddLump( bspfile, header, LUMP_LEAFSURFACES, dleafsurfaces, numleafsurfaces*sizeof(dleafsurfaces[0]) );
-	AddLump( bspfile, header, LUMP_LEAFBRUSHES, dleafbrushes, numleafbrushes*sizeof(dleafbrushes[0]) );
-	AddLump( bspfile, header, LUMP_MODELS, dmodels, nummodels*sizeof(dmodel_t) );
-	AddLump( bspfile, header, LUMP_DRAWVERTS, drawVerts, numDrawVerts*sizeof(drawVert_t) );
-	AddLump( bspfile, header, LUMP_SURFACES, drawSurfaces, numDrawSurfaces*sizeof(dsurface_t) );
+    // UnparseEntities...
+	UnparseEntities();
+	AddLump( bspfile, header, LUMP_ENTITIES, dentdata, entdatasize );
+
+	AddLump( bspfile, header, LUMP_SHADERS, dshaders, numShaders * sizeof(dshader_t) );
+	AddLump( bspfile, header, LUMP_PLANES, dplanes, numplanes * sizeof(dplane_t) );
+	AddLump( bspfile, header, LUMP_LEAFS, dleafs, numleafs * sizeof(dleaf_t) );
+	AddLump( bspfile, header, LUMP_NODES, dnodes, numnodes * sizeof(dnode_t) );
+	AddLump( bspfile, header, LUMP_BRUSHES, dbrushes, numbrushes * sizeof(dbrush_t) );
+
+	if ( g_game->bspVersion == 1 ) {
+		// FBSP: engine expects rdbrushside_t (12 bytes: planeNum, shaderNum, surfaceNum)
+		rdbrushside_t *rbs = malloc( numbrushsides * sizeof(rdbrushside_t) );
+		for ( int k = 0; k < numbrushsides; k++ ) {
+			rbs[k].planeNum = dbrushsides[k].planeNum;
+			rbs[k].shaderNum = dbrushsides[k].shaderNum;
+			rbs[k].surfaceNum = 0;
+		}
+		AddLump( bspfile, header, LUMP_BRUSHSIDES, rbs, numbrushsides * sizeof(rdbrushside_t) );
+		free( rbs );
+	} else {
+		// IBSP: standard 8-byte brushsides
+		AddLump( bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides * sizeof(dbrushside_t) );
+	}
+	AddLump( bspfile, header, LUMP_LEAFSURFACES, dleafsurfaces, numleafsurfaces * sizeof(dleafsurfaces[0]) );
+	AddLump( bspfile, header, LUMP_LEAFBRUSHES, dleafbrushes, numleafbrushes * sizeof(dleafbrushes[0]) );
+	AddLump( bspfile, header, LUMP_MODELS, dmodels, nummodels * sizeof(dmodel_t) );
+	AddLump( bspfile, header, LUMP_DRAWINDEXES, drawIndexes, numDrawIndexes * sizeof(drawIndexes[0]) );
 	AddLump( bspfile, header, LUMP_VISIBILITY, visBytes, numVisBytes );
 	AddLump( bspfile, header, LUMP_LIGHTMAPS, lightBytes, numLightBytes );
-	AddLump( bspfile, header, LUMP_LIGHTGRID, gridData, 8 * numGridPoints );
-	AddLump( bspfile, header, LUMP_ENTITIES, dentdata, entdatasize );
 	AddLump( bspfile, header, LUMP_FOGS, dfogs, numFogs * sizeof(dfog_t) );
-	AddLump( bspfile, header, LUMP_DRAWINDEXES, drawIndexes, numDrawIndexes * sizeof(drawIndexes[0]) );
-	
+
+	if ( g_game->bspVersion == 1 ) {
+		// FBSP v1
+		CompressGrid();
+		AddLump( bspfile, header, LUMP_DRAWVERTS, drawVerts, numDrawVerts * sizeof(drawVert_t) );
+		AddLump( bspfile, header, LUMP_SURFACES, drawSurfaces, numDrawSurfaces * sizeof(dsurface_t) );
+		AddLump( bspfile, header, LUMP_LIGHTGRID, gridData, numGridPoints * sizeof(bspGridPoint_t) );
+		AddLump( bspfile, header, LUMP_LIGHTARRAY, lightArray, numLightArray * 2 );
+	} else {
+		// IBSP v46
+		// We need to down-convert. We already swapped in place, so swap back first.
+		SwapBSPFile();
+
+		ibspDrawVert_t *iv = malloc( numDrawVerts * sizeof(ibspDrawVert_t) );
+		for ( i = 0 ; i < numDrawVerts ; i++ ) {
+			VectorCopy( drawVerts[i].xyz, iv[i].xyz );
+			iv[i].st[0] = LittleFloat( drawVerts[i].st[0] );
+			iv[i].st[1] = LittleFloat( drawVerts[i].st[1] );
+			iv[i].lightmap[0] = LittleFloat( drawVerts[i].lightmap[0][0] );
+			iv[i].lightmap[1] = LittleFloat( drawVerts[i].lightmap[0][1] );
+			VectorCopy( drawVerts[i].normal, iv[i].normal );
+			for ( j = 0 ; j < 3 ; j++ ) {
+				iv[i].xyz[j] = LittleFloat( iv[i].xyz[j] );
+				iv[i].normal[j] = LittleFloat( iv[i].normal[j] );
+				iv[i].color[j] = drawVerts[i].color[0][j];
+			}
+			iv[i].color[3] = drawVerts[i].color[0][3];
+		}
+		AddLump( bspfile, header, LUMP_DRAWVERTS, iv, numDrawVerts * sizeof(ibspDrawVert_t) );
+		free( iv );
+
+		ibspSurface_t *is = malloc( numDrawSurfaces * sizeof(ibspSurface_t) );
+		for ( i = 0 ; i < numDrawSurfaces ; i++ ) {
+			is[i].shaderNum = LittleLong( drawSurfaces[i].shaderNum );
+			is[i].fogNum = LittleLong( drawSurfaces[i].fogNum );
+			is[i].surfaceType = LittleLong( drawSurfaces[i].surfaceType );
+			is[i].firstVert = LittleLong( drawSurfaces[i].firstVert );
+			is[i].numVerts = LittleLong( drawSurfaces[i].numVerts );
+			is[i].firstIndex = LittleLong( drawSurfaces[i].firstIndex );
+			is[i].numIndexes = LittleLong( drawSurfaces[i].numIndexes );
+			is[i].lightmapNum = LittleLong( drawSurfaces[i].lightmapNum[0] );
+			is[i].lightmapX = LittleLong( drawSurfaces[i].lightmapOffset[0][0] );
+			is[i].lightmapY = LittleLong( drawSurfaces[i].lightmapOffset[0][1] );
+			is[i].lightmapWidth = LittleLong( drawSurfaces[i].lightmapWidth );
+			is[i].lightmapHeight = LittleLong( drawSurfaces[i].lightmapHeight );
+			for ( j = 0 ; j < 3 ; j++ ) {
+				is[i].lightmapOrigin[j] = LittleFloat( drawSurfaces[i].lightmapOrigin[j] );
+				is[i].lightmapVecs[0][j] = LittleFloat( drawSurfaces[i].lightmapVecs[0][j] );
+				is[i].lightmapVecs[1][j] = LittleFloat( drawSurfaces[i].lightmapVecs[1][j] );
+				is[i].lightmapVecs[2][j] = LittleFloat( drawSurfaces[i].lightmapVecs[2][j] );
+			}
+			is[i].patchWidth = LittleLong( drawSurfaces[i].patchWidth );
+			is[i].patchHeight = LittleLong( drawSurfaces[i].patchHeight );
+		}
+		AddLump( bspfile, header, LUMP_SURFACES, is, numDrawSurfaces * sizeof(ibspSurface_t) );
+		free( is );
+
+		v46GridPoint_t *ig = malloc( numGridPoints * 8 );
+		for ( i = 0 ; i < numGridPoints ; i++ ) {
+			VectorCopy( gridData[i].ambient[0], ig[i].ambient );
+			VectorCopy( gridData[i].directed[0], ig[i].directed );
+			ig[i].latLong[0] = gridData[i].latLong[0];
+			ig[i].latLong[1] = gridData[i].latLong[1];
+		}
+		AddLump( bspfile, header, LUMP_LIGHTGRID, ig, numGridPoints * 8 );
+		free( ig );
+		
+		SwapBSPFile(); // swap back to internal format
+	}
+
 	fseek (bspfile, 0, SEEK_SET);
 	SafeWrite (bspfile, header, sizeof(dheader_t));
 	fclose (bspfile);	

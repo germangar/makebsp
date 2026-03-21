@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // light.c
 
 #include "light.h"
+#include "../common/imagelib.h"
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
 #endif
@@ -97,6 +98,24 @@ typedef struct {
   dbrush_t *b;
   vec3_t bounds[2];
 } skyBrush_t;
+
+float CalculateFalloff(float dot) {
+  float val = (dot > 1.0f) ? 1.0f : dot;
+  if (g_game->falloff == FALLOFF_HALFLAMBERT) {
+    val = val * 0.5f + 0.5f;
+    return val * val;
+  } else if (g_game->falloff == FALLOFF_QUADRATIC) {
+    if (val < 0.0f) return 0.0f;
+    val = 1.0f - val;
+    return 1.0f - (val * val);
+  } else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) {
+    if (val < 0.0f) return 0.0f;
+    val = 1.0f - val;
+    return 1.0f - (val * val * val);
+  } else {
+    return (val < 0.0f) ? 0.0f : val;
+  }
+}
 
 int numSkyBrushes;
 skyBrush_t skyBrushes[MAX_MAP_BRUSHES];
@@ -221,14 +240,18 @@ void CountLightmaps(void) {
   int count;
   int i;
   dsurface_t *ds;
+  int numSamples = 0;
 
-  qprintf("--- CountLightmaps ---\n");
+  _printf("--- CountLightmaps ---\n");
   count = 0;
   for (i = 0; i < numDrawSurfaces; i++) {
     // see if this surface is light emiting
     ds = &drawSurfaces[i];
-    if (ds->lightmapNum > count) {
-      count = ds->lightmapNum;
+    if (ds->lightmapNum[0] > count) {
+      count = ds->lightmapNum[0];
+    }
+    if (ds->lightmapNum[0] >= 0) {
+      numSamples += ds->lightmapWidth * ds->lightmapHeight;
     }
   }
 
@@ -238,8 +261,9 @@ void CountLightmaps(void) {
     Error("MAX_MAP_LIGHTING exceeded");
   }
 
-  qprintf("%5i drawSurfaces\n", numDrawSurfaces);
-  qprintf("%5i lightmaps\n", count);
+  _printf("%5i drawSurfaces\n", numDrawSurfaces);
+  _printf("%5i lightmaps\n", count);
+  _printf("%5i lightmap samples\n", numSamples);
 }
 
 /*
@@ -261,7 +285,7 @@ void VisualizeLightmapAllocation(void) {
 
   for (i = 0; i < numDrawSurfaces; i++) {
     ds = &drawSurfaces[i];
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
 
     // generate a unique color for this surface based on index
@@ -272,9 +296,9 @@ void VisualizeLightmapAllocation(void) {
 
     for (y = 0; y < ds->lightmapHeight; y++) {
       for (x = 0; x < ds->lightmapWidth; x++) {
-        p = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            (ds->lightmapX + x);
+            (ds->lightmapOffset[0][0] + x);
         k = p * 3;
         lightBytes[k] = color[0];
         lightBytes[k + 1] = color[1];
@@ -870,7 +894,7 @@ void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
     return;
   }
 
-  angle = DotProduct(normal, sunDirection);
+  angle = CalculateFalloff(DotProduct(normal, sunDirection));
   if (angle <= 0) {
     return; // facing away
   }
@@ -900,8 +924,10 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   for (light = lights; light; light = light->next) {
 
     // MrE: if the light is behind the surface
-    if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
-      continue;
+    if (g_game->falloff != FALLOFF_HALFLAMBERT) {
+      if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
+        continue;
+    }
     // testing exact PTPFF
     if (exactPointToPolygon && light->type == emit_area) {
       float factor;
@@ -940,11 +966,13 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       }
 
       // calculate the contribution
-      factor = PointToPolygonFormFactor(pushedOrigin, normal, light->w);
-      if (factor <= 0) {
-        if (light->twosided) {
-          factor = -factor;
-        } else {
+      {
+        float formFactor = PointToPolygonFormFactor(pushedOrigin, normal, light->w);
+        if (formFactor < 0 && light->twosided) {
+          formFactor = -formFactor;
+        }
+        factor = CalculateFalloff(formFactor);
+        if (factor <= 0) {
           continue;
         }
       }
@@ -963,7 +991,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       if (dist < 16) {
         dist = 16;
       }
-      angle = DotProduct(normal, dir);
+      angle = CalculateFalloff(DotProduct(normal, dir));
       if (light->linearLight) {
         add = angle * light->photons * linearScale - dist;
         if (add < 0) {
@@ -1006,7 +1034,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       if (dist < 16) {
         dist = 16;
       }
-      angle = DotProduct(normal, dir);
+      angle = CalculateFalloff(DotProduct(normal, dir));
       add = light->photons / (dist * dist) * angle * coneScale;
 
     } else if (light->type == emit_area) {
@@ -1016,7 +1044,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       if (dist < 16) {
         dist = 16;
       }
-      angle = DotProduct(normal, dir);
+      angle = CalculateFalloff(DotProduct(normal, dir));
       if (angle <= 0) {
         continue;
       }
@@ -1074,9 +1102,7 @@ PrintOccluded
 For debugging
 =============
 */
-void PrintOccluded(
-    byte occluded[LIGHTMAP_WIDTH * EXTRASCALE][LIGHTMAP_HEIGHT * EXTRASCALE],
-    int width, int height) {
+void PrintOccluded(byte **occluded, int width, int height) {
   int i, j;
 
   _printf("\n");
@@ -1140,7 +1166,7 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
       if (sample[j] > 255) {
         sample[j] = 255;
       }
-      dv->color[j] = sample[j];
+      dv->color[0][j] = sample[j];
     }
 
     // Don't bother writing alpha since it will already be set to 255,
@@ -1213,8 +1239,20 @@ ColorToBytes
 void ColorToBytes(const float *color, byte *colorBytes) {
   float max;
   vec3_t sample;
+  int i;
 
   VectorCopy(color, sample);
+
+  if (g_game->lightmapsRGB) {
+    for (i = 0; i < 3; i++) {
+      float l = sample[i] / 255.0f;
+      if (l <= 0.0031308f)
+        l *= 12.92f;
+      else
+        l = 1.055f * pow(l, 1.0f / 2.4f) - 0.055f;
+      sample[i] = l * 255.0f;
+    }
+  }
 
   // clamp with color normalization
   max = sample[0];
@@ -1227,9 +1265,9 @@ void ColorToBytes(const float *color, byte *colorBytes) {
   if (max > 255) {
     VectorScale(sample, 255 / max, sample);
   }
-  colorBytes[0] = sample[0];
-  colorBytes[1] = sample[1];
-  colorBytes[2] = sample[2];
+  colorBytes[0] = (byte)sample[0];
+  colorBytes[1] = (byte)sample[1];
+  colorBytes[2] = (byte)sample[2];
 }
 
 /*
@@ -1243,16 +1281,24 @@ void TraceLtm(int num) {
   int x, y;
   int position, numPositions;
   vec3_t base, origin, normal;
-  byte occluded[LIGHTMAP_WIDTH * EXTRASCALE][LIGHTMAP_HEIGHT * EXTRASCALE];
-  vec3_t color[LIGHTMAP_WIDTH * EXTRASCALE][LIGHTMAP_HEIGHT * EXTRASCALE];
-  traceWork_t tw;
+  traceWork_t *tw;
+  tw = malloc(sizeof(traceWork_t));
+  if (!tw)
+    Error("Failed to allocate TraceLtm memory (traceWork_t)");
+  memset(tw, 0, sizeof(traceWork_t));
+
+  byte **occluded = NULL;
+  byte *occluded_data = NULL;
+  vec3_t **color = NULL;
+  vec3_t *color_data = NULL;
   vec3_t average;
   int count;
   mesh_t srcMesh, *mesh = NULL, *subdivided = NULL;
   shaderInfo_t *si;
   static float nudge[2][9] = {{0, -1, 0, 1, -1, 1, -1, 0, 1},
-                              {0, -1, -1, -1, 0, 0, 1, 1, 1}};
+                               {0, -1, -1, -1, 0, 0, 1, 1, 1}};
   int sampleWidth, sampleHeight, ssize;
+  int extW, extH;
   vec3_t lightmapOrigin, lightmapVecs[2];
   int widthtable[LIGHTMAP_WIDTH], heighttable[LIGHTMAP_WIDTH];
 
@@ -1261,21 +1307,24 @@ void TraceLtm(int num) {
 
   // vertex-lit triangle model
   if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, &tw);
+    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
+    free(tw);
     return;
   }
 
-  if (ds->lightmapNum == -1) {
+  if (ds->lightmapNum[0] == -1) {
+    free(tw);
     return; // doesn't need lighting at all
   }
 
   if (!novertexlighting) {
     // calculate the vertex lighting for gouraud shade mode
     VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale,
-                   &tw);
+                   tw);
   }
 
-  if (ds->lightmapNum < 0) {
+  if (ds->lightmapNum[0] < 0) {
+    free(tw);
     return; // doesn't need lightmap lighting
   }
 
@@ -1285,9 +1334,9 @@ void TraceLtm(int num) {
     ssize = si->lightmapSampleSize;
 
   if (si->patchShadows)
-    tw.patchshadows = qtrue;
+    tw->patchshadows = qtrue;
   else
-    tw.patchshadows = patchshadows;
+    tw->patchshadows = patchshadows;
 
   if (ds->surfaceType == MST_PATCH) {
     srcMesh.width = ds->patchWidth;
@@ -1344,10 +1393,33 @@ void TraceLtm(int num) {
     sampleHeight = ds->lightmapHeight;
   }
 
-  memset(color, 0, sizeof(color));
+  extW = sampleWidth;
+  extH = sampleHeight;
+
+  occluded = malloc(extW * sizeof(byte *));
+  occluded_data = malloc(extW * extH * sizeof(byte));
+  color = malloc(extW * sizeof(vec3_t *));
+  color_data = malloc(extW * extH * sizeof(vec3_t));
+
+  if (!occluded || !occluded_data || !color || !color_data) {
+    _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", num, extW, extH);
+    if (occluded) free(occluded);
+    if (occluded_data) free(occluded_data);
+    if (color) free(color);
+    if (color_data) free(color_data);
+    free(tw);
+    return;
+  }
+
+  for (i = 0; i < extW; i++) {
+    occluded[i] = occluded_data + i * extH;
+    color[i] = color_data + i * extH;
+  }
+
+  memset(color_data, 0, extW * extH * sizeof(vec3_t));
 
   // determine which samples are occluded
-  memset(occluded, 0, sizeof(occluded));
+  memset(occluded_data, 0, extW * extH * sizeof(byte));
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
@@ -1399,7 +1471,7 @@ void TraceLtm(int num) {
         c_visible++;
       }
       occluded[i][j] = qfalse;
-      LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, &tw);
+      LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, tw);
     }
   }
 
@@ -1510,9 +1582,9 @@ void TraceLtm(int num) {
   // clamp the colors to bytes and store off
   for (i = 0; i < ds->lightmapWidth; i++) {
     for (j = 0; j < ds->lightmapHeight; j++) {
-      k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + j) *
+      k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j) *
               LIGHTMAP_WIDTH +
-          ds->lightmapX + i;
+          ds->lightmapOffset[0][0] + i;
 
       ColorToBytes(color[i][j], lightBytes + k * 3);
     }
@@ -1521,6 +1593,11 @@ void TraceLtm(int num) {
   if (ds->surfaceType == MST_PATCH) {
     FreeMesh(mesh);
   }
+  free(tw);
+  free(occluded);
+  free(occluded_data);
+  free(color);
+  free(color_data);
 }
 
 //=============================================================================
@@ -1649,8 +1726,13 @@ void TraceGrid(int num) {
   contribution_t contributions[MAX_CONTRIBUTIONS];
   int numCon;
   int i;
-  traceWork_t tw;
+  traceWork_t *tw;
   float addSize;
+
+  tw = malloc(sizeof(traceWork_t));
+  if (!tw)
+    Error("Failed to allocate traceWork_t");
+  memset(tw, 0, sizeof(traceWork_t));
 
   mod = num;
   z = mod / (gridBounds[0] * gridBounds[1]);
@@ -1701,9 +1783,8 @@ void TraceGrid(int num) {
     }
     if (step > 18) {
       // can't find a valid point at all
-      for (i = 0; i < 8; i++) {
-        gridData[num * 8 + i] = 0;
-      }
+      memset(&gridData[num], 0, sizeof(gridData[num]));
+      free(tw);
       return;
     }
   }
@@ -1721,7 +1802,7 @@ void TraceGrid(int num) {
     vec3_t dir;
     float addSize;
 
-    if (!LightContributionToPoint(light, origin, add, &tw)) {
+    if (!LightContributionToPoint(light, origin, add, tw)) {
       continue;
     }
 
@@ -1743,7 +1824,7 @@ void TraceGrid(int num) {
   //
   // trace directly to the sun
   //
-  SunToPoint(origin, &tw, color);
+  SunToPoint(origin, tw, color);
   addSize = VectorLength(color);
   if (addSize > 0) {
     VectorCopy(color, contributions[numCon].color);
@@ -1761,10 +1842,7 @@ void TraceGrid(int num) {
   for (i = 0; i < numCon; i++) {
     float d;
 
-    d = DotProduct(contributions[i].dir, summedDir);
-    if (d < 0) {
-      d = 0;
-    }
+    d = CalculateFalloff(DotProduct(contributions[i].dir, summedDir));
 
     VectorMA(directedColor, d, contributions[i].color, directedColor);
 
@@ -1779,11 +1857,13 @@ void TraceGrid(int num) {
   //
   // save the resulting value out
   //
-  ColorToBytes(color, gridData + num * 8);
-  ColorToBytes(directedColor, gridData + num * 8 + 3);
+  memset(&gridData[num], 0, sizeof(gridData[num]));
+  ColorToBytes(color, gridData[num].ambient[0]);
+  ColorToBytes(directedColor, gridData[num].directed[0]);
 
   VectorNormalize(summedDir, summedDir);
-  NormalToLatLong(summedDir, gridData + num * 8 + 6);
+  NormalToLatLong(summedDir, gridData[num].latLong);
+  free(tw);
 }
 
 /*
@@ -1802,7 +1882,7 @@ void SetupGrid(void) {
   }
 
   numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
-  if (numGridPoints * 8 >= MAX_MAP_LIGHTGRID)
+  if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
     Error("MAX_MAP_LIGHTGRID");
   qprintf("%5i gridPoints\n", numGridPoints);
 }
@@ -1858,22 +1938,22 @@ void LightWorld(void) {
   VectorScale(ambientColor, f, ambientColor);
 
   // create lights out of patches and lights
-  qprintf("--- CreateLights ---\n");
+  _printf("--- CreateLights ---\n");
   CreateEntityLights();
-  qprintf("%i point lights\n", numPointLights);
-  qprintf("%i area lights\n", numAreaLights);
+  _printf("%i point lights\n", numPointLights);
+  _printf("%i area lights\n", numAreaLights);
 
   if (!nogridlighting) {
-    qprintf("--- TraceGrid ---\n");
+    _printf("--- TraceGrid ---\n");
     RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
-    qprintf("%i x %i x %i = %i grid\n", gridBounds[0], gridBounds[1],
+    _printf("%i x %i x %i = %i grid\n", gridBounds[0], gridBounds[1],
             gridBounds[2], numGridPoints);
   }
 
-  qprintf("--- TraceLtm ---\n");
+  _printf("--- TraceLtm ---\n");
   RunThreadsOnIndividual(numDrawSurfaces, qtrue, TraceLtm);
-  qprintf("%5i visible samples\n", c_visible);
-  qprintf("%5i occluded samples\n", c_occluded);
+  _printf("%5i visible samples\n", c_visible);
+  _printf("%5i occluded samples\n", c_occluded);
 }
 
 /*
@@ -1988,8 +2068,13 @@ VertexLightingThread
 */
 void VertexLightingThread(int num) {
   dsurface_t *ds;
-  traceWork_t tw;
+  traceWork_t *tw;
   shaderInfo_t *si;
+
+  tw = malloc(sizeof(traceWork_t));
+  if (!tw)
+    Error("Failed to allocate traceWork_t");
+  memset(tw, 0, sizeof(traceWork_t));
 
   ds = &drawSurfaces[num];
 
@@ -2001,15 +2086,15 @@ void VertexLightingThread(int num) {
   if (novertexlighting)
     return;
 
-  if (ds->lightmapNum == -1) {
+  if (ds->lightmapNum[0] == -1) {
     return; // doesn't need lighting at all
   }
 
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
   // calculate the vertex lighting for gouraud shade mode
-  VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale,
-                 &tw);
+  VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale, tw);
+  free(tw);
 }
 
 /*
@@ -2019,16 +2104,22 @@ TriSoupLightingThread
 */
 void TriSoupLightingThread(int num) {
   dsurface_t *ds;
-  traceWork_t tw;
+  traceWork_t *tw;
   shaderInfo_t *si;
+
+  tw = malloc(sizeof(traceWork_t));
+  if (!tw)
+    Error("Failed to allocate traceWork_t");
+  memset(tw, 0, sizeof(traceWork_t));
 
   ds = &drawSurfaces[num];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
   // vertex-lit triangle model
   if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, &tw);
+    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
   }
+  free(tw);
 }
 
 /*
@@ -2127,6 +2218,39 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-debug_lightmaps")) {
       debugLightmaps = qtrue;
       _printf("Lightmap debug visualization enabled\n");
+    } else if (!strcmp(argv[i], "-game")) {
+      char *arg = argv[++i];
+      int j;
+      for (j = 0; games[j].arg; j++) {
+        if (!strcmp(games[j].arg, arg)) {
+          g_game = &games[j];
+          break;
+        }
+      }
+      strcpy(gamedir, arg);
+    } else if (!strcmp(argv[i], "-sRGB")) {
+      g_game->lightmapsRGB = qtrue;
+      _printf("sRGB lightmaps enabled\n");
+    } else if (!strcmp(argv[i], "-falloff")) {
+      char *arg = argv[++i];
+          if (!strcmp(arg, "halflambert")) {
+            g_game->falloff = FALLOFF_HALFLAMBERT;
+            _printf("Half-Lambert attenuation enabled\n");
+          } else if (!strcmp(arg, "lambert")) {
+            g_game->falloff = FALLOFF_LAMBERT;
+            _printf("Lambert attenuation enabled\n");
+          } else if (!strcmp(arg, "quadratic")) {
+            g_game->falloff = FALLOFF_QUADRATIC;
+            _printf("Quadratic attenuation enabled\n");
+          } else if (!strcmp(arg, "doublequadratic")) {
+            g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
+            _printf("Double Quadratic attenuation enabled\n");
+          } else {
+            Error("Unknown falloff type: %s", arg);
+          }
+    } else if (!strcmp(argv[i], "-deluxe")) {
+      g_game->deluxeMap = qtrue;
+      _printf("Deluxemaps enabled\n");
     } else {
       break;
     }
@@ -2149,6 +2273,8 @@ int LightMain(int argc, char **argv) {
             "lighting\n"
             "   novertex       = don't calculate vertex lighting\n"
             "   samplesize <N> = set the lightmap pixel size to NxN units\n"
+            "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
+            "                     quadratic, doublequadratic)\n"
             "   debug_lightmaps = visualize lightmap allocation and export BMPs\n");
     exit(0);
   }
@@ -2170,6 +2296,13 @@ int LightMain(int argc, char **argv) {
   _printf("reading %s\n", source);
 
   LoadBSPFile(source);
+  _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+
+  if (samplesize == 0) {
+    samplesize = g_game->defaultSampleSize;
+    _printf("Defaulting lightmap sample size to %dx%d units\n", samplesize,
+            samplesize);
+  }
 
   FindSkyBrushes();
 

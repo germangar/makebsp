@@ -120,8 +120,8 @@ int CreateNewFloatPlane(vec3_t normal, vec_t dist) {
   }
 
   // create a new plane
-  if (nummapplanes + 2 > MAX_MAP_PLANES)
-    Error("MAX_MAP_PLANES");
+  if (nummapplanes + 2 > MAX_MAP_PLANES_LIMIT)
+    Error("MAX_MAP_PLANES_LIMIT");
 
   p = &mapplanes[nummapplanes];
   VectorCopy(normal, p->normal);

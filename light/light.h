@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../common/bspfile.h"
 #include "../common/cmdlib.h"
-#include "../common/imagelib.h"
 #include "../common/mathlib.h"
 #include "../common/polylib.h"
 #include "../common/scriplib.h"
@@ -54,6 +53,8 @@ typedef struct light_s {
   winding_t *w;
   vec3_t emitColor; // full out-of-gamut value
 } light_t;
+
+float CalculateFalloff(float dot);
 
 extern float lightscale;
 extern float ambient;

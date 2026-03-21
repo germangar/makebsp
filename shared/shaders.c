@@ -96,7 +96,9 @@ infoParm_t infoParms[] = {
     {"pointlight", 0, SURF_POINTLIGHT, 0}, // sample lighting at vertexes
     {"nolightmap", 0, SURF_NOLIGHTMAP, 0}, // don't generate a lightmap
     {"nodlight", 0, SURF_NODLIGHT, 0},     // don't ever add dynamic lights
-    {"dust", 0, SURF_DUST, 0} // leave dust trail when walking on this surface
+    {"dust", 0, SURF_DUST, 0}, // leave dust trail when walking on this surface
+    {"skip", 0, SURF_SKIP, 0}, // completely ignore, allowing non-closed brushes
+    {"nowalljump", 0, SURF_NOWALLJUMP, 0} // QFusion: disable wall jumping
 };
 
 /*

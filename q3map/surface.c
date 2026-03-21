@@ -41,8 +41,8 @@ AllocDrawSurf
 mapDrawSurface_t *AllocDrawSurf(void) {
   mapDrawSurface_t *ds;
 
-  if (numMapDrawSurfs >= MAX_MAP_DRAW_SURFS) {
-    Error("MAX_MAP_DRAW_SURFS");
+  if (numMapDrawSurfs >= MAX_MAP_DRAW_SURFS_LIMIT) {
+    Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
 
   ds = &mapDrawSurfs[numMapDrawSurfs];
@@ -735,9 +735,16 @@ static void SurfaceAsTriFan(dsurface_t *ds) {
   drawVert_t *mid, *v;
 
   // create a new point in the center of the face
-  if (numDrawVerts == MAX_MAP_DRAW_VERTS) {
-    Error("MAX_MAP_DRAW_VERTS");
-  }
+    if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
+      _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
+      _printf("Surface Shader: %s\n", dshaders[ds->shaderNum].shader);
+      _printf("Total vertices so far: %i\n", numDrawVerts);
+      _printf("Current surface vertices: %i\n", ds->numVerts);
+      _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+      _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
+      _printf("-----------------------------\n");
+      Error("MAX_MAP_DRAW_VERTS_LIMIT");
+    }
   mid = &drawVerts[numDrawVerts];
   numDrawVerts++;
 
@@ -748,13 +755,13 @@ static void SurfaceAsTriFan(dsurface_t *ds) {
     VectorAdd(mid->xyz, v->xyz, mid->xyz);
     mid->st[0] += v->st[0];
     mid->st[1] += v->st[1];
-    mid->lightmap[0] += v->lightmap[0];
-    mid->lightmap[1] += v->lightmap[1];
+    mid->lightmap[0][0] += v->lightmap[0][0];
+    mid->lightmap[0][1] += v->lightmap[0][1];
 
-    colorSum[0] += v->color[0];
-    colorSum[1] += v->color[1];
-    colorSum[2] += v->color[2];
-    colorSum[3] += v->color[3];
+    colorSum[0] += v->color[0][0];
+    colorSum[1] += v->color[0][1];
+    colorSum[2] += v->color[0][2];
+    colorSum[3] += v->color[0][3];
   }
 
   mid->xyz[0] /= ds->numVerts;
@@ -764,13 +771,13 @@ static void SurfaceAsTriFan(dsurface_t *ds) {
   mid->st[0] /= ds->numVerts;
   mid->st[1] /= ds->numVerts;
 
-  mid->lightmap[0] /= ds->numVerts;
-  mid->lightmap[1] /= ds->numVerts;
+  mid->lightmap[0][0] /= ds->numVerts;
+  mid->lightmap[0][1] /= ds->numVerts;
 
-  mid->color[0] = colorSum[0] / ds->numVerts;
-  mid->color[1] = colorSum[1] / ds->numVerts;
-  mid->color[2] = colorSum[2] / ds->numVerts;
-  mid->color[3] = colorSum[3] / ds->numVerts;
+  mid->color[0][0] = colorSum[0] / ds->numVerts;
+  mid->color[0][1] = colorSum[1] / ds->numVerts;
+  mid->color[0][2] = colorSum[2] / ds->numVerts;
+  mid->color[0][3] = colorSum[3] / ds->numVerts;
 
   VectorCopy((drawVerts + ds->firstVert)->normal, mid->normal);
 
@@ -880,8 +887,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds) {
   dsurface_t *out;
   drawVert_t *outv;
 
-  if (numDrawSurfaces == MAX_MAP_DRAW_SURFS) {
-    Error("MAX_MAP_DRAW_SURFS");
+  if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT) {
+    Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
   out = &drawSurfaces[numDrawSurfaces];
   numDrawSurfaces++;
@@ -891,11 +898,21 @@ void EmitPlanarSurf(mapDrawSurface_t *ds) {
   out->firstVert = numDrawVerts;
   out->numVerts = ds->numVerts;
   out->fogNum = ds->fogNum;
-  out->lightmapNum = ds->lightmapNum;
-  out->lightmapX = ds->lightmapX;
-  out->lightmapY = ds->lightmapY;
+  out->lightmapNum[0] = ds->lightmapNum;
+  out->lightmapOffset[0][0] = ds->lightmapX;
+  out->lightmapOffset[0][1] = ds->lightmapY;
   out->lightmapWidth = ds->lightmapWidth;
   out->lightmapHeight = ds->lightmapHeight;
+  // FBSP: initialize styles and auxiliary layers
+  out->lightmapStyles[0] = 0;    // LS_NORMAL
+  out->vertexStyles[0] = 0;
+  for (j = 1; j < 4; j++) {
+    out->lightmapNum[j] = -1;
+    out->lightmapOffset[j][0] = 0;
+    out->lightmapOffset[j][1] = 0;
+    out->lightmapStyles[j] = 0xFF;  // LS_NONE
+    out->vertexStyles[j] = 0xFF;
+  }
 
   VectorCopy(ds->lightmapOrigin, out->lightmapOrigin);
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]);
@@ -903,16 +920,23 @@ void EmitPlanarSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
 
   for (j = 0; j < ds->numVerts; j++) {
-    if (numDrawVerts == MAX_MAP_DRAW_VERTS) {
-      Error("MAX_MAP_DRAW_VERTS");
+    if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
+      _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
+      _printf("Surface: %s\n", ds->shaderInfo->shader);
+      _printf("Total vertices so far: %i\n", numDrawVerts);
+      _printf("Current surface vertices: %i\n", ds->numVerts);
+      _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+      _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
+      _printf("-----------------------------\n");
+      Error("MAX_MAP_DRAW_VERTS_LIMIT");
     }
     outv = &drawVerts[numDrawVerts];
     numDrawVerts++;
     memcpy(outv, &ds->verts[j], sizeof(*outv));
-    outv->color[0] = 255;
-    outv->color[1] = 255;
-    outv->color[2] = 255;
-    outv->color[3] = 255;
+    outv->color[0][0] = 255;
+    outv->color[0][1] = 255;
+    outv->color[0][2] = 255;
+    outv->color[0][3] = 255;
   }
 
   // create the indexes
@@ -929,8 +953,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds) {
   dsurface_t *out;
   drawVert_t *outv;
 
-  if (numDrawSurfaces == MAX_MAP_DRAW_SURFS) {
-    Error("MAX_MAP_DRAW_SURFS");
+  if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT) {
+    Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
   out = &drawSurfaces[numDrawSurfaces];
   numDrawSurfaces++;
@@ -944,11 +968,21 @@ void EmitPatchSurf(mapDrawSurface_t *ds) {
   out->patchWidth = ds->patchWidth;
   out->patchHeight = ds->patchHeight;
   out->fogNum = ds->fogNum;
-  out->lightmapNum = ds->lightmapNum;
-  out->lightmapX = ds->lightmapX;
-  out->lightmapY = ds->lightmapY;
+  out->lightmapNum[0] = ds->lightmapNum;
+  out->lightmapOffset[0][0] = ds->lightmapX;
+  out->lightmapOffset[0][1] = ds->lightmapY;
   out->lightmapWidth = ds->lightmapWidth;
   out->lightmapHeight = ds->lightmapHeight;
+  // FBSP: initialize styles and auxiliary layers
+  out->lightmapStyles[0] = 0;
+  out->vertexStyles[0] = 0;
+  for (j = 1; j < 4; j++) {
+    out->lightmapNum[j] = -1;
+    out->lightmapOffset[j][0] = 0;
+    out->lightmapOffset[j][1] = 0;
+    out->lightmapStyles[j] = 0xFF;
+    out->vertexStyles[j] = 0xFF;
+  }
 
   VectorCopy(ds->lightmapOrigin, out->lightmapOrigin);
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]);
@@ -956,21 +990,28 @@ void EmitPatchSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
 
   for (j = 0; j < ds->numVerts; j++) {
-    if (numDrawVerts == MAX_MAP_DRAW_VERTS) {
-      Error("MAX_MAP_DRAW_VERTS");
+    if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
+      _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
+      _printf("Surface: %s\n", ds->shaderInfo->shader);
+      _printf("Total vertices so far: %i\n", numDrawVerts);
+      _printf("Current surface vertices: %i\n", ds->numVerts);
+      _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+      _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
+      _printf("-----------------------------\n");
+      Error("MAX_MAP_DRAW_VERTS_LIMIT");
     }
     outv = &drawVerts[numDrawVerts];
     numDrawVerts++;
     memcpy(outv, &ds->verts[j], sizeof(*outv));
-    outv->color[0] = 255;
-    outv->color[1] = 255;
-    outv->color[2] = 255;
-    outv->color[3] = 255;
+    outv->color[0][0] = 255;
+    outv->color[0][1] = 255;
+    outv->color[0][2] = 255;
+    outv->color[0][3] = 255;
   }
 
   for (j = 0; j < ds->numIndexes; j++) {
-    if (numDrawIndexes == MAX_MAP_DRAW_INDEXES) {
-      Error("MAX_MAP_DRAW_INDEXES");
+    if (numDrawIndexes >= MAX_MAP_DRAW_INDEXES_LIMIT) {
+      Error("MAX_MAP_DRAW_INDEXES_LIMIT");
     }
     drawIndexes[numDrawIndexes] = ds->indexes[j];
     numDrawIndexes++;
@@ -985,8 +1026,8 @@ EmitFlareSurf
 void EmitFlareSurf(mapDrawSurface_t *ds) {
   dsurface_t *out;
 
-  if (numDrawSurfaces == MAX_MAP_DRAW_SURFS) {
-    Error("MAX_MAP_DRAW_SURFS");
+  if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT) {
+    Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
   out = &drawSurfaces[numDrawSurfaces];
   numDrawSurfaces++;
@@ -994,6 +1035,21 @@ void EmitFlareSurf(mapDrawSurface_t *ds) {
   out->surfaceType = MST_FLARE;
   out->shaderNum = EmitShader(ds->shaderInfo->shader);
   out->fogNum = ds->fogNum;
+  // FBSP: initialize styles and auxiliary layers
+  out->lightmapStyles[0] = 0;
+  out->vertexStyles[0] = 0;
+  {
+    int j;
+    for (j = 0; j < 4; j++) {
+      out->lightmapNum[j] = -1;
+      out->lightmapOffset[j][0] = 0;
+      out->lightmapOffset[j][1] = 0;
+    }
+    for (j = 1; j < 4; j++) {
+      out->lightmapStyles[j] = 0xFF;
+      out->vertexStyles[j] = 0xFF;
+    }
+  }
 
   VectorCopy(ds->lightmapOrigin, out->lightmapOrigin);
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]); // color
@@ -1010,8 +1066,8 @@ void EmitModelSurf(mapDrawSurface_t *ds) {
   dsurface_t *out;
   drawVert_t *outv;
 
-  if (numDrawSurfaces == MAX_MAP_DRAW_SURFS) {
-    Error("MAX_MAP_DRAW_SURFS");
+  if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT) {
+    Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
   out = &drawSurfaces[numDrawSurfaces];
   numDrawSurfaces++;
@@ -1025,11 +1081,21 @@ void EmitModelSurf(mapDrawSurface_t *ds) {
   out->patchWidth = ds->patchWidth;
   out->patchHeight = ds->patchHeight;
   out->fogNum = ds->fogNum;
-  out->lightmapNum = ds->lightmapNum;
-  out->lightmapX = ds->lightmapX;
-  out->lightmapY = ds->lightmapY;
+  out->lightmapNum[0] = ds->lightmapNum;
+  out->lightmapOffset[0][0] = ds->lightmapX;
+  out->lightmapOffset[0][1] = ds->lightmapY;
   out->lightmapWidth = ds->lightmapWidth;
   out->lightmapHeight = ds->lightmapHeight;
+  // FBSP: initialize styles and auxiliary layers
+  out->lightmapStyles[0] = 0;
+  out->vertexStyles[0] = 0;
+  for (j = 1; j < 4; j++) {
+    out->lightmapNum[j] = -1;
+    out->lightmapOffset[j][0] = 0;
+    out->lightmapOffset[j][1] = 0;
+    out->lightmapStyles[j] = 0xFF;
+    out->vertexStyles[j] = 0xFF;
+  }
 
   VectorCopy(ds->lightmapOrigin, out->lightmapOrigin);
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]);
@@ -1037,20 +1103,27 @@ void EmitModelSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
 
   for (j = 0; j < ds->numVerts; j++) {
-    if (numDrawVerts == MAX_MAP_DRAW_VERTS) {
-      Error("MAX_MAP_DRAW_VERTS");
+    if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
+      _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
+      _printf("Surface: %s\n", ds->shaderInfo->shader);
+      _printf("Total vertices so far: %i\n", numDrawVerts);
+      _printf("Current surface vertices: %i\n", ds->numVerts);
+      _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+      _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
+      _printf("-----------------------------\n");
+      Error("MAX_MAP_DRAW_VERTS_LIMIT");
     }
     outv = &drawVerts[numDrawVerts];
     numDrawVerts++;
     memcpy(outv, &ds->verts[j], sizeof(*outv));
-    outv->color[0] = 255;
-    outv->color[1] = 255;
-    outv->color[2] = 255;
+    outv->color[0][0] = 255;
+    outv->color[0][1] = 255;
+    outv->color[0][2] = 255;
   }
 
   for (j = 0; j < ds->numIndexes; j++) {
-    if (numDrawIndexes == MAX_MAP_DRAW_INDEXES) {
-      Error("MAX_MAP_DRAW_INDEXES");
+    if (numDrawIndexes >= MAX_MAP_DRAW_INDEXES_LIMIT) {
+      Error("MAX_MAP_DRAW_INDEXES_LIMIT");
     }
     drawIndexes[numDrawIndexes] = ds->indexes[j];
     numDrawIndexes++;
@@ -1121,21 +1194,27 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree) {
     }
     if (ds->miscModel) {
       refs = FilterMiscModelSurfIntoTree(ds, tree);
-      EmitModelSurf(ds);
+      if (refs > 0) {
+        EmitModelSurf(ds);
+      }
     } else if (ds->patch) {
       refs = FilterPatchSurfIntoTree(ds, tree);
-      EmitPatchSurf(ds);
+      if (refs > 0) {
+        EmitPatchSurf(ds);
+      }
     } else if (ds->flareSurface) {
       refs = FilterFlareSurfIntoTree(ds, tree);
-      EmitFlareSurf(ds);
+      if (refs > 0) {
+        EmitFlareSurf(ds);
+      }
     } else {
       refs = FilterFaceIntoTree(ds, tree);
-      //			if ( ds->shaderInfo->value >= 1000 ) { //
-      // ds->shaderInfo->flareShader[0] ) {
-      if (ds->shaderInfo->flareShader[0]) {
-        CreateFlareSurface(ds);
+      if (refs > 0) {
+        if (ds->shaderInfo->flareShader[0]) {
+          CreateFlareSurface(ds);
+        }
+        EmitPlanarSurf(ds);
       }
-      EmitPlanarSurf(ds);
     }
     if (refs > 0) {
       c_surfs++;

@@ -53,7 +53,7 @@ void SplitMeshByPlane(mesh_t *in, vec3_t normal, float dist, mesh_t **front,
   drawVert_t *dv, *v1, *v2;
   int c_front, c_back, c_on;
   mesh_t *f, *b;
-  int i;
+  int i, j;
   float frac;
   int frontAprox, backAprox;
 
@@ -192,12 +192,14 @@ void SplitMeshByPlane(mesh_t *in, vec3_t normal, float dist, mesh_t **front,
     }
     for (i = 0; i < 2; i++) {
       dv->st[i] = v1->st[i] + frac * (v2->st[i] - v1->st[i]);
-      dv->lightmap[i] =
-          v1->lightmap[i] + frac * (v2->lightmap[i] - v1->lightmap[i]);
     }
     for (i = 0; i < 4; i++) {
-      dv->color[i] =
-          v1->color[i] + frac * ((float)v2->color[i] - (float)v1->color[i]);
+      for (j = 0; j < 2; j++) {
+        dv->lightmap[i][j] = v1->lightmap[i][j] + frac * (v2->lightmap[i][j] - v1->lightmap[i][j]);
+      }
+      for (j = 0; j < 4; j++) {
+        dv->color[i][j] = v1->color[i][j] + frac * ((float)v2->color[i][j] - (float)v1->color[i][j]);
+      }
     }
     if (frontAprox) {
       f->verts[h * f->width + split + 2] = *dv;

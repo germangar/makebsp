@@ -22,11 +22,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../common/bspfile.h"
 #include "../common/cmdlib.h"
-#include "../common/imagelib.h"
 #include "../common/mathlib.h"
 #include "../common/mutex.h"
 #include "../common/scriplib.h"
 #include "../common/threads.h"
+#include "../shared/globals.h"
 
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
@@ -45,7 +45,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define MAX_FACETS 65536
 #define MAX_LIGHTS 16384
 
-#define LIGHTMAP_SIZE 128
+#define MAX_LIGHTMAP_SIZE 1024
+#define LIGHTMAP_SIZE (g_game->lightmapSize)
 
 #define LIGHTMAP_PIXELSHIFT 0.5
 
@@ -458,39 +459,39 @@ void VL_DrawLightmapPixel(int surfaceNum, int x, int y, int color) {
   if (ds->surfaceType == MST_PATCH) {
     mesh = lsurfaceTest[surfaceNum]->detailMesh;
     VectorCopy(
-        mesh->verts[(y - ds->lightmapY) * mesh->width + x - ds->lightmapX].xyz,
+        mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x - ds->lightmapOffset[0][0]].xyz,
         w.points[0]);
     VectorCopy(
-        mesh->verts[(y + 1 - ds->lightmapY) * mesh->width + x - ds->lightmapX]
+        mesh->verts[(y + 1 - ds->lightmapOffset[0][1]) * mesh->width + x - ds->lightmapOffset[0][0]]
             .xyz,
         w.points[1]);
-    VectorCopy(mesh->verts[(y + 1 - ds->lightmapY) * mesh->width + x + 1 -
-                           ds->lightmapX]
+    VectorCopy(mesh->verts[(y + 1 - ds->lightmapOffset[0][1]) * mesh->width + x + 1 -
+                           ds->lightmapOffset[0][0]]
                    .xyz,
                w.points[2]);
     VectorCopy(
-        mesh->verts[(y - ds->lightmapY) * mesh->width + x + 1 - ds->lightmapX]
+        mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x + 1 - ds->lightmapOffset[0][0]]
             .xyz,
         w.points[3]);
     w.numpoints = 4;
   } else {
-    VectorMA(ds->lightmapOrigin, (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapX,
+    VectorMA(ds->lightmapOrigin, (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
              ds->lightmapVecs[0], w.points[0]);
-    VectorMA(w.points[0], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapY,
+    VectorMA(w.points[0], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
              ds->lightmapVecs[1], w.points[0]);
-    VectorMA(ds->lightmapOrigin, (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapX,
+    VectorMA(ds->lightmapOrigin, (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
              ds->lightmapVecs[0], w.points[1]);
-    VectorMA(w.points[1], (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapY,
+    VectorMA(w.points[1], (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapOffset[0][1],
              ds->lightmapVecs[1], w.points[1]);
     VectorMA(ds->lightmapOrigin,
-             (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapX,
+             (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapOffset[0][0],
              ds->lightmapVecs[0], w.points[2]);
-    VectorMA(w.points[2], (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapY,
+    VectorMA(w.points[2], (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapOffset[0][1],
              ds->lightmapVecs[1], w.points[2]);
     VectorMA(ds->lightmapOrigin,
-             (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapX,
+             (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapOffset[0][0],
              ds->lightmapVecs[0], w.points[3]);
-    VectorMA(w.points[3], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapY,
+    VectorMA(w.points[3], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
              ds->lightmapVecs[1], w.points[3]);
     w.numpoints = 4;
   }
@@ -937,36 +938,36 @@ void VL_LightmapMatrixFromPoints(dsurface_t *dsurf, shaderInfo_t *si,
                   f->lightmapMatrix[1]);
     }
     VectorSubtract(a->xyz, f->mins, delta);
-    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapX + 0.5) /
+    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapOffset[0][0] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(s - a->lightmap[0]) > 0.01) {
+    if (fabs(s - a->lightmap[0][0]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
-    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapY + 0.5) /
+    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapOffset[0][1] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(t - a->lightmap[1]) > 0.01) {
+    if (fabs(t - a->lightmap[0][1]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
     VectorSubtract(b->xyz, f->mins, delta);
-    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapX + 0.5) /
+    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapOffset[0][0] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(s - b->lightmap[0]) > 0.01) {
+    if (fabs(s - b->lightmap[0][0]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
-    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapY + 0.5) /
+    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapOffset[0][1] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(t - b->lightmap[1]) > 0.01) {
+    if (fabs(t - b->lightmap[0][1]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
     VectorSubtract(c->xyz, f->mins, delta);
-    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapX + 0.5) /
+    s = (DotProduct(delta, f->lightmapMatrix[0]) + dsurf->lightmapOffset[0][0] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(s - c->lightmap[0]) > 0.01) {
+    if (fabs(s - c->lightmap[0][0]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
-    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapY + 0.5) /
+    t = (DotProduct(delta, f->lightmapMatrix[1]) + dsurf->lightmapOffset[0][1] + 0.5) /
         LIGHTMAP_SIZE;
-    if (fabs(t - c->lightmap[1]) > 0.01) {
+    if (fabs(t - c->lightmap[0][1]) > 0.01) {
       _printf("Bad lightmapMatrix");
     }
     VectorAdd(f->mins, surfaceOrigin[dsurf - drawSurfaces], f->mins);
@@ -976,9 +977,9 @@ void VL_LightmapMatrixFromPoints(dsurface_t *dsurf, shaderInfo_t *si,
   for (i = 0; i < 2; i++) {
 
     if (i)
-      al = a->lightmap[i] - ((float)dsurf->lightmapY + 0.5) / LIGHTMAP_SIZE;
+      al = a->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][1] + 0.5) / LIGHTMAP_SIZE;
     else
-      al = a->lightmap[i] - ((float)dsurf->lightmapX + 0.5) / LIGHTMAP_SIZE;
+      al = a->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][0] + 0.5) / LIGHTMAP_SIZE;
 
     m[0][0] = a->xyz[0] - f->mins[0];
     m[0][1] = a->xyz[1] - f->mins[1];
@@ -986,9 +987,9 @@ void VL_LightmapMatrixFromPoints(dsurface_t *dsurf, shaderInfo_t *si,
     m[0][3] = al;
 
     if (i)
-      bl = b->lightmap[i] - ((float)dsurf->lightmapY + 0.5) / LIGHTMAP_SIZE;
+      bl = b->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][1] + 0.5) / LIGHTMAP_SIZE;
     else
-      bl = b->lightmap[i] - ((float)dsurf->lightmapX + 0.5) / LIGHTMAP_SIZE;
+      bl = b->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][0] + 0.5) / LIGHTMAP_SIZE;
 
     m[1][0] = b->xyz[0] - f->mins[0];
     m[1][1] = b->xyz[1] - f->mins[1];
@@ -996,9 +997,9 @@ void VL_LightmapMatrixFromPoints(dsurface_t *dsurf, shaderInfo_t *si,
     m[1][3] = bl;
 
     if (i)
-      cl = c->lightmap[i] - ((float)dsurf->lightmapY + 0.5) / LIGHTMAP_SIZE;
+      cl = c->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][1] + 0.5) / LIGHTMAP_SIZE;
     else
-      cl = c->lightmap[i] - ((float)dsurf->lightmapX + 0.5) / LIGHTMAP_SIZE;
+      cl = c->lightmap[0][i] - ((float)dsurf->lightmapOffset[0][0] + 0.5) / LIGHTMAP_SIZE;
 
     m[2][0] = c->xyz[0] - f->mins[0];
     m[2][1] = c->xyz[1] - f->mins[1];
@@ -1193,12 +1194,12 @@ qboolean VL_GenerateFacetFor3Points(dsurface_t *dsurf, shaderInfo_t *si,
   VectorAdd(b->xyz, surfaceOrigin[dsurf - drawSurfaces], f->points[1]);
   VectorAdd(c->xyz, surfaceOrigin[dsurf - drawSurfaces], f->points[2]);
 
-  f->lightmapCoords[0][0] = a->lightmap[0];
-  f->lightmapCoords[0][1] = a->lightmap[1];
-  f->lightmapCoords[1][0] = b->lightmap[0];
-  f->lightmapCoords[1][1] = b->lightmap[1];
-  f->lightmapCoords[2][0] = c->lightmap[0];
-  f->lightmapCoords[2][1] = c->lightmap[1];
+  f->lightmapCoords[0][0] = a->lightmap[0][0];
+  f->lightmapCoords[0][1] = a->lightmap[0][1];
+  f->lightmapCoords[1][0] = b->lightmap[0][0];
+  f->lightmapCoords[1][1] = b->lightmap[0][1];
+  f->lightmapCoords[2][0] = c->lightmap[0][0];
+  f->lightmapCoords[2][1] = c->lightmap[0][1];
 
   VL_GenerateBoundaryForPoints(&f->boundaries[0], &f->plane, f->points[0],
                                f->points[1]);
@@ -1268,14 +1269,14 @@ qboolean VL_GenerateFacetFor4Points(dsurface_t *dsurf, shaderInfo_t *si,
     }
   }
 
-  f->lightmapCoords[0][0] = a->lightmap[0];
-  f->lightmapCoords[0][1] = a->lightmap[1];
-  f->lightmapCoords[1][0] = b->lightmap[0];
-  f->lightmapCoords[1][1] = b->lightmap[1];
-  f->lightmapCoords[2][0] = c->lightmap[0];
-  f->lightmapCoords[2][1] = c->lightmap[1];
-  f->lightmapCoords[3][0] = d->lightmap[0];
-  f->lightmapCoords[3][1] = d->lightmap[1];
+  f->lightmapCoords[0][0] = a->lightmap[0][0];
+  f->lightmapCoords[0][1] = a->lightmap[0][1];
+  f->lightmapCoords[1][0] = b->lightmap[0][0];
+  f->lightmapCoords[1][1] = b->lightmap[0][1];
+  f->lightmapCoords[2][0] = c->lightmap[0][0];
+  f->lightmapCoords[2][1] = c->lightmap[0][1];
+  f->lightmapCoords[3][0] = d->lightmap[0][0];
+  f->lightmapCoords[3][1] = d->lightmap[0][1];
 
   VL_GenerateBoundaryForPoints(&f->boundaries[0], &f->plane, f->points[0],
                                f->points[1]);
@@ -1385,7 +1386,7 @@ void VL_FacetsForPatch(dsurface_t *dsurf, int surfaceNum, shaderInfo_t *si,
   int count, ssize;
   mesh_t mesh;
   mesh_t *subdivided, *detailmesh, *newmesh;
-  int widthtable[LIGHTMAP_SIZE], heighttable[LIGHTMAP_SIZE];
+  int widthtable[MAX_LIGHTMAP_SIZE], heighttable[MAX_LIGHTMAP_SIZE];
 
   mesh.width = dsurf->patchWidth;
   mesh.height = dsurf->patchHeight;
@@ -1826,7 +1827,7 @@ void VL_CalcVisibleLightmapPixelArea(void) {
       continue;
     ds = &drawSurfaces[i];
 
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
 
     for (y = 0; y < ds->lightmapHeight; y++) {
@@ -1872,9 +1873,9 @@ void VL_CalcVisibleLightmapPixelArea(void) {
             area += VL_ChopWindingWithFacet(&tmpw, &test->facets[j]);
           }
         }
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         lightmappixelarea[k] = area;
       }
     }
@@ -1913,7 +1914,7 @@ int VL_FindAdjacentSurface(int surfaceNum, int facetNum, vec3_t p1, vec3_t p2,
     if (test->trisoup) // || test->patch)
       continue;
     ds = &drawSurfaces[i];
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
     // if this surface is not even near the edge
     VectorSubtract(p1, test->origin, dir);
@@ -2005,7 +2006,7 @@ void VL_SmoothenLightmapEdges(void) {
     if (test->trisoup) // || test->patch)
       continue;
     ds1 = &drawSurfaces[i];
-    if (ds1->lightmapNum < 0)
+    if (ds1->lightmapNum[0] < 0)
       continue;
     for (j = 0; j < test->numFacets; j++) {
       facet1 = &test->facets[j];
@@ -2038,8 +2039,8 @@ void VL_SmoothenLightmapEdges(void) {
           s = DotProduct(cross, facet1->lightmapMatrix[0]);
           coords1[0][0] += s < 0 ? 1 : -1;
           coords1[1][0] += s < 0 ? 1 : -1;
-          if (coords1[0][0] < ds1->lightmapX ||
-              coords1[0][0] >= ds1->lightmapX + ds1->lightmapWidth) {
+          if (coords1[0][0] < ds1->lightmapOffset[0][0] ||
+              coords1[0][0] >= ds1->lightmapOffset[0][0] + ds1->lightmapWidth) {
             coords1[0][0] += s < 0 ? -1 : 1;
             coords1[1][0] += s < 0 ? -1 : 1;
           }
@@ -2048,8 +2049,8 @@ void VL_SmoothenLightmapEdges(void) {
           t = DotProduct(cross, facet1->lightmapMatrix[1]);
           coords1[0][1] += t < 0 ? 1 : -1;
           coords1[1][1] += t < 0 ? 1 : -1;
-          if (coords1[0][1] < ds1->lightmapY ||
-              coords1[0][1] >= ds1->lightmapY + ds1->lightmapHeight) {
+          if (coords1[0][1] < ds1->lightmapOffset[0][1] ||
+              coords1[0][1] >= ds1->lightmapOffset[0][1] + ds1->lightmapHeight) {
             coords1[0][1] += t < 0 ? -1 : 1;
             coords1[1][1] += t < 0 ? -1 : 1;
           }
@@ -2111,8 +2112,8 @@ void VL_SmoothenLightmapEdges(void) {
           continue;
         //
         while (1) {
-          k1 = (ds1->lightmapNum * LIGHTMAP_HEIGHT + y1) * LIGHTMAP_WIDTH + x1;
-          k2 = (ds2->lightmapNum * LIGHTMAP_HEIGHT + ((int)y2)) *
+          k1 = (ds1->lightmapNum[0] * LIGHTMAP_HEIGHT + y1) * LIGHTMAP_WIDTH + x1;
+          k2 = (ds2->lightmapNum[0] * LIGHTMAP_HEIGHT + ((int)y2)) *
                    LIGHTMAP_WIDTH +
                ((int)x2);
           color1 = lightFloats + k1 * 3;
@@ -2133,14 +2134,14 @@ void VL_SmoothenLightmapEdges(void) {
           y1 += yinc1;
           x2 += xinc2;
           y2 += yinc2;
-          if (x2 < ds2->lightmapX)
-            x2 = ds2->lightmapX;
-          if (x2 >= ds2->lightmapX + ds2->lightmapWidth)
-            x2 = ds2->lightmapX + ds2->lightmapWidth - 1;
-          if (y2 < ds2->lightmapY)
-            y2 = ds2->lightmapY;
-          if (y2 >= ds2->lightmapY + ds2->lightmapHeight)
-            y2 = ds2->lightmapY + ds2->lightmapHeight - 1;
+          if (x2 < ds2->lightmapOffset[0][0])
+            x2 = ds2->lightmapOffset[0][0];
+          if (x2 >= ds2->lightmapOffset[0][0] + ds2->lightmapWidth)
+            x2 = ds2->lightmapOffset[0][0] + ds2->lightmapWidth - 1;
+          if (y2 < ds2->lightmapOffset[0][1])
+            y2 = ds2->lightmapOffset[0][1];
+          if (y2 >= ds2->lightmapOffset[0][1] + ds2->lightmapHeight)
+            y2 = ds2->lightmapOffset[0][1] + ds2->lightmapHeight - 1;
         }
       }
     }
@@ -2159,7 +2160,7 @@ void VL_FixLightmapEdges(void) {
   lsurfaceTest_t *test;
   float color[3];
   float *ptr;
-  byte filled[(LIGHTMAP_SIZE + 1) * (LIGHTMAP_SIZE + 1) / 8];
+  byte filled[(MAX_LIGHTMAP_SIZE + 1) * (MAX_LIGHTMAP_SIZE + 1) / 8];
   float lightmap_edge_epsilon;
 
   lightmap_edge_epsilon = 0.1 * samplesize;
@@ -2169,7 +2170,7 @@ void VL_FixLightmapEdges(void) {
       continue;
     ds = &drawSurfaces[i];
 
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
     if (ds->surfaceType == MST_PATCH) {
       height = ds->lightmapHeight - 1;
@@ -2182,11 +2183,11 @@ void VL_FixLightmapEdges(void) {
     //		printf("\n");
     for (x = 0; x < width; x++) {
       for (y = 0; y < height; y++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         if (lightmappixelarea[k] > lightmap_edge_epsilon) {
-          index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+          index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
           filled[index >> 3] |= 1 << (index & 7);
           //					printf("*");
         }
@@ -2198,7 +2199,7 @@ void VL_FixLightmapEdges(void) {
     for (y = 0; y < height; y++) {
       pos = -2;
       for (x = 0; x < width; x++) {
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (pos == -2) {
           if (filled[index >> 3] & (1 << (index & 7)))
             pos = -1;
@@ -2207,26 +2208,26 @@ void VL_FixLightmapEdges(void) {
             pos = x - 1;
         } else {
           if (filled[index >> 3] & (1 << (index & 7))) {
-            bottom = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+            bottom = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                          LIGHTMAP_WIDTH +
-                     ds->lightmapX + pos;
-            top = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+                     ds->lightmapOffset[0][0] + pos;
+            top = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + x;
+                  ds->lightmapOffset[0][0] + x;
             for (j = 0; j < (x - pos + 1) / 2; j++) {
-              k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+              k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + pos + j + 1;
-              index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX +
+                  ds->lightmapOffset[0][0] + pos + j + 1;
+              index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] +
                       pos + j + 1;
               filled[index >> 3] |= 1 << (index & 7);
               (lightFloats + k * 3)[0] = (lightFloats + top * 3)[0];
               (lightFloats + k * 3)[1] = (lightFloats + top * 3)[1];
               (lightFloats + k * 3)[2] = (lightFloats + top * 3)[2];
-              k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+              k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + x - j - 1;
-              index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x -
+                  ds->lightmapOffset[0][0] + x - j - 1;
+              index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x -
                       j - 1;
               filled[index >> 3] |= 1 << (index & 7);
               (lightFloats + k * 3)[0] = (lightFloats + bottom * 3)[0];
@@ -2241,7 +2242,7 @@ void VL_FixLightmapEdges(void) {
     for (x = 0; x < width; x++) {
       pos = -2;
       for (y = 0; y < height; y++) {
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (pos == -2) {
           if (filled[index >> 3] & (1 << (index & 7)))
             pos = -1;
@@ -2250,29 +2251,29 @@ void VL_FixLightmapEdges(void) {
             pos = y - 1;
         } else {
           if (filled[index >> 3] & (1 << (index & 7))) {
-            bottom = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + pos) *
+            bottom = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + pos) *
                          LIGHTMAP_WIDTH +
-                     ds->lightmapX + x;
-            top = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+                     ds->lightmapOffset[0][0] + x;
+            top = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + x;
+                  ds->lightmapOffset[0][0] + x;
             for (j = 0; j < (y - pos + 1) / 2; j++) {
-              k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + pos + j +
+              k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + pos + j +
                    1) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + x;
-              index = (ds->lightmapY + pos + j + 1) * LIGHTMAP_WIDTH +
-                      ds->lightmapX + x;
+                  ds->lightmapOffset[0][0] + x;
+              index = (ds->lightmapOffset[0][1] + pos + j + 1) * LIGHTMAP_WIDTH +
+                      ds->lightmapOffset[0][0] + x;
               filled[index >> 3] |= 1 << (index & 7);
               (lightFloats + k * 3)[0] = (lightFloats + top * 3)[0];
               (lightFloats + k * 3)[1] = (lightFloats + top * 3)[1];
               (lightFloats + k * 3)[2] = (lightFloats + top * 3)[2];
-              k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y - j -
+              k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y - j -
                    1) *
                       LIGHTMAP_WIDTH +
-                  ds->lightmapX + x;
-              index = (ds->lightmapY + y - j - 1) * LIGHTMAP_WIDTH +
-                      ds->lightmapX + x;
+                  ds->lightmapOffset[0][0] + x;
+              index = (ds->lightmapOffset[0][1] + y - j - 1) * LIGHTMAP_WIDTH +
+                      ds->lightmapOffset[0][0] + x;
               filled[index >> 3] |= 1 << (index & 7);
               (lightFloats + k * 3)[0] = (lightFloats + bottom * 3)[0];
               (lightFloats + k * 3)[1] = (lightFloats + bottom * 3)[1];
@@ -2286,10 +2287,10 @@ void VL_FixLightmapEdges(void) {
     for (y = 0; y < height; y++) {
       foundvalue = qfalse;
       for (x = 0; x < width; x++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (foundvalue) {
           if (filled[index >> 3] & (1 << (index & 7))) {
             ptr = lightFloats + k * 3;
@@ -2315,10 +2316,10 @@ void VL_FixLightmapEdges(void) {
       }
       foundvalue = qfalse;
       for (x = width - 1; x >= 0; x--) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (foundvalue) {
           if (filled[index >> 3] & (1 << (index & 7))) {
             ptr = lightFloats + k * 3;
@@ -2346,10 +2347,10 @@ void VL_FixLightmapEdges(void) {
     for (x = 0; x < width; x++) {
       foundvalue = qfalse;
       for (y = 0; y < height; y++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (foundvalue) {
           if (filled[index >> 3] & (1 << (index & 7))) {
             ptr = lightFloats + k * 3;
@@ -2375,10 +2376,10 @@ void VL_FixLightmapEdges(void) {
       }
       foundvalue = qfalse;
       for (y = height - 1; y >= 0; y--) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
-        index = (ds->lightmapY + y) * LIGHTMAP_WIDTH + ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
+        index = (ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
         if (foundvalue) {
           if (filled[index >> 3] & (1 << (index & 7))) {
             ptr = lightFloats + k * 3;
@@ -2406,9 +2407,9 @@ void VL_FixLightmapEdges(void) {
     if (ds->surfaceType == MST_PATCH) {
       x = ds->lightmapWidth - 1;
       for (y = 0; y < ds->lightmapHeight; y++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         ptr = lightFloats + k * 3;
         ptr[0] = (lightFloats + (k - 1) * 3)[0];
         ptr[1] = (lightFloats + (k - 1) * 3)[1];
@@ -2416,9 +2417,9 @@ void VL_FixLightmapEdges(void) {
       }
       y = ds->lightmapHeight - 1;
       for (x = 0; x < ds->lightmapWidth; x++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         ptr = lightFloats + k * 3;
         ptr[0] = (lightFloats + (k - LIGHTMAP_WIDTH) * 3)[0];
         ptr[1] = (lightFloats + (k - LIGHTMAP_WIDTH) * 3)[1];
@@ -2432,8 +2433,8 @@ void VL_FixLightmapEdges(void) {
             x = ds->lightmapWidth-1;
             for (y = 0; y < ds->lightmapHeight; y++)
             {
-                    k = ( ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y)
-                                    * LIGHTMAP_WIDTH + ds->lightmapX + x;
+                    k = ( ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y)
+                                    * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
                     ptr = lightFloats + k*3;
                     ptr[0] = 255;
                     ptr[1] = 0;
@@ -2442,8 +2443,8 @@ void VL_FixLightmapEdges(void) {
             y = ds->lightmapHeight-1;
             for (x = 0; x < ds->lightmapWidth; x++)
             {
-                    k = ( ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y)
-                                    * LIGHTMAP_WIDTH + ds->lightmapX + x;
+                    k = ( ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y)
+                                    * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
                     ptr = lightFloats + k*3;
                     ptr[0] = 0;
                     ptr[1] = 255;
@@ -2474,15 +2475,15 @@ void VL_ShiftPatchLightmaps(void) {
       continue;
     ds = &drawSurfaces[i];
 
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
     if (ds->surfaceType != MST_PATCH)
       continue;
     for (x = ds->lightmapWidth; x > 0; x--) {
       for (y = 0; y <= ds->lightmapHeight; y++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         ptr = lightFloats + k * 3;
         ptr[0] = (lightFloats + (k - 1) * 3)[0];
         ptr[1] = (lightFloats + (k - 1) * 3)[1];
@@ -2491,9 +2492,9 @@ void VL_ShiftPatchLightmaps(void) {
     }
     for (y = ds->lightmapHeight; y > 0; y--) {
       for (x = 0; x <= ds->lightmapWidth; x++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         ptr = lightFloats + k * 3;
         ptr[0] = (lightFloats + (k - LIGHTMAP_WIDTH) * 3)[0];
         ptr[1] = (lightFloats + (k - LIGHTMAP_WIDTH) * 3)[1];
@@ -2502,8 +2503,8 @@ void VL_ShiftPatchLightmaps(void) {
     }
     verts = &drawVerts[ds->firstVert];
     for (j = 0; j < ds->patchHeight * ds->patchWidth; j++) {
-      verts[j].lightmap[0] += 0.5 / LIGHTMAP_WIDTH;
-      verts[j].lightmap[1] += 0.5 / LIGHTMAP_HEIGHT;
+      verts[j].lightmap[0][0] += 0.5 / LIGHTMAP_WIDTH;
+      verts[j].lightmap[0][1] += 0.5 / LIGHTMAP_HEIGHT;
     }
     ds->lightmapHeight++;
     ds->lightmapWidth++;
@@ -2536,14 +2537,14 @@ void VL_StoreLightmap(void) {
       continue;
     ds = &drawSurfaces[i];
 
-    if (ds->lightmapNum < 0)
+    if (ds->lightmapNum[0] < 0)
       continue;
 
     for (y = 0; y < ds->lightmapHeight; y++) {
       for (x = 0; x < ds->lightmapWidth; x++) {
-        k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+        k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
                 LIGHTMAP_WIDTH +
-            ds->lightmapX + x;
+            ds->lightmapOffset[0][0] + x;
         VectorAdd((lightFloats + k * 3), lightAmbientColor,
                   (lightFloats + k * 3));
         src = &lightFloats[k * 3];
@@ -2751,7 +2752,7 @@ lightvolume_t *volume )
                 return;
         }
 
-        if ( ds->lightmapNum < 0 ) {
+        if ( ds->lightmapNum[0] < 0 ) {
                 return;		// doesn't need lighting
         }
 
@@ -2812,9 +2813,9 @@ lightmapVecs[1][k];
 
                         if (VL_PointInsideLightVolume(base, volume))
                         {
-                                k = ( ds->lightmapNum * LIGHTMAP_HEIGHT +
-ds->lightmapY + j)
-                                        * LIGHTMAP_WIDTH + ds->lightmapX + i;
+                                k = ( ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
+ds->lightmapOffset[0][1] + j)
+                                        * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + i;
                                 ptr = lightBytes + k*3;
                                 color[0] = (float) ptr[0] + add *
 light->color[0]; color[1] = (float) ptr[1] + add * light->color[1]; color[2] =
@@ -2964,13 +2965,13 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
   lsurfaceTest_t *test;
   winding_t w;
   vec3_t base, dir, delta, normal, filter, origin;
-  int min_x[LIGHTMAP_SIZE + 2], max_x[LIGHTMAP_SIZE + 2];
+  int min_x[MAX_LIGHTMAP_SIZE + 2], max_x[MAX_LIGHTMAP_SIZE + 2];
   int min_y, max_y, k, x, y, n;
   float *color, distscale;
   float d, add, angle, dist, area, insidearea,
       coords[MAX_POINTS_ON_WINDING + 1][2];
   mesh_t *mesh;
-  byte polygonedges[(LIGHTMAP_SIZE + 1) * (LIGHTMAP_SIZE + 1) / 8];
+  byte polygonedges[(MAX_LIGHTMAP_SIZE + 1) * (MAX_LIGHTMAP_SIZE + 1) / 8];
 
   ds = &drawSurfaces[surfaceNum];
 
@@ -2979,7 +2980,7 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
     return;
   }
 
-  if (ds->lightmapNum < 0) {
+  if (ds->lightmapNum[0] < 0) {
     return; // doesn't need lighting
   }
 
@@ -3007,11 +3008,11 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
 
   if (ds->surfaceType == MST_PATCH) {
     // FIXME: reduce size and don't mark all as edge
-    min_y = ds->lightmapY + facet->y;
-    max_y = ds->lightmapY + facet->y + facet->height - 1;
+    min_y = ds->lightmapOffset[0][1] + facet->y;
+    max_y = ds->lightmapOffset[0][1] + facet->y + facet->height - 1;
     for (y = min_y; y <= max_y; y++) {
-      min_x[y] = ds->lightmapX + facet->x;
-      max_x[y] = ds->lightmapX + facet->x + facet->width - 1;
+      min_x[y] = ds->lightmapOffset[0][0] + facet->x;
+      max_x[y] = ds->lightmapOffset[0][0] + facet->x + facet->width - 1;
       for (x = min_x[y]; x <= max_x[y]; x++) {
         n = y * LIGHTMAP_SIZE + x;
         polygonedges[n >> 3] |= 1 << (n & 7);
@@ -3025,8 +3026,8 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         _printf("coords overflow\n");
       if (ds->surfaceType != MST_PATCH) {
         VectorSubtract(w.points[i], facet->mins, delta);
-        s = DotProduct(delta, facet->lightmapMatrix[0]) + ds->lightmapX + 0.5;
-        t = DotProduct(delta, facet->lightmapMatrix[1]) + ds->lightmapY + 0.5;
+        s = DotProduct(delta, facet->lightmapMatrix[0]) + ds->lightmapOffset[0][0] + 0.5;
+        t = DotProduct(delta, facet->lightmapMatrix[1]) + ds->lightmapOffset[0][1] + 0.5;
         if (s >= LIGHTMAP_SIZE)
           s = LIGHTMAP_SIZE - 0.5;
         if (s < 0)
@@ -3046,23 +3047,23 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         s = s - floor(s);
         t = t - floor(t);
 
-        coords[i][0] = ds->lightmapX + s * LIGHTMAP_SIZE; // + 0.5;
-        coords[i][1] = ds->lightmapY + t * LIGHTMAP_SIZE; // + 0.5;
+        coords[i][0] = ds->lightmapOffset[0][0] + s * LIGHTMAP_SIZE; // + 0.5;
+        coords[i][1] = ds->lightmapOffset[0][1] + t * LIGHTMAP_SIZE; // + 0.5;
 
         if (coords[i][0] >= LIGHTMAP_SIZE)
           coords[i][0] -= LIGHTMAP_SIZE;
         if (coords[i][1] >= LIGHTMAP_SIZE)
           coords[i][1] -= LIGHTMAP_SIZE;
-        if (coords[i][0] < ds->lightmapX)
-          coords[i][0] = ds->lightmapX;
-        if (coords[i][1] < ds->lightmapY)
-          coords[i][1] = ds->lightmapY;
+        if (coords[i][0] < ds->lightmapOffset[0][0])
+          coords[i][0] = ds->lightmapOffset[0][0];
+        if (coords[i][1] < ds->lightmapOffset[0][1])
+          coords[i][1] = ds->lightmapOffset[0][1];
       }
       x = coords[i][0];
       y = coords[i][1];
-      if (x < ds->lightmapX || x >= LIGHTMAP_SIZE)
+      if (x < ds->lightmapOffset[0][0] || x >= LIGHTMAP_SIZE)
         _printf("VL_LightSurfaceWithVolume: x outside lightmap\n");
-      if (y < ds->lightmapY || y >= LIGHTMAP_SIZE)
+      if (y < ds->lightmapOffset[0][1] || y >= LIGHTMAP_SIZE)
         _printf("VL_LightSurfaceWithVolume: y outside lightmap\n");
     }
     coords[i][0] = coords[0][0];
@@ -3119,9 +3120,9 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         else
           ystep = 0;
         while (1) {
-          if (x < ds->lightmapX || x >= LIGHTMAP_SIZE)
+          if (x < ds->lightmapOffset[0][0] || x >= LIGHTMAP_SIZE)
             _printf("VL_LightSurfaceWithVolume: x outside lightmap\n");
-          if (y < ds->lightmapY || y >= LIGHTMAP_SIZE)
+          if (y < ds->lightmapOffset[0][1] || y >= LIGHTMAP_SIZE)
             _printf("VL_LightSurfaceWithVolume: y outside lightmap\n");
           //
           n = y * LIGHTMAP_SIZE + x;
@@ -3177,9 +3178,9 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         else
           xstep = 0;
         while (1) {
-          if (x < ds->lightmapX || x >= LIGHTMAP_SIZE)
+          if (x < ds->lightmapOffset[0][0] || x >= LIGHTMAP_SIZE)
             _printf("VL_LightSurfaceWithVolume: x outside lightmap\n");
-          if (y < ds->lightmapY || y >= LIGHTMAP_SIZE)
+          if (y < ds->lightmapOffset[0][1] || y >= LIGHTMAP_SIZE)
             _printf("VL_LightSurfaceWithVolume: y outside lightmap\n");
           //
           n = y * LIGHTMAP_SIZE + x;
@@ -3225,18 +3226,18 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
       if (ds->surfaceType == MST_PATCH) {
         mesh = test->detailMesh;
         VectorCopy(
-            mesh->verts[(y - ds->lightmapY) * mesh->width + x - ds->lightmapX]
+            mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x - ds->lightmapOffset[0][0]]
                 .xyz,
             base);
         VectorCopy(
-            mesh->verts[(y - ds->lightmapY) * mesh->width + x - ds->lightmapX]
+            mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x - ds->lightmapOffset[0][0]]
                 .normal,
             normal);
         // VectorCopy(facet->plane.normal, normal);
       } else {
-        VectorMA(ds->lightmapOrigin, (float)x - ds->lightmapX,
+        VectorMA(ds->lightmapOrigin, (float)x - ds->lightmapOffset[0][0],
                  ds->lightmapVecs[0], base);
-        VectorMA(base, (float)y - ds->lightmapY, ds->lightmapVecs[1], base);
+        VectorMA(base, (float)y - ds->lightmapOffset[0][1], ds->lightmapVecs[1], base);
         VectorCopy(facet->plane.normal, normal);
       }
       if (light->type == LIGHT_POINTSPOT) {
@@ -3273,20 +3274,8 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         if (dist < 16) {
           dist = 16;
         }
-        angle = DotProduct(normal, dir);
-        if (angle > 1)
-          angle = 1;
-        if (angle > 0) {
-          if (light->atten_angletype == LAAT_QUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle;
-            angle = 1 - angle;
-          } else if (light->atten_angletype == LAAT_DOUBLEQUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle * angle;
-            angle = 1 - angle;
-          }
-        }
+        angle = CalculateFalloff(DotProduct(normal, dir));
+
         if (light->atten_anglescale > 0) {
           angle /= light->atten_anglescale;
           if (angle > 1)
@@ -3297,29 +3286,28 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         } else {
           distscale = 1;
         }
-        //
         if (light->atten_disttype == LDAT_NOSCALE) {
-          add = angle * coneScale;
+          add = angle;
         } else if (light->atten_disttype == LDAT_LINEAR) {
-          add = angle * light->photons * lightLinearScale * coneScale -
-                dist * distscale;
+          add = angle * light->photons * lightLinearScale - dist * distscale;
           if (add < 0) {
             add = 0;
           }
-        } else {
+        } else { // default quadratic
           add = light->photons / (dist * dist * distscale) * angle * coneScale;
         }
+
         if (add <= 1.0)
           continue;
       } else if (light->type == LIGHT_POINTFAKESURFACE) {
         // calculate the contribution
-        add = PointToPolygonFormFactor(base, normal, &light->w);
+        float formFactor = PointToPolygonFormFactor(base, normal, &light->w);
+        if (formFactor < 0 && light->twosided) {
+          formFactor = -formFactor;
+        }
+        add = CalculateFalloff(formFactor);
         if (add <= 0) {
-          if (light->twosided) {
-            add = -add;
-          } else {
-            continue;
-          }
+          continue;
         }
       } else if (light->type == LIGHT_SURFACEDIRECTED) {
         // VectorCopy(light->normal, dir);
@@ -3334,20 +3322,8 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
           dist = 16;
         }
         //
-        angle = DotProduct(normal, dir);
-        if (angle > 1)
-          angle = 1;
-        if (angle > 0) {
-          if (light->atten_angletype == LAAT_QUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle;
-            angle = 1 - angle;
-          } else if (light->atten_angletype == LAAT_DOUBLEQUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle * angle;
-            angle = 1 - angle;
-          }
-        }
+        angle = CalculateFalloff(DotProduct(normal, dir));
+
         if (light->atten_anglescale > 0) {
           angle /= light->atten_anglescale;
           if (angle > 1)
@@ -3377,20 +3353,8 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
         if (dist < 16) {
           dist = 16;
         }
-        angle = DotProduct(normal, dir);
-        if (angle > 1)
-          angle = 1;
-        if (angle > 0) {
-          if (light->atten_angletype == LAAT_QUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle;
-            angle = 1 - angle;
-          } else if (light->atten_angletype == LAAT_DOUBLEQUADRATIC) {
-            angle = 1 - angle;
-            angle *= angle * angle;
-            angle = 1 - angle;
-          }
-        }
+        angle = CalculateFalloff(DotProduct(normal, dir));
+
         if (light->atten_anglescale > 0) {
           angle /= light->atten_anglescale;
           if (angle > 1)
@@ -3408,72 +3372,65 @@ void VL_LightSurfaceWithVolume(int surfaceNum, int facetNum, vlight_t *light,
           if (add < 0) {
             add = 0;
           }
-        } else {
+        } else { // default quadratic
           add = light->photons / (dist * dist * distscale) * angle;
         }
-        if (add <= 1.0)
+        if (add <= 0)
           continue;
       }
-      //
-      k = (ds->lightmapNum * LIGHTMAP_HEIGHT + y) * LIGHTMAP_WIDTH + x;
-      // if on one of the edges
-      n = y * LIGHTMAP_SIZE + x;
-      if ((polygonedges[n >> 3] & (1 << (n & 7)))) {
-        // multiply 'add' by the relative area being lit of the total visible
-        // lightmap pixel area
-        //
-        // first create a winding for the lightmap pixel
-        if (ds->surfaceType == MST_PATCH) {
-          mesh = test->detailMesh;
-          if (y - ds->lightmapY >= mesh->height - 1)
-            _printf("y outside mesh\n");
-          if (x - ds->lightmapX >= mesh->width - 1)
-            _printf("x outside mesh\n");
-          VectorCopy(
-              mesh->verts[(y - ds->lightmapY) * mesh->width + x - ds->lightmapX]
-                  .xyz,
-              w.points[0]);
-          VectorCopy(mesh->verts[(y + 1 - ds->lightmapY) * mesh->width + x -
-                                 ds->lightmapX]
-                         .xyz,
-                     w.points[1]);
-          VectorCopy(mesh->verts[(y + 1 - ds->lightmapY) * mesh->width + x + 1 -
-                                 ds->lightmapX]
-                         .xyz,
-                     w.points[2]);
-          VectorCopy(mesh->verts[(y - ds->lightmapY) * mesh->width + x + 1 -
-                                 ds->lightmapX]
-                         .xyz,
-                     w.points[3]);
-          w.numpoints = 4;
-        } else {
-          VectorMA(ds->lightmapOrigin,
-                   (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapX,
-                   ds->lightmapVecs[0], w.points[0]);
-          VectorMA(w.points[0], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapY,
-                   ds->lightmapVecs[1], w.points[0]);
-          VectorMA(ds->lightmapOrigin,
-                   (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapX,
-                   ds->lightmapVecs[0], w.points[1]);
-          VectorMA(w.points[1],
-                   (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapY,
-                   ds->lightmapVecs[1], w.points[1]);
-          VectorMA(ds->lightmapOrigin,
-                   (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapX,
-                   ds->lightmapVecs[0], w.points[2]);
-          VectorMA(w.points[2],
-                   (float)y - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapY,
-                   ds->lightmapVecs[1], w.points[2]);
-          VectorMA(ds->lightmapOrigin,
-                   (float)x - LIGHTMAP_PIXELSHIFT + 1 - ds->lightmapX,
-                   ds->lightmapVecs[0], w.points[3]);
-          VectorMA(w.points[3], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapY,
-                   ds->lightmapVecs[1], w.points[3]);
-          w.numpoints = 4;
-        }
-        //
-        // take the visible area of the lightmap pixel into account
-        //
+      // if the lightmap pixel is a patch, we need to calculate the area of the
+      // lightmap pixel
+      if (ds->surfaceType == MST_PATCH) {
+        mesh = test->detailMesh;
+        if (y - ds->lightmapOffset[0][1] >= mesh->height - 1)
+          _printf("y outside mesh\n");
+        if (x - ds->lightmapOffset[0][0] >= mesh->width - 1)
+          _printf("x outside mesh\n");
+        VectorCopy(
+            mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x - ds->lightmapOffset[0][0]]
+                .xyz,
+            w.points[0]);
+        VectorCopy(mesh->verts[(y + 1 - ds->lightmapOffset[0][1]) * mesh->width + x -
+                               ds->lightmapOffset[0][0]]
+                       .xyz,
+                   w.points[1]);
+        VectorCopy(mesh->verts[(y + 1 - ds->lightmapOffset[0][1]) * mesh->width + x + 1 -
+                               ds->lightmapOffset[0][0]]
+                       .xyz,
+                   w.points[2]);
+        VectorCopy(mesh->verts[(y - ds->lightmapOffset[0][1]) * mesh->width + x + 1 -
+                               ds->lightmapOffset[0][0]]
+                       .xyz,
+                   w.points[3]);
+        w.numpoints = 4;
+      } else {
+        VectorMA(ds->lightmapOrigin,
+                 (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
+                 ds->lightmapVecs[0], w.points[0]);
+        VectorMA(w.points[0], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
+                 ds->lightmapVecs[1], w.points[0]);
+        VectorMA(ds->lightmapOrigin,
+                 (float)x - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
+                 ds->lightmapVecs[0], w.points[3]);
+        VectorMA(w.points[3], (float)y + LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
+                 ds->lightmapVecs[1], w.points[3]);
+        VectorMA(ds->lightmapOrigin,
+                 (float)x + LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
+                 ds->lightmapVecs[0], w.points[2]);
+        VectorMA(w.points[2], (float)y + LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
+                 ds->lightmapVecs[1], w.points[2]);
+        VectorMA(ds->lightmapOrigin,
+                 (float)x + LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][0],
+                 ds->lightmapVecs[0], w.points[1]);
+        VectorMA(w.points[1], (float)y - LIGHTMAP_PIXELSHIFT - ds->lightmapOffset[0][1],
+                 ds->lightmapVecs[1], w.points[1]);
+        w.numpoints = 4;
+      }
+      // if the lightmap pixel is partly inside the light volume
+      if (polygonedges[(y * LIGHTMAP_SIZE + x) >> 3] &
+          (1 << ((y * LIGHTMAP_SIZE + x) & 7))) {
+        // if the lightmap pixel is a patch, we need to calculate the area of the
+        // lightmap pixel
         // area = WindingArea(&w);
         area = lightmappixelarea[k];
         if (area <= 0)
@@ -4557,7 +4514,7 @@ void VL_DoForcedTraceLight(int num) {
   if (ds->surfaceType == MST_TRIANGLE_SOUP)
     return;
 
-  if (ds->lightmapNum < 0)
+  if (ds->lightmapNum[0] < 0)
     return;
 
   // always light entity surfaces with the old light algorithm
@@ -4605,7 +4562,7 @@ void VL_SurfaceRadiosity(int num) {
 
   ds = &drawSurfaces[num];
 
-  if (ds->lightmapNum < 0) {
+  if (ds->lightmapNum[0] < 0) {
     return; // doesn't have a lightmap
   }
 
@@ -4624,9 +4581,9 @@ void VL_SurfaceRadiosity(int num) {
   for (x = 0; x < ds->lightmapWidth; x++) {
     for (y = 0; y < ds->lightmapHeight; y++) {
       //
-      k = (ds->lightmapNum * LIGHTMAP_HEIGHT + ds->lightmapY + y) *
+      k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) *
               LIGHTMAP_WIDTH +
-          ds->lightmapX + x;
+          ds->lightmapOffset[0][0] + x;
       area = lightmappixelarea[k];
       if (area <= 0)
         continue;

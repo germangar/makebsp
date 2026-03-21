@@ -205,7 +205,7 @@ void AddSurfaceEdges(mapDrawSurface_t *ds) {
   for (i = 0; i < ds->numVerts; i++) {
     // save the edge number in the lightmap field
     // so we don't need to look it up again
-    ds->verts[i].lightmap[0] = AddEdge(
+    ds->verts[i].lightmap[0][0] = AddEdge(
         ds->verts[i].xyz, ds->verts[(i + 1) % ds->numVerts].xyz, qfalse);
   }
 }
@@ -296,14 +296,14 @@ void AddPatchEdges(mapDrawSurface_t *ds) {
 FixSurfaceJunctions
 ====================
 */
-#define MAX_SURFACE_VERTS 256
+#define MAX_TJUNCTION_VERTS 1024
 void FixSurfaceJunctions(mapDrawSurface_t *ds) {
   int i, j, k;
   edgeLine_t *e;
   edgePoint_t *p;
-  int counts[MAX_SURFACE_VERTS];
-  int originals[MAX_SURFACE_VERTS];
-  drawVert_t verts[MAX_SURFACE_VERTS], *v1, *v2;
+  int counts[MAX_TJUNCTION_VERTS];
+  int originals[MAX_TJUNCTION_VERTS];
+  drawVert_t verts[MAX_TJUNCTION_VERTS], *v1, *v2;
   int numVerts;
   float start, end, frac;
   vec3_t delta;
@@ -324,7 +324,7 @@ void FixSurfaceJunctions(mapDrawSurface_t *ds) {
     v1 = &ds->verts[i];
     v2 = &ds->verts[(i + 1) % ds->numVerts];
 
-    j = (int)ds->verts[i].lightmap[0];
+    j = (int)ds->verts[i].lightmap[0][0];
     if (j == -1) {
       continue; // degenerate edge
     }
@@ -508,7 +508,7 @@ void FixTJunctions(entity_t *ent) {
   // this gives the most accurate edge description
   for (i = 0; i < numOriginalEdges; i++) {
     e = &originalEdges[i];
-    e->dv[0]->lightmap[0] = AddEdge(e->dv[0]->xyz, e->dv[1]->xyz, qtrue);
+    e->dv[0]->lightmap[0][0] = AddEdge(e->dv[0]->xyz, e->dv[1]->xyz, qtrue);
   }
 
   qprintf("%6i axial edge lines\n", axialEdgeLines);

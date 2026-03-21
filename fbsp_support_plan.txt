@@ -1,0 +1,83 @@
+# FBSP (QFusion) Support Implementation Plan
+
+## PART 1: FULL PLAN FOR HUMANS
+
+### 1. Introduction
+The goal is to add support for the QFusion BSP format (FBSP version 1) to the `makebsp` compiler suite while maintaining full compatibility with the standard Quake 3 format (IBSP version 46). The implementation will leverage a "Unified Internal Format" strategy to minimize branching in the core geometry and lighting logic.
+
+### 2. Architectural Strategy: Unified Internal Format
+Instead of using different structures throughout the compiler depending on the target game, we will expand the internal compiler structures (`drawVert_t`, `dsurface_t`, and light grid structs) to the maximum capacity required by any supported format (currently FBSP's 4 lightmap/color layers).
+- **Benefit:** Core algorithms (VIS, Lighting, CSG) only see one format.
+- **I/O Layer:** The conversion to the specific on-disk format (e.g., stripping extra layers for IBSP or palette-izing the light grid for FBSP) happens only during the final write/load stages in `common/bspfile.c`.
+
+### 3. Implementation Phases
+
+#### Phase 1: Global Game Configuration
+- **Objective:** Allow the user to specify `-game qfusion` or `-game quake3`.
+- **Files:** `shared/globals.h`, `shared/globals.c`, `q3map/main.c`, `light/main.c`.
+- **Changes:**
+    - Define a `game_t` struct containing: `bspIdent`, `bspVersion`, `lumpCount`, `lightmapsRGB`, `lightAngleHL`, `deluxeMap`, `maxLMSurfaceVerts`, etc.
+    - Create a global `g_game` pointer.
+    - Implement command-line parsing for `-game` in both executables.
+
+#### Phase 2: Internal Structure Expansion
+- **Objective:** Prepare structures for multi-layered lighting.
+- **Files:** `common/qfiles.h`, `common/bspfile.h`.
+- **Changes:**
+    - Expand `drawVert_t`: `float lightmap[2]` -> `float lightmap[4][2]`, `byte color[4]` -> `byte color[4][4]`.
+    - Expand `dsurface_t`: Add arrays for `lightmapNum`, `lightmapX`, `lightmapY`, and `styles`.
+    - Expand light grid point structures to support 4 layers of ambient/directed light.
+
+#### Phase 3: Abstraction of the I/O Layer (The "Bridge")
+- **Objective:** Implement format-specific reading and writing.
+- **Files:** `common/bspfile.c`.
+- **Changes:**
+    - **Writing IBSP:** Define local "bridge" structs (e.g., `ibspDrawVert_t`) that match the standard 44-byte Q3 vertex. Loop through the expanded internal data and copy only layer 0 to the bridge struct before writing the lump.
+    - **Writing FBSP:** Write the expanded structures directly. Implement the `LUMP_LIGHTARRAY` logic which involves de-duplicating light grid points into a palette (`LUMP_LIGHTGRID`) and writing indices to the new lump.
+    - **Header Logic:** Ensure `header->ident` and `header->version` match the selected game.
+
+#### Phase 4: Lighting Core Enhancements
+- **Objective:** Implement QFusion-specific lighting math.
+- **Files:** `light/light.c`, `light/lightv.c`, `light/light_trace.c`.
+- **Changes:**
+    - **sRGB:** Implement `LinearToSRGB` and `SRGBToLinear` conversions. Apply to texture sampling and final lightmap/vertex color storage if `g_game->lightmapsRGB` is set.
+    - **Half-Lambert:** Implement the `(dot * 0.5 + 0.5)^2` attenuation if `g_game->lightAngleHL` is set.
+    - **Deluxemaps:** Add logic to calculate the primary light vector during the trace and store it in the second lightmap layer if `g_game->deluxeMap` is enabled.
+
+#### Phase 5: Testing and Validation
+- **IBSP Regression:** Compile a known Q3 map and verify it still works in a standard Q3 engine.
+- **FBSP Validation:** Compile a map with `-game qfusion` and verify the output BSP has the "FBSP" ident and 18 lumps using a hex editor or BSP info tool.
+
+---
+
+## PART 2: CONDENSED PLAN FOR AI (iA)
+
+### 1. Configuration (Globals)
+- **`shared/globals.h`**: Add `game_t` struct. Members: `char ident[4]`, `int version`, `int lumps`, `bool sRGB`, `bool halfLambert`, `bool deluxe`.
+- **`shared/globals.c`**: Define `game_t games[]` (quake3, qfusion). Default `g_game = &games[0]`.
+- **`q3map/main.c` / `light/main.c`**: Add `if(!strcmp(argv[i], "-game")) g_game = FindGame(argv[++i]);`.
+
+### 2. Structs (Internal)
+- **`common/qfiles.h`**: 
+    - `drawVert_t`: Expand `lightmap[4][2]`, `color[4][4]`.
+    - `dsurface_t`: Expand `lightmapNum[4]`, `styles[4]`, etc.
+    - `dgrid_t`: Expand to 4 layers.
+
+### 3. I/O (Drivers)
+- **`common/bspfile.c`**:
+    - `SwapBSPFile()`: Add branching logic for vertex/surface sizes.
+    - `WriteBSPFile()`: 
+        - If `IBSP`: Use `ibspDrawVert_t` (44 bytes) as buffer, copy `internal->layer[0]` to `buffer`, write lump.
+        - If `FBSP`: Write expanded `drawVert_t` (80 bytes).
+    - `LightGrid`: Implement palette-indexing for `FBSP` (Lump 15 + Lump 17).
+
+### 4. Lighting (Core)
+- **`light/light.c`**: 
+    - Add `if(g_game->halfLambert) dot = pow(dot*0.5+0.5, 2);`.
+    - Add sRGB conversion in `FinalizeSamples` if `g_game->sRGB`.
+- **`light/lightmaps.c`**: 
+    - If `g_game->deluxe`, allocate and fill `LUMP_LIGHTMAPS` with luxel+deluxel pairs.
+
+### 5. Constants
+- `IBSP`: Ident "IBSP", Version 46, Lumps 17.
+- `FBSP`: Ident "FBSP", Version 1, Lumps 18.

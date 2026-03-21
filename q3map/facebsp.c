@@ -320,6 +320,9 @@ bspface_t	*MakeStructuralBspFaceList( bspbrush_t *list ) {
 		}
 		for ( i = 0 ; i < b->numsides ; i++ ) {
 			s = &b->sides[i];
+			if (s->surfaceFlags & SURF_SKIP) {
+				continue;
+			}
 			w = s->winding;
 			if ( !w ) {
 				continue;
@@ -358,6 +361,9 @@ bspface_t	*MakeVisibleBspFaceList( bspbrush_t *list ) {
 		}
 		for ( i = 0 ; i < b->numsides ; i++ ) {
 			s = &b->sides[i];
+			if (s->surfaceFlags & SURF_SKIP) {
+				continue;
+			}
 			w = s->visibleHull;
 			if ( !w ) {
 				continue;

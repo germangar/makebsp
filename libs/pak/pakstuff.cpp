@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "pakstuff.h"
 #include "../common/cmdlib.h"
-#include "../common/imagelib.h"
 #include "../common/mathlib.h"
 #include "io.h"
 #include "unzip.h"

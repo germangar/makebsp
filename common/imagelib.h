@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "qtypes.h"
 
-void LoadImage(const char *name, byte **pixels, int *width, int *height);
+void Q_LoadImage(const char *name, byte **pixels, int *width, int *height);
 void SaveImage(const char *name, byte *pixels, int width, int height, int components);
 
 void LoadTGA(const char *filename, byte **pixels, int *width, int *height);

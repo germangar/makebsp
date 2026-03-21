@@ -186,11 +186,28 @@ void PatchMapDrawSurfs(entity_t *e) {
   drawVert_t *v1, *v2;
   vec3_t bounds[2];
   byte *bordering;
-  parseMesh_t *meshes[MAX_MAP_DRAW_SURFS];
-  qboolean grouped[MAX_MAP_DRAW_SURFS];
-  byte group[MAX_MAP_DRAW_SURFS];
+  parseMesh_t **meshes;
+  qboolean *grouped;
+  byte *group;
 
   qprintf("----- PatchMapDrawSurfs -----\n");
+
+  patchCount = 0;
+  for (pm = e->patches; pm; pm = pm->next) {
+    if (patchCount == MAX_MAP_DRAW_SURFS) {
+      Error("MAX_MAP_DRAW_SURFS reached in PatchMapDrawSurfs");
+    }
+    patchCount++;
+  }
+
+  if (!patchCount) {
+    return;
+  }
+
+  meshes = malloc(patchCount * sizeof(*meshes));
+  grouped = malloc(patchCount * sizeof(*grouped));
+  group = malloc(patchCount * sizeof(*group));
+  bordering = malloc(patchCount * patchCount);
 
   patchCount = 0;
   for (pm = e->patches; pm; pm = pm->next) {
@@ -198,10 +215,6 @@ void PatchMapDrawSurfs(entity_t *e) {
     patchCount++;
   }
 
-  if (!patchCount) {
-    return;
-  }
-  bordering = malloc(patchCount * patchCount);
   memset(bordering, 0, patchCount * patchCount);
 
   // build the bordering matrix
@@ -275,4 +288,9 @@ void PatchMapDrawSurfs(entity_t *e) {
 
   qprintf("%5i patches\n", patchCount);
   qprintf("%5i patch LOD groups\n", groupCount);
+
+  free(bordering);
+  free(group);
+  free(grouped);
+  free(meshes);
 }
