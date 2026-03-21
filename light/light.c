@@ -282,6 +282,64 @@ static qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
 }
 
 /*
+=================
+TriSoupSamplePoint
+
+Finds the position and normal for a lightmap sample point (st in pixel space)
+on a triangle soup surface using barycentric interpolation.
+=================
+*/
+static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
+                                   vec3_t normal) {
+  int j, k;
+  float st0[2], st1[2], st2[2];
+  float area, w0, w1, w2;
+
+  for (j = 0; j < ds->numIndexes; j += 3) {
+    int i0 = drawIndexes[ds->firstIndex + j];
+    int i1 = drawIndexes[ds->firstIndex + j + 1];
+    int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+    drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
+    drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
+    drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
+
+    st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
+    st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
+    st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
+    st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
+    st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
+    st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
+
+    if (PointInTriangle(st[0], st[1], st0, st1, st2)) {
+      // Calculate barycentric coordinates
+      area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
+             (st2[0] - st1[0]) * (st0[1] - st2[1]);
+      if (fabs(area) < 0.0001f)
+        continue;
+
+      w0 = ((st1[1] - st2[1]) * (st[0] - st2[0]) +
+            (st2[0] - st1[0]) * (st[1] - st2[1])) /
+           area;
+      w1 = ((st2[1] - st0[1]) * (st[0] - st2[0]) +
+            (st0[0] - st2[0]) * (st[1] - st2[1])) /
+           area;
+      w2 = 1.0f - w0 - w1;
+
+      for (k = 0; k < 3; k++) {
+        origin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
+        normal[k] =
+            w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
+      }
+      VectorNormalize(normal, normal);
+      return qtrue;
+    }
+  }
+
+  return qfalse;
+}
+
+/*
 ===============
 VisualizeLightmapAllocation
 ===============
@@ -1402,8 +1460,8 @@ void TraceLtm(int num) {
   ds = &drawSurfaces[num];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
-  // vertex-lit triangle model
-  if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+  // vertex-lit triangle model if no lightmap allocated
+  if (ds->surfaceType == MST_TRIANGLE_SOUP && ds->lightmapNum[0] == -1) {
     VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
     free(tw);
     return;
@@ -1522,7 +1580,39 @@ void TraceLtm(int num) {
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
-      if (ds->patchWidth) {
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        float st[2];
+        vec3_t temp_origin; // Use vec3_t to match function signature
+        if (extra) {
+          st[0] = (float)ds->lightmapOffset[0][0] + (i + 0.5f) * 0.5f;
+          st[1] = (float)ds->lightmapOffset[0][1] + (j + 0.5f) * 0.5f;
+        } else {
+          st[0] = (float)ds->lightmapOffset[0][0] + i + 0.5f;
+          st[1] = (float)ds->lightmapOffset[0][1] + j + 0.5f;
+        }
+
+        if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) {
+          // Dilation: try 4 neighbor samples (1/4 pixel away) to bleed light
+          // outwards
+          float offsets[4][2] = {{0.4f, 0}, {-0.4f, 0}, {0, 0.4f}, {0, -0.4f}};
+          int n;
+          for (n = 0; n < 4; n++) {
+            float st2[2] = {st[0] + offsets[n][0], st[1] + offsets[n][1]};
+            if (TriSoupSamplePoint(ds, st2, temp_origin, normal))
+              break;
+          }
+
+          if (n == 4)
+            continue; // totally outside
+        }
+
+        numPositions = 9;
+        for (k = 0; k < 3; k++) {
+          origin_d[k] = (double)temp_origin[k];
+          base[k] = origin_d[k] + (double)normal[k] * SAMPLE_NUDGE;
+        }
+        MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+      } else if (ds->patchWidth) {
         numPositions = 9;
         VectorCopy(mesh->verts[j * mesh->width + i].normal, normal);
         // push off of the curve a bit
