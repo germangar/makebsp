@@ -390,6 +390,15 @@ void LoadTriangleModels(void) {
                   dv->st[1] = mesh->mTextureCoords[0][oldIdx].y;
                 }
 
+                // Prefer channel 1 for lightmap UVs, fallback to channel 0
+                if (mesh->mTextureCoords[1]) {
+                  dv->lightmap[0][0] = mesh->mTextureCoords[1][oldIdx].x;
+                  dv->lightmap[0][1] = mesh->mTextureCoords[1][oldIdx].y;
+                } else if (mesh->mTextureCoords[0]) {
+                  dv->lightmap[0][0] = dv->st[0];
+                  dv->lightmap[0][1] = dv->st[1];
+                }
+
                 dv->color[0][0] = dv->color[0][1] = dv->color[0][2] = dv->color[0][3] = 255;
                 ds->numVerts++;
               }

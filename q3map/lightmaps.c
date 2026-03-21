@@ -90,6 +90,131 @@ AllocateLightmapForPatch
 */
 // #define LIGHTMAP_PATCHSHIFT
 
+/*
+===================
+AllocateLightmapForMiscModel
+===================
+*/
+void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
+  int i, x, y, ssize;
+  float min_s, max_s, min_t, max_t;
+  double area3D = 0, areaUV = 0;
+  float s, t, scale;
+  int w, h;
+  drawVert_t *v0, *v1, *v2;
+
+  if (ds->numIndexes < 3)
+    return;
+
+  ssize = samplesize;
+  if (ds->shaderInfo->lightmapSampleSize)
+    ssize = ds->shaderInfo->lightmapSampleSize;
+
+  // 1. Initial UV bounds
+  min_s = min_t = 1000000;
+  max_s = max_t = -1000000;
+  for (i = 0; i < ds->numVerts; i++) {
+    s = ds->verts[i].lightmap[0][0];
+    t = ds->verts[i].lightmap[0][1];
+    if (s < min_s)
+      min_s = s;
+    if (s > max_s)
+      max_s = s;
+    if (t < min_t)
+      min_t = t;
+    if (t > max_t)
+      max_t = t;
+  }
+
+  // 2. Area Calculation
+  for (i = 0; i < ds->numIndexes; i += 3) {
+    v0 = &ds->verts[ds->indexes[i]];
+    v1 = &ds->verts[ds->indexes[i + 1]];
+    v2 = &ds->verts[ds->indexes[i + 2]];
+
+    // 3D Area (cross product)
+    vec3_t side1, side2, cross;
+    VectorSubtract(v1->xyz, v0->xyz, side1);
+    VectorSubtract(v2->xyz, v0->xyz, side2);
+    CrossProduct(side1, side2, cross);
+    area3D += 0.5 * VectorLength(cross);
+
+    // UV Area (2D cross product)
+    areaUV +=
+        0.5 *
+        fabs((v1->lightmap[0][0] - v0->lightmap[0][0]) *
+                 (v2->lightmap[0][1] - v0->lightmap[0][1]) -
+             (v2->lightmap[0][0] - v0->lightmap[0][0]) *
+                 (v1->lightmap[0][1] - v0->lightmap[0][1]));
+  }
+
+  if (areaUV < 0.0001) {
+    _printf("WARNING: misc_model surface with degenerate UVs (areaUV: %f)\n",
+            areaUV);
+    return;
+  }
+
+  // 3. Scale Determination
+  // Target density: 1/ssize^2 luxels per square unit.
+  scale = sqrt((area3D / (ssize * ssize)) / areaUV);
+
+  _printf("Allocating for TriSoup: 3D Area: %.2f, UV Area: %.4f, ssize: %d, "
+          "Scale: %.4f\n",
+          area3D, areaUV, ssize, scale);
+
+  // Safeguard against extreme scaling
+  if (scale < 0.01)
+    scale = 0.01;
+  if (scale > 100)
+    scale = 100;
+
+  w = ceil((max_s - min_s) * scale) + 1;
+  h = ceil((max_t - min_t) * scale) + 1;
+
+  // Limit lightmap size
+  if (w > LIGHTMAP_WIDTH)
+    w = LIGHTMAP_WIDTH;
+  if (h > LIGHTMAP_HEIGHT)
+    h = LIGHTMAP_HEIGHT;
+
+  if (w < 1)
+    w = 1;
+  if (h < 1)
+    h = 1;
+
+  // 4. Allocation
+  if (!AllocLMBlock(w, h, &x, &y)) {
+    PrepareNewLightmap();
+    if (!AllocLMBlock(w, h, &x, &y)) {
+      Error("misc_model: Lightmap allocation failed");
+    }
+  }
+
+  // 5. Finalize UVs
+  ds->lightmapNum = numLightmaps - 1;
+  ds->lightmapWidth = w;
+  ds->lightmapHeight = h;
+  ds->lightmapX = x;
+  ds->lightmapY = y;
+
+  for (i = 0; i < ds->numVerts; i++) {
+    ds->verts[i].lightmap[0][0] =
+        (x + 0.5 + (ds->verts[i].lightmap[0][0] - min_s) * scale) /
+        LIGHTMAP_WIDTH;
+    ds->verts[i].lightmap[0][1] =
+        (y + 0.5 + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
+        LIGHTMAP_HEIGHT;
+  }
+
+  // 6. Overlap Warning
+  float bbArea = (max_s - min_s) * (max_t - min_t);
+  if (areaUV > bbArea * 1.05) {
+    _printf("WARNING: misc_model has overlapping lightmap UVs! (UV Area: %.3f, "
+            "Bounds Area: %.3f)\n",
+            areaUV, bbArea);
+  }
+}
+
 void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   int i, j, k;
   drawVert_t *verts;
@@ -338,10 +463,7 @@ void AllocateLightmaps(entity_t *e) {
     if (!ds->numVerts) {
       continue; // leftover from a surface subdivision
     }
-    if (ds->miscModel) {
-      continue;
-    }
-    if (!ds->patch) {
+    if (!ds->patch && !ds->miscModel) {
       VectorCopy(mapplanes[ds->side->planenum].normal, ds->lightmapVecs[2]);
     }
 
@@ -375,15 +497,33 @@ void AllocateLightmaps(entity_t *e) {
       // some surfaces don't need lightmaps allocated for them
       if (si->surfaceFlags & SURF_NOLIGHTMAP) {
         ds->lightmapNum = -1;
+        if (ds->miscModel)
+          _printf("TriSoup surface skipped (SURF_NOLIGHTMAP): shader %s\n",
+                  si->shader);
       } else if (si->surfaceFlags & SURF_POINTLIGHT) {
         ds->lightmapNum = -3;
+        if (ds->miscModel)
+          _printf("TriSoup surface skipped (SURF_POINTLIGHT): shader %s\n",
+                  si->shader);
       } else {
-        AllocateLightmapForSurface(ds);
+        if (ds->miscModel) {
+          AllocateLightmapForMiscModel(ds);
+        } else {
+          AllocateLightmapForSurface(ds);
+        }
       }
     }
   }
 
+  // Set numLightBytes so WriteBSPFile will export the lump
+  numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
+  if (numLightBytes > MAX_MAP_LIGHTING) {
+    Error("MAX_MAP_LIGHTING exceeded");
+  }
+
+  // Clear the lightmap buffer
+  memset(lightBytes, 0, numLightBytes);
+
   qprintf("%7i exact lightmap texels\n", c_exactLightmap);
-  qprintf("%7i block lightmap texels\n",
-          numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+  qprintf("%7i block lightmap texels\n", numLightBytes);
 }
