@@ -243,6 +243,47 @@ void LoadTriangleModels(void) {
         shaderInfo_t *si = ShaderInfoForShader(shaderName);
 
         // ==========================================
+        // UV Overlap Detection
+        // ==========================================
+        if (mesh->mTextureCoords[0]) {
+          float totalUVArea = 0;
+          float uvMins[2] = {999999, 999999};
+          float uvMaxs[2] = {-999999, -999999};
+
+          for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+            if (mesh->mFaces[j].mNumIndices != 3)
+              continue;
+            unsigned int i0 = mesh->mFaces[j].mIndices[0];
+            unsigned int i1 = mesh->mFaces[j].mIndices[1];
+            unsigned int i2 = mesh->mFaces[j].mIndices[2];
+
+            struct aiVector3D *u0 = &mesh->mTextureCoords[0][i0];
+            struct aiVector3D *u1 = &mesh->mTextureCoords[0][i1];
+            struct aiVector3D *u2 = &mesh->mTextureCoords[0][i2];
+
+            float area = fabs((u1->x - u0->x) * (u2->y - u0->y) -
+                              (u2->x - u0->x) * (u1->y - u0->y)) *
+                         0.5f;
+            totalUVArea += area;
+          }
+
+          for (int j = 0; j < (int)mesh->mNumVertices; j++) {
+            struct aiVector3D *u = &mesh->mTextureCoords[0][j];
+            if (u->x < uvMins[0]) uvMins[0] = u->x;
+            if (u->y < uvMins[1]) uvMins[1] = u->y;
+            if (u->x > uvMaxs[0]) uvMaxs[0] = u->x;
+            if (u->y > uvMaxs[1]) uvMaxs[1] = u->y;
+          }
+
+          float bbArea = (uvMaxs[0] - uvMins[0]) * (uvMaxs[1] - uvMins[1]);
+          if (totalUVArea > bbArea * 1.05) {
+            _printf("WARNING: model %s (mesh %d) has overlapping lightmap UVs! "
+                    "(UV Area: %.3f, Bounds Area: %.3f)\n",
+                    model, i, totalUVArea, bbArea);
+          }
+        }
+
+        // ==========================================
         // STEP 1: Extract Raw Collision Topology
         // ==========================================
         if (si && (si->contents & CONTENTS_SOLID) && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {

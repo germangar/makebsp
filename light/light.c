@@ -1602,10 +1602,10 @@ void TraceLtm(int num) {
               break;
           }
 
-          if (n == 4)
+          if (n == 4) {
+            occluded[i][j] = qtrue; // Mark gaps as occluded so they get dilated over!
             continue; // totally outside
-        }
-
+          }
         numPositions = 9;
         for (k = 0; k < 3; k++) {
           origin_d[k] = (double)temp_origin[k];
@@ -1675,34 +1675,51 @@ void TraceLtm(int num) {
     PrintOccluded(occluded, sampleWidth, sampleHeight);
   }
 
-  // calculate average values for occluded samples
-  for (i = 0; i < sampleWidth; i++) {
-    for (j = 0; j < sampleHeight; j++) {
-      if (!occluded[i][j]) {
-        continue;
-      }
-      // scan all surrounding samples
-      count = 0;
-      VectorClear(average);
-      for (x = -1; x <= 1; x++) {
-        for (y = -1; y <= 1; y++) {
-          if (i + x < 0 || i + x >= sampleWidth) {
+  // Multi-pass edge dilation to prevent black bands on UV seams and gaps
+  {
+    int pass;
+    byte **newOccluded = malloc(sampleWidth * sizeof(byte *));
+    byte *newOccluded_data = malloc(sampleWidth * sampleHeight * sizeof(byte));
+    for (i = 0; i < sampleWidth; i++) {
+      newOccluded[i] = newOccluded_data + i * sampleHeight;
+    }
+
+    for (pass = 0; pass < 4; pass++) {
+      memcpy(newOccluded_data, occluded_data, sampleWidth * sampleHeight * sizeof(byte));
+      for (i = 0; i < sampleWidth; i++) {
+        for (j = 0; j < sampleHeight; j++) {
+          if (!occluded[i][j]) {
             continue;
           }
-          if (j + y < 0 || j + y >= sampleHeight) {
-            continue;
+          // scan all surrounding samples
+          count = 0;
+          VectorClear(average);
+          for (x = -1; x <= 1; x++) {
+            for (y = -1; y <= 1; y++) {
+              if (x == 0 && y == 0) continue;
+              if (i + x < 0 || i + x >= sampleWidth) {
+                continue;
+              }
+              if (j + y < 0 || j + y >= sampleHeight) {
+                continue;
+              }
+              if (occluded[i + x][j + y]) {
+                continue;
+              }
+              count++;
+              VectorAdd(color[i + x][j + y], average, average);
+            }
           }
-          if (occluded[i + x][j + y]) {
-            continue;
+          if (count) {
+            VectorScale(average, 1.0 / count, color[i][j]);
+            newOccluded[i][j] = qfalse; // Mark as filled for the next pass
           }
-          count++;
-          VectorAdd(color[i + x][j + y], average, average);
         }
       }
-      if (count) {
-        VectorScale(average, 1.0 / count, color[i][j]);
-      }
+      memcpy(occluded_data, newOccluded_data, sampleWidth * sampleHeight * sizeof(byte));
     }
+    free(newOccluded);
+    free(newOccluded_data);
   }
 
   // average together the values if we are extra sampling

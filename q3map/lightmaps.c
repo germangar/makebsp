@@ -165,17 +165,31 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   // Safeguard against extreme scaling
   if (scale < 0.01)
     scale = 0.01;
-  if (scale > 100)
-    scale = 100;
+//   if (scale > 100)
+//     scale = 100;
 
+  // Limit lightmap size and adjust scale proportionally
+  // so no UV coordinates fall outside the allocated block.
   w = ceil((max_s - min_s) * scale) + 1;
   h = ceil((max_t - min_t) * scale) + 1;
 
-  // Limit lightmap size
-  if (w > LIGHTMAP_WIDTH)
-    w = LIGHTMAP_WIDTH;
-  if (h > LIGHTMAP_HEIGHT)
-    h = LIGHTMAP_HEIGHT;
+  if (w > LIGHTMAP_WIDTH || h > LIGHTMAP_HEIGHT) {
+    float scaleX = scale;
+    float scaleY = scale;
+    
+    if (w > LIGHTMAP_WIDTH) {
+      scaleX = (LIGHTMAP_WIDTH - 2) / (max_s - min_s);
+    }
+    if (h > LIGHTMAP_HEIGHT) {
+      scaleY = (LIGHTMAP_HEIGHT - 2) / (max_t - min_t);
+    }
+    
+    // Use the more restrictive scale to keep aspect ratio
+    scale = (scaleX < scaleY) ? scaleX : scaleY;
+    
+    w = ceil((max_s - min_s) * scale) + 1;
+    h = ceil((max_t - min_t) * scale) + 1;
+  }
 
   if (w < 1)
     w = 1;
@@ -204,14 +218,6 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
     ds->verts[i].lightmap[0][1] =
         (y + 0.5 + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
         LIGHTMAP_HEIGHT;
-  }
-
-  // 6. Overlap Warning
-  float bbArea = (max_s - min_s) * (max_t - min_t);
-  if (areaUV > bbArea * 1.05) {
-    _printf("WARNING: misc_model has overlapping lightmap UVs! (UV Area: %.3f, "
-            "Bounds Area: %.3f)\n",
-            areaUV, bbArea);
   }
 }
 
