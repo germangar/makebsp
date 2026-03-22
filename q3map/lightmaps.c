@@ -109,9 +109,7 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   if (ds->numIndexes < 3)
     return;
 
-  ssize = samplesize;
-  if (ds->shaderInfo->lightmapSampleSize)
-    ssize = ds->shaderInfo->lightmapSampleSize;
+  ssize = ds->samplesize;
 
   // 1. Initial UV bounds
   min_s = min_t = 1000000;
@@ -252,9 +250,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   tempMesh = RemoveLinearMeshColumnsRows(newmesh);
   FreeMesh(newmesh);
 
-  ssize = samplesize;
-  if (ds->shaderInfo->lightmapSampleSize)
-    ssize = ds->shaderInfo->lightmapSampleSize;
+  ssize = ds->samplesize;
 
 #ifdef LIGHTMAP_PATCHSHIFT
   subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 1,
@@ -356,9 +352,7 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     return;
   }
 
-  ssize = samplesize;
-  if (ds->shaderInfo->lightmapSampleSize)
-    ssize = ds->shaderInfo->lightmapSampleSize;
+  ssize = ds->samplesize;
 
   plane = &mapplanes[ds->side->planenum];
 

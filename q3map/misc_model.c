@@ -601,6 +601,22 @@ void LoadTriangleModels(void) {
           ds->lightmapNum = -1;
           ds->fogNum = -1;
 
+          // Resolve sample size hierarchy (must be AFTER memset!)
+          ds->samplesize = samplesize; // Start with global default
+          if (si && si->lightmapSampleSize > 0) {
+            ds->samplesize = si->lightmapSampleSize;
+          }
+          if (inst->creator) {
+            const char *ent_sample_str = ValueForKey(inst->creator, "_lightmapsamplesize");
+            if (ent_sample_str[0]) {
+              int ent_sample = atoi(ent_sample_str);
+              if (ent_sample > 0) {
+                ds->samplesize = ent_sample;
+              }
+            }
+          }
+          _printf("Final samplesize for misc_model: %d\n", ds->samplesize);
+
           // Reset vMap for this new chunk
           for (int v = 0; v < mesh->mNumVertices; v++) vMap[v] = -1;
 

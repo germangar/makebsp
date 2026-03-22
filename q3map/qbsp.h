@@ -159,6 +159,7 @@ typedef struct drawsurf_s {
   qboolean miscModel;
 
   qboolean flareSurface;
+  int samplesize;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s {

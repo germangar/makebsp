@@ -489,6 +489,9 @@ void FixTJunctions(entity_t *ent) {
   // for non-axial edges
   for (i = ent->firstDrawSurf; i < numMapDrawSurfs; i++) {
     ds = &mapDrawSurfs[i];
+    if (!ds->shaderInfo) {
+      continue;
+    }
     if (ds->patch) {
       AddPatchEdges(ds);
     } else if (ds->shaderInfo->autosprite || ds->shaderInfo->notjunc ||

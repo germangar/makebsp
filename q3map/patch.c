@@ -282,6 +282,20 @@ void PatchMapDrawSurfs(entity_t *e) {
     scan->grouped = qtrue;
     ds = DrawSurfaceForMesh(&scan->mesh);
     ds->shaderInfo = scan->shaderInfo;
+
+    // Resolve sample size hierarchy
+    ds->samplesize = samplesize; // Start with global default
+    if (scan->shaderInfo && scan->shaderInfo->lightmapSampleSize > 0) {
+      ds->samplesize = scan->shaderInfo->lightmapSampleSize;
+    }
+    const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
+    if (ent_sample_str[0]) {
+      int ent_sample = atoi(ent_sample_str);
+      if (ent_sample > 0) {
+        ds->samplesize = ent_sample;
+      }
+    }
+
     VectorCopy(bounds[0], ds->lightmapVecs[0]);
     VectorCopy(bounds[1], ds->lightmapVecs[1]);
   }

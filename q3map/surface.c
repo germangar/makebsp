@@ -48,6 +48,8 @@ mapDrawSurface_t *AllocDrawSurf(void) {
   ds = &mapDrawSurfs[numMapDrawSurfs];
   numMapDrawSurfs++;
 
+  ds->samplesize = samplesize;
+
   return ds;
 }
 
@@ -83,6 +85,22 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
   ds->mapBrush = b;
   ds->side = s;
   ds->fogNum = -1;
+
+  // Resolve sample size hierarchy
+  if (si && si->lightmapSampleSize > 0) {
+    ds->samplesize = si->lightmapSampleSize;
+  }
+  if (b) {
+    entity_t *e = &entities[b->entitynum];
+    const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
+    if (ent_sample_str[0]) {
+      int ent_sample = atoi(ent_sample_str);
+      if (ent_sample > 0) {
+        ds->samplesize = ent_sample;
+      }
+    }
+  }
+
   ds->numVerts = w->numpoints;
   ds->verts = malloc(ds->numVerts * sizeof(*ds->verts));
   memset(ds->verts, 0, ds->numVerts * sizeof(*ds->verts));
