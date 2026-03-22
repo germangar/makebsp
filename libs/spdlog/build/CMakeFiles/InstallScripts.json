@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"E:/CODE/antigravity/makebsp/libs/spdlog/build/cmake_install.cmake",
+		"E:/CODE/antigravity/makebsp/libs/spdlog/build/example/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,1 @@
+make.bat: Nothing to be done for 'all'.
