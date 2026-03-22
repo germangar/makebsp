@@ -228,6 +228,8 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
   }
 
   int numIslands = 0;
+  float currentGlobalMaxU = 0;
+  float currentGlobalMaxV = 0;
   int *stack = malloc(sizeof(int) * mesh->mNumFaces);
   for (int j = 0; j < (int)mesh->mNumFaces; j++) {
     if (triIsland[j] != -1 || mesh->mFaces[j].mNumIndices != 3) continue;
@@ -289,80 +291,121 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
     }
 
     // ------------------------------------------
-    // TIGHT SHELF PACKER
+    // BEST-FIT CORNER-SEARCH PACKER
     // ------------------------------------------
-    // 1. Calculate Total Area and Sort by Height
-    float totalArea = 0;
+    // 1. Sort by Area (Descending)
     int sortIds[500];
     for (int j = 0; j < numIslands; j++) {
       sortIds[j] = j;
-      float w = islands[j].maxs[0] - islands[j].mins[0];
-      float h = islands[j].maxs[1] - islands[j].mins[1];
-      totalArea += w * h;
     }
 
     // Simple Bubble Sort (numIslands is small)
     for (int a = 0; a < numIslands - 1; a++) {
       for (int b = a + 1; b < numIslands; b++) {
-        float hA = islands[sortIds[a]].maxs[1] - islands[sortIds[a]].mins[1];
-        float hB = islands[sortIds[b]].maxs[1] - islands[sortIds[b]].mins[1];
-        if (hB > hA) { int t = sortIds[a]; sortIds[a] = sortIds[b]; sortIds[b] = t; }
+        float areaA = (islands[sortIds[a]].maxs[0] - islands[sortIds[a]].mins[0]) * (islands[sortIds[a]].maxs[1] - islands[sortIds[a]].mins[1]);
+        float areaB = (islands[sortIds[b]].maxs[0] - islands[sortIds[b]].mins[0]) * (islands[sortIds[b]].maxs[1] - islands[sortIds[b]].mins[1]);
+        if (areaB > areaA) { int t = sortIds[a]; sortIds[a] = sortIds[b]; sortIds[b] = t; }
       }
     }
 
-    // 2. Greedy Shelf Packing
-    float atlasWidth = sqrtf(totalArea) * 1.5f; // Target square-ish area with breathing room
-    if (atlasWidth < 5.0f) atlasWidth = 5.0f;
-    
-    float shelfX = 0, shelfY = 0, currentShelfHeight = 0, gutter = 0.1f;
+    // 2. Greedy Best-Fit Corner Search
+    float gutter = 0.1f;
+
     for (int i = 0; i < numIslands; i++) {
-      int id = sortIds[i];
-      float w = islands[id].maxs[0] - islands[id].mins[0];
-      float h = islands[id].maxs[1] - islands[id].mins[1];
+      int targetId = sortIds[i];
+      float bestU = -1, bestV = -1, bestScore = 999999;
+      float iw = islands[targetId].maxs[0] - islands[targetId].mins[0];
+      float ih = islands[targetId].maxs[1] - islands[targetId].mins[1];
 
-      if (shelfX + w + gutter > atlasWidth && shelfX > 0) {
-        shelfX = 0;
-        shelfY += currentShelfHeight + gutter;
-        currentShelfHeight = 0;
+      // Generate Candidate Positions (0,0 + all corners of placed islands)
+      int numCand = i * 2 + 1;
+      for (int c = 0; c < numCand; c++) {
+        float px, py;
+        if (c == 0) { px = 0; py = 0; }
+        else {
+          int k = (c - 1) / 2;
+          int kId = sortIds[k];
+          if ((c - 1) % 2 == 0) {
+            // Corner Right: (maxU_k + gutter, minV_k)
+            px = (islands[kId].maxs[0] + islands[kId].offset[0]) + gutter;
+            py = (islands[kId].mins[1] + islands[kId].offset[1]);
+          } else {
+            // Corner Top: (minU_k, maxV_k + gutter)
+            px = (islands[kId].mins[0] + islands[kId].offset[0]);
+            py = (islands[kId].maxs[1] + islands[kId].offset[1]) + gutter;
+          }
+        }
+
+        // Target Offsets to reach (px, py)
+        float tx = px - islands[targetId].mins[0];
+        float ty = py - islands[targetId].mins[1];
+
+        // Collision Check (against all islands from 0 to i-1)
+        qboolean collision = qfalse;
+        float targetMins[2] = { px, py };
+        float targetMaxs[2] = { px + iw, py + ih };
+        float targetArea = iw * ih;
+
+        for (int m = 0; m < i; m++) {
+          int mId = sortIds[m];
+          float testMins[2] = { islands[mId].mins[0] + islands[mId].offset[0], islands[mId].mins[1] + islands[mId].offset[1] };
+          float testMaxs[2] = { islands[mId].maxs[0] + islands[mId].offset[0], islands[mId].maxs[1] + islands[mId].offset[1] };
+          
+          float interMinU = (targetMins[0] > testMins[0]) ? targetMins[0] : testMins[0], interMaxU = (targetMaxs[0] < testMaxs[0]) ? targetMaxs[0] : testMaxs[0];
+          float interMinV = (targetMins[1] > testMins[1]) ? targetMins[1] : testMins[1], interMaxV = (targetMaxs[1] < testMaxs[1]) ? targetMaxs[1] : testMaxs[1];
+          float interW = interMaxU - interMinU, interH = interMaxV - interMinV;
+          if (interW > 0.001f && interH > 0.001f) {
+            float testArea = (testMaxs[0] - testMins[0]) * (testMaxs[1] - testMins[1]);
+            float interArea = interW * interH, minArea = (testArea < targetArea) ? testArea : targetArea;
+            if (interArea > 0.01f * minArea) { collision = qtrue; break; }
+          }
+        }
+
+        if (!collision) {
+          float newMaxU = (currentGlobalMaxU > targetMaxs[0]) ? currentGlobalMaxU : targetMaxs[0];
+          float newMaxV = (currentGlobalMaxV > targetMaxs[1]) ? currentGlobalMaxV : targetMaxs[1];
+          // Score prioritizing square aspect ratio and minimum range
+          float score = (newMaxU > newMaxV) ? newMaxU : newMaxV;
+          if (score < bestScore) {
+            bestScore = score;
+            bestU = tx; bestV = ty;
+          }
+        }
       }
 
-      islands[id].offset[0] = shelfX;
-      islands[id].offset[1] = shelfY;
+      if (bestU != -1) {
+        islands[targetId].offset[0] = bestU;
+        islands[targetId].offset[1] = bestV;
+        if (bestU != 0 || bestV != 0) numShifted++;
+        float finalMaxU = islands[targetId].maxs[0] + bestU;
+        float finalMaxV = islands[targetId].maxs[1] + bestV;
+        if (finalMaxU > currentGlobalMaxU) currentGlobalMaxU = finalMaxU;
+        if (finalMaxV > currentGlobalMaxV) currentGlobalMaxV = finalMaxV;
+      } else {
+        abortSpreading = qtrue; break;
+      }
       
-      if (shelfX != 0 || shelfY != 0) numShifted++;
-      shelfX += w + gutter;
-      if (h > currentShelfHeight) currentShelfHeight = h;
-      
-      if (shelfY + h > 20.0f) { abortSpreading = qtrue; break; } // Safeguard
+      if (currentGlobalMaxU > 20.0f || currentGlobalMaxV > 20.0f) { abortSpreading = qtrue; break; }
     }
   }
 
-  if (abortSpreading && islands) {
-    for (int j = 0; j < numIslands; j++) islands[j].offset[0] = islands[j].offset[1] = 0;
-  }
-
-  float currentMaxU = -999999;
-  if (islands) {
-    for (int j = 0; j < numIslands; j++) {
-      float m = islands[j].maxs[0] + islands[j].offset[0];
-      if (m > currentMaxU) currentMaxU = m;
+  // ------------------------------------------
+  // STEP 3: Write Back Offsets
+  // ------------------------------------------
+  if (!abortSpreading) {
+    for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+      if (triIsland[j] == -1) continue;
+      int id = triIsland[j];
+      outU[j] = islands[id].offset[0];
+      outV[j] = islands[id].offset[1];
     }
+  } else {
+    for (int j = 0; j < (int)mesh->mNumFaces; j++) outU[j] = outV[j] = 0;
   }
 
-  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
-    if (triIsland[j] != -1 && islands) {
-      int islId = triIsland[j];
-      outU[j] = islands[islId].offset[0];
-      outV[j] = islands[islId].offset[1];
-    } else {
-      outU[j] = outV[j] = 0;
-    }
-  }
-
-  free(triIsland); free(stack); if (islands) free(islands);
-  if (!abortSpreading && currentMaxU > 1.05f) {
-    _printf("  NOTICE: model %s (mesh %d) UVs spread and TIGHT-SHELF-PACKED (Max U: %.2f, Islands: %d, Shifted: %d)\n", modelName, meshIdx, currentMaxU, numIslands, numShifted);
-  }
+  if (islands) free(islands);
+  free(triIsland);
+  free(stack);
 }
 
 /*
