@@ -165,8 +165,6 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   // Safeguard against extreme scaling
   if (scale < 0.01)
     scale = 0.01;
-//   if (scale > 100)
-//     scale = 100;
 
   // Limit lightmap size and adjust scale proportionally
   // so no UV coordinates fall outside the allocated block.

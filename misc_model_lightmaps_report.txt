@@ -1,0 +1,87 @@
+================================================================================
+MISC_MODEL LIGHTMAPS ARCHITECTURAL REPORT
+================================================================================
+
+This document provides a comprehensive methodology for the lightmap generation 
+system implemented for `misc_model` entities (Assimp-loaded geometry). This code 
+is a custom extension to the original Quake 3 lighting pipeline.
+
+--------------------------------------------------------------------------------
+1. LIGHTMAP ALLOCATION & UV SCALING (q3map.exe)
+--------------------------------------------------------------------------------
+File: q3map/lightmaps.c
+Function: `AllocateLightmapForMiscModel`
+
+METHODOLOGY:
+1.  **Density Calculation**: The system first calculates the 3D surface area of 
+    the mesh and its area in UV space (0..1 range). 
+2.  **Scale Determination**: A `scale` factor is derived using the `samplesize` 
+    (ssize) variable from the shader:
+    `scale = sqrt((area3D / (ssize * ssize)) / areaUV)`
+3.  **Proportional Clamping**: 
+    - The resulting width (`w`) and height (`h`) are constrained by 
+      `LIGHTMAP_WIDTH` and `LIGHTMAP_HEIGHT` (standard 512x512 atlas tiles).
+    - **CRITICAL**: If `w` or `h` exceed 512, the system automatically 
+      recalculates a "proportional scale" fallback:
+      `scale = MIN((510 / width_in_uv), (510 / height_in_uv))`
+    - This ensures that 100% of the mesh UVs are mapped inside the 512x512 
+      boundary, preventing "black band" artifacts caused by UV wrapping/clipping.
+4.  **Serialization**: The finalized `scale`, `min_s`, and `min_t` are stored 
+    within the `mapDrawSurface_t` and serialized into the BSP. Vertices are 
+    transformed so their `lightmap[0]` coordinates exist in the [0..1] range of 
+    their allocated atlas block.
+
+--------------------------------------------------------------------------------
+2. LUXEL RASTERIZATION (light.exe)
+--------------------------------------------------------------------------------
+File: light/light.c
+Function: `TriSoupSamplePoint`
+
+METHODOLOGY:
+Since `misc_models` (Triangle Soup) lack a natural grid-aligned plane (unlike 
+brushes), they require a UV-to-World-Space rasterizer.
+1.  **UV Search**: For every pixel (luxel) in the allocated lightmap block, 
+    the function iterates through the mesh's `drawIndexes`.
+2.  **Point-In-Triangle Test**: It checks if the current luxel coordinate 
+    `(s, t)` falls within the 2D triangle formed by the vertices' lightmap UVs.
+3.  **Barycentric Interpolation**: When a triangle is hit, it calculates 
+    barycentric weights (`w0, w1, w2`).
+4.  **World Reconstruction**: These weights are used to interpolate the 3D 
+    world coordinate (`xyz`) and the surface normal from the original vertices.
+    - Result: This provides a 3D origin and a 3D vector for the lighting rays.
+
+--------------------------------------------------------------------------------
+3. RADIOSITY LIGHTING PROCESS (light.exe)
+--------------------------------------------------------------------------------
+File: light/light.c
+Function: `TraceLtm` (Triangle Soup branch)
+
+METHODOLOGY:
+The lighting for these surfaces is "omnidirectional" in the context of 
+hemispherical radiosity sampling.
+1.  **Nudging**: The interpolated 3D origin is nudged along the normal by 
+    `SAMPLE_NUDGE` (default 1.0 unit) to prevent the ray from starting inside 
+    the geometry.
+2.  **Super-Sampling**: `numPositions` is set to 9. The system traces rays from 
+    a 3x3 jittered grid around the luxel center to provide soft shadows and 
+    anti-aliasing.
+3.  **TraceLine**: For each position, the engine calls `TraceLine` towards 
+    every light source in the map (or computes ambient/radiosity bounces).
+4.  **Facet Integration**: `misc_models` are added to the facet tree 
+    (`MakeFacets`), allowing them to both receive and cast shadows onto the 
+    world and themselves.
+
+--------------------------------------------------------------------------------
+4. SUMMARY OF INNOVATIONS
+--------------------------------------------------------------------------------
+-   **Dynamic UV Mapping**: Unlike standard Q3 brushes which use planar 
+    projections, `misc_models` use their own authoring-time UVs, which are 
+    dynamically scaled and packed by the compiler into the unified atlas.
+-   **Proportional Scale Safeguard**: A unique clamping mechanism that 
+    preserves mesh lighting aspect ratio even when exceeding hardware limits.
+-   **Triangle-Barycentric Tracing**: A modern rasterization approach 
+    bridging 3D geometry and 2D lightmap textures for arbitrary meshes.
+
+--------------------------------------------------------------------------------
+REPORT CONCLUDED - MARCH 22, 2026
+--------------------------------------------------------------------------------
