@@ -47,8 +47,6 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
   struct aiString matName;
 
   if (mesh->mMaterialIndex >= scene->mNumMaterials) {
-    _printf("WARNING: mesh->mMaterialIndex (%i) >= scene->mNumMaterials (%i)\n",
-            mesh->mMaterialIndex, scene->mNumMaterials);
     strcpy(shaderName, "default");
     return;
   }
@@ -69,8 +67,6 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
   if (!Q_stricmp(ext, "obj")) {
     if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
         aiReturn_SUCCESS) {
-      _printf("      obj $tex.file: %s\n", path.data);
-      fflush(stdout);
       strncpy(shaderName, path.data, MAX_QPATH - 1);
       shaderName[MAX_QPATH - 1] = '\0';
       StripExtension(shaderName);
@@ -79,13 +75,9 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
   }
 
   if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS) {
-    _printf("      AI_MATKEY_NAME: %s\n", matName.data);
-    fflush(stdout);
     strncpy(shaderName, matName.data, MAX_QPATH - 1);
     shaderName[MAX_QPATH - 1] = '\0';
   } else {
-    _printf("      Using default shader\n");
-    fflush(stdout);
     strcpy(shaderName, "default");
   }
 }
@@ -110,9 +102,7 @@ static const struct aiScene *GetCachedModel(const char *modelName) {
   }
 
   sprintf(filename, "%s%s", gamedir, modelName);
-  _printf("--- Loading Model: %s ---\n", filename);
-  fflush(stdout);
-
+  
   const struct aiScene *scene = aiImportFile(
       filename, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
                     aiProcess_SortByPType | aiProcess_FlipUVs |
@@ -120,17 +110,10 @@ static const struct aiScene *GetCachedModel(const char *modelName) {
                     aiProcess_PreTransformVertices);
 
   if (!scene) {
-    _printf("WARNING: Assimp failed to load model %s: %s\n", filename,
-            aiGetErrorString());
-    fflush(stdout);
     return NULL;
   }
 
-  _printf("    Assimp success: %i meshes, %i materials\n", scene->mNumMeshes,
-          scene->mNumMaterials);
-
   if (strlen(modelName) >= MAX_QPATH) {
-    _printf("WARNING: modelName too long: %s\n", modelName);
   }
   strncpy(modelCache[numModelCache].name, modelName, MAX_QPATH - 1);
   modelCache[numModelCache].name[MAX_QPATH - 1] = '\0';
@@ -171,6 +154,204 @@ static void AnglesToMatrix(vec3_t angles, float matrix[3][3]) {
   matrix[2][2] = cr * cp;
 }
 
+typedef struct {
+  int originalIdx;
+  float x, y, z;
+} sortVert_t;
+
+static int CompareVerts(const void *a, const void *b) {
+  sortVert_t *v1 = (sortVert_t *)a;
+  sortVert_t *v2 = (sortVert_t *)b;
+  if (v1->x != v2->x) return (v1->x < v2->x) ? -1 : 1;
+  if (v1->y != v2->y) return (v1->y < v2->y) ? -1 : 1;
+  if (v1->z != v2->z) return (v1->z < v2->z) ? -1 : 1;
+  return 0;
+}
+
+
+/*
+====================
+TrySpreadUVs
+
+Advanced UV overlap detection and resolving.
+Resolves mirrored/stacked UVs by spreading them into a 1D or 2D slot array.
+Safeguarded to only touch simple mirrored props.
+====================
+*/
+static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *modelName, int meshIdx, float *outU, float *outV) {
+  // 1. Identify Geometric Islands (using XYZ connectivity)
+  int *vPosId = malloc(sizeof(int) * mesh->mNumVertices);
+  for (int j = 0; j < (int)mesh->mNumVertices; j++) vPosId[j] = -1;
+  
+  int numUniquePositions = 0;
+  sortVert_t *sVerts = malloc(sizeof(sortVert_t) * mesh->mNumVertices);
+  for (int j = 0; j < (int)mesh->mNumVertices; j++) {
+    sVerts[j].originalIdx = j;
+    sVerts[j].x = mesh->mVertices[j].x;
+    sVerts[j].y = mesh->mVertices[j].y;
+    sVerts[j].z = mesh->mVertices[j].z;
+  }
+  
+  qsort(sVerts, mesh->mNumVertices, sizeof(sortVert_t), CompareVerts);
+  
+  for (int j = 0; j < (int)mesh->mNumVertices; j++) {
+    if (j > 0 && sVerts[j].x == sVerts[j-1].x && sVerts[j].y == sVerts[j-1].y && sVerts[j].z == sVerts[j-1].z) {
+      vPosId[sVerts[j].originalIdx] = vPosId[sVerts[j-1].originalIdx];
+    } else {
+      vPosId[sVerts[j].originalIdx] = numUniquePositions++;
+    }
+  }
+  free(sVerts);
+
+  int *triIsland = malloc(sizeof(int) * mesh->mNumFaces);
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) triIsland[j] = -1;
+
+  int *pTriCount = calloc(numUniquePositions, sizeof(int));
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+    if (mesh->mFaces[j].mNumIndices != 3) continue;
+    int p0 = vPosId[mesh->mFaces[j].mIndices[0]];
+    int p1 = vPosId[mesh->mFaces[j].mIndices[1]];
+    int p2 = vPosId[mesh->mFaces[j].mIndices[2]];
+    pTriCount[p0]++; pTriCount[p1]++; pTriCount[p2]++;
+  }
+  int **pTris = malloc(sizeof(int *) * numUniquePositions);
+  int *pTriOffset = calloc(numUniquePositions, sizeof(int));
+  for (int j = 0; j < numUniquePositions; j++) {
+    pTris[j] = malloc(sizeof(int) * pTriCount[j]);
+  }
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+    if (mesh->mFaces[j].mNumIndices != 3) continue;
+    for (int k = 0; k < 3; k++) {
+      int pIdx = vPosId[mesh->mFaces[j].mIndices[k]];
+      pTris[pIdx][pTriOffset[pIdx]++] = j;
+    }
+  }
+
+  int numIslands = 0;
+  int *stack = malloc(sizeof(int) * mesh->mNumFaces);
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+    if (triIsland[j] != -1 || mesh->mFaces[j].mNumIndices != 3) continue;
+    int stackPtr = 0;
+    stack[stackPtr++] = j;
+    triIsland[j] = numIslands;
+    while (stackPtr > 0) {
+      int currTri = stack[--stackPtr];
+      for (int k = 0; k < 3; k++) {
+        int pIdx = vPosId[mesh->mFaces[currTri].mIndices[k]];
+        for (int m = 0; m < pTriCount[pIdx]; m++) {
+          int nextTri = pTris[pIdx][m];
+          if (triIsland[nextTri] == -1) {
+            triIsland[nextTri] = numIslands;
+            stack[stackPtr++] = nextTri;
+          }
+        }
+      }
+    }
+    numIslands++;
+  }
+  for (int j = 0; j < numUniquePositions; j++) free(pTris[j]);
+  free(pTris); free(pTriCount); free(pTriOffset); free(vPosId);
+
+  float initialMaxU = -999999, initialMaxV = -999999;
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+    if (triIsland[j] == -1) continue;
+    for (int k = 0; k < 3; k++) {
+      int vIdx = mesh->mFaces[j].mIndices[k];
+      struct aiVector3D *u = &mesh->mTextureCoords[uvChannel][vIdx];
+      if (u->x > initialMaxU) initialMaxU = u->x;
+      if (u->y > initialMaxV) initialMaxV = u->y;
+    }
+  }
+
+  qboolean abortSpreading = (numIslands > 500 || initialMaxU > 5.0f || initialMaxV > 5.0f) ? qtrue : qfalse;
+  int numShifted = 0;
+  typedef struct { float mins[2], maxs[2], offset[2]; } uvIsland_t;
+  uvIsland_t *islands = NULL;
+
+  if (!abortSpreading) {
+    islands = malloc(sizeof(uvIsland_t) * numIslands);
+    for (int j = 0; j < numIslands; j++) {
+      islands[j].mins[0] = islands[j].mins[1] = 999999;
+      islands[j].maxs[0] = islands[j].maxs[1] = -999999;
+      islands[j].offset[0] = islands[j].offset[1] = 0;
+    }
+    for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+      if (triIsland[j] == -1) continue;
+      int islId = triIsland[j];
+      for (int k = 0; k < 3; k++) {
+        int vIdx = mesh->mFaces[j].mIndices[k];
+        struct aiVector3D *u = &mesh->mTextureCoords[uvChannel][vIdx];
+        if (u->x < islands[islId].mins[0]) islands[islId].mins[0] = u->x;
+        if (u->y < islands[islId].mins[1]) islands[islId].mins[1] = u->y;
+        if (u->x > islands[islId].maxs[0]) islands[islId].maxs[0] = u->x;
+        if (u->y > islands[islId].maxs[1]) islands[islId].maxs[1] = u->y;
+      }
+    }
+
+    for (int j = 0; j < numIslands; j++) {
+      islands[j].offset[0] = 0; islands[j].offset[1] = 0;
+      int slotX = 0, slotY = 0;
+      qboolean done = qfalse;
+      while (!done) {
+        qboolean collision = qfalse;
+        float testMinU = islands[j].mins[0] + slotX, testMaxU = islands[j].maxs[0] + slotX;
+        float testMinV = islands[j].mins[1] + slotY, testMaxV = islands[j].maxs[1] + slotY;
+        for (int k = 0; k < j; k++) {
+          if (islands[k].offset[0] == (float)slotX && islands[k].offset[1] == (float)slotY) {
+            float minsA[2] = { islands[k].mins[0] + islands[k].offset[0], islands[k].mins[1] + islands[k].offset[1] };
+            float maxsA[2] = { islands[k].maxs[0] + islands[k].offset[0], islands[k].maxs[1] + islands[k].offset[1] };
+            float minsB[2] = { testMinU, testMinV }, maxsB[2] = { testMaxU, testMaxV };
+            float interMinU = (minsA[0] > minsB[0]) ? minsA[0] : minsB[0], interMaxU = (maxsA[0] < maxsB[0]) ? maxsA[0] : maxsB[0];
+            float interMinV = (minsA[1] > minsB[1]) ? minsA[1] : minsB[1], interMaxV = (maxsA[1] < maxsB[1]) ? maxsA[1] : maxsB[1];
+            float interW = interMaxU - interMinU, interH = interMaxV - interMinV;
+            if (interW > 0.001f && interH > 0.001f) {
+              float areaA = (maxsA[0] - minsA[0]) * (maxsA[1] - minsA[1]), areaB = (maxsB[0] - minsB[0]) * (maxsB[1] - minsB[1]);
+              float interArea = interW * interH, minArea = (areaA < areaB) ? areaA : areaB;
+              if (interArea > 0.98f * minArea) { collision = qtrue; break; }
+            }
+          }
+        }
+        if (!collision) {
+          islands[j].offset[0] = (float)slotX; islands[j].offset[1] = (float)slotY;
+          if (slotX != 0 || slotY != 0) numShifted++;
+          done = qtrue;
+        } else {
+          slotX++; if (slotX >= 20) { slotX = 0; slotY++; }
+          if (slotY >= 20) { abortSpreading = qtrue; done = qtrue; break; }
+        }
+      }
+      if (numShifted > 300 || numIslands > 500) abortSpreading = qtrue;
+      if (abortSpreading) break;
+    }
+  }
+
+  if (abortSpreading && islands) {
+    for (int j = 0; j < numIslands; j++) islands[j].offset[0] = islands[j].offset[1] = 0;
+  }
+
+  float currentMaxU = -999999;
+  if (islands) {
+    for (int j = 0; j < numIslands; j++) {
+      float m = islands[j].maxs[0] + islands[j].offset[0];
+      if (m > currentMaxU) currentMaxU = m;
+    }
+  }
+
+  for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+    if (triIsland[j] != -1 && islands) {
+      int islId = triIsland[j];
+      outU[j] = islands[islId].offset[0];
+      outV[j] = islands[islId].offset[1];
+    } else {
+      outU[j] = outV[j] = 0;
+    }
+  }
+
+  free(triIsland); free(stack); if (islands) free(islands);
+  if (!abortSpreading && currentMaxU > 1.05f) {
+  }
+}
+
 /*
 ====================
 LoadTriangleModels
@@ -190,13 +371,12 @@ void LoadTriangleModels(void) {
 
   for (entity_num = 1; entity_num < num_entities; entity_num++) {
     entity = &entities[entity_num];
+    const char *classname = ValueForKey(entity, "classname");
 
-    if (!Q_stricmp("misc_model", ValueForKey(entity, "classname"))) {
+    if (!Q_stricmp("misc_model", classname)) {
       model = ValueForKey(entity, "model");
       if (!model[0])
         continue;
-
-      _printf("  Processing entity %i: %s\n", entity_num, model);
 
       GetVectorForKey(entity, "origin", origin);
       GetVectorForKey(entity, "angles", angles);
@@ -243,43 +423,47 @@ void LoadTriangleModels(void) {
         shaderInfo_t *si = ShaderInfoForShader(shaderName);
 
         // ==========================================
-        // UV Overlap Detection
+        // UV Overlap Detection & Automatic Spreading
         // ==========================================
-        if (mesh->mTextureCoords[0]) {
-          float totalUVArea = 0;
-          float uvMins[2] = {999999, 999999};
-          float uvMaxs[2] = {-999999, -999999};
+        float *uOffsets = calloc(mesh->mNumFaces, sizeof(float));
+        float *vOffsets = calloc(mesh->mNumFaces, sizeof(float));
+        int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
 
-          for (int j = 0; j < (int)mesh->mNumFaces; j++) {
-            if (mesh->mFaces[j].mNumIndices != 3)
-              continue;
-            unsigned int i0 = mesh->mFaces[j].mIndices[0];
-            unsigned int i1 = mesh->mFaces[j].mIndices[1];
-            unsigned int i2 = mesh->mFaces[j].mIndices[2];
+        if (mesh->mTextureCoords[uvChannel]) {
+          // Most Basic Check: UV Area Ratio Detection (Sampled).
+          // Ratio > 1.1 means significant overlaps/mirroring.
+          qboolean potentialOverlap = qfalse;
+          float areaSum = 0;
+          float uvMins[2] = {999999, 999999}, uvMaxs[2] = {-999999, -999999};
+          int sampleStep = (mesh->mNumFaces > 200) ? 10 : 1;
+          for (int k = 0; k < (int)mesh->mNumFaces; k += sampleStep) {
+            if (mesh->mFaces[k].mNumIndices != 3) continue;
+            struct aiVector3D *v0 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[0]];
+            struct aiVector3D *v1 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[1]];
+            struct aiVector3D *v2 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[2]];
+            
+            // Triangle Area (Shoelace formula)
+            float a = 0.5f * fabsf((v0->x - v2->x) * (v1->y - v0->y) - (v0->x - v1->x) * (v2->y - v0->y));
+            areaSum += a;
 
-            struct aiVector3D *u0 = &mesh->mTextureCoords[0][i0];
-            struct aiVector3D *u1 = &mesh->mTextureCoords[0][i1];
-            struct aiVector3D *u2 = &mesh->mTextureCoords[0][i2];
-
-            float area = fabs((u1->x - u0->x) * (u2->y - u0->y) -
-                              (u2->x - u0->x) * (u1->y - u0->y)) *
-                         0.5f;
-            totalUVArea += area;
+            // UV Bounds
+            for (int m = 0; m < 3; m++) {
+              struct aiVector3D *v = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[m]];
+              if (v->x < uvMins[0]) uvMins[0] = v->x;
+              if (v->x > uvMaxs[0]) uvMaxs[0] = v->x;
+              if (v->y < uvMins[1]) uvMins[1] = v->y;
+              if (v->y > uvMaxs[1]) uvMaxs[1] = v->y;
+            }
+          }
+          float bboxArea = (uvMaxs[0] - uvMins[0]) * (uvMaxs[1] - uvMins[1]);
+          float areaRatio = (bboxArea > 0.001f) ? (areaSum * sampleStep / bboxArea) : 0;
+          
+          if (areaRatio > 1.05f) {
+            potentialOverlap = qtrue;
           }
 
-          for (int j = 0; j < (int)mesh->mNumVertices; j++) {
-            struct aiVector3D *u = &mesh->mTextureCoords[0][j];
-            if (u->x < uvMins[0]) uvMins[0] = u->x;
-            if (u->y < uvMins[1]) uvMins[1] = u->y;
-            if (u->x > uvMaxs[0]) uvMaxs[0] = u->x;
-            if (u->y > uvMaxs[1]) uvMaxs[1] = u->y;
-          }
-
-          float bbArea = (uvMaxs[0] - uvMins[0]) * (uvMaxs[1] - uvMins[1]);
-          if (totalUVArea > bbArea * 1.05) {
-            _printf("WARNING: model %s (mesh %d) has overlapping lightmap UVs! "
-                    "(UV Area: %.3f, Bounds Area: %.3f)\n",
-                    model, i, totalUVArea, bbArea);
+          if (potentialOverlap) {
+            TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
           }
         }
 
@@ -433,11 +617,11 @@ void LoadTriangleModels(void) {
 
                 // Prefer channel 1 for lightmap UVs, fallback to channel 0
                 if (mesh->mTextureCoords[1]) {
-                  dv->lightmap[0][0] = mesh->mTextureCoords[1][oldIdx].x;
-                  dv->lightmap[0][1] = mesh->mTextureCoords[1][oldIdx].y;
+                  dv->lightmap[0][0] = mesh->mTextureCoords[1][oldIdx].x + uOffsets[currentFace];
+                  dv->lightmap[0][1] = mesh->mTextureCoords[1][oldIdx].y + vOffsets[currentFace];
                 } else if (mesh->mTextureCoords[0]) {
-                  dv->lightmap[0][0] = dv->st[0];
-                  dv->lightmap[0][1] = dv->st[1];
+                  dv->lightmap[0][0] = dv->st[0] + uOffsets[currentFace];
+                  dv->lightmap[0][1] = dv->st[1] + vOffsets[currentFace];
                 }
 
                 dv->color[0][0] = dv->color[0][1] = dv->color[0][2] = dv->color[0][3] = 255;
@@ -460,11 +644,11 @@ void LoadTriangleModels(void) {
         }
         
         free(vMap);
+        if (uOffsets) free(uOffsets);
+        if (vOffsets) free(vOffsets);
       }
     }
   }
-
-  _printf("----- LoadTriangleModels finished -----\n");
 }
 
 /*
@@ -476,7 +660,6 @@ Second pass: Insert the pre-calculated surfaces into the BSP tree.
 */
 void AddTriangleModels(tree_t *tree) {
   int i;
-  _printf("----- AddTriangleModels (Insertion) -----\n");
 
   for (i = 0; i < numModelInstances; i++) {
     modelInstance_t *inst = &modelInstances[i];
