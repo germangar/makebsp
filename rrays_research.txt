@@ -1,0 +1,51 @@
+# Radeon Rays Integration Research Report
+
+## 1. Overview
+Radeon Rays 4.0 (RR4) is a high-performance, hardware-agnostic ray tracing library that leverages GPU acceleration (via DXR on DirectX 12 or Vulkan Ray Tracing). It provides a C API for building acceleration structures (BVHs) and performing ray-scene intersections.
+
+## 2. Architecture & Backend Requirements
+- **Backend**: RR4 is NOT a standalone renderer. It requires an external GPU context.
+- **DirectX 12**: Preferred for Windows 10. We need to initialize:
+    - `ID3D12Device`
+    - `ID3D12CommandQueue`
+    - `ID3D12GraphicsCommandList`
+- **Vulkan**: Alternative backend, requires Vulkan SDK and driver.
+- **Interoperability**: RR functions (`rrCreateContextDX`, `rrGetDevicePtrFromD3D12Resource`) allow sharing GPU buffers between the application and the library.
+
+## 3. Core Workflow
+1. **Context Creation**: `rrCreateContextDX` links RR to our D3D12 device.
+2. **Geometry Buffers**: 
+    - Convert BSP world surfaces (Facets) into indexed triangle meshes.
+    - Allocate `D3D12_HEAP_TYPE_DEFAULT` buffers and upload vertex/index data.
+    - Obtain `RRDevicePtr` for these buffers.
+3. **Acceleration Structures**:
+    - Build Bottom-Level AS (BLAS) for each surface type or the entire world mesh using `rrCmdBuildGeometry`.
+    - Build Top-Level AS (TLAS) using `rrCmdBuildScene` referencing geometry instances.
+4. **Execution**:
+    - Batch thousands of rays into an `RRRay` buffer on the GPU.
+    - Execute `rrCmdIntersect` with `RR_INTERSECT_QUERY_ANY` (for occlusion) or `RR_INTERSECT_QUERY_CLOSEST` (for surface hits).
+    - Read back `RRHit` results to the CPU.
+
+## 4. Integration into light_gpu
+### Direct Lighting Pass (Point Entities)
+- **Luxel Sampling**: For each lightmap pixel (luxel), calculate its world position $P$ and surface normal $N$.
+- **Ray Generation**: 
+    - Offset $P$ slightly ($P + \epsilon N$) to avoid self-intersection.
+    - For each light entity $L$ within range:
+        - Direction $D = L - P$.
+        - Length $dist = |D|$.
+        - Add ray $(P, D / dist, dist)$ to the GPU ray batch.
+- **Occlusion Testing**: Use RR to find any triangle blocking the ray.
+    - Opaque surfaces: Stop tracing, light is 0.
+    - Alpha surfaces: RR returns `prim_id`, we can fetch texture data to calculate light filtering.
+- **Hardware Efficiency**: batched rays (e.g., 1 million rays per `rrCmdIntersect`) will maximize GPU throughput.
+
+## 5. Dependencies
+- **spdlog**: Required for internal RR logging.
+- **d3d12.lib / dxgi.lib / d3dcompiler.lib**: Required for DX12 host implementation.
+- **RadeonRays.a / libspdlog.a**: Already integrated into build.
+
+## 6. Implementation Strategy (Phase 1)
+1. Implement a minimal DX12 "host" module in `light_gpu/gpu_context.c`.
+2. Implement geometry export in `light_gpu/gpu_geometry.c`: convert `surfaceTest_t` (facets) to unified vertex/index buffers.
+3. Replace the inner loop of the direct lighting pass with a "Ray Batcher" that delegates to RR.

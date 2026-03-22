@@ -1,21 +1,22 @@
 CC = gcc
 CXX = g++
-CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight \
+CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu \
          -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen \
          -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite \
+         -Ilibs/radeonrays/include -Ilibs/spdlog/include \
          -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 \
          -DSTB_IMAGE_IMPLEMENTATION
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch \
            -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
 BASE_LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm -lstdc++ -fopenmp
 Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lz
-LIGHT_LDFLAGS = $(BASE_LDFLAGS)
+LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/radeonrays/lib -lradeonrays -Llibs/spdlog/lib -lspdlog
 
 # Directories
 COMMON_DIR = common
 Q3MAP_DIR = q3map
 SHARED_DIR = shared
-LIGHT_DIR = light
+LIGHT_DIR = light_gpu
 PAK_DIR = libs/pak
 HACD_DIR = libs/hacd
 OBJ_DIR = obj
