@@ -288,40 +288,52 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
       }
     }
 
+    // ------------------------------------------
+    // TIGHT SHELF PACKER
+    // ------------------------------------------
+    // 1. Calculate Total Area and Sort by Height
+    float totalArea = 0;
+    int sortIds[500];
     for (int j = 0; j < numIslands; j++) {
-      islands[j].offset[0] = 0; islands[j].offset[1] = 0;
-      int slotX = 0, slotY = 0;
-      qboolean done = qfalse;
-      while (!done) {
-        qboolean collision = qfalse;
-        float testMinU = islands[j].mins[0] + slotX, testMaxU = islands[j].maxs[0] + slotX;
-        float testMinV = islands[j].mins[1] + slotY, testMaxV = islands[j].maxs[1] + slotY;
-        for (int k = 0; k < j; k++) {
-          if (islands[k].offset[0] == (float)slotX && islands[k].offset[1] == (float)slotY) {
-            float minsA[2] = { islands[k].mins[0] + islands[k].offset[0], islands[k].mins[1] + islands[k].offset[1] };
-            float maxsA[2] = { islands[k].maxs[0] + islands[k].offset[0], islands[k].maxs[1] + islands[k].offset[1] };
-            float minsB[2] = { testMinU, testMinV }, maxsB[2] = { testMaxU, testMaxV };
-            float interMinU = (minsA[0] > minsB[0]) ? minsA[0] : minsB[0], interMaxU = (maxsA[0] < maxsB[0]) ? maxsA[0] : maxsB[0];
-            float interMinV = (minsA[1] > minsB[1]) ? minsA[1] : minsB[1], interMaxV = (maxsA[1] < maxsB[1]) ? maxsA[1] : maxsB[1];
-            float interW = interMaxU - interMinU, interH = interMaxV - interMinV;
-            if (interW > 0.001f && interH > 0.001f) {
-              float areaA = (maxsA[0] - minsA[0]) * (maxsA[1] - minsA[1]), areaB = (maxsB[0] - minsB[0]) * (maxsB[1] - minsB[1]);
-              float interArea = interW * interH, minArea = (areaA < areaB) ? areaA : areaB;
-              if (interArea > 0.98f * minArea) { collision = qtrue; break; }
-            }
-          }
-        }
-        if (!collision) {
-          islands[j].offset[0] = (float)slotX; islands[j].offset[1] = (float)slotY;
-          if (slotX != 0 || slotY != 0) numShifted++;
-          done = qtrue;
-        } else {
-          slotX++; if (slotX >= 20) { slotX = 0; slotY++; }
-          if (slotY >= 20) { abortSpreading = qtrue; done = qtrue; break; }
-        }
+      sortIds[j] = j;
+      float w = islands[j].maxs[0] - islands[j].mins[0];
+      float h = islands[j].maxs[1] - islands[j].mins[1];
+      totalArea += w * h;
+    }
+
+    // Simple Bubble Sort (numIslands is small)
+    for (int a = 0; a < numIslands - 1; a++) {
+      for (int b = a + 1; b < numIslands; b++) {
+        float hA = islands[sortIds[a]].maxs[1] - islands[sortIds[a]].mins[1];
+        float hB = islands[sortIds[b]].maxs[1] - islands[sortIds[b]].mins[1];
+        if (hB > hA) { int t = sortIds[a]; sortIds[a] = sortIds[b]; sortIds[b] = t; }
       }
-      if (numShifted > 300 || numIslands > 500) abortSpreading = qtrue;
-      if (abortSpreading) break;
+    }
+
+    // 2. Greedy Shelf Packing
+    float atlasWidth = sqrtf(totalArea) * 1.5f; // Target square-ish area with breathing room
+    if (atlasWidth < 5.0f) atlasWidth = 5.0f;
+    
+    float shelfX = 0, shelfY = 0, currentShelfHeight = 0, gutter = 0.1f;
+    for (int i = 0; i < numIslands; i++) {
+      int id = sortIds[i];
+      float w = islands[id].maxs[0] - islands[id].mins[0];
+      float h = islands[id].maxs[1] - islands[id].mins[1];
+
+      if (shelfX + w + gutter > atlasWidth && shelfX > 0) {
+        shelfX = 0;
+        shelfY += currentShelfHeight + gutter;
+        currentShelfHeight = 0;
+      }
+
+      islands[id].offset[0] = shelfX;
+      islands[id].offset[1] = shelfY;
+      
+      if (shelfX != 0 || shelfY != 0) numShifted++;
+      shelfX += w + gutter;
+      if (h > currentShelfHeight) currentShelfHeight = h;
+      
+      if (shelfY + h > 20.0f) { abortSpreading = qtrue; break; } // Safeguard
     }
   }
 
@@ -349,6 +361,7 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
 
   free(triIsland); free(stack); if (islands) free(islands);
   if (!abortSpreading && currentMaxU > 1.05f) {
+    _printf("  NOTICE: model %s (mesh %d) UVs spread and TIGHT-SHELF-PACKED (Max U: %.2f, Islands: %d, Shifted: %d)\n", modelName, meshIdx, currentMaxU, numIslands, numShifted);
   }
 }
 
