@@ -31,14 +31,19 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 int numSortShaders;
 mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
 
+#define MAX_LIGHTMAPS 512
 #define MAX_LIGHTMAP_WIDTH 1024
-int allocated[MAX_LIGHTMAP_WIDTH];
+int *lightmapHeights = NULL;
 
-int numLightmaps = 1;
+int numLightmaps = 0;
 int c_exactLightmap;
 
 void PrepareNewLightmap(void) {
-  memset(allocated, 0, sizeof(allocated));
+  if (numLightmaps >= MAX_LIGHTMAPS) {
+    Error("MAX_LIGHTMAPS exceeded");
+  }
+  // Explicitly clear the memory for the new lightmap's heightmap
+  memset(&lightmapHeights[numLightmaps * MAX_LIGHTMAP_WIDTH], 0, sizeof(int) * MAX_LIGHTMAP_WIDTH);
   numLightmaps++;
 }
 
@@ -49,38 +54,36 @@ AllocLMBlock
 returns a texture number and the position inside it
 ===============
 */
-qboolean AllocLMBlock(int w, int h, int *x, int *y) {
+qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y) {
   int i, j;
-  int best, best2;
+  int *allocated = &lightmapHeights[lmIndex * MAX_LIGHTMAP_WIDTH];
+  int bestY;
 
-  best = LIGHTMAP_HEIGHT;
-
+  // Search for the first horizontal run where it fits vertically
   for (i = 0; i <= LIGHTMAP_WIDTH - w; i++) {
-    best2 = 0;
-
+    bestY = 0;
     for (j = 0; j < w; j++) {
-      if (allocated[i + j] >= best) {
-        break;
+      if (allocated[i + j] > bestY) {
+        bestY = allocated[i + j];
       }
-      if (allocated[i + j] > best2) {
-        best2 = allocated[i + j];
+      if (bestY + h > LIGHTMAP_HEIGHT) {
+        break; // Doesn't fit in this run starting at 'i'
       }
     }
-    if (j == w) { // this is a valid spot
+    
+    if (j == w) { // Fits!
       *x = i;
-      *y = best = best2;
+      *y = bestY;
+      
+      // Update the heightmap
+      for (j = 0; j < w; j++) {
+        allocated[i + j] = bestY + h;
+      }
+      return qtrue;
     }
   }
 
-  if (best + h > LIGHTMAP_HEIGHT) {
-    return qfalse;
-  }
-
-  for (i = 0; i < w; i++) {
-    allocated[*x + i] = best + h;
-  }
-
-  return qtrue;
+  return qfalse;
 }
 
 /*
@@ -195,15 +198,25 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
     h = 1;
 
   // 4. Allocation
-  if (!AllocLMBlock(w, h, &x, &y)) {
-    PrepareNewLightmap();
-    if (!AllocLMBlock(w, h, &x, &y)) {
-      Error("misc_model: Lightmap allocation failed");
+  qboolean allocated_success = qfalse;
+  for (i = 0; i < numLightmaps; i++) {
+    if (AllocLMBlock(i, w, h, &x, &y)) {
+      ds->lightmapNum = i;
+      allocated_success = qtrue;
+      if (i < numLightmaps - 1) {
+        _printf("  NOTICE: TriSoup REFILLED old LM %d\n", i);
+      }
+      break;
     }
   }
 
-  // 5. Finalize UVs
-  ds->lightmapNum = numLightmaps - 1;
+  if (!allocated_success) {
+    PrepareNewLightmap();
+    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+      Error("misc_model: Lightmap allocation failed");
+    }
+    ds->lightmapNum = numLightmaps - 1;
+  }
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
   ds->lightmapX = x;
@@ -264,12 +277,22 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   // allocate the lightmap
   c_exactLightmap += w * h;
 
-  if (!AllocLMBlock(w, h, &x, &y)) {
+  qboolean allocated_patch_success = qfalse;
+  for (i = 0; i < numLightmaps; i++) {
+    if (AllocLMBlock(i, w, h, &x, &y)) {
+      ds->lightmapNum = i;
+      allocated_patch_success = qtrue;
+      break;
+    }
+  }
+
+  if (!allocated_patch_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(w, h, &x, &y)) {
-      Error("Entity %i, brush %i: Lightmap allocation failed",
+    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+      Error("Entity %i, brush %i: Patch lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
+    ds->lightmapNum = numLightmaps - 1;
   }
 
 #ifdef LIGHTMAP_PATCHSHIFT
@@ -397,12 +420,22 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
 
   c_exactLightmap += w * h;
 
-  if (!AllocLMBlock(w, h, &x, &y)) {
+  qboolean allocated_surf_success = qfalse;
+  for (i = 0; i < numLightmaps; i++) {
+    if (AllocLMBlock(i, w, h, &x, &y)) {
+      ds->lightmapNum = i;
+      allocated_surf_success = qtrue;
+      break;
+    }
+  }
+
+  if (!allocated_surf_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(w, h, &x, &y)) {
-      Error("Entity %i, brush %i: Lightmap allocation failed",
+    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+      Error("Entity %i, brush %i: Surface lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
+    ds->lightmapNum = numLightmaps - 1;
   }
 
   // set the lightmap texture coordinates in the drawVerts
@@ -457,6 +490,12 @@ void AllocateLightmaps(entity_t *e) {
   shaderInfo_t *si;
 
   qprintf("--- AllocateLightmaps ---\n");
+
+  if (!lightmapHeights) {
+    lightmapHeights = calloc(MAX_LIGHTMAPS * MAX_LIGHTMAP_WIDTH, sizeof(int));
+    numLightmaps = 0;
+    PrepareNewLightmap(); // Start with the first lightmap
+  }
 
   // sort all surfaces by shader so common shaders will usually
   // be in the same lightmap
@@ -530,4 +569,11 @@ void AllocateLightmaps(entity_t *e) {
 
   qprintf("%7i exact lightmap texels\n", c_exactLightmap);
   qprintf("%7i block lightmap texels\n", numLightBytes);
+}
+
+void FreeLightmaps(void) {
+  if (lightmapHeights) {
+    free(lightmapHeights);
+    lightmapHeights = NULL;
+  }
 }

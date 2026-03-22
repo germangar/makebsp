@@ -411,6 +411,7 @@ void PatchMapDrawSurfs(entity_t *e);
 
 void AllocateLightmaps(entity_t *e);
 void AllocateLightmapForPatch(mapDrawSurface_t *ds);
+void FreeLightmaps(void);
 
 //=============================================================================
 

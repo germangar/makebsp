@@ -549,5 +549,7 @@ int main(int argc, char **argv) {
     remove(tempsource);
   }
 
+  FreeLightmaps();
+
   return 0;
 }
