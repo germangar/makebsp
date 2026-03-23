@@ -111,17 +111,25 @@ float CalculateFalloff(float dot) {
   if (g_game->falloff == FALLOFF_HALFLAMBERT) {
     val = val * 0.5f + 0.5f;
     return val * val;
+  } else if (g_game->falloff == FALLOFF_WRAPPED) {
+    // 0.5 wrap rescaled to 0-1
+    val = (val + 0.5f) / 1.5f;
+    return (val < 0.0f) ? 0.0f : val;
+  } else if (g_game->falloff == FALLOFF_UNREAL) {
+    // Unreal angular part is standard Lambert
+    return (val < 0.0f) ? 0.0f : val;
   } else if (g_game->falloff == FALLOFF_QUADRATIC) {
-    if (val < 0.0f) return 0.0f;
+    if (val < 0.0f)
+      return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val);
   } else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) {
-    if (val < 0.0f) return 0.0f;
+    if (val < 0.0f)
+      return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val * val);
-  } else {
-    return (val < 0.0f) ? 0.0f : val;
   }
+  return (val < 0.0f) ? 0.0f : val;
 }
 
 int numSkyBrushes;
@@ -1152,7 +1160,11 @@ void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
   }
 
   // if the sun is behind the surface
-  if (g_game->falloff != FALLOFF_HALFLAMBERT || tw->forceFrontOnly) {
+  if (tw->forceFrontOnly) {
+    if (DotProduct(normal, sunDirection) < -0.125f) {
+      return; // facing away
+    }
+  } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
     if (DotProduct(normal, sunDirection) <= 0) {
       return; // facing away
     }
@@ -1188,7 +1200,10 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   for (light = lights; light; light = light->next) {
 
     // if the light is behind the surface
-    if (g_game->falloff != FALLOFF_HALFLAMBERT || tw->forceFrontOnly) {
+    if (tw->forceFrontOnly) {
+      if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < -0.125f)
+        continue;
+    } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
       if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
         continue;
     }
@@ -1256,7 +1271,21 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
         dist = 16;
       }
       angle = CalculateFalloff(DotProduct(normal, dir));
-      if (light->linearLight) {
+      if (g_game->falloff == FALLOFF_UNREAL) {
+        // Unreal Windowed Inverse Square
+        // R is the distance where light would naturally fall below 1.0 (clamped)
+        float R = sqrt(light->photons);
+        if (dist > R) {
+           add = 0;
+        } else {
+           float ratio = dist / R;
+           float ratio2 = ratio * ratio;
+           float window = 1.0f - ratio2 * ratio2;
+           if (window < 0) window = 0;
+           // + 1.0f on bottom to prevent hotspots
+           add = (light->photons / (dist * dist + 1.0f)) * (window * window) * angle;
+        }
+      } else if (light->linearLight) {
         add = angle * light->photons * linearScale - dist;
         if (add < 0) {
           add = 0;
@@ -1641,8 +1670,8 @@ void TraceLtm(int num) {
 
       mesh = mp;
     }
-    sampleWidth = mesh->width;
-    sampleHeight = mesh->height;
+    sampleWidth = mesh->width + currentGutter * 2;
+    sampleHeight = mesh->height + currentGutter * 2;
   } else {
     VectorCopy(ds->lightmapVecs[2], normal);
 
@@ -1734,8 +1763,8 @@ void TraceLtm(int num) {
       } else if (ds->patchWidth) {
         numPositions = 9;
         // Dilation: clamp to mesh bounds for the gutter
-        int mi = i - GUTTER;
-        int mj = j - GUTTER;
+        int mi = i - currentGutter;
+        int mj = j - currentGutter;
         if (mi < 0) mi = 0; 
         if (mi >= mesh->width) mi = mesh->width - 1;
         if (mj < 0) mj = 0;
@@ -1752,8 +1781,8 @@ void TraceLtm(int num) {
       } else {
         numPositions = 9;
         // Dilation: offset the planar calculation
-        int pi = i - GUTTER;
-        int pj = j - GUTTER;
+        int pi = i - currentGutter;
+        int pj = j - currentGutter;
         for (k = 0; k < 3; k++) {
           base[k] = (double)lightmapOrigin[k] +
                     (double)normal[k] * SAMPLE_NUDGE +
@@ -2603,6 +2632,12 @@ int LightMain(int argc, char **argv) {
           } else if (!strcmp(arg, "doublequadratic")) {
             g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
             _printf("Double Quadratic attenuation enabled\n");
+          } else if (!strcmp(arg, "unreal")) {
+            g_game->falloff = FALLOFF_UNREAL;
+            _printf("Unreal Windowed Inverse Square attenuation enabled\n");
+          } else if (!strcmp(arg, "wrapped")) {
+            g_game->falloff = FALLOFF_WRAPPED;
+            _printf("Wrapped Lambert (0.5) attenuation enabled\n");
           } else {
             Error("Unknown falloff type: %s", arg);
           }

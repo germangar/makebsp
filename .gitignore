@@ -25,6 +25,7 @@ libs/MeshLib/build_minimal/
 libs/MeshLib/tmp_cmake_test/
 libs/MeshLib/cmake_trace.txt
 libs/MeshLib/thirdparty/
+q3map2_reference
 
 # Debug OBJ exports
 *_meshlib.obj

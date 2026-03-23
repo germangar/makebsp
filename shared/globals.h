@@ -3,7 +3,7 @@
 
 #include "../common/qtypes.h"
 
-typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC } falloff_t;
+typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL, FALLOFF_WRAPPED } falloff_t;
 
 extern int samplesize;
 extern char source[1024];
