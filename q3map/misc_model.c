@@ -608,6 +608,9 @@ void LoadTriangleModels(void) {
           }
           if (inst->creator) {
             const char *ent_sample_str = ValueForKey(inst->creator, "_lightmapsamplesize");
+            if (!ent_sample_str[0]) ent_sample_str = ValueForKey(inst->creator, "_samplesize");
+            if (!ent_sample_str[0]) ent_sample_str = ValueForKey(inst->creator, "samplesize");
+            
             if (ent_sample_str[0]) {
               int ent_sample = atoi(ent_sample_str);
               if (ent_sample > 0) {

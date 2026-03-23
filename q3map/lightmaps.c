@@ -157,11 +157,9 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
 
   // 3. Scale Determination
   // Target density: 1/ssize^2 luxels per square unit.
+  // 3. Scale Determination
+  // Target density: 1/ssize^2 luxels per square unit.
   scale = sqrt((area3D / (ssize * ssize)) / areaUV);
-
-  _printf("Allocating for TriSoup: 3D Area: %.2f, UV Area: %.4f, ssize: %d, "
-          "Scale: %.4f\n",
-          area3D, areaUV, ssize, scale);
 
   // Safeguard against extreme scaling
   if (scale < 0.01)
@@ -201,9 +199,6 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
     if (AllocLMBlock(i, w, h, &x, &y)) {
       ds->lightmapNum = i;
       allocated_success = qtrue;
-      if (i < numLightmaps - 1) {
-        _printf("  NOTICE: TriSoup REFILLED old LM %d\n", i);
-      }
       break;
     }
   }
@@ -297,7 +292,6 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 #endif
 
   // set the lightmap texture coordinates in the drawVerts
-  ds->lightmapNum = numLightmaps - 1;
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
   ds->lightmapX = x;
@@ -433,7 +427,6 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
   }
 
   // set the lightmap texture coordinates in the drawVerts
-  ds->lightmapNum = numLightmaps - 1;
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
   ds->lightmapX = x;
@@ -557,6 +550,9 @@ void AllocateLightmaps(entity_t *e) {
   if (numLightBytes > MAX_MAP_LIGHTING) {
     Error("MAX_MAP_LIGHTING exceeded");
   }
+
+  _printf("%5i unique shaders\n", numSortShaders);
+  _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
 
   // Clear the lightmap buffer
   memset(lightBytes, 0, numLightBytes);

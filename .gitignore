@@ -9,10 +9,11 @@ libs/assimp_src/
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
 
+// temporary!
+libs/embree
+light_embree/
 
-paklog.txt
-modeltest_modelsinfo.txt
-libs/coacd
+
 AGENTS.md
 .vscode/settings.json
 
@@ -49,3 +50,4 @@ iqm2glb/tris.skm
 iqm2glb/tris.skp
 
 light.exe
+q3light.exe

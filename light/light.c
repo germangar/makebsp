@@ -28,6 +28,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 #define EXTRASCALE 2
+#define GUTTER 1
 
 typedef struct {
   float plane[4];
@@ -238,17 +239,18 @@ CountLightmaps
 */
 void CountLightmaps(void) {
   int count;
-  int i;
+  int i, j;
   dsurface_t *ds;
   int numSamples = 0;
 
   _printf("--- CountLightmaps ---\n");
-  count = 0;
+  count = -1;
   for (i = 0; i < numDrawSurfaces; i++) {
-    // see if this surface is light emiting
     ds = &drawSurfaces[i];
-    if (ds->lightmapNum[0] > count) {
-      count = ds->lightmapNum[0];
+    for (j = 0; j < 4; j++) {
+      if (ds->lightmapNum[j] > count) {
+        count = ds->lightmapNum[j];
+      }
     }
     if (ds->lightmapNum[0] >= 0) {
       numSamples += ds->lightmapWidth * ds->lightmapHeight;
@@ -283,6 +285,36 @@ static qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
 
 /*
 =================
+DistanceSqToSegment
+
+Returns the squared distance from a point to a line segment in 2D.
+Also returns the parametric 't' value of the closest point [0, 1].
+=================
+*/
+static float DistanceSqToSegment(float px, float py, float v0[2], float v1[2],
+                                 float *t) {
+  float dx = v1[0] - v0[0];
+  float dy = v1[1] - v0[1];
+  float l2 = dx * dx + dy * dy;
+  if (l2 == 0.0f) {
+    if (t)
+      *t = 0.0f;
+    return (px - v0[0]) * (px - v0[0]) + (py - v0[1]) * (py - v0[1]);
+  }
+  float tt = ((px - v0[0]) * dx + (py - v0[1]) * dy) / l2;
+  if (t)
+    *t = tt;
+  if (tt < 0.0f)
+    return (px - v0[0]) * (px - v0[0]) + (py - v0[1]) * (py - v0[1]);
+  if (tt > 1.0f)
+    return (px - v1[0]) * (px - v1[0]) + (py - v1[1]) * (py - v1[1]);
+  float projx = v0[0] + tt * dx;
+  float projy = v0[1] + tt * dy;
+  return (px - projx) * (px - projx) + (py - projy) * (py - projy);
+}
+
+/*
+=================
 TriSoupSamplePoint
 
 Finds the position and normal for a lightmap sample point (st in pixel space)
@@ -311,6 +343,18 @@ static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
     st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
     st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
 
+    // Fast Bounding Box rejection
+    float mins[2], maxs[2];
+    mins[0] = st0[0] < st1[0] ? (st0[0] < st2[0] ? st0[0] : st2[0]) : (st1[0] < st2[0] ? st1[0] : st2[0]);
+    mins[1] = st0[1] < st1[1] ? (st0[1] < st2[1] ? st0[1] : st2[1]) : (st1[1] < st2[1] ? st1[1] : st2[1]);
+    maxs[0] = st0[0] > st1[0] ? (st0[0] > st2[0] ? st0[0] : st2[0]) : (st1[0] > st2[0] ? st1[0] : st2[0]);
+    maxs[1] = st0[1] > st1[1] ? (st0[1] > st2[1] ? st0[1] : st2[1]) : (st1[1] > st2[1] ? st1[1] : st2[1]);
+
+    if (st[0] < mins[0] - GUTTER || st[0] > maxs[0] + GUTTER ||
+        st[1] < mins[1] - GUTTER || st[1] > maxs[1] + GUTTER) {
+      continue;
+    }
+
     if (PointInTriangle(st[0], st[1], st0, st1, st2)) {
       // Calculate barycentric coordinates
       area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
@@ -334,26 +378,78 @@ static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
       VectorNormalize(normal, normal);
       return qtrue;
     }
+
+    // Dilation: if not inside, check if we are within the gutter distance
+    // For TriSoup, we always allow this if we have a gutter
+    {
+      float dSq, dMin = 999999.0f;
+      float t;
+      int edgeBest = -1;
+
+      dSq = DistanceSqToSegment(st[0], st[1], st0, st1, &t);
+      if (dSq < dMin) {
+        dMin = dSq;
+        edgeBest = 0;
+      }
+      dSq = DistanceSqToSegment(st[0], st[1], st1, st2, &t);
+      if (dSq < dMin) {
+        dMin = dSq;
+        edgeBest = 1;
+      }
+      dSq = DistanceSqToSegment(st[0], st[1], st2, st0, &t);
+      if (dSq < dMin) {
+        dMin = dSq;
+        edgeBest = 2;
+      }
+
+      // Check if within dilation radius
+      if (edgeBest >= 0 && dMin < (float)GUTTER * GUTTER) {
+        // Calculate raw barycentric coordinates (extrapolation)
+        area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
+               (st2[0] - st1[0]) * (st0[1] - st2[1]);
+        if (fabs(area) < 0.0001f)
+          continue;
+
+        w0 = ((st1[1] - st2[1]) * (st[0] - st2[0]) +
+              (st2[0] - st1[0]) * (st[1] - st2[1])) /
+             area;
+        w1 = ((st2[1] - st0[1]) * (st[0] - st2[0]) +
+              (st0[0] - st2[0]) * (st[1] - st2[1])) /
+             area;
+        w2 = 1.0f - w0 - w1;
+
+        for (k = 0; k < 3; k++) {
+          origin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
+          normal[k] =
+              w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
+        }
+        VectorNormalize(normal, normal);
+        return qtrue;
+      }
+    }
   }
 
   return qfalse;
 }
 
 /*
-===============
+==========================
 VisualizeLightmapAllocation
-===============
+==========================
 */
 void VisualizeLightmapAllocation(void) {
-  int i, j, x, y, k, p;
-  dsurface_t *ds;
-  byte color[3];
+  int i, x, y, p, numPages;
   char filename[1024];
-  int numPages;
+  dsurface_t *ds;
+  drawVert_t *v0, *v1, *v2;
+  int j, k;
+  byte color[3];
+  int rasterizedCount = 0;
 
   _printf("--- VisualizeLightmapAllocation ---\n");
+  _printf("numLightBytes: %d, Page Size: %dx%d\n", numLightBytes, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
 
-  // clear lightBytes (quantized output) to a slightly different grey for contrast
+  // Clear the entire lightmap buffer with a dark grey color
   memset(lightBytes, 24, numLightBytes);
 
   for (i = 0; i < numDrawSurfaces; i++) {
@@ -361,10 +457,9 @@ void VisualizeLightmapAllocation(void) {
     if (ds->lightmapNum[0] < 0)
       continue;
 
+    rasterizedCount++;
+
     if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-      _printf("Surface %d (TriSoup): lightmapNum=%d, x=%d, y=%d, w=%d, h=%d\n",
-              i, ds->lightmapNum[0], ds->lightmapOffset[0][0],
-              ds->lightmapOffset[0][1], ds->lightmapWidth, ds->lightmapHeight);
     }
 
     // generate a unique color for this surface based on index
@@ -462,6 +557,8 @@ void VisualizeLightmapAllocation(void) {
   }
 
   // export pages to BMP
+  _printf("%5i surfaces rasterized into debug lightmaps\n", rasterizedCount);
+
   numPages = numLightBytes / (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3);
   for (i = 0; i < numPages; i++) {
     sprintf(filename, "lm_%04i.bmp", i);
@@ -1484,6 +1581,8 @@ void TraceLtm(int num) {
   }
 
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+  int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
+  int use_upscale = extra;
   ssize = samplesize;
   if (si->lightmapSampleSize)
     ssize = si->lightmapSampleSize;
@@ -1494,6 +1593,9 @@ void TraceLtm(int num) {
     tw->patchshadows = patchshadows;
 
   tw->ignoreSurface = num;
+
+  int scale = use_upscale ? 2 : 1;
+  int currentGutter = superSample ? (GUTTER * scale) : 0;
 
   if (ds->surfaceType == MST_PATCH) {
     srcMesh.width = ds->patchWidth;
@@ -1513,7 +1615,7 @@ void TraceLtm(int num) {
       Error("Mesh lightmap miscount");
     }
 
-    if (extra) {
+    if (superSample) {
       mesh_t *mp;
 
       // chop it up for more light samples (leaking memory...)
@@ -1525,29 +1627,33 @@ void TraceLtm(int num) {
 
       mesh = mp;
     }
+    sampleWidth = mesh->width;
+    sampleHeight = mesh->height;
   } else {
     VectorCopy(ds->lightmapVecs[2], normal);
 
-    if (!extra) {
+    if (!superSample) {
       VectorCopy(ds->lightmapOrigin, lightmapOrigin);
       VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
       VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
+      sampleWidth = ds->lightmapWidth;
+      sampleHeight = ds->lightmapHeight;
     } else {
       // sample at a closer spacing for antialiasing
       VectorCopy(ds->lightmapOrigin, lightmapOrigin);
-      VectorScale(ds->lightmapVecs[0], 0.5, lightmapVecs[0]);
-      VectorScale(ds->lightmapVecs[1], 0.5, lightmapVecs[1]);
-      VectorMA(lightmapOrigin, -0.5, lightmapVecs[0], lightmapOrigin);
-      VectorMA(lightmapOrigin, -0.5, lightmapVecs[1], lightmapOrigin);
-    }
-  }
+      if (use_upscale) {
+        VectorScale(ds->lightmapVecs[0], 0.5, lightmapVecs[0]);
+        VectorScale(ds->lightmapVecs[1], 0.5, lightmapVecs[1]);
+        VectorMA(lightmapOrigin, -0.5, lightmapVecs[0], lightmapOrigin);
+        VectorMA(lightmapOrigin, -0.5, lightmapVecs[1], lightmapOrigin);
+      }
 
-  if (extra) {
-    sampleWidth = ds->lightmapWidth * 2;
-    sampleHeight = ds->lightmapHeight * 2;
-  } else {
-    sampleWidth = ds->lightmapWidth;
-    sampleHeight = ds->lightmapHeight;
+      // Dilation: shift origin for gutter
+      VectorMA(lightmapOrigin, -currentGutter, lightmapVecs[0], lightmapOrigin);
+      VectorMA(lightmapOrigin, -currentGutter, lightmapVecs[1], lightmapOrigin);
+      sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
+      sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
+    }
   }
 
   extW = sampleWidth;
@@ -1557,13 +1663,17 @@ void TraceLtm(int num) {
   occluded_data = malloc(extW * extH * sizeof(byte));
   color = malloc(extW * sizeof(vec3_t *));
   color_data = malloc(extW * extH * sizeof(vec3_t));
+  byte *sampleHit_data = malloc(extW * extH * sizeof(byte));
+  byte **sampleHit = malloc(extW * sizeof(byte *));
 
-  if (!occluded || !occluded_data || !color || !color_data) {
+  if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data) {
     _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", num, extW, extH);
     if (occluded) free(occluded);
     if (occluded_data) free(occluded_data);
     if (color) free(color);
     if (color_data) free(color_data);
+    if (sampleHit) free(sampleHit);
+    if (sampleHit_data) free(sampleHit_data);
     free(tw);
     return;
   }
@@ -1571,9 +1681,11 @@ void TraceLtm(int num) {
   for (i = 0; i < extW; i++) {
     occluded[i] = occluded_data + i * extH;
     color[i] = color_data + i * extH;
+    sampleHit[i] = sampleHit_data + i * extH;
   }
 
   memset(color_data, 0, extW * extH * sizeof(vec3_t));
+  memset(sampleHit_data, 0, extW * extH * sizeof(byte));
 
   // determine which samples are occluded
   memset(occluded_data, 0, extW * extH * sizeof(byte));
@@ -1582,29 +1694,23 @@ void TraceLtm(int num) {
 
       if (ds->surfaceType == MST_TRIANGLE_SOUP) {
         float st[2];
-        vec3_t temp_origin; // Use vec3_t to match function signature
-        if (extra) {
-          st[0] = (float)ds->lightmapOffset[0][0] + (i + 0.5f) * 0.5f;
-          st[1] = (float)ds->lightmapOffset[0][1] + (j + 0.5f) * 0.5f;
-        } else {
-          st[0] = (float)ds->lightmapOffset[0][0] + i + 0.5f;
-          st[1] = (float)ds->lightmapOffset[0][1] + j + 0.5f;
-        }
+        vec3_t temp_origin;
+        
+        // Calculate the target (s,t) coordinate in the lightmap
+        // Account for the Gutter shift and the optional 0.5x supersampling
+        float fi = (float)(i - currentGutter);
+        float fj = (float)(j - currentGutter);
+        float step = 1.0f / (float)scale;
+        float offset = 0.5f * step;
+        
+        st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
+        st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
 
         if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) {
-          // Dilation: try 4 neighbor samples (1/4 pixel away) to bleed light
-          // outwards
-          float offsets[4][2] = {{0.4f, 0}, {-0.4f, 0}, {0, 0.4f}, {0, -0.4f}};
-          int n;
-          for (n = 0; n < 4; n++) {
-            float st2[2] = {st[0] + offsets[n][0], st[1] + offsets[n][1]};
-            if (TriSoupSamplePoint(ds, st2, temp_origin, normal))
-              break;
-          }
-
-          if (n == 4)
-            continue; // totally outside
+          sampleHit[i][j] = qfalse;
+          continue; // totally outside any dilated triangle
         }
+        sampleHit[i][j] = qtrue;
         numPositions = 9;
         for (k = 0; k < 3; k++) {
           origin_d[k] = (double)temp_origin[k];
@@ -1613,25 +1719,40 @@ void TraceLtm(int num) {
         MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
       } else if (ds->patchWidth) {
         numPositions = 9;
-        VectorCopy(mesh->verts[j * mesh->width + i].normal, normal);
+        // Dilation: clamp to mesh bounds for the gutter
+        int mi = i - GUTTER;
+        int mj = j - GUTTER;
+        if (mi < 0) mi = 0; 
+        if (mi >= mesh->width) mi = mesh->width - 1;
+        if (mj < 0) mj = 0;
+        if (mj >= mesh->height) mj = mesh->height - 1;
+
+        VectorCopy(mesh->verts[mj * mesh->width + mi].normal, normal);
         // push off of the curve a bit
         for (k = 0; k < 3; k++) {
-          base[k] = (double)mesh->verts[j * mesh->width + i].xyz[k] +
+          base[k] = (double)mesh->verts[mj * mesh->width + mi].xyz[k] +
                     (double)normal[k] * SAMPLE_NUDGE;
         }
 
         MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
       } else {
         numPositions = 9;
+        // Dilation: offset the planar calculation
+        int pi = i - GUTTER;
+        int pj = j - GUTTER;
         for (k = 0; k < 3; k++) {
           base[k] = (double)lightmapOrigin[k] +
                     (double)normal[k] * SAMPLE_NUDGE +
-                    (double)i * lightmapVecs[0][k] +
-                    (double)j * lightmapVecs[1][k];
+                    (double)pi * lightmapVecs[0][k] +
+                    (double)pj * lightmapVecs[1][k];
         }
       }
       for (k = 0; k < 3; k++) {
         base[k] += surfaceOrigin[num][k];
+      }
+
+      if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+        sampleHit[i][j] = qtrue;
       }
 
       // we may need to slightly nudge the sample point
@@ -1705,49 +1826,69 @@ void TraceLtm(int num) {
   }
 
   // average together the values if we are extra sampling
-  if (ds->lightmapWidth != sampleWidth) {
+  if (superSample && use_upscale) {
     for (i = 0; i < ds->lightmapWidth; i++) {
       for (j = 0; j < ds->lightmapHeight; j++) {
-        for (k = 0; k < 3; k++) {
-          float value, coverage;
+        vec3_t value;
+        float coverage;
 
-          value = color[i * 2][j * 2][k] + color[i * 2][j * 2 + 1][k] +
-                  color[i * 2 + 1][j * 2][k] + color[i * 2 + 1][j * 2 + 1][k];
-          coverage = 4;
-          if (extraWide) {
-            // wider than box filter
-            if (i > 0) {
-              value +=
-                  color[i * 2 - 1][j * 2][k] + color[i * 2 - 1][j * 2 + 1][k];
-              value +=
-                  color[i * 2 - 2][j * 2][k] + color[i * 2 - 2][j * 2 + 1][k];
-              coverage += 4;
-            }
-            if (i < ds->lightmapWidth - 1) {
-              value +=
-                  color[i * 2 + 2][j * 2][k] + color[i * 2 + 2][j * 2 + 1][k];
-              value +=
-                  color[i * 2 + 3][j * 2][k] + color[i * 2 + 3][j * 2 + 1][k];
-              coverage += 4;
-            }
-            if (j > 0) {
-              value +=
-                  color[i * 2][j * 2 - 1][k] + color[i * 2 + 1][j * 2 - 1][k];
-              value +=
-                  color[i * 2][j * 2 - 2][k] + color[i * 2 + 1][j * 2 - 2][k];
-              coverage += 4;
-            }
-            if (j < ds->lightmapHeight - 1) {
-              value +=
-                  color[i * 2][j * 2 + 2][k] + color[i * 2 + 1][j * 2 + 2][k];
-              value +=
-                  color[i * 2][j * 2 + 3][k] + color[i * 2 + 1][j * 2 + 3][k];
-              coverage += 2;
+        int i2 = i * scale + currentGutter;
+        int j2 = j * scale + currentGutter;
+
+        VectorClear(value);
+        coverage = 0;
+
+        if (sampleHit[i2][j2]) {
+          VectorAdd(value, color[i2][j2], value);
+          coverage++;
+        }
+        if (sampleHit[i2][j2 + 1]) {
+          VectorAdd(value, color[i2][j2 + 1], value);
+          coverage++;
+        }
+        if (sampleHit[i2 + 1][j2]) {
+          VectorAdd(value, color[i2 + 1][j2], value);
+          coverage++;
+        }
+        if (sampleHit[i2 + 1][j2 + 1]) {
+          VectorAdd(value, color[i2 + 1][j2 + 1], value);
+          coverage++;
+        }
+
+        if (extraWide) {
+          // wider than box filter
+          // We can now use the gutter data even at edges!
+          int ii, jj;
+          for (ii = -2; ii <= 3; ii++) {
+            for (jj = -2; jj <= 3; jj++) {
+              if (ii >= 0 && ii <= 1 && jj >= 0 && jj <= 1)
+                continue; // Already added
+              int ni = i2 + ii;
+              int nj = j2 + jj;
+              if (ni >= 0 && ni < sampleWidth && nj >= 0 && nj < sampleHeight) {
+                if (sampleHit[ni][nj]) {
+                  VectorAdd(value, color[ni][nj], value);
+                  coverage++;
+                }
+              }
             }
           }
-
-          color[i][j][k] = value / coverage;
         }
+
+        if (coverage > 0.0f) {
+          color[i][j][0] = value[0] / coverage;
+          color[i][j][1] = value[1] / coverage;
+          color[i][j][2] = value[2] / coverage;
+        } else {
+          VectorClear(color[i][j]);
+        }
+      }
+    }
+  } else if (superSample && !use_upscale) {
+    // 1:1 dilation test: copy directly from guttered buffer
+    for (i = 0; i < ds->lightmapWidth; i++) {
+      for (j = 0; j < ds->lightmapHeight; j++) {
+        VectorCopy(color[i + currentGutter][j + currentGutter], color[i][j]);
       }
     }
   }
@@ -1788,6 +1929,8 @@ void TraceLtm(int num) {
   if (ds->surfaceType == MST_PATCH) {
     FreeMesh(mesh);
   }
+  free(sampleHit);
+  free(sampleHit_data);
   free(tw);
   free(occluded);
   free(occluded_data);
@@ -2363,6 +2506,7 @@ int LightMain(int argc, char **argv) {
   _printf("----- Lighting ----\n");
 
   verbose = qfalse;
+  extra = qfalse;
 
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-tempname")) {

@@ -289,6 +289,9 @@ void PatchMapDrawSurfs(entity_t *e) {
       ds->samplesize = scan->shaderInfo->lightmapSampleSize;
     }
     const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
+    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "_samplesize");
+    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "samplesize");
+    
     if (ent_sample_str[0]) {
       int ent_sample = atoi(ent_sample_str);
       if (ent_sample > 0) {

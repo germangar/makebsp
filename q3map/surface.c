@@ -93,6 +93,9 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
   if (b) {
     entity_t *e = &entities[b->entitynum];
     const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
+    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "_samplesize");
+    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "samplesize");
+    
     if (ent_sample_str[0]) {
       int ent_sample = atoi(ent_sample_str);
       if (ent_sample > 0) {
