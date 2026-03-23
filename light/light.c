@@ -455,7 +455,7 @@ void VisualizeLightmapAllocation(void) {
   int i, x, y, p, numPages;
   char filename[1024];
   dsurface_t *ds;
-  drawVert_t *v0, *v1, *v2;
+  vec3_t v0, v1, v2;
   int j, k;
   byte color[3];
   int rasterizedCount = 0;
@@ -1633,8 +1633,6 @@ void TraceLtm(int num) {
     tw->patchshadows = qtrue;
   else
     tw->patchshadows = patchshadows;
-
-  tw->ignoreSurface = num;
   tw->forceFrontOnly = qtrue;
 
   int scale = use_upscale ? 2 : 1;
@@ -2115,8 +2113,6 @@ void TraceGrid(int num) {
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
 
-  tw->ignoreSurface = -1;
-
   mod = num;
   z = mod / (gridBounds[0] * gridBounds[1]);
   mod -= z * (gridBounds[0] * gridBounds[1]);
@@ -2458,7 +2454,6 @@ void VertexLightingThread(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
-  tw->ignoreSurface = num;
 
   ds = &drawSurfaces[num];
 
@@ -2495,7 +2490,6 @@ void TriSoupLightingThread(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
-  tw->ignoreSurface = num;
 
   ds = &drawSurfaces[num];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);

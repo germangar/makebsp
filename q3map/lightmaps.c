@@ -157,8 +157,6 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
 
   // 3. Scale Determination
   // Target density: 1/ssize^2 luxels per square unit.
-  // 3. Scale Determination
-  // Target density: 1/ssize^2 luxels per square unit.
   scale = sqrt((area3D / (ssize * ssize)) / areaUV);
 
   // Safeguard against extreme scaling

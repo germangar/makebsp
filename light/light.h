@@ -119,7 +119,6 @@ typedef struct {
   int openLeafNumbers[MAX_MAP_LEAFS];
   trace_t *trace;
   int patchshadows;
-  int ignoreSurface;
   qboolean forceFrontOnly;
 } traceWork_t;
 

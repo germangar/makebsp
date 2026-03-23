@@ -922,10 +922,6 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
       if (!test) {
         continue;
       }
-      // skip the surface we are currently lighting to prevent self-shadowing
-      if (surfaceNum == tw->ignoreSurface) {
-        continue;
-      }
       //
       if (!tw->patchshadows && test->patch) {
         continue;
