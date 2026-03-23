@@ -160,6 +160,7 @@ typedef struct drawsurf_s {
 
   qboolean flareSurface;
   int samplesize;
+  float lightmapScale;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s {

@@ -606,19 +606,25 @@ void LoadTriangleModels(void) {
           if (si && si->lightmapSampleSize > 0) {
             ds->samplesize = si->lightmapSampleSize;
           }
+
+          // Entity-level lightmapscale for models
+          ds->lightmapScale = 1.0f;
           if (inst->creator) {
-            const char *ent_sample_str = ValueForKey(inst->creator, "_lightmapsamplesize");
-            if (!ent_sample_str[0]) ent_sample_str = ValueForKey(inst->creator, "_samplesize");
-            if (!ent_sample_str[0]) ent_sample_str = ValueForKey(inst->creator, "samplesize");
+            const char *ent_scale_str = ValueForKey(inst->creator, "_lightmapscale");
+            if (!ent_scale_str[0]) ent_scale_str = ValueForKey(inst->creator, "lightmapscale");
             
-            if (ent_sample_str[0]) {
-              int ent_sample = atoi(ent_sample_str);
-              if (ent_sample > 0) {
-                ds->samplesize = ent_sample;
+            if (ent_scale_str[0]) {
+              float ent_scale = atof(ent_scale_str);
+              if (ent_scale > 0) {
+                // Safeguards
+                if (ent_scale < 0.01f) ent_scale = 0.01f;
+                if (ent_scale > 16.0f) ent_scale = 16.0f;
+                ds->lightmapScale = ent_scale;
               }
             }
           }
-          _printf("Final samplesize for misc_model: %d\n", ds->samplesize);
+          
+          _printf("Final samplesize for misc_model: %d, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
 
           // Reset vMap for this new chunk
           for (int v = 0; v < mesh->mNumVertices; v++) vMap[v] = -1;

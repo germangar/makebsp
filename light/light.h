@@ -120,6 +120,7 @@ typedef struct {
   trace_t *trace;
   int patchshadows;
   int ignoreSurface;
+  qboolean forceFrontOnly;
 } traceWork_t;
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,

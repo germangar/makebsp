@@ -1,0 +1,82 @@
+EMBREE 4.4.0 INTEGRATION RESEARCH AND STRATEGY REPORT (REFINED)
+==============================================================
+Target: light_embree (makebsp project)
+Date: 2026-03-23
+
+1. OVERVIEW & PERFORMANCE GOALS
+-------------------------------
+The goal is to replace the legacy BSP traversal with a high-performance BVH-based ray caster. 
+- Target Speedup: 10x-20x for geometry intersection.
+- Quality: Unbiased path tracing with physically-based light transport.
+- Hardware: Optimized for AVX2/AVX-512 capable CPUs.
+
+2. MEMORY MAPPING & GEOMETRY (Zero-Copy)
+----------------------------------------
+Embree 4.4.0 allows sharing buffers between the application and the BVH builder.
+
+2.1. Vertex Data (Zero-Copy)
+The `drawVert_t` structure in `common/bspfile.h` stores `xyz[3]`, `st[2]`, etc.
+- We can use `rtcSetSharedGeometryBuffer` with `RTC_BUFFER_TYPE_VERTEX`.
+- Byte-stride: `sizeof(drawVert_t)`.
+- Benefit: No duplication of vertex data; Embree reads directly from the BSP drawSurfaces.
+
+2.2. Index Data (Conversion Needed)
+- Q3 uses `int` (32-bit signed) for indices. 
+- Embree expects `unsigned int` (32-bit unsigned) for `RTC_FORMAT_UINT3`.
+- Strategy: Allocate a temporary `unsigned int*` buffer for each surface's indices during scene construction.
+
+2.3. Unified Scene Structure
+- All `mapDrawSurface_t` with `SURF_NODRAW` or `SURF_NOLIGHTMAP` (that don't cast shadows) should be skipped.
+- `SURF_SKY` surfaces should be added but flagged to terminate rays (returning a specific ID to trigger sun/sky sampling).
+
+3. ADVANCED ALPHA-TESTED SHADOWS (SURF_ALPHASHADOW)
+---------------------------------------------------
+This is a critical feature for realistic foliage and grate shadows.
+
+3.1. Filter Function Implementation
+- Use `rtcSetGeometryIntersectFilterFunction`.
+- Inside the filter:
+    1. Retrieve `shaderInfo_t*` via `rtcGetGeometryUserData`.
+    2. Interpolate `st` (texture coordinates) using the hit's barycentric coordinates.
+    3. Sample the `pixels` buffer of the shader.
+    4. If `alpha < 128` (based on `GE128` standard), call `rtcIgnoreIntersection`.
+
+3.2. Optimization
+- Only attach filter functions to geometries whose shaders have `SURF_ALPHASHADOW` or `lightFilter` set. This avoids the overhead for opaque brushes.
+
+4. LIGHTMAP EVALUATION & UV GBUFFER
+-----------------------------------
+4.1. The UV GBuffer Strategy
+To maximize Embree's throughput, we should decouple lightmap geometry from lighting.
+1. Pre-Pass: For every luxel in the lightmap atlas, store its world-position and normal in a large "GBuffer" array.
+2. Trace-Pass: Iterate through the GBuffer and shoot rays. This allows for perfectly linear memory access and simplifies the integration of Intel OIDN.
+
+4.2. Padding for Denoising
+- Increase `GUTTER` from 1 to 4.
+- This provides the 8x8 context window needed by the OIDN convolutional neural network to distinguish between noise and geometric detail.
+
+5. THREAD SAFETY & DISPATCH
+---------------------------
+5.1. Integration with threads.c
+- The current `RunThreadsOnIndividual` system is fully compatible with Embree.
+- `RTCScene` is thread-safe for concurrent `rtcIntersect` calls once `rtcCommitScene` is called on the main thread.
+- `RTCDevice` and `RTCScene` should be global or passed through the worker functions.
+
+5.2. SIMD Packet Tracing
+- Replace the individual `TraceLine` calls in `VL_SurfaceRadiosity` with `rtcIntersect4` (SSE) or `rtcIntersect8` (AVX).
+- Group 4 or 8 luxels from the same lightmap row into a single packet.
+- This utilizes the CPU's vector units much more effectively than single-ray tracing.
+
+6. REFINED INTEGRATION ROADMAP
+------------------------------
+1. Build Step: Iterate `numDrawSurfaces`, create `RTCGeometry` for each, map buffers, and `rtcCommitScene`.
+2. GBuffer Step: Populate `luxel_positions[]` and `luxel_normals[]`.
+3. Path Trace: For each luxel, trace 1 direct ray to each light source + N indirect rays (cosine-weighted).
+4. Denoise: Pass the resulting lightmap buffers to OIDN.
+5. Store: Write the denoised values back into the `dlightmaps` BSP lump.
+
+7. COMPILER SETTINGS
+--------------------
+- Link against `embree4.lib`.
+- Include `embree4/rtcore.h`.
+- Ensure `/arch:AVX2` is enabled in `build.bat` for the best performance.

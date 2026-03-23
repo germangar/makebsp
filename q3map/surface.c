@@ -90,19 +90,9 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
   if (si && si->lightmapSampleSize > 0) {
     ds->samplesize = si->lightmapSampleSize;
   }
-  if (b) {
-    entity_t *e = &entities[b->entitynum];
-    const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
-    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "_samplesize");
-    if (!ent_sample_str[0]) ent_sample_str = ValueForKey(e, "samplesize");
-    
-    if (ent_sample_str[0]) {
-      int ent_sample = atoi(ent_sample_str);
-      if (ent_sample > 0) {
-        ds->samplesize = ent_sample;
-      }
-    }
-  }
+  // Brushes strictly follow the Shader/Global hierarchy for samplesize.
+  // Manual entity-level overrides are no longer supported.
+  ds->lightmapScale = 1.0f;
 
   ds->numVerts = w->numpoints;
   ds->verts = malloc(ds->numVerts * sizeof(*ds->verts));

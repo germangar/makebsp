@@ -165,6 +165,25 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   if (scale < 0.01)
     scale = 0.01;
 
+  // Enforce dynamic minimum lightmap area
+  float uvWidth = max_s - min_s;
+  float uvHeight = max_t - min_t;
+  float uvArea = uvWidth * uvHeight;
+  if (uvArea > 0.0001f) {
+    float minDimension = (LIGHTMAP_WIDTH / 4.0f);
+    if (minDimension < 64.0f) {
+        minDimension = 64.0f;
+    }
+    float targetArea = minDimension * minDimension;
+    float minScale = sqrt(targetArea / uvArea);
+    if (scale < minScale) {
+        scale = minScale;
+    }
+  }
+
+  // Final quality knob adjustment
+  scale *= ds->lightmapScale;
+
   // Limit lightmap size and adjust scale proportionally
   // so no UV coordinates fall outside the allocated block.
   w = ceil((max_s - min_s) * scale) + 1;

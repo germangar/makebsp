@@ -53,6 +53,12 @@ qboolean lightmapBorder;
 qboolean noSurfaces;
 qboolean debugLightmaps;
 
+// CLI Overrides
+qboolean falloffOverridden = qfalse;
+falloff_t overrideFalloff;
+qboolean lightmapsRGBOverridden = qfalse;
+qboolean deluxeMapOverridden = qfalse;
+
 extern int samplesize; // sample size in units
 int novertexlighting = 0;
 int nogridlighting = 0;
@@ -1145,6 +1151,13 @@ void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
     return;
   }
 
+  // if the sun is behind the surface
+  if (g_game->falloff != FALLOFF_HALFLAMBERT || tw->forceFrontOnly) {
+    if (DotProduct(normal, sunDirection) <= 0) {
+      return; // facing away
+    }
+  }
+
   angle = CalculateFalloff(DotProduct(normal, sunDirection));
   if (angle <= 0) {
     return; // facing away
@@ -1174,8 +1187,8 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   // trace to all the lights
   for (light = lights; light; light = light->next) {
 
-    // MrE: if the light is behind the surface
-    if (g_game->falloff != FALLOFF_HALFLAMBERT) {
+    // if the light is behind the surface
+    if (g_game->falloff != FALLOFF_HALFLAMBERT || tw->forceFrontOnly) {
       if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
         continue;
     }
@@ -1593,6 +1606,7 @@ void TraceLtm(int num) {
     tw->patchshadows = patchshadows;
 
   tw->ignoreSurface = num;
+  tw->forceFrontOnly = qtrue;
 
   int scale = use_upscale ? 2 : 1;
   int currentGutter = superSample ? (GUTTER * scale) : 0;
@@ -2573,6 +2587,7 @@ int LightMain(int argc, char **argv) {
       strcpy(gamedir, arg);
     } else if (!strcmp(argv[i], "-sRGB")) {
       g_game->lightmapsRGB = qtrue;
+      lightmapsRGBOverridden = qtrue;
       _printf("sRGB lightmaps enabled\n");
     } else if (!strcmp(argv[i], "-falloff")) {
       char *arg = argv[++i];
@@ -2591,8 +2606,11 @@ int LightMain(int argc, char **argv) {
           } else {
             Error("Unknown falloff type: %s", arg);
           }
+          falloffOverridden = qtrue;
+          overrideFalloff = g_game->falloff;
     } else if (!strcmp(argv[i], "-deluxe")) {
       g_game->deluxeMap = qtrue;
+      deluxeMapOverridden = qtrue;
       _printf("Deluxemaps enabled\n");
     } else {
       break;
@@ -2640,6 +2658,20 @@ int LightMain(int argc, char **argv) {
 
   LoadBSPFile(source);
   _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+
+  // Re-apply CLI overrides that might have been clobbered by LoadBSPFile profile detection
+  if (falloffOverridden) {
+    g_game->falloff = overrideFalloff;
+    _printf("Restoring CLI override: Falloff mode\n");
+  }
+  if (lightmapsRGBOverridden) {
+    g_game->lightmapsRGB = qtrue;
+    _printf("Restoring CLI override: sRGB lightmaps\n");
+  }
+  if (deluxeMapOverridden) {
+    g_game->deluxeMap = qtrue;
+    _printf("Restoring CLI override: Deluxemaps\n");
+  }
 
   if (samplesize == 0) {
     samplesize = g_game->defaultSampleSize;
