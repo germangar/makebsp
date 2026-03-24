@@ -51,6 +51,7 @@ qboolean extraWide;
 qboolean lightmapBorder;
 
 qboolean noSurfaces;
+qboolean oldTrace;
 qboolean debugLightmaps;
 
 extern int samplesize; // sample size in units
@@ -1791,6 +1792,13 @@ void TraceLtm(int num) {
         if (notrace) {
           break;
         }
+
+        // --- PointInSolid Bypass (q3map2 style) ---
+        // Always use the nominal position (position 0) because our raytracer
+        // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
+        // geometry at junctions.
+        break;
+
         if (!PointInSolid(origin)) {
           break;
         }
@@ -2525,7 +2533,7 @@ int LightMain(int argc, char **argv) {
   double start, end;
   const char *value;
 
-  _printf("----- Lighting ----\n");
+  _printf("----- Lighting (Embree Ag Build v1.1) ----\n");
 
   verbose = qfalse;
   extra = qfalse;
@@ -2616,6 +2624,9 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-deluxe")) {
       g_game->deluxeMap = qtrue;
       _printf("Deluxemaps enabled\n");
+    } else if (!strcmp(argv[i], "-oldtrace")) {
+      oldTrace = qtrue;
+      _printf("Legacy BSP-brush occlusion tracing enabled\n");
     } else {
       break;
     }
@@ -2640,7 +2651,10 @@ int LightMain(int argc, char **argv) {
             "   samplesize <N> = set the lightmap pixel size to NxN units\n"
             "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
             "                     quadratic, doublequadratic)\n"
-            "   debuglightmaps = visualize lightmap allocation and export BMPs\n");    exit(0);
+            "   debuglightmaps = visualize lightmap allocation and export BMPs\n"
+            "   oldtrace       = use legacy BSP-brush occlusion for all "
+            "surfaces\n");
+    exit(0);
   }
 
   start = I_FloatTime();

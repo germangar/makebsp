@@ -68,6 +68,8 @@ extern float entity_scale;
 
 extern qboolean noSurfaces;
 extern qboolean debugLightmaps;
+extern qboolean oldTrace;
+extern qboolean bruteTrace;
 
 //===============================================================
 
@@ -83,6 +85,7 @@ typedef struct cFacet_s {
 
   float textureMatrix[2][4]; // compute texture coordinates at point of impact
                              // for translucency
+  int surfaceNum;
 } cFacet_t;
 
 typedef struct {
@@ -96,6 +99,7 @@ typedef struct {
   cFacet_t *facets;
 
   shaderInfo_t *shader; // for translucency
+  int surfaceNum;
 } surfaceTest_t;
 
 typedef struct {
@@ -121,6 +125,7 @@ typedef struct {
   trace_t *trace;
   int patchshadows;
   qboolean forceFrontOnly;
+  int ignoreSurface;
 } traceWork_t;
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,

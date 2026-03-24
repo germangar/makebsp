@@ -67,6 +67,7 @@ extern float direct_scale;
 extern float entity_scale;
 
 extern qboolean noSurfaces;
+extern qboolean oldTrace;
 extern qboolean debugLightmaps;
 
 //===============================================================

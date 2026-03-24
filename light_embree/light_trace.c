@@ -940,9 +940,35 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 
   trace->passSolid = qfalse;
   trace->hitFraction = 1.0;
+  r = qfalse;
 
-  // 1. Legacy BSP traversal for solid brushes and opaque clusters
-  r = TraceLine_r(0, start, stop, tw);
+  if (oldTrace) {
+    // 1. Legacy BSP traversal for solid brushes and opaque clusters
+    // --- Legacy Junction Fix (q3map2 style) ---
+    // We shift the start point by 1.25 units to avoid being trapped
+    // inside intersecting geometry at junctions.
+    {
+      vec3_t dir;
+      float len;
+      vec3_t shiftedStart;
+
+      VectorSubtract(stop, start, dir);
+      len = VectorNormalize(dir, dir);
+
+      if (len > SELF_SHADOW_EPSILON) {
+        VectorMA(start, SELF_SHADOW_EPSILON, dir, shiftedStart);
+        r = TraceLine_r(0, shiftedStart, stop, tw);
+        if (r) {
+          // Adjust hitFraction to be relative to the ORIGINAL start point
+          float hitDist = (trace->hitFraction * (len - SELF_SHADOW_EPSILON)) +
+                          SELF_SHADOW_EPSILON;
+          trace->hitFraction = hitDist / len;
+        }
+      } else {
+        r = TraceLine_r(0, start, stop, tw);
+      }
+    }
+  }
 
   // If we hit a solid leaf and we don't need all hits, we can stop here
   if (r && !testAll) {

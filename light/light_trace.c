@@ -261,7 +261,7 @@ FacetsForTriangleSurface
 ====================
 */
 void FacetsForTriangleSurface(dsurface_t *dsurf, shaderInfo_t *si,
-                              surfaceTest_t *test) {
+                              surfaceTest_t *test, int surfaceNum) {
   int i;
   drawVert_t *v1, *v2, *v3, *v4;
   int count;
@@ -301,6 +301,10 @@ void FacetsForTriangleSurface(dsurface_t *dsurf, shaderInfo_t *si,
       count++;
   }
 
+  for (i = 0; i < count; i++) {
+    test->facets[i].surfaceNum = surfaceNum;
+  }
+
   // we may have turned some pairs into quads
   test->numFacets = count;
 }
@@ -310,7 +314,8 @@ void FacetsForTriangleSurface(dsurface_t *dsurf, shaderInfo_t *si,
 FacetsForPatch
 ====================
 */
-void FacetsForPatch(dsurface_t *dsurf, shaderInfo_t *si, surfaceTest_t *test) {
+void FacetsForPatch(dsurface_t *dsurf, shaderInfo_t *si, surfaceTest_t *test,
+                    int surfaceNum) {
   int i, j;
   drawVert_t *v1, *v2, *v3, *v4;
   int count;
@@ -351,6 +356,9 @@ void FacetsForPatch(dsurface_t *dsurf, shaderInfo_t *si, surfaceTest_t *test) {
           count++;
       }
     }
+  }
+  for (i = 0; i < count; i++) {
+    test->facets[i].surfaceNum = surfaceNum;
   }
   test->numFacets = count;
   FreeMesh(subdivided);
@@ -398,10 +406,11 @@ void InitSurfacesForTesting(void) {
 
     if (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
         dsurf->surfaceType == MST_PLANAR) {
-      FacetsForTriangleSurface(dsurf, si, test);
+      FacetsForTriangleSurface(dsurf, si, test, i);
     } else if (dsurf->surfaceType == MST_PATCH) {
-      FacetsForPatch(dsurf, si, test);
+      FacetsForPatch(dsurf, si, test, i);
     }
+    test->surfaceNum = i;
   }
 }
 
@@ -500,15 +509,37 @@ void TraceAgainstFacet(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet) {
   d2 = (double)tr->end[0] * facet->surface[0] +
        (double)tr->end[1] * facet->surface[1] +
        (double)tr->end[2] * facet->surface[2] - dist;
-  if (d2 > -SELF_SHADOW_EPSILON && d2 < SELF_SHADOW_EPSILON) {
-    return; // don't self intersect
-  }
 
   // calculate the intersection fraction
   f = d1 / (d1 - d2);
   if (f < TRACE_EPSILON) {
     return;
   }
+
+  // --- Mesh Trace Distance Jump (q3map2 style) ---
+  {
+    vec3_t dir;
+    float len;
+    float dist_hit;
+
+    VectorSubtract(tr->end, tr->start, dir);
+    len = VectorLength(dir);
+    dist_hit = f * len;
+
+    if (dist_hit < SELF_SHADOW_EPSILON) {
+      return; // handle self-shadowing and junctions
+    }
+
+    // --- ignore own planar surface ---
+    if (tr->ignoreSurface != -1) {
+      if (tr->ignoreSurface == (int)facet->surfaceNum) {
+        if (drawSurfaces[tr->ignoreSurface].surfaceType == MST_PLANAR) {
+          return;
+        }
+      }
+    }
+  }
+
   if (f >= tr->trace->hitFraction) {
     return; // we have hit something earlier
   }
@@ -811,11 +842,13 @@ void TraceAgainstSurface(traceWork_t *tw, surfaceTest_t *surf) {
   int i;
 
   // if surfaces are trans
-  if (SphereCull(tw->start, tw->end, surf->origin, surf->radius)) {
-    if (numthreads == 1) {
-      c_cullTrace++;
+  if (!bruteTrace) {
+    if (SphereCull(tw->start, tw->end, surf->origin, surf->radius)) {
+      if (numthreads == 1) {
+        c_cullTrace++;
+      }
+      return;
     }
-    return;
   }
 
   if (numthreads == 1) {
@@ -844,22 +877,174 @@ void TraceAgainstSurface(traceWork_t *tw, surfaceTest_t *surf) {
 
 /*
 =============
-TraceLine
+TraceLine_Surface_r
 
-Follow the trace just through the solid leafs first, and only
-if it passes that, trace against the objects inside the empty leafs
-Returns qtrue if the trace hit any
-
-traceWork_t is only a parameter to crutch up poor large local allocations on
-winNT and macOS.  It should be allocated in the worker function, but never
-looked at.
-
-leave testAll false if all you care about is if it hit anything at all.
-if you need to know the exact first point of impact (for a sun trace), set
-testAll to true
+Recursive traversal that collects ALL leaves along the ray (ignoring Solid/Empty)
 =============
 */
-extern qboolean patchshadows;
+void TraceLine_Surface_r(int node, const vec3_t start, const vec3_t stop,
+                         traceWork_t *tw) {
+  tnode_t *tnode;
+  double d1, d2, frac;
+  int side;
+  vec3_t mid;
+
+  if (node & (1 << 31)) {
+    // save the leaf number for surface testing
+    if (tw->numOpenLeafs == MAX_MAP_LEAFS) {
+      return;
+    }
+    tw->openLeafNumbers[tw->numOpenLeafs] = node & ~(3 << 30);
+    tw->numOpenLeafs++;
+    return;
+  }
+
+  tnode = &tnodes[node];
+
+  switch (tnode->type) {
+  case PLANE_X:
+    d1 = (double)start[0] - tnode->dist;
+    d2 = (double)stop[0] - tnode->dist;
+    break;
+  case PLANE_Y:
+    d1 = (double)start[1] - tnode->dist;
+    d2 = (double)stop[1] - tnode->dist;
+    break;
+  case PLANE_Z:
+    d1 = (double)start[2] - tnode->dist;
+    d2 = (double)stop[2] - tnode->dist;
+    break;
+  default:
+    d1 = ((double)start[0] * tnode->normal[0] +
+          (double)start[1] * tnode->normal[1] +
+          (double)start[2] * tnode->normal[2]) -
+         tnode->dist;
+    d2 = ((double)stop[0] * tnode->normal[0] +
+          (double)stop[1] * tnode->normal[1] +
+          (double)stop[2] * tnode->normal[2]) -
+         tnode->dist;
+    break;
+  }
+
+  if (d1 >= TRACE_EPSILON && d2 >= TRACE_EPSILON) {
+    TraceLine_Surface_r(tnode->children[0], start, stop, tw);
+    return;
+  }
+
+  if (d1 <= -TRACE_EPSILON && d2 <= -TRACE_EPSILON) {
+    TraceLine_Surface_r(tnode->children[1], start, stop, tw);
+    return;
+  }
+
+  side = d1 < 0;
+
+  frac = d1 / (d1 - d2);
+
+  mid[0] = start[0] + (stop[0] - start[0]) * frac;
+  mid[1] = start[1] + (stop[1] - start[1]) * frac;
+  mid[2] = start[2] + (stop[2] - start[2]) * frac;
+
+  TraceLine_Surface_r(tnode->children[side], start, mid, tw);
+  TraceLine_Surface_r(tnode->children[!side], mid, stop, tw);
+}
+
+/*
+=============
+TraceLine_Surface
+
+New mesh-only tracing mode (q3map2 style)
+=============
+*/
+void TraceLine_Surface(const vec3_t start, const vec3_t stop, trace_t *trace,
+                       qboolean testAll, traceWork_t *tw) {
+  int i, j;
+  dleaf_t *leaf;
+  float oldHitFrac;
+  surfaceTest_t *test;
+  int surfaceNum;
+  byte surfaceTested[MAX_MAP_DRAW_SURFS / 8];
+
+  if (numthreads == 1) {
+    c_totalTrace++;
+  }
+
+  // assume all light gets through
+  trace->filter[0] = 1.0;
+  trace->filter[1] = 1.0;
+  trace->filter[2] = 1.0;
+
+  VectorCopy(start, tw->start);
+  VectorCopy(stop, tw->end);
+  tw->trace = trace;
+
+  tw->numOpenLeafs = 0;
+
+  trace->passSolid = qfalse;
+  trace->hitFraction = 1.0;
+
+  // collect ALL leaves along the ray (including those BSP thinks are solid)
+  TraceLine_Surface_r(0, start, stop, tw);
+
+  if (noSurfaces || !tw->numOpenLeafs) {
+    return;
+  }
+
+  memset(surfaceTested, 0, (numDrawSurfaces + 7) / 8);
+  oldHitFrac = trace->hitFraction;
+
+  if (bruteTrace) {
+    for (surfaceNum = 0; surfaceNum < numDrawSurfaces; surfaceNum++) {
+      test = surfaceTest[surfaceNum];
+      if (!test)
+        continue;
+      if (!tw->patchshadows && test->patch)
+        continue;
+      TraceAgainstSurface(tw, test);
+    }
+  } else {
+    for (i = 0; i < tw->numOpenLeafs; i++) {
+      leaf = &dleafs[tw->openLeafNumbers[i]];
+      for (j = 0; j < leaf->numLeafSurfaces; j++) {
+        surfaceNum = dleafsurfaces[leaf->firstLeafSurface + j];
+
+        // make sure we don't test the same ray against a surface more than once
+        if (surfaceTested[surfaceNum >> 3] & (1 << (surfaceNum & 7))) {
+          continue;
+        }
+        surfaceTested[surfaceNum >> 3] |= (1 << (surfaceNum & 7));
+
+        test = surfaceTest[surfaceNum];
+        if (!test) {
+          continue;
+        }
+
+        if (!tw->patchshadows && test->patch) {
+          continue;
+        }
+
+        TraceAgainstSurface(tw, test);
+      }
+
+      if (!testAll && trace->hitFraction < oldHitFrac) {
+        trace->passSolid = qtrue;
+        break;
+      }
+    }
+  }
+
+  for (i = 0; i < 3; i++) {
+    trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
+  }
+}
+
+/*
+=============
+TraceLine
+
+Dispatcher for legacy vs mesh-only tracing
+=============
+*/
+extern qboolean oldTrace;
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw) {
@@ -871,6 +1056,11 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
   int surfaceNum;
   byte surfaceTested[MAX_MAP_DRAW_SURFS / 8];
   ;
+
+  if (!oldTrace) {
+    TraceLine_Surface(start, stop, trace, testAll, tw);
+    return;
+  }
 
   if (numthreads == 1) {
     c_totalTrace++;
@@ -891,7 +1081,30 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
   trace->passSolid = qfalse;
   trace->hitFraction = 1.0;
 
-  r = TraceLine_r(0, start, stop, tw);
+  // --- Legacy Junction Fix (q3map2 style) ---
+  // We shift the start point of the legacy trace by 1.25 units
+  // to avoid being trapped inside intersecting geometry at junctions.
+  {
+    vec3_t dir;
+    float len;
+    vec3_t shiftedStart;
+
+    VectorSubtract(stop, start, dir);
+    len = VectorNormalize(dir, dir);
+
+    if (len > SELF_SHADOW_EPSILON) {
+      VectorMA(start, SELF_SHADOW_EPSILON, dir, shiftedStart);
+      r = TraceLine_r(0, shiftedStart, stop, tw);
+      if (r) {
+        // Adjust hitFraction to be relative to the ORIGINAL start point
+        float hitDist = (trace->hitFraction * (len - SELF_SHADOW_EPSILON)) +
+                        SELF_SHADOW_EPSILON;
+        trace->hitFraction = hitDist / len;
+      }
+    } else {
+      r = TraceLine_r(0, start, stop, tw);
+    }
+  }
 
   // if we hit a solid leaf, stop without testing the leaf
   // surfaces.  Note that the plane and endpoint might not

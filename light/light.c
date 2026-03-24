@@ -52,6 +52,8 @@ qboolean lightmapBorder;
 
 qboolean noSurfaces;
 qboolean debugLightmaps;
+qboolean oldTrace = qfalse;
+qboolean bruteTrace = qfalse;
 
 // CLI Overrides
 qboolean falloffOverridden = qfalse;
@@ -1110,7 +1112,7 @@ void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight) {
   }
 
   VectorMA(origin, MAX_WORLD_COORD * 2, sunDirection, end);
-
+ 
   TraceLine(origin, end, &trace, qtrue, tw);
 
   // see if trace.hit is inside a sky brush
@@ -1200,12 +1202,14 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   for (light = lights; light; light = light->next) {
 
     // if the light is behind the surface
-    if (tw->forceFrontOnly) {
-      if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < -0.125f)
-        continue;
-    } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
-      if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
-        continue;
+    if (!bruteTrace) {
+      if (tw->forceFrontOnly) {
+        if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < -0.125f)
+          continue;
+      } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
+        if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
+          continue;
+      }
     }
     // testing exact PTPFF
     if (exactPointToPolygon && light->type == emit_area) {
@@ -1810,6 +1814,13 @@ void TraceLtm(int num) {
         if (notrace) {
           break;
         }
+
+        // --- PointInSolid Bypass (q3map2 style) ---
+        // We always use the nominal position (position 0) because our raytracer
+        // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
+        // geometry at junctions.
+        break; 
+
         if (!PointInSolid(origin)) {
           break;
         }
@@ -1828,6 +1839,7 @@ void TraceLtm(int num) {
         c_visible++;
       }
       occluded[i][j] = qfalse;
+      tw->ignoreSurface = num;
       LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, tw);
     }
   }
@@ -2540,7 +2552,7 @@ int LightMain(int argc, char **argv) {
   double start, end;
   const char *value;
 
-  _printf("----- Lighting ----\n");
+  _printf("----- Lighting (Ag Build v1.1) ----\n");
 
   verbose = qfalse;
   extra = qfalse;
@@ -2641,6 +2653,12 @@ int LightMain(int argc, char **argv) {
       g_game->deluxeMap = qtrue;
       deluxeMapOverridden = qtrue;
       _printf("Deluxemaps enabled\n");
+    } else if (!strcmp(argv[i], "-oldtrace")) {
+      oldTrace = qtrue;
+      _printf("Legacy BSP-brush tracing enabled\n");
+    } else if (!strcmp(argv[i], "-brutetrace")) {
+      bruteTrace = qtrue;
+      _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
     } else {
       break;
     }
@@ -2665,7 +2683,9 @@ int LightMain(int argc, char **argv) {
             "   samplesize <N> = set the lightmap pixel size to NxN units\n"
             "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
             "                     quadratic, doublequadratic)\n"
-            "   debuglightmaps = visualize lightmap allocation and export BMPs\n");    exit(0);
+            "   brutetrace      = disable all tracing optimizations for debugging\n"
+            "   debuglightmaps = visualize lightmap allocation and export BMPs\n");
+    exit(0);
   }
 
   start = I_FloatTime();
