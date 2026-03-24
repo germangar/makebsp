@@ -32,6 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
+#define MIN_LIGHT_ADD 0.1f
 
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 

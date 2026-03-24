@@ -1356,7 +1356,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       }
     }
 
-    if (add <= 1.0) {
+    if (add <= MIN_LIGHT_ADD) {
       continue;
     }
 
@@ -2060,7 +2060,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     return qfalse;
   }
 
-  if (add <= 1.0) {
+  if (add <= MIN_LIGHT_ADD) {
     return qfalse;
   }
 
@@ -2595,7 +2595,7 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-dump")) {
       dump = qtrue;
       _printf("Dumping occlusion maps\n");
-    } else if (!strcmp(argv[i], "debuglightmaps")) {
+    } else if (!strcmp(argv[i], "-debuglightmaps")) {
       debugLightmaps = qtrue;
       _printf("Lightmap debug visualization enabled\n");
     } else if (!strcmp(argv[i], "-game")) {
@@ -2665,8 +2665,7 @@ int LightMain(int argc, char **argv) {
             "   samplesize <N> = set the lightmap pixel size to NxN units\n"
             "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
             "                     quadratic, doublequadratic)\n"
-            "   debug_lightmaps = visualize lightmap allocation and export BMPs\n");
-    exit(0);
+            "   debuglightmaps = visualize lightmap allocation and export BMPs\n");    exit(0);
   }
 
   start = I_FloatTime();
