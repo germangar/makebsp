@@ -9,9 +9,6 @@ libs/assimp_src/
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
 
-// temporary!
-libs/embree
-light_embree/
 
 
 AGENTS.md
@@ -52,3 +49,4 @@ iqm2glb/tris.skp
 
 light.exe
 q3light.exe
+EMBREE_PROGRESS.txt
