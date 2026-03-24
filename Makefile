@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++
-CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/windows/include -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION
+CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/windows/include -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
 BASE_LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm -lstdc++ -fopenmp
 Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lz
@@ -17,6 +17,7 @@ PAK_DIR = libs/pak
 HACD_DIR = libs/hacd
 OBJ_DIR = obj
 OBJ_LITE_DIR = obj_lite
+XATLAS_DIR = libs/xatlas
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
@@ -26,6 +27,7 @@ Q3LIGHT_SRC = $(wildcard $(Q3LIGHT_DIR)/*.c)
 LIGHT_SRC = $(wildcard $(LIGHT_DIR)/*.c)
 PAK_SRC = $(wildcard $(PAK_DIR)/*.cpp)
 HACD_SRC = $(wildcard $(HACD_DIR)/*.cpp)
+XATLAS_SRC = $(wildcard $(XATLAS_DIR)/*.cpp)
 
 ML_LITE_CORE_SRC = \
 	libs/MeshLib-Lite/MRMesh/MRAABBTree.cpp \
@@ -92,7 +94,7 @@ ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
 
 # Object files for Q3MAP (BSP/VIS)
-Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o)
+Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) $(XATLAS_SRC:$(XATLAS_DIR)/%.cpp=$(OBJ_DIR)/xatlas/%.o)
 
 # Object files for Q3LIGHT
 Q3LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3LIGHT_SRC:$(Q3LIGHT_DIR)/%.c=$(OBJ_DIR)/q3light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
@@ -147,7 +149,11 @@ $(OBJ_DIR)/pak/%.o: libs/pak/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/hacd/%.o: libs/hacd/%.cpp
+$(OBJ_DIR)/xatlas/%.o: $(XATLAS_DIR)/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

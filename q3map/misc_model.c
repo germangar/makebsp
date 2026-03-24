@@ -12,6 +12,11 @@ This file is part of Quake III Arena source code.
 #include "../libs/assimp/include/assimp/scene.h"
 #include "qbsp.h"
 #include "model_collision.h"
+#include "xatlas_c.h"
+
+typedef struct {
+  float u, v;
+} uv_t;
 
 
 int c_triangleModels;
@@ -168,18 +173,14 @@ static int CompareVerts(const void *a, const void *b) {
   return 0;
 }
 
-
 /*
 ====================
-TrySpreadUVs
+IdentifyIslands
 
-Advanced UV overlap detection and resolving.
-Resolves mirrored/stacked UVs by spreading them into a 1D or 2D slot array.
-Safeguarded to only touch simple mirrored props.
+Groups faces into geometric islands based on vertex connectivity.
 ====================
 */
-static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *modelName, int meshIdx, float *outU, float *outV) {
-  // 1. Identify Geometric Islands (using XYZ connectivity)
+static int* IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut) {
   int *vPosId = malloc(sizeof(int) * mesh->mNumVertices);
   for (int j = 0; j < (int)mesh->mNumVertices; j++) vPosId[j] = -1;
   
@@ -228,8 +229,6 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
   }
 
   int numIslands = 0;
-  float currentGlobalMaxU = 0;
-  float currentGlobalMaxV = 0;
   int *stack = malloc(sizeof(int) * mesh->mNumFaces);
   for (int j = 0; j < (int)mesh->mNumFaces; j++) {
     if (triIsland[j] != -1 || mesh->mFaces[j].mNumIndices != 3) continue;
@@ -253,6 +252,124 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
   }
   for (int j = 0; j < numUniquePositions; j++) free(pTris[j]);
   free(pTris); free(pTriCount); free(pTriOffset); free(vPosId);
+  free(stack);
+
+  *numIslandsOut = numIslands;
+  return triIsland;
+}
+
+/*
+====================
+TryXAtlasUVs
+
+Use xatlas library to pack existing UVs.
+====================
+*/
+static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel) {
+  int numIslands = 0;
+  int *triIsland = IdentifyIslands(mesh, &numIslands);
+  if (!triIsland) return NULL;
+
+  xatlasAtlas *atlas = xatlasCreate();
+  if (!atlas) {
+    free(triIsland);
+    return NULL;
+  }
+
+  // Prepare mesh declaration for xatlas
+  xatlasUvMeshDecl decl;
+  xatlasUvMeshDeclInit(&decl);
+
+  float *uvs = malloc(sizeof(float) * 2 * mesh->mNumVertices);
+  for (int i = 0; i < (int)mesh->mNumVertices; i++) {
+    uvs[i * 2 + 0] = mesh->mTextureCoords[uvChannel][i].x;
+    uvs[i * 2 + 1] = mesh->mTextureCoords[uvChannel][i].y;
+  }
+
+  uint32_t *indices = malloc(sizeof(uint32_t) * mesh->mNumFaces * 3);
+  uint32_t *materialIds = malloc(sizeof(uint32_t) * mesh->mNumFaces);
+  int validTris = 0;
+  for (int i = 0; i < (int)mesh->mNumFaces; i++) {
+    if (mesh->mFaces[i].mNumIndices == 3) {
+      indices[validTris * 3 + 0] = mesh->mFaces[i].mIndices[0];
+      indices[validTris * 3 + 1] = mesh->mFaces[i].mIndices[1];
+      indices[validTris * 3 + 2] = mesh->mFaces[i].mIndices[2];
+      materialIds[validTris] = (uint32_t)triIsland[i];
+      validTris++;
+    }
+  }
+
+  decl.vertexUvData = uvs;
+  decl.vertexCount = mesh->mNumVertices;
+  decl.vertexStride = sizeof(float) * 2;
+  decl.indexData = indices;
+  decl.indexCount = validTris * 3;
+  decl.indexFormat = xatlasIndexFormat_UInt32;
+  decl.faceMaterialData = materialIds;
+
+  xatlasAddMeshError error = xatlasAddUvMesh(atlas, &decl);
+  if (error != xatlasAddMeshError_Success) {
+    _printf("xatlasAddUvMesh failed: %s\n", xatlasAddMeshErrorString(error));
+    xatlasDestroy(atlas);
+    free(uvs); free(indices); free(materialIds); free(triIsland);
+    return NULL;
+  }
+
+  xatlasChartOptions chartOptions;
+  xatlasChartOptionsInit(&chartOptions);
+  xatlasComputeCharts(atlas, &chartOptions);
+
+  xatlasPackOptions packOptions;
+  xatlasPackOptionsInit(&packOptions);
+  packOptions.padding = 2;
+  packOptions.resolution = 1024; 
+  packOptions.texelsPerUnit = 0.0f; 
+  xatlasPackCharts(atlas, &packOptions);
+
+  if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0) {
+    xatlasDestroy(atlas);
+    free(uvs); free(indices); free(materialIds); free(triIsland);
+    return NULL;
+  }
+
+  uv_t *outUVs = calloc(mesh->mNumFaces * 3, sizeof(uv_t));
+  xatlasMesh *xMesh = &atlas->meshes[0];
+  
+  // xatlas might have split vertices, so we map them back using face corners.
+  // We must be careful to map back to the original face index.
+  int validIdx = 0;
+  for (int i = 0; i < (int)mesh->mNumFaces; i++) {
+    if (mesh->mFaces[i].mNumIndices == 3) {
+      for (int v = 0; v < 3; v++) {
+        uint32_t xIdx = xMesh->indexArray[validIdx * 3 + v];
+        xatlasVertex *xv = &xMesh->vertexArray[xIdx];
+        
+        // Normalize UVs to [0, 1]
+        outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
+        outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
+      }
+      validIdx++;
+    }
+  }
+
+  xatlasDestroy(atlas);
+  free(uvs); free(indices); free(materialIds); free(triIsland);
+  return outUVs;
+}
+
+/*
+====================
+TrySpreadUVs
+
+Advanced UV overlap detection and resolving.
+Resolves mirrored/stacked UVs by spreading them into a 1D or 2D slot array.
+Safeguarded to only touch simple mirrored props.
+====================
+*/
+static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *modelName, int meshIdx, float *outU, float *outV) {
+  int numIslands = 0;
+  int *triIsland = IdentifyIslands(mesh, &numIslands);
+  if (!triIsland) return;
 
   float initialMaxU = -999999, initialMaxV = -999999;
   for (int j = 0; j < (int)mesh->mNumFaces; j++) {
@@ -294,7 +411,7 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
     // BEST-FIT CORNER-SEARCH PACKER
     // ------------------------------------------
     // 1. Sort by Area (Descending)
-    int sortIds[500];
+    int *sortIds = malloc(sizeof(int) * numIslands);
     for (int j = 0; j < numIslands; j++) {
       sortIds[j] = j;
     }
@@ -310,6 +427,8 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
 
     // 2. Greedy Best-Fit Corner Search
     float gutter = 0.1f;
+    float currentGlobalMaxU = 0;
+    float currentGlobalMaxV = 0;
 
     for (int i = 0; i < numIslands; i++) {
       int targetId = sortIds[i];
@@ -387,6 +506,7 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
       
       if (currentGlobalMaxU > 20.0f || currentGlobalMaxV > 20.0f) { abortSpreading = qtrue; break; }
     }
+    free(sortIds);
   }
 
   // ------------------------------------------
@@ -405,7 +525,6 @@ static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *m
 
   if (islands) free(islands);
   free(triIsland);
-  free(stack);
 }
 
 /*
@@ -483,6 +602,7 @@ void LoadTriangleModels(void) {
         // ==========================================
         float *uOffsets = calloc(mesh->mNumFaces, sizeof(float));
         float *vOffsets = calloc(mesh->mNumFaces, sizeof(float));
+        uv_t *xatlasUVs = NULL;
         int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
 
         if (mesh->mTextureCoords[uvChannel]) {
@@ -519,7 +639,14 @@ void LoadTriangleModels(void) {
           }
 
           if (potentialOverlap) {
-            TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
+            _printf("Potential UV overlap detected (ratio: %.2f). Trying xatlas packing...\n", areaRatio);
+            xatlasUVs = TryXAtlasUVs(mesh, uvChannel);
+            if (xatlasUVs) {
+              _printf("xatlas packing successful.\n");
+            } else {
+              _printf("xatlas packing failed, falling back to original spreading.\n");
+              TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
+            }
           }
         }
 
@@ -579,6 +706,9 @@ void LoadTriangleModels(void) {
         // STEP 2: Chunk Visual Geometry
         // ==========================================
         if (si && (si->surfaceFlags & SURF_SKIP)) {
+          if (xatlasUVs) free(xatlasUVs);
+          if (uOffsets) free(uOffsets);
+          if (vOffsets) free(vOffsets);
           continue;
         }
 
@@ -586,6 +716,7 @@ void LoadTriangleModels(void) {
         
         // Vertex mapping array (old index -> new index inside this chunk)
         int *vMap = malloc(sizeof(int) * mesh->mNumVertices);
+        int *vMapReverse = malloc(sizeof(int) * MAX_SURFACE_VERTS);
         
         while (currentFace < (int)mesh->mNumFaces) {
           if (inst->numDrawSurfs >= 1024) {
@@ -646,26 +777,62 @@ void LoadTriangleModels(void) {
 
             // How many NEW vertices would this face add?
             int newVerts = 0;
-            for (int k = 0; k < 3; k++) {
-              if (vMap[face->mIndices[k]] == -1) newVerts++;
+            if (xatlasUVs) {
+              // With xatlas, we might need more vertices due to UV splits.
+              // We'll check for matching vertices in the current chunk.
+              for (int k = 0; k < 3; k++) {
+                int oldIdx = face->mIndices[k];
+                int found = -1;
+                for (int v = 0; v < ds->numVerts; v++) {
+                  if (vMapReverse[v] == oldIdx) {
+                    if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + k].u &&
+                        ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + k].v) {
+                      found = v;
+                      break;
+                    }
+                  }
+                }
+                if (found == -1) newVerts++;
+              }
+            } else {
+              for (int k = 0; k < 3; k++) {
+                if (vMap[face->mIndices[k]] == -1) newVerts++;
+              }
             }
 
             // Check limits!
             if (ds->numVerts + newVerts > MAX_SURFACE_VERTS || ds->numIndexes + 3 > MAX_SURFACE_INDEXES) {
-              // Time for a new chunk!
               if (ds->numIndexes == 0) {
-                 // A single triangle is bigger than the limit? Impossible, but safeguard
                  Error("Single triangle exceeds limits?");
               }
-              break; // Break the inner while, start a new drawSurf
+              break; 
             }
 
             // Add the face to this chunk
             for (int k = 0; k < 3; k++) {
               unsigned int oldIdx = face->mIndices[k];
-              if (vMap[oldIdx] == -1) {
+              int mapIdx = -1;
+
+              if (xatlasUVs) {
+                for (int v = 0; v < ds->numVerts; v++) {
+                  if (vMapReverse[v] == oldIdx) {
+                    if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + k].u &&
+                        ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + k].v) {
+                      mapIdx = v;
+                      break;
+                    }
+                  }
+                }
+              } else {
+                mapIdx = vMap[oldIdx];
+              }
+
+              if (mapIdx == -1) {
                 // Add the vertex!
-                vMap[oldIdx] = ds->numVerts;
+                mapIdx = ds->numVerts;
+                if (!xatlasUVs) vMap[oldIdx] = mapIdx;
+                vMapReverse[mapIdx] = oldIdx;
+
                 drawVert_t *dv = &ds->verts[ds->numVerts];
                 
                 float mx = mesh->mVertices[oldIdx].x * scale_vec[0];
@@ -696,20 +863,22 @@ void LoadTriangleModels(void) {
                   dv->st[1] = mesh->mTextureCoords[0][oldIdx].y;
                 }
 
-                // Prefer channel 1 for lightmap UVs, fallback to channel 0
-                if (mesh->mTextureCoords[1]) {
-                  dv->lightmap[0][0] = mesh->mTextureCoords[1][oldIdx].x + uOffsets[currentFace];
-                  dv->lightmap[0][1] = mesh->mTextureCoords[1][oldIdx].y + vOffsets[currentFace];
-                } else if (mesh->mTextureCoords[0]) {
-                  dv->lightmap[0][0] = dv->st[0] + uOffsets[currentFace];
-                  dv->lightmap[0][1] = dv->st[1] + vOffsets[currentFace];
+                if (xatlasUVs) {
+                  dv->lightmap[0][0] = xatlasUVs[currentFace * 3 + k].u;
+                  dv->lightmap[0][1] = xatlasUVs[currentFace * 3 + k].v;
+                } else {
+                  // Original or Spread UVs
+                  if (mesh->mTextureCoords[uvChannel]) {
+                    dv->lightmap[0][0] = mesh->mTextureCoords[uvChannel][oldIdx].x + uOffsets[currentFace];
+                    dv->lightmap[0][1] = mesh->mTextureCoords[uvChannel][oldIdx].y + vOffsets[currentFace];
+                  }
                 }
 
                 dv->color[0][0] = dv->color[0][1] = dv->color[0][2] = dv->color[0][3] = 255;
                 ds->numVerts++;
               }
               // Add the index
-              ds->indexes[ds->numIndexes++] = vMap[oldIdx];
+              ds->indexes[ds->numIndexes++] = mapIdx;
             }
             currentFace++;
           }
@@ -719,12 +888,13 @@ void LoadTriangleModels(void) {
             ds->verts = realloc(ds->verts, sizeof(drawVert_t) * ds->numVerts);
             ds->indexes = realloc(ds->indexes, sizeof(int) * ds->numIndexes);
           } else {
-            // Empty chunk
             inst->numDrawSurfs--;
           }
         }
         
         free(vMap);
+        free(vMapReverse);
+        if (xatlasUVs) free(xatlasUVs);
         if (uOffsets) free(uOffsets);
         if (vOffsets) free(vOffsets);
       }
