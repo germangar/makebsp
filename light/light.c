@@ -2595,7 +2595,7 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-dump")) {
       dump = qtrue;
       _printf("Dumping occlusion maps\n");
-    } else if (!strcmp(argv[i], "-debug_lightmaps")) {
+    } else if (!strcmp(argv[i], "debuglightmaps")) {
       debugLightmaps = qtrue;
       _printf("Lightmap debug visualization enabled\n");
     } else if (!strcmp(argv[i], "-game")) {
