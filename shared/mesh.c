@@ -26,6 +26,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/bspfile.h"
 #include "mesh.h"
 
+__thread int	originalWidths[MAX_EXPANDED_AXIS];
+__thread int	originalHeights[MAX_EXPANDED_AXIS];
+
 
 /*
 ===============================================================
@@ -36,12 +39,10 @@ MESH SUBDIVISION
 */
 
 
-int	originalWidths[MAX_EXPANDED_AXIS];
-int	originalHeights[MAX_EXPANDED_AXIS];
-
 int	neighbors[8][2] = {
 	{0,1}, {1,1}, {1,0}, {1,-1}, {0,-1}, {-1,-1}, {-1,0}, {-1,1}
 };
+
 
 /*
 ============
@@ -302,6 +303,8 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 	float len;
 	mesh_t out;
 	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	int	originalWidths[MAX_EXPANDED_AXIS];
+	int	originalHeights[MAX_EXPANDED_AXIS];
 
 	if (!expand) {
 		Error("SubdivideMesh: malloc failed for expand buffer");
@@ -479,6 +482,8 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 	vec3_t proj, dir;
 	mesh_t out;
 	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	int	originalWidths[MAX_EXPANDED_AXIS];
+	int	originalHeights[MAX_EXPANDED_AXIS];
 
 	if (!expand) {
 		Error("RemoveLinearMeshColumnsRows: malloc failed for expand buffer");
@@ -596,8 +601,16 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 		Error("SubdivideMeshQuads: malloc failed for expand buffer");
 	}
 
+
 	out.width = in->width;
 	out.height = in->height;
+
+	for (i = 0; i < in->width; i++) {
+		originalWidths[i] = i;
+	}
+	for (i = 0; i < in->height; i++) {
+		originalHeights[i] = i;
+	}
 
 	for (i = 0; i < in->width; i++) {
 		for (j = 0; j < in->height; j++) {

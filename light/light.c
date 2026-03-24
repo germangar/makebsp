@@ -1275,7 +1275,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
         // Unreal Windowed Inverse Square
         // R is the distance where light would naturally fall below 1.0 (clamped)
         float R = sqrt(light->photons);
-        if (dist > R) {
+        if (dist > R || R < 0.001f) {
            add = 0;
         } else {
            float ratio = dist / R;
@@ -1594,7 +1594,7 @@ void TraceLtm(int num) {
   int sampleWidth, sampleHeight, ssize;
   int extW, extH;
   vec3_t lightmapOrigin, lightmapVecs[2];
-  int widthtable[LIGHTMAP_WIDTH], heighttable[LIGHTMAP_WIDTH];
+  int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
 
   ds = &drawSurfaces[num];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);

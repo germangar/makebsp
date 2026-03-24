@@ -30,8 +30,8 @@ typedef struct {
 
 #define	MAX_EXPANDED_AXIS		1024
 
-extern	int	originalWidths[MAX_EXPANDED_AXIS];
-extern	int	originalHeights[MAX_EXPANDED_AXIS];
+extern	__thread int	originalWidths[MAX_EXPANDED_AXIS];
+extern	__thread int	originalHeights[MAX_EXPANDED_AXIS];
 
 void FreeMesh( mesh_t *m );
 mesh_t *CopyMesh( mesh_t *mesh );
