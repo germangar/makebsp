@@ -50,6 +50,7 @@ qboolean extraWide;
 qboolean lightmapBorder;
 
 qboolean debugLightmaps;
+qboolean debugLightmapsAlpha;
 qboolean oldTrace = qfalse;
 qboolean bruteTrace = qfalse;
 qboolean embree = qfalse;
@@ -472,78 +473,61 @@ void VisualizeLightmapAllocation(void) {
 
     rasterizedCount++;
 
-    if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-    }
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+    int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
+    int use_upscale = extra;
+    int scale = use_upscale ? 2 : 1;
+    int currentGutter = superSample ? (GUTTER * scale) : 0;
 
     // generate a unique color for this surface based on index
-    // avoid too dark or too bright colors
     color[0] = (i * 123) % 200 + 55;
     color[1] = (i * 456) % 200 + 55;
     color[2] = (i * 789) % 200 + 55;
 
-    if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-      // Rasterize triangles into the lightmap
-      for (j = 0; j < ds->numIndexes; j += 3) {
-        int i0 = drawIndexes[ds->firstIndex + j];
-        int i1 = drawIndexes[ds->firstIndex + j + 1];
-        int i2 = drawIndexes[ds->firstIndex + j + 2];
+    if (debugLightmapsAlpha) {
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        // Use the exact same logic as TraceLtm for model lightmaps
+        int extW = ds->lightmapWidth * scale + currentGutter * 2;
+        int extH = ds->lightmapHeight * scale + currentGutter * 2;
 
-        drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
-        drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
-        drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
+        for (y = 0; y < extH; y++) {
+          for (x = 0; x < extW; x++) {
+            float st[2];
+            vec3_t temp_origin, normal;
+            float fi = (float)(x - currentGutter);
+            float fj = (float)(y - currentGutter);
+            float step = 1.0f / (float)scale;
+            float offset = 0.5f * step;
 
-        // UVs in lightmap space
-        float st0[2], st1[2], st2[2];
-        st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
-        st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
-        st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
-        st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
-        st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
-        st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
+            st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
+            st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
 
-        // Bounding box of the triangle in pixels
-        float fMinX = st0[0];
-        if (st1[0] < fMinX)
-          fMinX = st1[0];
-        if (st2[0] < fMinX)
-          fMinX = st2[0];
-        float fMaxX = st0[0];
-        if (st1[0] > fMaxX)
-          fMaxX = st1[0];
-        if (st2[0] > fMaxX)
-          fMaxX = st2[0];
-        float fMinY = st0[1];
-        if (st1[1] < fMinY)
-          fMinY = st1[1];
-        if (st2[1] < fMinY)
-          fMinY = st2[1];
-        float fMaxY = st0[1];
-        if (st1[1] > fMaxY)
-          fMaxY = st1[1];
-        if (st2[1] > fMaxY)
-          fMaxY = st2[1];
+            if (TriSoupSamplePoint(ds, st, temp_origin, normal)) {
+              int px = (int)floor(st[0]);
+              int py = (int)floor(st[1]);
 
-        int minX = (int)floor(fMinX);
-        int maxX = (int)ceil(fMaxX);
-        int minY = (int)floor(fMinY);
-        int maxY = (int)ceil(fMaxY);
+              if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
+                k = p * 3;
+                lightBytes[k] = color[0];
+                lightBytes[k + 1] = color[1];
+                lightBytes[k + 2] = color[2];
+              }
+            }
+          }
+        }
+      } else {
+        // For patches and planar surfaces, we also honor the dilated bounds
+        int extW = ds->lightmapWidth * scale + currentGutter * 2;
+        int extH = ds->lightmapHeight * scale + currentGutter * 2;
 
-        // Clamp to lightmap block bounds
-        if (minX < ds->lightmapOffset[0][0])
-          minX = ds->lightmapOffset[0][0];
-        if (maxX >= ds->lightmapOffset[0][0] + ds->lightmapWidth)
-          maxX = ds->lightmapOffset[0][0] + ds->lightmapWidth - 1;
-        if (minY < ds->lightmapOffset[0][1])
-          minY = ds->lightmapOffset[0][1];
-        if (maxY >= ds->lightmapOffset[0][1] + ds->lightmapHeight)
-          maxY = ds->lightmapOffset[0][1] + ds->lightmapHeight - 1;
+        for (y = 0; y < extH; y++) {
+          for (x = 0; x < extW; x++) {
+            int px = ds->lightmapOffset[0][0] + (x - currentGutter) / scale;
+            int py = ds->lightmapOffset[0][1] + (y - currentGutter) / scale;
 
-        for (y = minY; y <= maxY; y++) {
-          for (x = minX; x <= maxX; x++) {
-            if (PointInTriangle((float)x + 0.5f, (float)y + 0.5f, st0, st1,
-                                st2)) {
-              p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + y) * LIGHTMAP_WIDTH +
-                  x;
+            if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
+              p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
               k = p * 3;
               lightBytes[k] = color[0];
               lightBytes[k + 1] = color[1];
@@ -553,17 +537,77 @@ void VisualizeLightmapAllocation(void) {
         }
       }
     } else {
-      // Standard rectangular filling for planar/patch surfaces
-      for (y = 0; y < ds->lightmapHeight; y++) {
-        for (x = 0; x < ds->lightmapWidth; x++) {
-          p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
-               ds->lightmapOffset[0][1] + y) *
-                  LIGHTMAP_WIDTH +
-              (ds->lightmapOffset[0][0] + x);
-          k = p * 3;
-          lightBytes[k] = color[0];
-          lightBytes[k + 1] = color[1];
-          lightBytes[k + 2] = color[2];
+      // FAST path: original debuglightmaps logic
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        // Rasterize triangles into the lightmap
+        for (j = 0; j < ds->numIndexes; j += 3) {
+          int i0 = drawIndexes[ds->firstIndex + j];
+          int i1 = drawIndexes[ds->firstIndex + j + 1];
+          int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+          drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
+          drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
+          drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
+
+          // UVs in lightmap space
+          float st0[2], st1[2], st2[2];
+          st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
+          st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
+          st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
+
+          // Bounding box of the triangle in pixels
+          float fMinX = st0[0];
+          if (st1[0] < fMinX) fMinX = st1[0];
+          if (st2[0] < fMinX) fMinX = st2[0];
+          float fMaxX = st0[0];
+          if (st1[0] > fMaxX) fMaxX = st1[0];
+          if (st2[0] > fMaxX) fMaxX = st2[0];
+          float fMinY = st0[1];
+          if (st1[1] < fMinY) fMinY = st1[1];
+          if (st2[1] < fMinY) fMinY = st2[1];
+          float fMaxY = st0[1];
+          if (st1[1] > fMaxY) fMaxY = st1[1];
+          if (st2[1] > fMaxY) fMaxY = st2[1];
+
+          int minX = (int)floor(fMinX);
+          int maxX = (int)ceil(fMaxX);
+          int minY = (int)floor(fMinY);
+          int maxY = (int)ceil(fMaxY);
+
+          // Clamp to lightmap block bounds
+          if (minX < ds->lightmapOffset[0][0]) minX = ds->lightmapOffset[0][0];
+          if (maxX >= ds->lightmapOffset[0][0] + ds->lightmapWidth) maxX = ds->lightmapOffset[0][0] + ds->lightmapWidth - 1;
+          if (minY < ds->lightmapOffset[0][1]) minY = ds->lightmapOffset[0][1];
+          if (maxY >= ds->lightmapOffset[0][1] + ds->lightmapHeight) maxY = ds->lightmapOffset[0][1] + ds->lightmapHeight - 1;
+
+          for (y = minY; y <= maxY; y++) {
+            for (x = minX; x <= maxX; x++) {
+              if (PointInTriangle((float)x + 0.5f, (float)y + 0.5f, st0, st1, st2)) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + y) * LIGHTMAP_WIDTH + x;
+                k = p * 3;
+                lightBytes[k] = color[0];
+                lightBytes[k + 1] = color[1];
+                lightBytes[k + 2] = color[2];
+              }
+            }
+          }
+        }
+      } else {
+        // Standard rectangular filling for planar/patch surfaces
+        for (y = 0; y < ds->lightmapHeight; y++) {
+          for (x = 0; x < ds->lightmapWidth; x++) {
+            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
+                 ds->lightmapOffset[0][1] + y) *
+                    LIGHTMAP_WIDTH +
+                (ds->lightmapOffset[0][0] + x);
+            k = p * 3;
+            lightBytes[k] = color[0];
+            lightBytes[k + 1] = color[1];
+            lightBytes[k + 2] = color[2];
+          }
         }
       }
     }
@@ -2595,7 +2639,11 @@ int LightMain(int argc, char **argv) {
       _printf("Adding debug border to lightmaps\n");
     } else if (!strcmp(argv[i], "-debuglightmaps")) {
       debugLightmaps = qtrue;
-      _printf("Lightmap debug visualization enabled\n");
+      _printf("Lightmap debug visualization enabled (FAST mode)\n");
+    } else if (!strcmp(argv[i], "-debuglightmapsalpha")) {
+      debugLightmaps = qtrue;
+      debugLightmapsAlpha = qtrue;
+      _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
     } else if (!strcmp(argv[i], "-game")) {
       char *arg = argv[++i];
       int j;
@@ -2674,7 +2722,8 @@ int LightMain(int argc, char **argv) {
             "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
             "                     quadratic, doublequadratic, unreal, wrapped)\n"
             "   brutetrace      = disable all tracing optimizations for debugging\n"
-            "   debuglightmaps = visualize lightmap allocation and export BMPs\n"
+            "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
+            "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
             "   oldtrace       = use legacy BSP-brush occlusion for all surfaces\n"
             "   bruteforce     = skip all culling and use legacy trace\n"
             "   embree         = use high-performance Embree tracing path (brute-force only)\n");
