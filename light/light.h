@@ -120,6 +120,7 @@ typedef struct {
 extern surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
 
 void InitTrace(void);
+void InitTracingGeometry(void);
 
 // traceWork_t is only a parameter to crutch up poor large local allocations on
 // winNT and macOS.  It should be allocated in the worker function, but never

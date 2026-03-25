@@ -2362,8 +2362,10 @@ void LightWorld(void) {
   if (!nogridlighting) {
     if (embree) {
       _printf("--- TraceGrid (embree) ---\n");
+    } else if (oldTrace) {
+      _printf("--- TraceGrid (legacy) ---\n");
     } else {
-      _printf("--- TraceGrid ---\n");
+      _printf("--- TraceGrid (surface) ---\n");
     }
     start = I_FloatTime();
     RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
@@ -2375,8 +2377,10 @@ void LightWorld(void) {
 
   if (embree) {
     _printf("--- TraceLtm (embree) ---\n");
+  } else if (oldTrace) {
+    _printf("--- TraceLtm (legacy) ---\n");
   } else {
-    _printf("--- TraceLtm ---\n");
+    _printf("--- TraceLtm (surface) ---\n");
   }
   start = I_FloatTime();
   RunThreadsOnIndividual(numDrawSurfaces, qtrue, TraceLtm);
@@ -2567,7 +2571,13 @@ void GridAndVertexLighting(void) {
   CreateSurfaceLights();
 
   if (!nogridlighting) {
-    _printf("--- TraceGrid ---\n");
+    if (embree) {
+      _printf("--- TraceGrid (embree) ---\n");
+    } else if (oldTrace) {
+      _printf("--- TraceGrid (legacy) ---\n");
+    } else {
+      _printf("--- TraceGrid (surface) ---\n");
+    }
     RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
   }
 
