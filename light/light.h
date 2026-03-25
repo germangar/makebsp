@@ -29,10 +29,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/globals.h"
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
+#include <embree4/rtcore.h>
+
+extern RTCDevice g_device;
+extern RTCScene g_scene;
 
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
 #define MIN_LIGHT_ADD 0.1f
+#define MIN_EMBREE_LIGHT_ADD 0.01f
 
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 
@@ -70,6 +75,7 @@ extern qboolean noSurfaces;
 extern qboolean debugLightmaps;
 extern qboolean oldTrace;
 extern qboolean bruteTrace;
+extern qboolean embree;
 
 //===============================================================
 

@@ -54,6 +54,7 @@ qboolean noSurfaces;
 qboolean debugLightmaps;
 qboolean oldTrace = qfalse;
 qboolean bruteTrace = qfalse;
+qboolean embree = qfalse;
 
 // CLI Overrides
 qboolean falloffOverridden = qfalse;
@@ -96,7 +97,6 @@ int entitySurface[MAX_MAP_DRAW_SURFS];
 
 // 7,9,11 normalized to avoid being nearly coplanar with common faces
 // vec3_t		sunDirection = { 0.441835, 0.56807, 0.694313 };
-// vec3_t		sunDirection = { 0.45, 0, 0.9 };
 // vec3_t		sunDirection = { 0, 0, 1 };
 
 // these are usually overrided by shader values
@@ -430,8 +430,8 @@ static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
               (st2[0] - st1[0]) * (st[1] - st2[1])) /
              area;
         w1 = ((st2[1] - st0[1]) * (st[0] - st2[0]) +
-              (st0[0] - st2[0]) * (st[1] - st2[1])) /
-             area;
+            (st0[0] - st2[0]) * (st[1] - st2[1])) /
+           area;
         w2 = 1.0f - w0 - w1;
 
         for (k = 0; k < 3; k++) {
@@ -1360,7 +1360,8 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       }
     }
 
-    if (add <= MIN_LIGHT_ADD) {
+    float minAdd = embree ? MIN_EMBREE_LIGHT_ADD : MIN_LIGHT_ADD;
+    if (add <= minAdd) {
       continue;
     }
 
@@ -2319,6 +2320,7 @@ LightWorld
 */
 void LightWorld(void) {
   float f;
+  double start, end;
 
   // determine the number of grid points
   SetupGrid();
@@ -2335,16 +2337,30 @@ void LightWorld(void) {
   _printf("%i area lights\n", numAreaLights);
 
   if (!nogridlighting) {
-    _printf("--- TraceGrid ---\n");
+    if (embree) {
+      _printf("--- TraceGrid (embree) ---\n");
+    } else {
+      _printf("--- TraceGrid ---\n");
+    }
+    start = I_FloatTime();
     RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
+    end = I_FloatTime();
     _printf("%i x %i x %i = %i grid\n", gridBounds[0], gridBounds[1],
             gridBounds[2], numGridPoints);
+    _printf("%5.0f seconds elapsed in TraceGrid\n", end - start);
   }
 
-  _printf("--- TraceLtm ---\n");
+  if (embree) {
+    _printf("--- TraceLtm (embree) ---\n");
+  } else {
+    _printf("--- TraceLtm ---\n");
+  }
+  start = I_FloatTime();
   RunThreadsOnIndividual(numDrawSurfaces, qtrue, TraceLtm);
+  end = I_FloatTime();
   _printf("%5i visible samples\n", c_visible);
   _printf("%5i occluded samples\n", c_occluded);
+  _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
 }
 
 /*
@@ -2656,7 +2672,10 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-oldtrace")) {
       oldTrace = qtrue;
       _printf("Legacy BSP-brush tracing enabled\n");
-    } else if (!strcmp(argv[i], "-brutetrace")) {
+    } else if (!strcmp(argv[i], "-embree")) {
+      embree = qtrue;
+      _printf("Embree-accelerated tracing enabled\n");
+    } else if (!strcmp(argv[i], "-bruteforce")) {
       bruteTrace = qtrue;
       _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
     } else {
@@ -2667,6 +2686,7 @@ int LightMain(int argc, char **argv) {
   ThreadSetDefault();
 
   if (i != argc - 1) {
+    _printf("Unknown command: %s", argv[i]);
     _printf("usage: q3map -light [-<switch> [-<switch> ...]] <mapname>\n"
             "\n"
             "Switches:\n"
@@ -2682,9 +2702,12 @@ int LightMain(int argc, char **argv) {
             "   novertex       = don't calculate vertex lighting\n"
             "   samplesize <N> = set the lightmap pixel size to NxN units\n"
             "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
-            "                     quadratic, doublequadratic)\n"
+            "                     quadratic, doublequadratic, unreal, wrapped)\n"
             "   brutetrace      = disable all tracing optimizations for debugging\n"
-            "   debuglightmaps = visualize lightmap allocation and export BMPs\n");
+            "   debuglightmaps = visualize lightmap allocation and export BMPs\n"
+            "   oldtrace       = use legacy BSP-brush occlusion for all surfaces\n"
+            "   bruteforce     = skip all culling and use legacy trace\n"
+            "   embree         = use high-performance Embree tracing path (brute-force only)\n");
     exit(0);
   }
 

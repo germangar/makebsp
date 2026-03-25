@@ -100,16 +100,14 @@ Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$
 Q3LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3LIGHT_SRC:$(Q3LIGHT_DIR)/%.c=$(OBJ_DIR)/q3light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for LIGHT
-LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(LIGHT_SRC:$(LIGHT_DIR)/%.c=$(OBJ_DIR)/light_embree/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
+LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3LIGHT_SRC:$(Q3LIGHT_DIR)/%.c=$(OBJ_DIR)/light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for MeshLib-Lite (persistent)
 ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
 
-Q3MAP_TARGET = q3map.exe
-Q3LIGHT_TARGET = q3light.exe
 LIGHT_TARGET = light.exe
 
-all: $(Q3MAP_TARGET) $(Q3LIGHT_TARGET) $(LIGHT_TARGET)
+all: $(Q3MAP_TARGET) $(LIGHT_TARGET)
 
 $(ML_LITE_LIB): $(ML_LITE_OBJ)
 	echo Building persistent MeshLib-Lite library...
@@ -117,9 +115,6 @@ $(ML_LITE_LIB): $(ML_LITE_OBJ)
 
 $(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB)
 	$(CXX) -o $@ $(Q3MAP_OBJ) $(ML_LITE_LIB) $(Q3MAP_LDFLAGS)
-
-$(Q3LIGHT_TARGET): $(Q3LIGHT_OBJ)
-	$(CXX) -o $@ $(Q3LIGHT_OBJ) $(Q3LIGHT_LDFLAGS)
 
 $(LIGHT_TARGET): $(LIGHT_OBJ)
 	$(CXX) -o $@ $(LIGHT_OBJ) $(LIGHT_LDFLAGS)
@@ -137,11 +132,7 @@ $(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/q3light/%.o: $(Q3LIGHT_DIR)/%.c
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/light_embree/%.o: $(LIGHT_DIR)/%.c
+$(OBJ_DIR)/light/%.o: $(Q3LIGHT_DIR)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

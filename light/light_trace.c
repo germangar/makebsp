@@ -20,6 +20,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "light.h"
+#include <embree4/rtcore.h>
+
+RTCDevice g_device = NULL;
+RTCScene g_scene = NULL;
+
+struct MyRayQueryContext {
+  struct RTCRayQueryContext context;
+  traceWork_t *tw;
+};
 
 #define CURVE_FACET_ERROR 8
 #define TRACE_EPSILON 0.001
@@ -640,18 +649,231 @@ void MakeTnode(int nodenum) {
 
 /*
 =============
+AlphaFilter
+
+Embree intersection filter for handling ignoreSurface and alpha shadows
+=============
+*/
+void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
+  if (args->valid[0] != -1)
+    return;
+  struct MyRayQueryContext *mcontext = (struct MyRayQueryContext *)args->context;
+  traceWork_t *tw = mcontext->tw;
+  struct RTCHit *hit = (struct RTCHit *)args->hit;
+  unsigned int geomID = hit->geomID;
+
+  // Handle ignoreSurface
+  if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
+    args->valid[0] = 0;
+    return;
+  }
+
+  // Only perform additional checks for draw surfaces
+  if (geomID < (unsigned int)numDrawSurfaces) {
+    // For now, let's keep it simple. If we want backface culling, 
+    // it should be consistent.
+    // However, missing shadows usually mean too much is being invalidated.
+    // Let's REMOVE backface culling in the filter for now to see if it fixes it.
+    /*
+    if (drawSurfaces[geomID].surfaceType == MST_PLANAR) {
+      struct RTCRay *ray = (struct RTCRay *)args->ray;
+      float dot = ray->dir_x * hit->Ng_x + ray->dir_y * hit->Ng_y + ray->dir_z * hit->Ng_z;
+      if (dot > 0) {
+        args->valid[0] = 0;
+      }
+    }
+    */
+  }
+}
+
+/*
+=============
+AddBrushesToEmbree
+
+Experimental: Converts all brushes to triangles and adds them to the Embree scene.
+=============
+*/
+static void AddBrushesToEmbree(RTCScene scene) {
+  int i, j, k;
+  dbrush_t *b;
+  dbrushside_t *s;
+  dplane_t *p, *p2;
+  winding_t *w;
+  int brushTriangles = 0;
+
+  _printf("--- AddBrushesToEmbree: Converting brushes to triangles ---\n");
+
+  for (i = 0; i < numbrushes; i++) {
+    b = &dbrushes[i];
+
+    for (j = 0; j < b->numSides; j++) {
+      s = &dbrushsides[b->firstSide + j];
+      p = &dplanes[s->planeNum];
+
+      w = BaseWindingForPlane(p->normal, p->dist);
+      for (k = 0; k < b->numSides && w; k++) {
+        p2 = &dplanes[dbrushsides[b->firstSide + k].planeNum];
+        ChopWindingInPlace(&w, p2->normal, p2->dist, 0.1f);
+      }
+
+      if (!w) {
+        continue;
+      }
+
+      if (w->numpoints < 3) {
+        FreeWinding(w);
+        continue;
+      }
+
+      RTCGeometry geom = rtcNewGeometry(g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
+      rtcSetGeometryBuildQuality(geom, RTC_BUILD_QUALITY_HIGH);
+
+      vec3_t *verts = (vec3_t *)rtcSetNewGeometryBuffer(
+          geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, sizeof(vec3_t),
+          w->numpoints);
+      int *indices = (int *)rtcSetNewGeometryBuffer(
+          geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(int) * 3,
+          w->numpoints - 2);
+
+      for (k = 0; k < w->numpoints; k++) {
+        VectorCopy(w->p[k], verts[k]);
+      }
+
+      for (k = 0; k < w->numpoints - 2; k++) {
+        indices[k * 3 + 0] = 0;
+        indices[k * 3 + 1] = k + 1;
+        indices[k * 3 + 2] = k + 2;
+      }
+
+      rtcCommitGeometry(geom);
+      rtcAttachGeometryByID(scene, geom, numDrawSurfaces + brushTriangles);
+      rtcReleaseGeometry(geom);
+
+      brushTriangles++;
+      FreeWinding(w);
+    }
+  }
+  _printf("Added %i brush sides as geometry to Embree\n", brushTriangles);
+}
+
+/*
+==============
 InitTrace
 
 Loads the node structure out of a .bsp file to be used for light occlusion
 =============
 */
 void InitTrace(void) {
+  int i, j;
+  dsurface_t *dsurf;
+
   // 32 byte align the structs
   tnodes = malloc((MAX_TNODES + 1) * sizeof(tnode_t));
   tnodes = (tnode_t *)(((size_t)tnodes + 31) & ~31);
   tnode_p = tnodes;
 
   MakeTnode(0);
+
+  if (!embree)
+    return;
+
+  // Embree 4 initialization
+  g_device = rtcNewDevice(NULL);
+  if (!g_device) {
+    Error("Embree: Failed to create device\n");
+  }
+  g_scene = rtcNewScene(g_device);
+  rtcSetSceneFlags(g_scene, RTC_SCENE_FLAG_ROBUST);
+
+  _printf("--- Embree Initializing ---\n");
+  
+  // Embree path is strictly brute-force (everything to Embree)
+  AddBrushesToEmbree(g_scene);
+
+  int count = 0;
+  for (i = 0; i < numDrawSurfaces; i++) {
+    dsurf = &drawSurfaces[i];
+    if (dsurf->numIndexes > 0 &&
+        (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
+         dsurf->surfaceType == MST_PLANAR)) {
+      RTCGeometry geom = rtcNewGeometry(g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
+      rtcSetGeometryBuildQuality(geom, RTC_BUILD_QUALITY_HIGH);
+
+      rtcSetSharedGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0,
+                                 RTC_FORMAT_FLOAT3, drawVerts, 0,
+                                 sizeof(drawVert_t), numDrawVerts);
+
+      unsigned int *indices = rtcSetNewGeometryBuffer(
+          geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3,
+          3 * sizeof(unsigned int), dsurf->numIndexes / 3);
+      for (j = 0; j < dsurf->numIndexes; j++) {
+        indices[j] = (unsigned int)(drawIndexes[dsurf->firstIndex + j] +
+                                    dsurf->firstVert);
+      }
+
+      rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+      rtcCommitGeometry(geom);
+      rtcAttachGeometryByID(g_scene, geom, i);
+      rtcReleaseGeometry(geom);
+      count++;
+    } else if (dsurf->surfaceType == MST_PATCH) {
+      mesh_t srcMesh, *subdivided, *mesh;
+      srcMesh.width = dsurf->patchWidth;
+      srcMesh.height = dsurf->patchHeight;
+      srcMesh.verts = &drawVerts[dsurf->firstVert];
+
+      mesh = SubdivideMesh(srcMesh, 8, 999);
+      PutMeshOnCurve(*mesh);
+      MakeMeshNormals(*mesh);
+      subdivided = RemoveLinearMeshColumnsRows(mesh);
+      FreeMesh(mesh);
+
+      RTCGeometry geom = rtcNewGeometry(g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
+      rtcSetGeometryBuildQuality(geom, RTC_BUILD_QUALITY_HIGH);
+
+      int numVerts = subdivided->width * subdivided->height;
+      void *verts = rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0,
+                                            RTC_FORMAT_FLOAT3,
+                                            sizeof(drawVert_t), numVerts);
+      memcpy(verts, subdivided->verts, sizeof(drawVert_t) * numVerts);
+
+      int numTris = (subdivided->width - 1) * (subdivided->height - 1) * 2;
+      unsigned int *indices = rtcSetNewGeometryBuffer(
+          geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3,
+          3 * sizeof(unsigned int), numTris);
+
+      int triCount = 0;
+      for (int x = 0; x < subdivided->width - 1; x++) {
+        for (int y = 0; y < subdivided->height - 1; y++) {
+          int v1 = y * subdivided->width + x;
+          int v2 = v1 + 1;
+          int v3 = v1 + subdivided->width + 1;
+          int v4 = v1 + subdivided->width;
+
+          indices[triCount * 3 + 0] = v1;
+          indices[triCount * 3 + 1] = v4;
+          indices[triCount * 3 + 2] = v3;
+          triCount++;
+
+          indices[triCount * 3 + 0] = v1;
+          indices[triCount * 3 + 1] = v3;
+          indices[triCount * 3 + 2] = v2;
+          triCount++;
+        }
+      }
+
+      FreeMesh(subdivided);
+
+      rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+      rtcCommitGeometry(geom);
+      rtcAttachGeometryByID(g_scene, geom, i);
+      rtcReleaseGeometry(geom);
+      count++;
+    }
+  }
+
+  rtcCommitScene(g_scene);
+  _printf("%d surfaces added to Embree scene\n", count);
 
   InitSurfacesForTesting();
 }
@@ -1044,8 +1266,6 @@ TraceLine
 Dispatcher for legacy vs mesh-only tracing
 =============
 */
-extern qboolean oldTrace;
-
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw) {
   int r;
@@ -1055,7 +1275,44 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
   surfaceTest_t *test;
   int surfaceNum;
   byte surfaceTested[MAX_MAP_DRAW_SURFS / 8];
-  ;
+
+  if (embree) {
+    struct RTCRayHit rayhit;
+    struct MyRayQueryContext context;
+    rtcInitRayQueryContext(&context.context);
+    context.tw = tw;
+
+    rayhit.ray.org_x = start[0];
+    rayhit.ray.org_y = start[1];
+    rayhit.ray.org_z = start[2];
+    rayhit.ray.dir_x = stop[0] - start[0];
+    rayhit.ray.dir_y = stop[1] - start[1];
+    rayhit.ray.dir_z = stop[2] - start[2];
+    rayhit.ray.tnear = 0.0001f; 
+    rayhit.ray.tfar = 1.0f;
+    rayhit.ray.mask = 0xFFFFFFFF;
+    rayhit.ray.flags = 0;
+    rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+    rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+
+    struct RTCIntersectArguments iargs;
+    rtcInitIntersectArguments(&iargs);
+    iargs.context = &context.context;
+
+    rtcIntersect1(g_scene, &rayhit, &iargs);
+
+    trace->filter[0] = 1.0;
+    trace->filter[1] = 1.0;
+    trace->filter[2] = 1.0;
+    trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
+    trace->hitFraction =
+        (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? 1.0f : rayhit.ray.tfar;
+
+    for (i = 0; i < 3; i++) {
+      trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
+    }
+    return;
+  }
 
   if (!oldTrace) {
     TraceLine_Surface(start, stop, trace, testAll, tw);
@@ -1151,5 +1408,23 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 
   for (i = 0; i < 3; i++) {
     trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
+  }
+}
+
+/*
+=============
+CleanupTrace
+
+Releases Embree resources
+=============
+*/
+void CleanupTrace(void) {
+  if (g_scene) {
+    rtcReleaseScene(g_scene);
+    g_scene = NULL;
+  }
+  if (g_device) {
+    rtcReleaseDevice(g_device);
+    g_device = NULL;
   }
 }
