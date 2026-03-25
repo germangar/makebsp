@@ -1262,63 +1262,65 @@ void TraceLine_Surface(const vec3_t start, const vec3_t stop, trace_t *trace,
 
 /*
 =============
-TraceLine
+TraceLine_Embree
 
-Dispatcher for legacy vs mesh-only tracing
+High-performance Embree tracing path
 =============
 */
-void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
-               qboolean testAll, traceWork_t *tw) {
-  int r;
-  int i, j;
-  dleaf_t *leaf;
+static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
+                             trace_t *trace, traceWork_t *tw) {
+  int i;
+  struct RTCRayHit rayhit;
+  struct MyRayQueryContext context;
+  rtcInitRayQueryContext(&context.context);
+  context.tw = tw;
+
+  rayhit.ray.org_x = start[0];
+  rayhit.ray.org_y = start[1];
+  rayhit.ray.org_z = start[2];
+  rayhit.ray.dir_x = stop[0] - start[0];
+  rayhit.ray.dir_y = stop[1] - start[1];
+  rayhit.ray.dir_z = stop[2] - start[2];
+  rayhit.ray.tnear = 0.0001f;
+  rayhit.ray.tfar = 1.0f;
+  rayhit.ray.mask = 0xFFFFFFFF;
+  rayhit.ray.flags = 0;
+  rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+  rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+
+  struct RTCIntersectArguments iargs;
+  rtcInitIntersectArguments(&iargs);
+  iargs.context = &context.context;
+
+  rtcIntersect1(g_scene, &rayhit, &iargs);
+
+  trace->filter[0] = 1.0;
+  trace->filter[1] = 1.0;
+  trace->filter[2] = 1.0;
+  trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
+  trace->hitFraction = (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? 1.0f : rayhit.ray.tfar;
+
+  for (i = 0; i < 3; i++) {
+    trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
+  }
+}
+
+/*
+=============
+TraceLine_Legacy
+
+Legacy BSP tree-based tracing path
+=============
+*/
+static void TraceLine_Legacy(const vec3_t start, const vec3_t stop,
+                             trace_t *trace, qboolean testAll,
+                             traceWork_t *tw) {
+  int i, r, j;
   float oldHitFrac;
-  surfaceTest_t *test;
+  dleaf_t *leaf;
   int surfaceNum;
+  surfaceTest_t *test;
   byte surfaceTested[MAX_MAP_DRAW_SURFS / 8];
-
-  if (embree) {
-    struct RTCRayHit rayhit;
-    struct MyRayQueryContext context;
-    rtcInitRayQueryContext(&context.context);
-    context.tw = tw;
-
-    rayhit.ray.org_x = start[0];
-    rayhit.ray.org_y = start[1];
-    rayhit.ray.org_z = start[2];
-    rayhit.ray.dir_x = stop[0] - start[0];
-    rayhit.ray.dir_y = stop[1] - start[1];
-    rayhit.ray.dir_z = stop[2] - start[2];
-    rayhit.ray.tnear = 0.0001f; 
-    rayhit.ray.tfar = 1.0f;
-    rayhit.ray.mask = 0xFFFFFFFF;
-    rayhit.ray.flags = 0;
-    rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
-    rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
-
-    struct RTCIntersectArguments iargs;
-    rtcInitIntersectArguments(&iargs);
-    iargs.context = &context.context;
-
-    rtcIntersect1(g_scene, &rayhit, &iargs);
-
-    trace->filter[0] = 1.0;
-    trace->filter[1] = 1.0;
-    trace->filter[2] = 1.0;
-    trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
-    trace->hitFraction =
-        (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? 1.0f : rayhit.ray.tfar;
-
-    for (i = 0; i < 3; i++) {
-      trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
-    }
-    return;
-  }
-
-  if (!oldTrace) {
-    TraceLine_Surface(start, stop, trace, testAll, tw);
-    return;
-  }
 
   if (numthreads == 1) {
     c_totalTrace++;
@@ -1371,7 +1373,6 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
     return;
   }
 
-
   memset(surfaceTested, 0, (numDrawSurfaces + 7) / 8);
   oldHitFrac = trace->hitFraction;
 
@@ -1407,6 +1408,24 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
   for (i = 0; i < 3; i++) {
     trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
   }
+}
+
+/*
+=============
+*/
+void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
+               qboolean testAll, traceWork_t *tw) {
+  if (embree) {
+    TraceLine_Embree(start, stop, trace, tw);
+    return;
+  }
+
+  if (!oldTrace) {
+    TraceLine_Surface(start, stop, trace, testAll, tw);
+    return;
+  }
+
+  TraceLine_Legacy(start, stop, trace, testAll, tw);
 }
 
 /*
