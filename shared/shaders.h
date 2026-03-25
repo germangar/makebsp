@@ -51,8 +51,6 @@ typedef struct shaderInfo_s {
                             // should test against the filter image
   qboolean forceTraceLight; // always use -light for this surface
   qboolean forceVLight;     // always use -vlight for this surface
-  qboolean patchShadows;  // have patches casting shadows when using -light for
-                          // this surface
   qboolean vertexShadows; // shadows will be casted at this surface even when
                           // vertex lit
   qboolean noVertexShadows; // no shadows will be casted at this surface in

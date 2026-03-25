@@ -790,6 +790,7 @@ void InitTrace(void) {
   // Embree path is strictly brute-force (everything to Embree)
   AddBrushesToEmbree(g_scene);
 
+
   int count = 0;
   for (i = 0; i < numDrawSurfaces; i++) {
     dsurf = &drawSurfaces[i];
@@ -1207,7 +1208,7 @@ void TraceLine_Surface(const vec3_t start, const vec3_t stop, trace_t *trace,
   // collect ALL leaves along the ray (including those BSP thinks are solid)
   TraceLine_Surface_r(0, start, stop, tw);
 
-  if (noSurfaces || !tw->numOpenLeafs) {
+  if (!tw->numOpenLeafs) {
     return;
   }
 
@@ -1370,9 +1371,6 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
     return;
   }
 
-  if (noSurfaces) {
-    return;
-  }
 
   memset(surfaceTested, 0, (numDrawSurfaces + 7) / 8);
   oldHitFrac = trace->hitFraction;

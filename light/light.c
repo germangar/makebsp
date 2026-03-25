@@ -44,13 +44,12 @@ int numFilters;
 extern char source[1024];
 
 qboolean notrace;
-qboolean patchshadows;
+qboolean patchshadows = qtrue;
 qboolean dump;
 qboolean extra;
 qboolean extraWide;
 qboolean lightmapBorder;
 
-qboolean noSurfaces;
 qboolean debugLightmaps;
 qboolean oldTrace = qfalse;
 qboolean bruteTrace = qfalse;
@@ -1634,10 +1633,7 @@ void TraceLtm(int num) {
   if (si->lightmapSampleSize)
     ssize = si->lightmapSampleSize;
 
-  if (si->patchShadows)
-    tw->patchshadows = qtrue;
-  else
-    tw->patchshadows = patchshadows;
+  tw->patchshadows = patchshadows;
   tw->forceFrontOnly = qtrue;
 
   int scale = use_upscale ? 2 : 1;
@@ -2592,9 +2588,6 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-notrace")) {
       notrace = qtrue;
       _printf("No occlusion tracing\n");
-    } else if (!strcmp(argv[i], "-patchshadows")) {
-      patchshadows = qtrue;
-      _printf("Patch shadow casting enabled\n");
     } else if (!strcmp(argv[i], "-extra")) {
       extra = qtrue;
       _printf("Extra detail tracing\n");
@@ -2617,9 +2610,6 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-border")) {
       lightmapBorder = qtrue;
       _printf("Adding debug border to lightmaps\n");
-    } else if (!strcmp(argv[i], "-nosurf")) {
-      noSurfaces = qtrue;
-      _printf("Not tracing against surfaces\n");
     } else if (!strcmp(argv[i], "-dump")) {
       dump = qtrue;
       _printf("Dumping occlusion maps\n");

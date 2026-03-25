@@ -71,7 +71,6 @@ extern float maxlight;
 extern float direct_scale;
 extern float entity_scale;
 
-extern qboolean noSurfaces;
 extern qboolean debugLightmaps;
 extern qboolean oldTrace;
 extern qboolean bruteTrace;

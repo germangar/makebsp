@@ -235,7 +235,6 @@ static shaderInfo_t *AllocShaderInfo(void) {
   si->lightmapSampleSize = 0;
   si->forceTraceLight = qfalse;
   si->forceVLight = qfalse;
-  si->patchShadows = qfalse;
   si->vertexShadows = qfalse;
   si->noVertexShadows = qfalse;
   si->forceSunLight = qfalse;
@@ -391,11 +390,6 @@ static void ParseShaderFile(const char *filename) {
         continue;
       }
 
-      // q3map_patchshadows
-      if (!Q_stricmp(token, "q3map_patchshadows")) {
-        si->patchShadows = qtrue;
-        continue;
-      }
 
       // q3map_vertexshadows
       if (!Q_stricmp(token, "q3map_vertexshadows")) {
