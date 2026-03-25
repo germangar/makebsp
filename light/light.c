@@ -45,7 +45,6 @@ extern char source[1024];
 
 qboolean notrace;
 qboolean patchshadows = qtrue;
-qboolean dump;
 qboolean extra;
 qboolean extraWide;
 qboolean lightmapBorder;
@@ -81,7 +80,6 @@ light_t *lights;
 int numPointLights;
 int numAreaLights;
 
-FILE *dumpFile;
 
 int c_visible, c_occluded;
 
@@ -1399,18 +1397,6 @@ PrintOccluded
 For debugging
 =============
 */
-void PrintOccluded(byte **occluded, int width, int height) {
-  int i, j;
-
-  _printf("\n");
-
-  for (i = 0; i < height; i++) {
-    for (j = 0; j < width; j++) {
-      _printf("%i", (int)occluded[j][i]);
-    }
-    _printf("\n");
-  }
-}
 
 /*
 =============
@@ -1841,9 +1827,6 @@ void TraceLtm(int num) {
     }
   }
 
-  if (dump) {
-    PrintOccluded(occluded, sampleWidth, sampleHeight);
-  }
 
   // calculate average values for occluded samples
   for (i = 0; i < sampleWidth; i++) {
@@ -2610,9 +2593,6 @@ int LightMain(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-border")) {
       lightmapBorder = qtrue;
       _printf("Adding debug border to lightmaps\n");
-    } else if (!strcmp(argv[i], "-dump")) {
-      dump = qtrue;
-      _printf("Dumping occlusion maps\n");
     } else if (!strcmp(argv[i], "-debuglightmaps")) {
       debugLightmaps = qtrue;
       _printf("Lightmap debug visualization enabled\n");
