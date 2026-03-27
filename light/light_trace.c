@@ -766,10 +766,13 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
   struct RTCHit *hit = (struct RTCHit *)args->hit;
   unsigned int geomID = hit->geomID;
 
-  // Handle ignoreSurface
+  // Only skip ignoreSurface for planar surfaces (which can't shadow themselves).
+  // Non-planar surfaces like trisoups and patches MUST be allowed to self-shadow.
   if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
-    args->valid[0] = 0;
-    return;
+    if (drawSurfaces[geomID].surfaceType == MST_PLANAR) {
+      args->valid[0] = 0;
+      return;
+    }
   }
 
   // Only perform additional checks for draw surfaces
