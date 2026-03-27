@@ -266,7 +266,7 @@ tree_t *FaceBSP( bspface_t *list ) {
 	for ( face = list ; face ; face = face->next ) {
 		count++;
 		for ( i = 0 ; i < face->w->numpoints ; i++ ) {
-			AddPointToBounds( face->w->p[i], tree->mins, tree->maxs);
+			AddPointToBounds( face->w->points[i], tree->mins, tree->maxs);
 		}
 	}
 	qprintf( "%5i faces\n", count );

@@ -57,9 +57,9 @@ void OutputWinding (winding_t *w, FILE *glview)
 	for (i=0 ; i<w->numpoints ; i++)
 	{
 		fprintf (glview, "%6.3f %6.3f %6.3f %6.3f %6.3f %6.3f\n",
-			w->p[i][0],
-			w->p[i][1],
-			w->p[i][2],
+			w->points[i][0],
+			w->points[i][1],
+			w->points[i][2],
 			light,
 			light,
 			light);

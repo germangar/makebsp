@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "../common/bspfile.h"
+#include "../common/lightdata.h"
 #include "../common/cmdlib.h"
 #include "../common/mathlib.h"
 #include "../common/polylib.h"
@@ -149,7 +150,7 @@ typedef struct {
 
   // for patches
   qboolean patch;
-  mesh_t mesh;
+  mesh32_t mesh;
 
   // for faces
   vec3_t origin;

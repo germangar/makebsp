@@ -111,7 +111,7 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
     // round the xyz to a given precision
     for (i = 0; i < 3; i++) {
       dv->xyz[i] =
-          SNAP_INT_TO_FLOAT * floor(w->p[j][i] * SNAP_FLOAT_TO_INT + 0.5);
+          SNAP_INT_TO_FLOAT * floor(w->points[j][i] * SNAP_FLOAT_TO_INT + 0.5);
     }
 
     if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES) {
@@ -232,7 +232,7 @@ void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
 
   ClearBounds(bounds[0], bounds[1]);
   for (i = 0; i < w->numpoints; i++) {
-    AddPointToBounds(w->p[i], bounds[0], bounds[1]);
+    AddPointToBounds(w->points[i], bounds[0], bounds[1]);
   }
 
   for (axis = 0; axis < 3; axis++) {
@@ -634,21 +634,21 @@ int FilterPatchSurfIntoTree(mapDrawSurface_t *ds, tree_t *tree) {
     for (j = 0; j < subdividedMesh->height - 1; j++) {
       w = AllocWinding(3);
       VectorCopy(subdividedMesh->verts[j * subdividedMesh->width + i].xyz,
-                 w->p[0]);
+                 w->points[0]);
       VectorCopy(subdividedMesh->verts[j * subdividedMesh->width + i + 1].xyz,
-                 w->p[1]);
+                 w->points[1]);
       VectorCopy(subdividedMesh->verts[(j + 1) * subdividedMesh->width + i].xyz,
-                 w->p[2]);
+                 w->points[2]);
       w->numpoints = 3;
       l += FilterMapDrawSurfIntoTree_r(w, ds, tree->headnode);
       w = AllocWinding(3);
       VectorCopy(subdividedMesh->verts[j * subdividedMesh->width + i + 1].xyz,
-                 w->p[0]);
+                 w->points[0]);
       VectorCopy(
           subdividedMesh->verts[(j + 1) * subdividedMesh->width + i + 1].xyz,
-          w->p[1]);
+          w->points[1]);
       VectorCopy(subdividedMesh->verts[(j + 1) * subdividedMesh->width + i].xyz,
-                 w->p[2]);
+                 w->points[2]);
       w->numpoints = 3;
       l += FilterMapDrawSurfIntoTree_r(w, ds, tree->headnode);
     }
@@ -678,9 +678,9 @@ int FilterMiscModelSurfIntoTree(mapDrawSurface_t *ds, tree_t *tree) {
   l = 0;
   for (i = 0; i < ds->numIndexes - 2; i += 3) {
     w = AllocWinding(3);
-    VectorCopy(ds->verts[ds->indexes[i]].xyz, w->p[0]);
-    VectorCopy(ds->verts[ds->indexes[i + 1]].xyz, w->p[1]);
-    VectorCopy(ds->verts[ds->indexes[i + 2]].xyz, w->p[2]);
+    VectorCopy(ds->verts[ds->indexes[i]].xyz, w->points[0]);
+    VectorCopy(ds->verts[ds->indexes[i + 1]].xyz, w->points[1]);
+    VectorCopy(ds->verts[ds->indexes[i + 2]].xyz, w->points[2]);
     w->numpoints = 3;
     l += FilterMapDrawSurfIntoTree_r(w, ds, tree->headnode);
   }

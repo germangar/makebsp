@@ -476,9 +476,9 @@ void EmitTerrainVerts(side_t *side, terrainSurf_t *surf, int maxlayer,
       vert->color[0][3] = 255;
     }
 
-    vert->xyz[0] = floor(side->winding->p[i][0] + 0.1f);
-    vert->xyz[1] = floor(side->winding->p[i][1] + 0.1f);
-    vert->xyz[2] = floor(side->winding->p[i][2] + 0.1f);
+    vert->xyz[0] = floor(side->winding->points[i][0] + 0.1f);
+    vert->xyz[1] = floor(side->winding->points[i][1] + 0.1f);
+    vert->xyz[2] = floor(side->winding->points[i][2] + 0.1f);
 
     // set the texture coordinates
     if (projecttexture) {
@@ -638,8 +638,8 @@ void SetTerrainTextures(void) {
       min_s = 1.0;
       min_t = 1.0;
       for (i = 0; i < side->winding->numpoints; i++) {
-        s = floor(side->winding->p[i][0] + 0.1f - mins[0]) / size[0];
-        t = floor(side->winding->p[i][1] + 0.1f - mins[0]) / size[1];
+        s = floor(side->winding->points[i][0] + 0.1f - mins[0]) / size[0];
+        t = floor(side->winding->points[i][1] + 0.1f - mins[0]) / size[1];
 
         if (s < 0) {
           s = 0;

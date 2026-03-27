@@ -114,9 +114,9 @@ static void WriteCollisionMap(const char *name) {
 
         // BaseWindingForPlane produces CW from normal direction.
         // Writing (0,1,2) gives correct outward normal via MapPlaneFromPoints.
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
-        fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->points[0][0], w->points[0][1], w->points[0][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->points[1][0], w->points[1][1], w->points[1][2]);
+        fprintf(f, "( %.3f %.3f %.3f ) ", w->points[2][0], w->points[2][1], w->points[2][2]);
 
         FreeWinding(w);
         fprintf(f, "common/caulk 0 0 0 1 1\n");
@@ -643,9 +643,9 @@ Deduplicates coplanar faces by finding unique plane indices.
       }
       b->sides[i].winding = AllocWinding(3);
       b->sides[i].winding->numpoints = 3;
-      VectorCopy(trianglePoints[i][0], b->sides[i].winding->p[0]);
-      VectorCopy(trianglePoints[i][1], b->sides[i].winding->p[1]);
-      VectorCopy(trianglePoints[i][2], b->sides[i].winding->p[2]);
+      VectorCopy(trianglePoints[i][0], b->sides[i].winding->points[0]);
+      VectorCopy(trianglePoints[i][1], b->sides[i].winding->points[1]);
+      VectorCopy(trianglePoints[i][2], b->sides[i].winding->points[2]);
     }
     if (!BoundBrush(b)) {
       c_degenerate_hulls++;

@@ -840,7 +840,7 @@ static void AddBrushesToEmbree(RTCScene scene) {
           w->numpoints - 2);
 
       for (k = 0; k < w->numpoints; k++) {
-        VectorCopy(w->p[k], verts[k]);
+        VectorCopy(w->points[k], verts[k]);
       }
 
       for (k = 0; k < w->numpoints - 2; k++) {

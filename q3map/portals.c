@@ -145,7 +145,7 @@ void PrintPortal(portal_t *p) {
 
   w = p->winding;
   for (i = 0; i < w->numpoints; i++)
-    _printf("(%5.0f,%5.0f,%5.0f)\n", w->p[i][0], w->p[i][1], w->p[i][2]);
+    _printf("(%5.0f,%5.0f,%5.0f)\n", w->points[i][0], w->points[i][1], w->points[i][2]);
 }
 
 /*
@@ -342,10 +342,10 @@ void SplitNodePortals(node_t *node) {
 
     if (frontwinding && WindingIsTiny(frontwinding)) {
       if (!f->tinyportals)
-        VectorCopy(frontwinding->p[0], f->referencepoint);
+        VectorCopy(frontwinding->points[0], f->referencepoint);
       f->tinyportals++;
       if (!other_node->tinyportals)
-        VectorCopy(frontwinding->p[0], other_node->referencepoint);
+        VectorCopy(frontwinding->points[0], other_node->referencepoint);
       other_node->tinyportals++;
 
       FreeWinding(frontwinding);
@@ -355,10 +355,10 @@ void SplitNodePortals(node_t *node) {
 
     if (backwinding && WindingIsTiny(backwinding)) {
       if (!b->tinyportals)
-        VectorCopy(backwinding->p[0], b->referencepoint);
+        VectorCopy(backwinding->points[0], b->referencepoint);
       b->tinyportals++;
       if (!other_node->tinyportals)
-        VectorCopy(backwinding->p[0], other_node->referencepoint);
+        VectorCopy(backwinding->points[0], other_node->referencepoint);
       other_node->tinyportals++;
 
       FreeWinding(backwinding);
@@ -421,7 +421,7 @@ void CalcNodeBounds(node_t *node) {
   for (p = node->portals; p; p = p->next[s]) {
     s = (p->nodes[1] == node);
     for (i = 0; i < p->winding->numpoints; i++)
-      AddPointToBounds(p->winding->p[i], node->mins, node->maxs);
+      AddPointToBounds(p->winding->points[i], node->mins, node->maxs);
   }
 }
 

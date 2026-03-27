@@ -199,7 +199,7 @@ qboolean BoundBrush(bspbrush_t *brush) {
     if (!w)
       continue;
     for (j = 0; j < w->numpoints; j++)
-      AddPointToBounds(w->p[j], brush->mins, brush->maxs);
+      AddPointToBounds(w->points[j], brush->mins, brush->maxs);
   }
 
   for (i = 0; i < 3; i++) {
@@ -367,7 +367,7 @@ vec_t BrushVolume(bspbrush_t *brush) {
   }
   if (!w)
     return 0;
-  VectorCopy(w->p[0], corner);
+  VectorCopy(w->points[0], corner);
 
   // make tetrahedrons to all other faces
 
@@ -414,9 +414,9 @@ void WriteBspBrushMap(char *name, bspbrush_t *list) {
                                 mapplanes[s->planenum].dist);
       }
 
-      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[0][0], w->p[0][1], w->p[0][2]);
-      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[2][0], w->p[2][1], w->p[2][2]);
-      fprintf(f, "( %.3f %.3f %.3f ) ", w->p[1][0], w->p[1][1], w->p[1][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->points[0][0], w->points[0][1], w->points[0][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->points[2][0], w->points[2][1], w->points[2][2]);
+      fprintf(f, "( %.3f %.3f %.3f ) ", w->points[1][0], w->points[1][1], w->points[1][2]);
 
       const char *shader = "textures/common/caulk";
       if (s->shaderInfo) {
@@ -623,7 +623,7 @@ qboolean WindingIsTiny(winding_t *w) {
   edges = 0;
   for (i = 0; i < w->numpoints; i++) {
     j = i == w->numpoints - 1 ? 0 : i + 1;
-    VectorSubtract(w->p[j], w->p[i], delta);
+    VectorSubtract(w->points[j], w->points[i], delta);
     len = VectorLength(delta);
     if (len > EDGE_LENGTH) {
       if (++edges == 3)
@@ -646,7 +646,7 @@ qboolean WindingIsHuge(winding_t *w) {
 
   for (i = 0; i < w->numpoints; i++) {
     for (j = 0; j < 3; j++)
-      if (w->p[i][j] <= MIN_WORLD_COORD || w->p[i][j] >= MAX_WORLD_COORD)
+      if (w->points[i][j] <= MIN_WORLD_COORD || w->points[i][j] >= MAX_WORLD_COORD)
         return qtrue;
   }
   return qfalse;
@@ -673,7 +673,7 @@ int BrushMostlyOnSide(bspbrush_t *brush, plane_t *plane) {
     if (!w)
       continue;
     for (j = 0; j < w->numpoints; j++) {
-      d = DotProduct(w->p[j], plane->normal) - plane->dist;
+      d = DotProduct(w->points[j], plane->normal) - plane->dist;
       if (d > max) {
         max = d;
         side = PSIDE_FRONT;
@@ -714,7 +714,7 @@ void SplitBrush(bspbrush_t *brush, int planenum, bspbrush_t **front,
     if (!w)
       continue;
     for (j = 0; j < w->numpoints; j++) {
-      d = DotProduct(w->p[j], plane->normal) - plane->dist;
+      d = DotProduct(w->points[j], plane->normal) - plane->dist;
       if (d > 0 && d > d_front)
         d_front = d;
       if (d < 0 && d < d_back)

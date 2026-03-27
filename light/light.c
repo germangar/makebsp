@@ -721,7 +721,7 @@ void CreateSurfaceLights(void) {
           f = surfaceTest[i]->facets + j;
           w = AllocWinding(f->numBoundaries);
           w->numpoints = f->numBoundaries;
-          memcpy(w->p, f->points, f->numBoundaries * 12);
+          memcpy(w->points, f->points, f->numBoundaries * 12);
 
           VectorCopy(f->surface, normal);
           if (side) {
@@ -740,7 +740,7 @@ void CreateSurfaceLights(void) {
         w = AllocWinding(ds->numVerts);
         w->numpoints = ds->numVerts;
         for (j = 0; j < ds->numVerts; j++) {
-          VectorCopy(drawVerts[ds->firstVert + j].xyz, w->p[j]);
+          VectorCopy(drawVerts[ds->firstVert + j].xyz, w->points[j]);
         }
         VectorCopy(ds->lightmapVecs[2], normal);
         if (side) {
@@ -994,7 +994,7 @@ float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
   float dot, angle, facing;
 
   for (i = 0; i < w->numpoints; i++) {
-    VectorSubtract(w->p[i], point, dirs[i]);
+    VectorSubtract(w->points[i], point, dirs[i]);
     VectorNormalize(dirs[i], dirs[i]);
   }
 
@@ -1028,7 +1028,7 @@ float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
         printed = qtrue;
         _printf("WARNING: bad PointToPolygonFormFactor: %f at %1.1f %1.1f "
                 "%1.1f from %1.1f %1.1f %1.1f\n",
-                total, w->p[i][0], w->p[i][1], w->p[i][2], point[0], point[1],
+                total, w->points[i][0], w->points[i][1], w->points[i][2], point[0], point[1],
                 point[2]);
       }
       return 0;
@@ -1488,12 +1488,11 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
       VectorScale(sample, 255 / max, sample);
     }
 
-    // save the sample
-    for (j = 0; j < 3; j++) {
-      if (sample[j] > 255) {
-        sample[j] = 255;
-      }
-      dv->color[0][j] = sample[j];
+    // save the high-precision result only
+    if (internalDrawVerts) {
+      internalDrawVerts[ds->firstVert + i].color[0][0] += sample[0];
+      internalDrawVerts[ds->firstVert + i].color[0][1] += sample[1];
+      internalDrawVerts[ds->firstVert + i].color[0][2] += sample[2];
     }
 
     // Don't bother writing alpha since it will already be set to 255,
@@ -1556,45 +1555,6 @@ mesh_t *LinearSubdivideMesh(mesh_t *in) {
   FreeMesh(in);
 
   return out;
-}
-
-/*
-==============
-ColorToBytes
-==============
-*/
-void ColorToBytes(const float *color, byte *colorBytes) {
-  float max;
-  vec3_t sample;
-  int i;
-
-  VectorCopy(color, sample);
-
-  if (g_game->lightmapsRGB) {
-    for (i = 0; i < 3; i++) {
-      float l = sample[i] / 255.0f;
-      if (l <= 0.0031308f)
-        l *= 12.92f;
-      else
-        l = 1.055f * pow(l, 1.0f / 2.4f) - 0.055f;
-      sample[i] = l * 255.0f;
-    }
-  }
-
-  // clamp with color normalization
-  max = sample[0];
-  if (sample[1] > max) {
-    max = sample[1];
-  }
-  if (sample[2] > max) {
-    max = sample[2];
-  }
-  if (max > 255) {
-    VectorScale(sample, 255 / max, sample);
-  }
-  colorBytes[0] = (byte)sample[0];
-  colorBytes[1] = (byte)sample[1];
-  colorBytes[2] = (byte)sample[2];
 }
 
 /*
@@ -1999,7 +1959,11 @@ void TraceLtm(int num) {
               LIGHTMAP_WIDTH +
           ds->lightmapOffset[0][0] + i;
 
-      ColorToBytes(color[i][j], lightBytes + k * 3);
+      if (lightFloats) {
+        lightFloats[k * 3 + 0] += color[i][j][0];
+        lightFloats[k * 3 + 1] += color[i][j][1];
+        lightFloats[k * 3 + 2] += color[i][j][2];
+      }
     }
   }
 
@@ -2198,6 +2162,7 @@ void TraceGrid(int num) {
     }
     if (step > 18) {
       // can't find a valid point at all
+      if (gridData32) memset(&gridData32[num], 0, sizeof(gridData32[num]));
       memset(&gridData[num], 0, sizeof(gridData[num]));
       free(tw);
       return;
@@ -2272,9 +2237,20 @@ void TraceGrid(int num) {
   //
   // save the resulting value out
   //
+  if (gridData32) {
+    VectorAdd(color, gridData32[num].ambient[0], gridData32[num].ambient[0]);
+    VectorAdd(directedColor, gridData32[num].directed[0], gridData32[num].directed[0]);
+    VectorNormalize(summedDir, summedDir);
+    NormalToLatLong(summedDir, gridData32[num].latLong);
+    gridData32[num].styles[0] = 0;
+    gridData32[num].styles[1] = 0xff;
+    gridData32[num].styles[2] = 0xff;
+    gridData32[num].styles[3] = 0xff;
+  }
+
   memset(&gridData[num], 0, sizeof(gridData[num]));
-  ColorToBytes(color, gridData[num].ambient[0]);
-  ColorToBytes(directedColor, gridData[num].directed[0]);
+  InternalColorToBytes(color, (byte *)gridData[num].ambient[0], g_game->lightmapsRGB);
+  InternalColorToBytes(directedColor, (byte *)gridData[num].directed[0], g_game->lightmapsRGB);
 
   VectorNormalize(summedDir, summedDir);
   NormalToLatLong(summedDir, gridData[num].latLong);
@@ -2297,6 +2273,7 @@ void SetupGrid(void) {
   }
 
   numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
+  CheckGridData32();
   if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
     Error("MAX_MAP_LIGHTGRID");
   qprintf("%5i gridPoints\n", numGridPoints);
@@ -2757,6 +2734,7 @@ int LightMain(int argc, char **argv) {
   _printf("reading %s\n", source);
 
   LoadBSPFile(source);
+  UpConvertLightingData();
   _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
 
   // Re-apply CLI overrides that might have been clobbered by LoadBSPFile profile detection
@@ -2801,6 +2779,7 @@ int LightMain(int argc, char **argv) {
   if (debugLightmaps) {
     VisualizeLightmapAllocation();
     _printf("writing %s\n", source);
+    DownConvertLightingData();
     WriteBSPFile(source);
     end = I_FloatTime();
     _printf("%5.0f seconds elapsed\n", end - start);
@@ -2812,6 +2791,7 @@ int LightMain(int argc, char **argv) {
   LightWorld();
 
   _printf("writing %s\n", source);
+  DownConvertLightingData();
   WriteBSPFile(source);
 
   end = I_FloatTime();

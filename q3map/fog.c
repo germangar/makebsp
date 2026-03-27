@@ -301,7 +301,7 @@ winding_t *WindingFromDrawSurf(mapDrawSurface_t *ds) {
   w = AllocWinding(ds->numVerts);
   w->numpoints = ds->numVerts;
   for (i = 0; i < ds->numVerts; i++) {
-    VectorCopy(ds->verts[i].xyz, w->p[i]);
+    VectorCopy(ds->verts[i].xyz, w->points[i]);
   }
   return w;
 }
@@ -399,7 +399,7 @@ qboolean ChopFaceByBrush(mapDrawSurface_t *ds, bspbrush_t *b) {
 
   for (j = 0; j < w->numpoints; j++) {
     dv = ds->verts + j;
-    VectorCopy(w->p[j], dv->xyz);
+    VectorCopy(w->points[j], dv->xyz);
 
     if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES) {
       // calculate texture s/t

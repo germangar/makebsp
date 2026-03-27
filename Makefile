@@ -105,6 +105,8 @@ LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$
 # Object files for MeshLib-Lite (persistent)
 ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
 
+Q3MAP_TARGET = q3map.exe
+Q3LIGHT_TARGET = q3light.exe
 LIGHT_TARGET = light.exe
 
 all: $(Q3MAP_TARGET) $(LIGHT_TARGET)

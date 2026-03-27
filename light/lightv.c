@@ -20,16 +20,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
-#include "../common/bspfile.h"
-#include "../common/cmdlib.h"
-#include "../common/mathlib.h"
+#include "light.h"
 #include "../common/mutex.h"
-#include "../common/scriplib.h"
-#include "../common/threads.h"
-#include "../shared/globals.h"
-
-#include "../shared/mesh.h"
-#include "../shared/shaders.h"
 
 #ifdef _WIN32
 // Improve floating-point consistency.
@@ -66,15 +58,6 @@ typedef struct {
   float dist;
 } plane_t;
 
-#define MAX_POINTS_ON_WINDING 64
-// NOTE: whenever this is overflowed parts of lightmaps might end up not being
-// lit
-#define MAX_POINTS_ON_FIXED_WINDING 48
-
-typedef struct {
-  int numpoints;
-  vec3_t points[MAX_POINTS_ON_FIXED_WINDING]; // variable sized
-} winding_t;
 
 typedef struct {
   plane_t plane; // normal pointing into neighbor
@@ -214,7 +197,7 @@ int numclustersurfaces = 0;
 lsurfaceTest_t *lsurfaceTest[MAX_MAP_DRAW_SURFS];
 int numfacets;
 float lightmappixelarea[MAX_MAP_LIGHTING / 3];
-static float *lightFloats; //[MAX_MAP_LIGHTING];
+// float *lightFloats; // use the one from lightdata.c
 
 // from polylib.c
 winding_t *AllocWinding(int points);
@@ -239,7 +222,7 @@ extern vec3_t gridSize;
 
 float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
                                const winding_t *w);
-void ColorToBytes(const float *color, byte *colorBytes);
+void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB);
 void CountLightmaps(void);
 void GridAndVertexLighting(void);
 void SetEntityOrigins(void);
@@ -546,8 +529,8 @@ int VL_SplitWinding(winding_t *in, winding_t *back, plane_t *split,
   int i, j;
   vec_t *p1, *p2;
   vec3_t mid;
-  winding_t out;
-  winding_t *neww;
+  fixedWinding_t out;
+  fixedWinding_t *neww;
 
   counts[0] = counts[1] = counts[2] = 0;
 
@@ -1554,8 +1537,8 @@ int VL_ChopWinding(winding_t *in, plane_t *split, float epsilon) {
   int i, j;
   vec_t *p1, *p2;
   vec3_t mid;
-  winding_t out;
-  winding_t *neww;
+  fixedWinding_t out;
+  fixedWinding_t *neww;
 
   counts[0] = counts[1] = counts[2] = 0;
 
@@ -2547,9 +2530,6 @@ void VL_StoreLightmap(void) {
             ds->lightmapOffset[0][0] + x;
         VectorAdd((lightFloats + k * 3), lightAmbientColor,
                   (lightFloats + k * 3));
-        src = &lightFloats[k * 3];
-        dst = lightBytes + k * 3;
-        ColorToBytes(src, dst);
       }
     }
   }
@@ -2819,7 +2799,7 @@ ds->lightmapOffset[0][1] + j)
                                 ptr = lightBytes + k*3;
                                 color[0] = (float) ptr[0] + add *
 light->color[0]; color[1] = (float) ptr[1] + add * light->color[1]; color[2] =
-(float) ptr[2] + add * light->color[2]; ColorToBytes(color, ptr);
+(float) ptr[2] + add * light->color[2]; InternalColorToBytes(, , g_game->lightmapsRGB);
                         }
                 }
         }
@@ -5340,6 +5320,9 @@ int VLightMain(int argc, char **argv) {
       radiosity = atoi(argv[i + 1]);
       _printf("radiosity = %d\n", radiosity);
       i++;
+    } else if (!strcmp(argv[i], "-sRGB")) {
+      g_game->lightmapsRGB = qtrue;
+      _printf("sRGB lightmaps enabled\n");
     } else {
       break;
     }
@@ -5381,6 +5364,7 @@ int VLightMain(int argc, char **argv) {
   _printf("reading %s\n", source);
 
   LoadBSPFile(source);
+  UpConvertLightingData();
   ParseEntities();
 
   value = ValueForKey(&entities[0], "gridsize");
@@ -5409,8 +5393,8 @@ int VLightMain(int argc, char **argv) {
 
   start = clock();
 
-  lightFloats = (float *)malloc(numLightBytes * sizeof(float));
-  memset(lightFloats, 0, numLightBytes * sizeof(float));
+  // lightFloats = (float *)malloc(numLightBytes * sizeof(float)); -- done in UpConvert
+  // memset(lightFloats, 0, numLightBytes * sizeof(float));
 
   VL_InitSurfacesForTesting();
 
@@ -5429,6 +5413,7 @@ int VLightMain(int argc, char **argv) {
   StripExtension(source);
   DefaultExtension(source, ".bsp");
   _printf("writing %s\n", source);
+  DownConvertLightingData();
   WriteBSPFile(source);
 #endif
 

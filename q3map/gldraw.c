@@ -123,13 +123,13 @@ void DrawWinding(winding_t *w) {
   glColor4f(0, 0, 0, 0.5);
   glBegin(GL_LINE_LOOP);
   for (i = 0; i < w->numpoints; i++)
-    glVertex3f(w->p[i][0], w->p[i][1], w->p[i][2]);
+    glVertex3f(w->points[i][0], w->points[i][1], w->points[i][2]);
   glEnd();
 
   glColor4f(0, 1, 0, 0.3);
   glBegin(GL_POLYGON);
   for (i = 0; i < w->numpoints; i++)
-    glVertex3f(w->p[i][0], w->p[i][1], w->p[i][2]);
+    glVertex3f(w->points[i][0], w->points[i][1], w->points[i][2]);
   glEnd();
 
   glFlush();
@@ -144,13 +144,13 @@ void DrawAuxWinding(winding_t *w) {
   glColor4f(0, 0, 0, 0.5);
   glBegin(GL_LINE_LOOP);
   for (i = 0; i < w->numpoints; i++)
-    glVertex3f(w->p[i][0], w->p[i][1], w->p[i][2]);
+    glVertex3f(w->points[i][0], w->points[i][1], w->points[i][2]);
   glEnd();
 
   glColor4f(1, 0, 0, 0.3);
   glBegin(GL_POLYGON);
   for (i = 0; i < w->numpoints; i++)
-    glVertex3f(w->p[i][0], w->p[i][1], w->p[i][2]);
+    glVertex3f(w->points[i][0], w->points[i][1], w->points[i][2]);
   glEnd();
 
   glFlush();
@@ -205,7 +205,7 @@ void GLS_Winding(winding_t *w, int code) {
   ((int *)buf)[1] = code;
   for (i = 0; i < w->numpoints; i++)
     for (j = 0; j < 3; j++)
-      ((float *)buf)[2 + i * 3 + j] = w->p[i][j];
+      ((float *)buf)[2 + i * 3 + j] = w->points[i][j];
 
   send(draw_socket, (const char *)buf, w->numpoints * 12 + 8, 0);
 }

@@ -99,9 +99,9 @@ void WritePortalFile_r (node_t *node)
 			for (i=0 ; i<w->numpoints ; i++)
 			{
 				fprintf (pf,"(");
-				WriteFloat (pf, w->p[i][0]);
-				WriteFloat (pf, w->p[i][1]);
-				WriteFloat (pf, w->p[i][2]);
+				WriteFloat (pf, w->points[i][0]);
+				WriteFloat (pf, w->points[i][1]);
+				WriteFloat (pf, w->points[i][2]);
 				fprintf (pf,") ");
 			}
 			fprintf (pf,"\n");
@@ -148,9 +148,9 @@ void WriteFaceFile_r (node_t *node)
 				for (i=0 ; i<w->numpoints ; i++)
 				{
 					fprintf (pf,"(");
-					WriteFloat (pf, w->p[i][0]);
-					WriteFloat (pf, w->p[i][1]);
-					WriteFloat (pf, w->p[i][2]);
+					WriteFloat (pf, w->points[i][0]);
+					WriteFloat (pf, w->points[i][1]);
+					WriteFloat (pf, w->points[i][2]);
 					fprintf (pf,") ");
 				}
 				fprintf (pf,"\n");
@@ -161,9 +161,9 @@ void WriteFaceFile_r (node_t *node)
 				for (i = w->numpoints-1; i >= 0; i--)
 				{
 					fprintf (pf,"(");
-					WriteFloat (pf, w->p[i][0]);
-					WriteFloat (pf, w->p[i][1]);
-					WriteFloat (pf, w->p[i][2]);
+					WriteFloat (pf, w->points[i][0]);
+					WriteFloat (pf, w->points[i][1]);
+					WriteFloat (pf, w->points[i][2]);
 					fprintf (pf,") ");
 				}
 				fprintf (pf,"\n");
