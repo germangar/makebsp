@@ -9,6 +9,7 @@
 
 drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
+byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {
@@ -406,6 +407,14 @@ void UpConvertLightingData(void) {
 	memset(lightFloats, 0, MAX_MAP_LIGHTING / 3 * sizeof(vec3_t));
 	// Note: We skip loading from lightBytes to ensure a clean additive start
 
+	// 2.5 Alpha Mask - Persistent across multiple passes
+	// We only allocate it the first time it's needed
+	if (!lightAlphaMask) {
+		lightAlphaMask = malloc(MAX_MAP_LIGHTING / 3 * sizeof(byte));
+		if (!lightAlphaMask) Error("UpConvertLightingData: malloc lightAlphaMask failed");
+		memset(lightAlphaMask, 0, MAX_MAP_LIGHTING / 3 * sizeof(byte));
+	}
+
 	// 3. Light Grid - Start from zero (total blackness) for the new passes
 	CheckGridData32();
 	// Note: CheckGridData32 already memsets the whole gridData32 array to 0, 
@@ -429,9 +438,12 @@ void DownConvertLightingData(void) {
 	// 2. Lightmaps
 	if (!lightFloats) { _printf("DownConvert: lightFloats is NULL\n"); return; }
 	_printf("DownConvert: Converting %d Lightmap pixels\n", numLightBytes / 3);
+	int processedCount = 0;
 	for (i = 0; i < numLightBytes / 3; i++) {
 		InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], g_game->lightmapsRGB);
+		if (lightAlphaMask && lightAlphaMask[i]) processedCount++;
 	}
+	_printf("DownConvert: %d pixels marked in alpha mask\n", processedCount);
 
 	// 3. Light Grid
 	if (!gridData32) return;

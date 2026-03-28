@@ -1964,6 +1964,33 @@ void TraceLtm(int num) {
         lightFloats[k * 3 + 1] += color[i][j][1];
         lightFloats[k * 3 + 2] += color[i][j][2];
       }
+
+      if (lightAlphaMask) {
+        // If this pixel ended up with any coverage/hits, mark it as processed
+        // For superSampled, dilation ensures coverage > 0 if there was any hit nearby.
+        // For standard, we just mark the pixel if it's within the surface's rectangle
+        // since Q3Map traces all texels in the allocated lightmap for planar/patch types.
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          // For models, we must be careful to only mark pixels that actually contain geometry
+          if (superSample) {
+            // Check if this pixel had any coverage during dilation
+            // This is actually already handled by the 'coverage' check in the superSample block
+            // but we can just check if the final color is not the clear color if we prefer.
+            // However, a more robust way is to check the Hit status.
+            // For now, if we are in this loop, we are within the lightmap bounds.
+            if (color[i][j][0] != 0 || color[i][j][1] != 0 || color[i][j][2] != 0) {
+                 lightAlphaMask[k] = 1;
+            }
+          } else {
+            if (sampleHit[i][j]) {
+              lightAlphaMask[k] = 1;
+            }
+          }
+        } else {
+          // For standard patches and faces, the entire allocated rectangle is valid
+          lightAlphaMask[k] = 1;
+        }
+      }
     }
   }
 

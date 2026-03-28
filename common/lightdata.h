@@ -30,6 +30,7 @@ typedef struct {
 // 32-bit floating-point lighting data
 extern drawVert32_t *internalDrawVerts;
 extern float *lightFloats;
+extern byte *lightAlphaMask;
 extern bspGridPoint32_t *gridData32;
 
 // Up-conversion: Standard 8-bit data -> Internal 32-bit float buffers
