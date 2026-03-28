@@ -551,12 +551,67 @@ Given a point on a facet, determine the color filter
 for light passing through
 =================
 */
+/*
+================
+Trace_SampleFilter
+
+Returns qtrue if the ray is fully blocked (absolute opacity).
+Returns qfalse if the ray passes through (transparent or tinted).
+Multiplies 'filter' by the sampled texture color.
+================
+*/
+qboolean Trace_SampleFilter(shaderInfo_t *si, float s, float t, vec3_t filter) {
+  int x, y;
+  byte *pixel;
+  byte alpha;
+
+  if (!si || !si->pixels) {
+    VectorClear(filter);
+    return qtrue; // Solid
+  }
+
+  // 1. Wrap UVs
+  s = s - floor(s);
+  t = 1.0f - (t - floor(t)); // Flip T for standard texture orientation
+
+  x = s * si->width;
+  y = t * si->height;
+  if (x < 0)
+    x = 0;
+  else if (x >= si->width)
+    x = si->width - 1;
+  if (y < 0)
+    y = 0;
+  else if (y >= si->height)
+    y = si->height - 1;
+
+  pixel = si->pixels + 4 * (y * si->width + x);
+  alpha = pixel[3];
+
+  // 2. Apply Alpha Threshold (Proposed 80% transparency rule)
+  // If it's more than 80% transparent (alpha < 51), it's a hole.
+  if (alpha < 51) {
+    return qfalse; // Ray passes through unfiltered
+  }
+
+  // 3. Apply Tinting
+  // Multiply cumulative filter by normalized texture RGB
+  filter[0] *= (float)pixel[0] / 255.0f;
+  filter[1] *= (float)pixel[1] / 255.0f;
+  filter[2] *= (float)pixel[2] / 255.0f;
+
+  // 4. Determine if it blocks entirely
+  // If alpha is high (> 250), we consider it fully opaque for occlusion.
+  if (alpha > 250) {
+    return qtrue; // Blocks ray
+  }
+
+  return qfalse; // Continues ray (tinted)
+}
+
 void SetFacetFilter(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet,
                     vec3_t point) {
   float s, t;
-  int is, it;
-  byte *image;
-  int b;
 
   // most surfaces are completely opaque
   if (!(shader->surfaceFlags & SURF_ALPHASHADOW)) {
@@ -567,29 +622,9 @@ void SetFacetFilter(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet,
   s = DotProduct(point, facet->textureMatrix[0]) + facet->textureMatrix[0][3];
   t = DotProduct(point, facet->textureMatrix[1]) + facet->textureMatrix[1][3];
 
-  if (!shader->pixels) {
-    // assume completely solid
-    VectorClear(point);
-    return;
+  if (Trace_SampleFilter(shader, s, t, tr->trace->filter)) {
+    VectorClear(tr->trace->filter); // Opaque hit
   }
-
-  s = s - floor(s);
-  t = t - floor(t);
-
-  is = s * shader->width;
-  it = t * shader->height;
-
-  image = shader->pixels + 4 * (it * shader->width + is);
-
-  // alpha filter
-  b = image[3];
-
-  // alpha test makes this a binary option
-  b = b < 128 ? 0 : 255;
-
-  tr->trace->filter[0] = tr->trace->filter[0] * (255 - b) / 255;
-  tr->trace->filter[1] = tr->trace->filter[1] * (255 - b) / 255;
-  tr->trace->filter[2] = tr->trace->filter[2] * (255 - b) / 255;
 }
 
 /*
@@ -765,6 +800,7 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
   traceWork_t *tw = mcontext->tw;
   struct RTCHit *hit = (struct RTCHit *)args->hit;
   unsigned int geomID = hit->geomID;
+  unsigned int primID = hit->primID;
 
   // Only skip ignoreSurface for planar surfaces (which can't shadow themselves).
   // Non-planar surfaces like trisoups and patches MUST be allowed to self-shadow.
@@ -777,19 +813,47 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
 
   // Only perform additional checks for draw surfaces
   if (geomID < (unsigned int)numDrawSurfaces) {
-    // For now, let's keep it simple. If we want backface culling, 
-    // it should be consistent.
-    // However, missing shadows usually mean too much is being invalidated.
-    // Let's REMOVE backface culling in the filter for now to see if it fixes it.
-    /*
-    if (drawSurfaces[geomID].surfaceType == MST_PLANAR) {
-      struct RTCRay *ray = (struct RTCRay *)args->ray;
-      float dot = ray->dir_x * hit->Ng_x + ray->dir_y * hit->Ng_y + ray->dir_z * hit->Ng_z;
-      if (dot > 0) {
+    dsurface_t *ds = &drawSurfaces[geomID];
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+
+    if (si->surfaceFlags & SURF_ALPHASHADOW) {
+      float u = hit->u;
+      float v = hit->v;
+      float s, t;
+
+      if (ds->surfaceType == MST_TRIANGLE_SOUP || ds->surfaceType == MST_PLANAR) {
+        // Standard draw surface vertices
+        drawVert_t *v0 = &drawVerts[drawIndexes[ds->firstIndex + primID * 3 + 0] + ds->firstVert];
+        drawVert_t *v1 = &drawVerts[drawIndexes[ds->firstIndex + primID * 3 + 1] + ds->firstVert];
+        drawVert_t *v2 = &drawVerts[drawIndexes[ds->firstIndex + primID * 3 + 2] + ds->firstVert];
+
+        s = (1.0f - u - v) * v0->st[0] + u * v1->st[0] + v * v2->st[0];
+        t = (1.0f - u - v) * v0->st[1] + u * v1->st[1] + v * v2->st[1];
+      } else if (ds->surfaceType == MST_PATCH) {
+        // Patches have their vertices copied into the Embree buffer during InitTracingGeometry.
+        // We'll need to retrieve them from the geometry.
+        RTCGeometry geom = rtcGetGeometry(g_scene, geomID);
+        drawVert_t *verts = (drawVert_t *)rtcGetGeometryBufferData(geom, RTC_BUFFER_TYPE_VERTEX, 0);
+        unsigned int *indices = (unsigned int *)rtcGetGeometryBufferData(geom, RTC_BUFFER_TYPE_INDEX, 0);
+
+        drawVert_t *v0 = &verts[indices[primID * 3 + 0]];
+        drawVert_t *v1 = &verts[indices[primID * 3 + 1]];
+        drawVert_t *v2 = &verts[indices[primID * 3 + 2]];
+
+        s = (1.0f - u - v) * v0->st[0] + u * v1->st[0] + v * v2->st[0];
+        t = (1.0f - u - v) * v0->st[1] + u * v1->st[1] + v * v2->st[1];
+      } else {
+        return; // Unknown surface type
+      }
+
+      // Sample the filter
+      if (Trace_SampleFilter(si, s, t, tw->trace->filter)) {
+        // Opaque hit - keep the valid flag (blocks)
+      } else {
+        // Transparent/Tinted hit - tell Embree to ignore and continue
         args->valid[0] = 0;
       }
     }
-    */
   }
 }
 

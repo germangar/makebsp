@@ -109,23 +109,17 @@ typedef struct {
   int surfaceNum;
 } surfaceTest_t;
 
+extern surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
+
 typedef struct {
+  qboolean passSolid;
   vec3_t filter; // starts out 1.0, 1.0, 1.0, may be reduced if
                  // transparent surfaces are crossed
 
   vec3_t hit;        // the impact point of a completely opaque surface
   float hitFraction; // 0 = at start, 1.0 = at end
-  qboolean passSolid;
 } trace_t;
 
-extern surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
-
-void InitTrace(void);
-void InitTracingGeometry(void);
-
-// traceWork_t is only a parameter to crutch up poor large local allocations on
-// winNT and macOS.  It should be allocated in the worker function, but never
-// looked at.
 typedef struct {
   vec3_t start, end;
   int numOpenLeafs;
@@ -135,6 +129,10 @@ typedef struct {
   qboolean forceFrontOnly;
   int ignoreSurface;
 } traceWork_t;
+
+void InitTrace(void);
+void InitTracingGeometry(void);
+qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t filter);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw);

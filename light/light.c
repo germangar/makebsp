@@ -30,17 +30,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define EXTRASCALE 2
 #define GUTTER 1
 
-typedef struct {
-  float plane[4];
-  vec3_t origin;
-  vec3_t vectors[2];
-  shaderInfo_t *si;
-} filter_t;
-
-#define MAX_FILTERS 1024
-filter_t filters[MAX_FILTERS];
-int numFilters;
-
 extern char source[1024];
 
 qboolean notrace;
@@ -1042,97 +1031,6 @@ float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
 }
 
 /*
-================
-FilterTrace
-
-Returns 0 to 1.0 filter fractions for the given trace
-================
-*/
-void FilterTrace(const vec3_t start, const vec3_t end, vec3_t filter) {
-  float d1, d2;
-  filter_t *f;
-  int filterNum;
-  vec3_t point;
-  float frac;
-  int i;
-  float s, t;
-  int u, v;
-  int x, y;
-  byte *pixel;
-  float radius;
-  float len;
-  vec3_t total;
-
-  filter[0] = 1.0;
-  filter[1] = 1.0;
-  filter[2] = 1.0;
-
-  for (filterNum = 0; filterNum < numFilters; filterNum++) {
-    f = &filters[filterNum];
-
-    // see if the plane is crossed
-    d1 = DotProduct(start, f->plane) - f->plane[3];
-    d2 = DotProduct(end, f->plane) - f->plane[3];
-
-    if ((d1 < 0) == (d2 < 0)) {
-      continue;
-    }
-
-    // calculate the crossing point
-    frac = d1 / (d1 - d2);
-
-    for (i = 0; i < 3; i++) {
-      point[i] = start[i] + frac * (end[i] - start[i]);
-    }
-
-    VectorSubtract(point, f->origin, point);
-
-    s = DotProduct(point, f->vectors[0]);
-    t = 1.0 - DotProduct(point, f->vectors[1]);
-    if (s < 0 || s >= 1.0 || t < 0 || t >= 1.0) {
-      continue;
-    }
-
-    // decide the filter size
-    radius = 10 * frac;
-    len = VectorLength(f->vectors[0]);
-    if (!len) {
-      continue;
-    }
-    radius = radius * len * f->si->width;
-
-    // look up the filter, taking multiple samples
-    VectorClear(total);
-    for (u = -1; u <= 1; u++) {
-      for (v = -1; v <= 1; v++) {
-        x = s * f->si->width + u * radius;
-        if (x < 0) {
-          x = 0;
-        }
-        if (x >= f->si->width) {
-          x = f->si->width - 1;
-        }
-        y = t * f->si->height + v * radius;
-        if (y < 0) {
-          y = 0;
-        }
-        if (y >= f->si->height) {
-          y = f->si->height - 1;
-        }
-
-        pixel = f->si->pixels + (y * f->si->width + x) * 4;
-        total[0] += pixel[0];
-        total[1] += pixel[1];
-        total[2] += pixel[2];
-      }
-    }
-
-    filter[0] *= total[0] / (255.0 * 9);
-    filter[1] *= total[1] / (255.0 * 9);
-    filter[2] *= total[2] / (255.0 * 9);
-  }
-}
-
 /*
 ================
 SunToPoint
@@ -1309,6 +1207,14 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
 
     // calculate the amount of light at this sample
     if (light->type == emit_point) {
+      if (!notrace && testOcclusion) {
+        TraceLine(origin, light->origin, &trace, qfalse, tw);
+        if (trace.passSolid)
+          continue;
+      } else {
+        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+      }
+
       VectorSubtract(light->origin, origin, dir);
       dist = VectorNormalize(dir, dir);
       // clamp the distance to prevent super hot spots
@@ -1415,9 +1321,9 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
         continue;
       }
     } else {
-      trace.filter[0] = 1;
-      trace.filter[1] = 1;
-      trace.filter[2] = 1;
+      trace.filter[0] = 1.0f;
+      trace.filter[1] = 1.0f;
+      trace.filter[2] = 1.0f;
     }
 
     // add the result
@@ -2395,111 +2301,6 @@ void LightWorld(void) {
 }
 
 /*
-========
-CreateFilters
-
-EXPERIMENTAL, UNUSED
-
-Look for transparent light filter surfaces.
-
-This will only work for flat 3*3 patches that exactly hold one copy of the
-texture.
-========
-*/
-#define PLANAR_PATCH_EPSILON 0.1
-void CreateFilters(void) {
-  int i;
-  filter_t *f;
-  dsurface_t *ds;
-  drawVert_t *v1, *v2, *v3;
-  vec3_t d1, d2;
-  int vertNum;
-
-  numFilters = 0;
-
-  return;
-
-  for (i = 0; i < numDrawSurfaces; i++) {
-    ds = &drawSurfaces[i];
-    if (!ds->patchWidth) {
-      continue;
-    }
-    ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-    /*
-                    if ( !(si->surfaceFlags & SURF_LIGHTFILTER) ) {
-                            continue;
-                    }
-    */
-
-    // we have a filter patch
-    v1 = &drawVerts[ds->firstVert];
-
-    if (ds->patchWidth != 3 || ds->patchHeight != 3) {
-      _printf("WARNING: patch at %i %i %i has SURF_LIGHTFILTER but isn't a 3 "
-              "by 3\n",
-              v1->xyz[0], v1->xyz[1], v1->xyz[2]);
-      continue;
-    }
-
-    if (numFilters == MAX_FILTERS) {
-      Error("MAX_FILTERS");
-    }
-    f = &filters[numFilters];
-    numFilters++;
-
-    v2 = &drawVerts[ds->firstVert + 2];
-    v3 = &drawVerts[ds->firstVert + 6];
-
-    VectorSubtract(v2->xyz, v1->xyz, d1);
-    VectorSubtract(v3->xyz, v1->xyz, d2);
-    VectorNormalize(d1, d1);
-    VectorNormalize(d2, d2);
-    CrossProduct(d1, d2, f->plane);
-    f->plane[3] = DotProduct(v1->xyz, f->plane);
-
-    // make sure all the control points are on the plane
-    for (vertNum = 0; vertNum < ds->numVerts; vertNum++) {
-      float d;
-
-      d = DotProduct(drawVerts[ds->firstVert + vertNum].xyz, f->plane) -
-          f->plane[3];
-      if (fabs(d) > PLANAR_PATCH_EPSILON) {
-        break;
-      }
-    }
-    if (vertNum != ds->numVerts) {
-      numFilters--;
-      _printf(
-          "WARNING: patch at %i %i %i has SURF_LIGHTFILTER but isn't flat\n",
-          v1->xyz[0], v1->xyz[1], v1->xyz[2]);
-      continue;
-    }
-  }
-
-  f = &filters[0];
-  numFilters = 1;
-
-  f->plane[0] = 1;
-  f->plane[1] = 0;
-  f->plane[2] = 0;
-  f->plane[3] = 448;
-
-  f->origin[0] = 448;
-  f->origin[1] = 192;
-  f->origin[2] = 0;
-
-  f->vectors[0][0] = 0;
-  f->vectors[0][1] = -1.0 / 128;
-  f->vectors[0][2] = 0;
-
-  f->vectors[1][0] = 0;
-  f->vectors[1][1] = 0;
-  f->vectors[1][2] = 1.0 / 128;
-
-  f->si = ShaderInfoForShader("textures/hell/blocks11ct");
-}
-
-/*
 =============
 VertexLightingThread
 =============
@@ -2569,7 +2370,6 @@ void GridAndVertexLighting(void) {
   SetupGrid();
 
   FindSkyBrushes();
-  CreateFilters();
   InitTrace();
   CreateEntityLights();
   CreateSurfaceLights();
@@ -2613,7 +2413,6 @@ void LightMain(void) {
             gridSize[2]);
   }
 
-  CreateFilters();
   InitTrace();
   SetEntityOrigins();
   CountLightmaps();
