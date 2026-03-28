@@ -462,7 +462,6 @@ void VisualizeLightmapAllocation(void) {
 
     rasterizedCount++;
 
-    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
     int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
     int use_upscale = extra;
     int scale = use_upscale ? 2 : 1;
@@ -1039,7 +1038,7 @@ Returns an amount of light to add at the point
 ================
 */
 int c_sunHit, c_sunMiss;
-void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight) {
+void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight, qboolean applyColorFilter) {
   int i;
   trace_t trace;
   skyBrush_t *b;
@@ -1072,6 +1071,9 @@ void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight) {
     if (numthreads == 1) {
       c_sunHit++;
     }
+    if (!applyColorFilter) {
+      trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+    }
     addLight[0] = trace.filter[0] * sunLight[0];
     addLight[1] = trace.filter[1] * sunLight[1];
     addLight[2] = trace.filter[2] * sunLight[2];
@@ -1092,7 +1094,7 @@ SunToPlane
 ================
 */
 void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
-                traceWork_t *tw) {
+                qboolean applyColorFilter, traceWork_t *tw) {
   float angle;
   vec3_t sunColor;
 
@@ -1116,7 +1118,7 @@ void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
     return; // facing away
   }
 
-  SunToPoint(origin, tw, sunColor);
+  SunToPoint(origin, tw, sunColor, applyColorFilter);
   VectorMA(color, angle, sunColor, color);
 }
 
@@ -1127,7 +1129,7 @@ LightingAtSample
 */
 void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
                       qboolean testOcclusion, qboolean forceSunLight,
-                      traceWork_t *tw) {
+                      qboolean applyColorFilter, traceWork_t *tw) {
   light_t *light;
   trace_t trace;
   float angle;
@@ -1177,6 +1179,9 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
         trace.filter[0] = 1.0;
         trace.filter[1] = 1.0;
         trace.filter[2] = 1.0;
+      }
+      if (!applyColorFilter) {
+        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
       }
 
       // nudge the point so that it is clearly forward of the light
@@ -1325,6 +1330,9 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
       trace.filter[1] = 1.0f;
       trace.filter[2] = 1.0f;
     }
+    if (!applyColorFilter) {
+      trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+    }
 
     // add the result
     color[0] += add * light->color[0] * trace.filter[0];
@@ -1336,7 +1344,7 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   // trace directly to the sun
   //
   if (testOcclusion || forceSunLight) {
-    SunToPlane(origin, normal, color, tw);
+    SunToPlane(origin, normal, color, applyColorFilter, tw);
   }
 }
 
@@ -1371,13 +1379,13 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 
     if (ds->patchWidth) {
       LightingAtSample(dv->xyz, dv->normal, sample, testOcclusion,
-                       forceSunLight, tw);
+                       forceSunLight, qfalse, tw);
     } else if (ds->surfaceType == MST_TRIANGLE_SOUP) {
       LightingAtSample(dv->xyz, dv->normal, sample, testOcclusion,
-                       forceSunLight, tw);
+                       forceSunLight, qfalse, tw);
     } else {
       LightingAtSample(dv->xyz, normal, sample, testOcclusion, forceSunLight,
-                       tw);
+                       qfalse, tw);
     }
 
     if (scale >= 0)
@@ -1733,7 +1741,7 @@ void TraceLtm(int num) {
       }
       occluded[i][j] = qfalse;
       tw->ignoreSurface = num;
-      LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, tw);
+      LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, qtrue, tw);
     }
   }
 
@@ -1966,7 +1974,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qfalse;
       }
     }
-    VectorScale(light->emitColor, factor, color);
+    color[0] = light->emitColor[0] * factor * trace.filter[0];
+    color[1] = light->emitColor[1] * factor * trace.filter[1];
+    color[2] = light->emitColor[2] * factor * trace.filter[2];
     return qtrue;
   }
 
@@ -2006,9 +2016,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   }
 
   // add the result
-  color[0] = add * light->color[0];
-  color[1] = add * light->color[1];
-  color[2] = add * light->color[2];
+  color[0] = add * light->color[0] * trace.filter[0];
+  color[1] = add * light->color[1] * trace.filter[1];
+  color[2] = add * light->color[2] * trace.filter[2];
 
   return qtrue;
 }
@@ -2137,7 +2147,7 @@ void TraceGrid(int num) {
   //
   // trace directly to the sun
   //
-  SunToPoint(origin, tw, color);
+  SunToPoint(origin, tw, color, qtrue);
   addSize = VectorLength(color);
   if (addSize > 0) {
     VectorCopy(color, contributions[numCon].color);
@@ -2247,27 +2257,13 @@ void RemoveLightsInSolid(void) {
 }
 
 /*
+/*
 =============
 LightWorld
 =============
 */
 void LightWorld(void) {
-  float f;
   double start, end;
-
-  // determine the number of grid points
-  SetupGrid();
-
-  // find the optional world ambient
-  GetVectorForKey(&entities[0], "_color", ambientColor);
-  f = FloatForKey(&entities[0], "ambient");
-  VectorScale(ambientColor, f, ambientColor);
-
-  // create lights out of patches and lights
-  _printf("--- CreateLights ---\n");
-  CreateEntityLights();
-  _printf("%i point lights\n", numPointLights);
-  _printf("%i area lights\n", numAreaLights);
 
   if (!nogridlighting) {
     if (embree) {
@@ -2301,106 +2297,14 @@ void LightWorld(void) {
 }
 
 /*
-=============
-VertexLightingThread
-=============
-*/
-void VertexLightingThread(int num) {
-  dsurface_t *ds;
-  traceWork_t *tw;
-  shaderInfo_t *si;
-
-  tw = malloc(sizeof(traceWork_t));
-  if (!tw)
-    Error("Failed to allocate traceWork_t");
-  memset(tw, 0, sizeof(traceWork_t));
-
-  ds = &drawSurfaces[num];
-
-  // vertex-lit triangle model
-  if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-    return;
-  }
-
-  if (novertexlighting)
-    return;
-
-  if (ds->lightmapNum[0] == -1) {
-    return; // doesn't need lighting at all
-  }
-
-  si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-
-  // calculate the vertex lighting for gouraud shade mode
-  VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale, tw);
-  free(tw);
-}
-
-/*
-=============
-TriSoupLightingThread
-=============
-*/
-void TriSoupLightingThread(int num) {
-  dsurface_t *ds;
-  traceWork_t *tw;
-  shaderInfo_t *si;
-
-  tw = malloc(sizeof(traceWork_t));
-  if (!tw)
-    Error("Failed to allocate traceWork_t");
-  memset(tw, 0, sizeof(traceWork_t));
-
-  ds = &drawSurfaces[num];
-  si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-
-  // vertex-lit triangle model
-  if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
-  }
-  free(tw);
-}
-
-/*
-=============
-GridAndVertexLighting
-=============
-*/
-void GridAndVertexLighting(void) {
-  SetupGrid();
-
-  FindSkyBrushes();
-  InitTrace();
-  CreateEntityLights();
-  CreateSurfaceLights();
-
-  if (!nogridlighting) {
-    if (embree) {
-      _printf("--- TraceGrid (embree) ---\n");
-    } else if (oldTrace) {
-      _printf("--- TraceGrid (legacy) ---\n");
-    } else {
-      _printf("--- TraceGrid (surface) ---\n");
-    }
-    RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
-  }
-
-  if (!novertexlighting) {
-    _printf("--- Vertex Lighting ---\n");
-    RunThreadsOnIndividual(numDrawSurfaces, qtrue, VertexLightingThread);
-  }
-
-  _printf("--- Model Lighting ---\n");
-  RunThreadsOnIndividual(numDrawSurfaces, qtrue, TriSoupLightingThread);
-}
-
-/*
 ========
 LightMain
 
 ========
 */
 void LightMain(void) {
+  float f;
+  
   _printf("--- LightMain ---\n");
 
   FindSkyBrushes();
@@ -2422,6 +2326,20 @@ void LightMain(void) {
     return;
   }
 
+  // determine the number of grid points
+  SetupGrid();
+
+  // find the optional world ambient
+  GetVectorForKey(&entities[0], "_color", ambientColor);
+  f = FloatForKey(&entities[0], "ambient");
+  VectorScale(ambientColor, f, ambientColor);
+
+  // create lights out of patches and lights
+  _printf("--- CreateLights ---\n");
+  CreateEntityLights();
   CreateSurfaceLights();
+  _printf("%i point lights\n", numPointLights);
+  _printf("%i area lights\n", numAreaLights);
+
   LightWorld();
 }
