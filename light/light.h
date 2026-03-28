@@ -159,7 +159,6 @@ extern float areaScale;
 extern float pointScale;
 extern qboolean notrace;
 extern qboolean extra;
-extern qboolean extraWide;
 extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;

@@ -65,10 +65,6 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-extra")) {
       extra = qtrue;
       _printf("Extra detail tracing\n");
-    } else if (!strcmp(argv[i], "-extrawide")) {
-      extra = qtrue;
-      extraWide = qtrue;
-      _printf("Extra wide detail tracing\n");
     } else if (!strcmp(argv[i], "-samplesize")) {
       samplesize = atoi(argv[i + 1]);
       if (samplesize < 1)
@@ -153,7 +149,6 @@ int main(int argc, char **argv) {
             "   point <W>      = set the point light scale to W\n"
             "   notrace        = don't cast any shadows\n"
             "   extra          = enable super sampling for anti-aliasing\n"
-            "   extrawide      = same as extra but smoothen more\n"
             "   nogrid         = don't calculate light grid for dynamic model "
             "lighting\n"
             "   novertex       = don't calculate vertex lighting\n"

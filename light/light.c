@@ -35,7 +35,6 @@ extern char source[1024];
 qboolean notrace;
 qboolean patchshadows = qtrue;
 qboolean extra;
-qboolean extraWide;
 qboolean lightmapBorder;
 
 qboolean debugLightmaps;
@@ -1319,13 +1318,6 @@ void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
   }
 }
 
-/*
-=============
-PrintOccluded
-
-For debugging
-=============
-*/
 
 /*
 =============
@@ -1775,26 +1767,6 @@ void TraceLtm(int num) {
         if (sampleHit[i2 + 1][j2 + 1]) {
           VectorAdd(value, color[i2 + 1][j2 + 1], value);
           coverage++;
-        }
-
-        if (extraWide) {
-          // wider than box filter
-          // We can now use the gutter data even at edges!
-          int ii, jj;
-          for (ii = -2; ii <= 3; ii++) {
-            for (jj = -2; jj <= 3; jj++) {
-              if (ii >= 0 && ii <= 1 && jj >= 0 && jj <= 1)
-                continue; // Already added
-              int ni = i2 + ii;
-              int nj = j2 + jj;
-              if (ni >= 0 && ni < sampleWidth && nj >= 0 && nj < sampleHeight) {
-                if (sampleHit[ni][nj]) {
-                  VectorAdd(value, color[ni][nj], value);
-                  coverage++;
-                }
-              }
-            }
-          }
         }
 
         if (coverage > 0.0f) {
