@@ -30,7 +30,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define EXTRASCALE 2
 #define GUTTER 1
 
-extern char source[1024];
 
 qboolean notrace;
 qboolean patchshadows = qtrue;
