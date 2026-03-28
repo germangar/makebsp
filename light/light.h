@@ -156,3 +156,22 @@ typedef struct {
   vec3_t origin;
   vec3_t vecs[3];
 } lightmap_t;
+
+extern float areaScale;
+extern float pointScale;
+extern qboolean notrace;
+extern qboolean extra;
+extern qboolean extraWide;
+extern qboolean lightmapBorder;
+extern int novertexlighting;
+extern int nogridlighting;
+
+extern qboolean falloffOverridden;
+extern falloff_t overrideFalloff;
+extern qboolean lightmapsRGBOverridden;
+extern qboolean deluxeMapOverridden;
+
+// Program flow
+void LightMain(void);
+void VisualizeLightmapAllocation(void);
+void CountLightmaps(void);
