@@ -40,8 +40,10 @@ typedef struct {
 	qboolean    deluxeMap;
 } game_t;
 
+#define MAX_GAMES 128
+extern int numGames;
 extern game_t *g_game;
-extern game_t games[];
+extern game_t games[MAX_GAMES];
 
 #define LIGHTMAP_WIDTH  (g_game->lightmapSize)
 #define LIGHTMAP_HEIGHT (g_game->lightmapSize)

@@ -41,6 +41,8 @@ int main(int argc, char **argv) {
   areaScale = 0.25;
   pointScale = 7500;
 
+  JSON_LoadPackages("games");
+
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-tempname")) {
       i++;
@@ -91,13 +93,6 @@ int main(int argc, char **argv) {
       _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
     } else if (!strcmp(argv[i], "-game")) {
       char *arg = argv[++i];
-      int j;
-      for (j = 0; games[j].arg; j++) {
-        if (!strcmp(games[j].arg, arg)) {
-          g_game = &games[j];
-          break;
-        }
-      }
       strcpy(gamedir, arg);
     } else if (!strcmp(argv[i], "-sRGB")) {
       g_game->lightmapsRGB = qtrue;

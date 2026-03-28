@@ -347,6 +347,75 @@ void OnlyTextures(void) { // FIXME!!!
 main
 ============
 */
+/*
+============
+ExportGameToJson
+============
+*/
+static void ExportGameToJson(const char *filename, game_t *game) {
+  char buffer[4096];
+  const char *falloffStr;
+  switch (game->falloff) {
+  case FALLOFF_LAMBERT:
+    falloffStr = "lambert";
+    break;
+  case FALLOFF_HALFLAMBERT:
+    falloffStr = "halflambert";
+    break;
+  case FALLOFF_QUADRATIC:
+    falloffStr = "quadratic";
+    break;
+  case FALLOFF_DOUBLEQUADRATIC:
+    falloffStr = "doublequadratic";
+    break;
+  case FALLOFF_UNREAL:
+    falloffStr = "unreal";
+    break;
+  case FALLOFF_WRAPPED:
+    falloffStr = "wrapped";
+    break;
+  default:
+    falloffStr = "unknown";
+    break;
+  }
+
+  sprintf(buffer,
+          "{\n"
+          "  \"arg\": \"%s\",\n"
+          "  \"gamePath\": \"%s\",\n"
+          "  \"bspIdent\": \"%s\",\n"
+          "  \"bspVersion\": %d,\n"
+          "  \"lumpCount\": %d,\n"
+          "  \"maxLMSurfaceVerts\": %d,\n"
+          "  \"maxSurfaceVerts\": %d,\n"
+          "  \"maxSurfaceIndexes\": %d,\n"
+          "  \"lightmapSize\": %d,\n"
+          "  \"maxMapDrawVerts\": %d,\n"
+          "  \"maxMapDrawSurfs\": %d,\n"
+          "  \"maxMapNodes\": %d,\n"
+          "  \"maxMapLeafs\": %d,\n"
+          "  \"maxMapPlanes\": %d,\n"
+          "  \"maxMapBrushes\": %d,\n"
+          "  \"maxMapDrawIndexes\": %d,\n"
+          "  \"defaultSampleSize\": %d,\n"
+          "  \"lightmapsRGB\": %s,\n"
+          "  \"texturesRGB\": %s,\n"
+          "  \"colorsRGB\": %s,\n"
+          "  \"falloff\": \"%s\",\n"
+          "  \"deluxeMap\": %s\n"
+          "}\n",
+          game->arg, game->gamePath, game->bspIdent, game->bspVersion,
+          game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
+          game->maxSurfaceIndexes, game->lightmapSize, game->maxMapDrawVerts,
+          game->maxMapDrawSurfs, game->maxMapNodes, game->maxMapLeafs,
+          game->maxMapPlanes, game->maxMapBrushes, game->maxMapDrawIndexes,
+          game->defaultSampleSize, game->lightmapsRGB ? "true" : "false",
+          game->texturesRGB ? "true" : "false",
+          game->colorsRGB ? "true" : "false", falloffStr,
+          game->deluxeMap ? "true" : "false");
+  SaveFile(filename, buffer, strlen(buffer));
+}
+
 int VisMain(int argc, char **argv);
 
 int main(int argc, char **argv) {
@@ -445,11 +514,28 @@ int main(int argc, char **argv) {
       strcpy(qdir, argv[++i]);
     } else if (!strcmp(argv[i], "-game")) {
       char *arg = argv[++i];
-      int j;
-      for (j = 0; games[j].arg; j++) {
-        if (!strcmp(games[j].arg, arg)) {
-          g_game = &games[j];
-          break;
+      char gameJsonPath[1024];
+      sprintf(gameJsonPath, "games/%s.json", arg);
+
+      // Try load first
+      if (FileExists(gameJsonPath)) {
+        if (numGames < MAX_GAMES) {
+          memcpy(&games[numGames], &games[0], sizeof(game_t));
+          if (JSON_LoadGame(gameJsonPath, &games[numGames])) {
+            g_game = &games[numGames];
+            numGames++;
+          }
+        }
+      }
+
+      // Lookup in existing loaded/hardcoded profiles
+      if (!g_game || strcmp(g_game->arg, arg)) {
+        int j;
+        for (j = 0; j < numGames; j++) {
+          if (games[j].arg && !strcmp(games[j].arg, arg)) {
+            g_game = &games[j];
+            break;
+          }
         }
       }
     } else if (!strcmp(argv[i], "-fakemap")) {
@@ -467,8 +553,23 @@ int main(int argc, char **argv) {
       break;
   }
 
+  _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+
   if (i != argc - 1)
     Error("usage: q3map [options] mapfile");
+
+  // Ensure qfusion game definition is exported to JSON for reference
+  if (!FileExists("games/qfusion.json")) {
+    int j;
+    for (j = 0; games[j].arg; j++) {
+      if (!strcmp(games[j].arg, "qfusion")) {
+        Q_mkdir("games");
+        ExportGameToJson("games/qfusion.json", &games[j]);
+        _printf("Exported 'qfusion.json' to games/ directory.\n");
+        break;
+      }
+    }
+  }
 
   start = I_FloatTime();
 

@@ -5,7 +5,9 @@ int samplesize = 0;
 char source[1024];
 char name[1024];
 
-game_t games[] = {
+int numGames = 2;
+
+game_t games[MAX_GAMES] = {
 	{
 		"quake3",
 		"baseq3",
@@ -55,8 +57,7 @@ game_t games[] = {
 		qtrue,      // colorsRGB
 		FALLOFF_HALFLAMBERT,
 		qtrue       // deluxeMap
-	},
-	{ NULL }
+	}
 };
 
 game_t *g_game = &games[0];

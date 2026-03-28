@@ -270,20 +270,23 @@ void	LoadBSPFile( const char *filename ) {
 	ident = LittleLong( header->ident );
 	version = LittleLong( header->version );
 
-	if ( ident == FBSP_IDENT ) {
-		if ( version != 1 ) {
-			Error( "%s is version %i, not 1", filename, version );
-		}
-		g_game = &games[1]; // qfusion
-	} else if ( ident == BSP_IDENT ) {
-		if ( version != 29 && version != 46 && version != 47 ) {
-			Error( "%s is version %i, not 46", filename, version );
-		}
-		g_game = &games[0]; // quake3
-	} else {
-		Error( "%s is not a BSP file (ident: %c%c%c%c)", filename, 
-			ident&0xFF, (ident>>8)&0xFF, (ident>>16)&0xFF, (ident>>24)&0xFF );
-	}
+  ident = LittleLong(header->ident);
+  version = LittleLong(header->version);
+
+  g_game = NULL;
+  for (i = 0; i < numGames; i++) {
+    int gameIdent = *(int *)games[i].bspIdent;
+    if (ident == gameIdent && version == games[i].bspVersion) {
+      g_game = &games[i];
+      break;
+    }
+  }
+
+  if (!g_game) {
+    Error("%s is an unknown BSP format (ident: %c%c%c%c, version: %d)", filename,
+          ident & 0xFF, (ident >> 8) & 0xFF, (ident >> 16) & 0xFF,
+          (ident >> 24) & 0xFF, version);
+  }
 
 	// swap the header
 	for ( i = 0 ; i < g_game->lumpCount ; i++ ) {
