@@ -240,36 +240,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 CountLightmaps
 ===============
 */
-void CountLightmaps(void) {
-  int count;
-  int i, j;
-  dsurface_t *ds;
-  int numSamples = 0;
-
-  _printf("--- CountLightmaps ---\n");
-  count = -1;
-  for (i = 0; i < numDrawSurfaces; i++) {
-    ds = &drawSurfaces[i];
-    for (j = 0; j < 4; j++) {
-      if (ds->lightmapNum[j] > count) {
-        count = ds->lightmapNum[j];
-      }
-    }
-    if (ds->lightmapNum[0] >= 0) {
-      numSamples += ds->lightmapWidth * ds->lightmapHeight;
-    }
-  }
-
-  count++;
-  numLightBytes = count * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
-  if (numLightBytes > MAX_MAP_LIGHTING) {
-    Error("MAX_MAP_LIGHTING exceeded");
-  }
-
-  _printf("%5i drawSurfaces\n", numDrawSurfaces);
-  _printf("%5i lightmaps\n", count);
-  _printf("%5i lightmap samples\n", numSamples);
-}
+// CountLightmaps inlined in LightMain
 
 static qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
                                 float v2[2]) {
@@ -2205,22 +2176,7 @@ void TraceGrid(int num) {
 SetupGrid
 =============
 */
-void SetupGrid(void) {
-  int i;
-  vec3_t maxs;
-
-  for (i = 0; i < 3; i++) {
-    gridMins[i] = gridSize[i] * ceil(dmodels[0].mins[i] / gridSize[i]);
-    maxs[i] = gridSize[i] * floor(dmodels[0].maxs[i] / gridSize[i]);
-    gridBounds[i] = (maxs[i] - gridMins[i]) / gridSize[i] + 1;
-  }
-
-  numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
-  CheckGridData32();
-  if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
-    Error("MAX_MAP_LIGHTGRID");
-  qprintf("%5i gridPoints\n", numGridPoints);
-}
+// SetupGrid inlined in LightMain
 
 //=============================================================================
 
@@ -2307,32 +2263,76 @@ void LightMain(void) {
   
   _printf("--- LightMain ---\n");
 
+  // find the optional world ambient
+  GetVectorForKey(&entities[0], "_color", ambientColor);
+  f = FloatForKey(&entities[0], "ambient");
+  VectorScale(ambientColor, f, ambientColor);
+
   FindSkyBrushes();
-  ParseEntities();
-
-  const char *value = ValueForKey(&entities[0], "gridsize");
-  if (strlen(value)) {
-    sscanf(value, "%f %f %f", &gridSize[0], &gridSize[1], &gridSize[2]);
-    _printf("grid size = {%1.1f, %1.1f, %1.1f}\n", gridSize[0], gridSize[1],
-            gridSize[2]);
-  }
-
-  InitTrace();
   SetEntityOrigins();
-  CountLightmaps();
+
+  // Validate the lightmaps
+  {
+    int count, numSamples;
+    int i, j;
+    dsurface_t *ds;
+
+    _printf("--- CountLightmaps ---\n");
+    count = -1;
+    numSamples = 0;
+    for (i = 0; i < numDrawSurfaces; i++) {
+      ds = &drawSurfaces[i];
+      for (j = 0; j < 4; j++) {
+        if (ds->lightmapNum[j] > count) {
+          count = ds->lightmapNum[j];
+        }
+      }
+      if (ds->lightmapNum[0] >= 0) {
+        numSamples += ds->lightmapWidth * ds->lightmapHeight;
+      }
+    }
+
+    count++;
+    numLightBytes = count * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
+    if (numLightBytes > MAX_MAP_LIGHTING) {
+      Error("MAX_MAP_LIGHTING exceeded");
+    }
+
+    _printf("%5i drawSurfaces\n", numDrawSurfaces);
+    _printf("%5i lightmaps\n", count);
+    _printf("%5i lightmap samples\n", numSamples);
+  }
 
   if (debugLightmaps) {
     VisualizeLightmapAllocation();
     return;
   }
 
-  // determine the number of grid points
-  SetupGrid();
+  // Initialize the grid
+  {
+    int i;
+    vec3_t maxs;
 
-  // find the optional world ambient
-  GetVectorForKey(&entities[0], "_color", ambientColor);
-  f = FloatForKey(&entities[0], "ambient");
-  VectorScale(ambientColor, f, ambientColor);
+    const char *value = ValueForKey(&entities[0], "gridsize");
+    if (strlen(value)) {
+        sscanf(value, "%f %f %f", &gridSize[0], &gridSize[1], &gridSize[2]);
+        _printf("grid size = {%1.1f, %1.1f, %1.1f}\n", gridSize[0], gridSize[1],
+                gridSize[2]);
+    }
+
+    for (i = 0; i < 3; i++) {
+      gridMins[i] = gridSize[i] * ceil(dmodels[0].mins[i] / gridSize[i]);
+      maxs[i] = gridSize[i] * floor(dmodels[0].maxs[i] / gridSize[i]);
+      gridBounds[i] = (maxs[i] - gridMins[i]) / gridSize[i] + 1;
+    }
+
+    numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
+    CheckGridData32();
+    if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
+      Error("MAX_MAP_LIGHTGRID");
+    qprintf("%5i gridPoints\n", numGridPoints);
+  }
+
 
   // create lights out of patches and lights
   _printf("--- CreateLights ---\n");
@@ -2341,5 +2341,6 @@ void LightMain(void) {
   _printf("%i point lights\n", numPointLights);
   _printf("%i area lights\n", numAreaLights);
 
+  InitTrace();
   LightWorld();
 }

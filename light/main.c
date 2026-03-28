@@ -209,6 +209,9 @@ int main(int argc, char **argv) {
             samplesize);
   }
 
+  // Parse entity strings into structs
+  ParseEntities();
+
   // Call core lighting process
   LightMain();
 
