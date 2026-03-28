@@ -38,7 +38,7 @@ Instead of using different structures throughout the compiler depending on the t
 
 #### Phase 4: Lighting Core Enhancements
 - **Objective:** Implement QFusion-specific lighting math.
-- **Files:** `light/light.c`, `light/lightv.c`, `light/light_trace.c`.
+- **Files:** `light/light.c`, `light/light_trace.c`.
 - **Changes:**
     - **sRGB:** Implement `LinearToSRGB` and `SRGBToLinear` conversions. Apply to texture sampling and final lightmap/vertex color storage if `g_game->lightmapsRGB` is set.
     - **Half-Lambert:** Implement the `(dot * 0.5 + 0.5)^2` attenuation if `g_game->lightAngleHL` is set.

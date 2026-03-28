@@ -25,24 +25,19 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <string.h>
 
 int LightMain(int argc, char **argv);
-int VLightMain(int argc, char **argv);
 
 int main(int argc, char **argv) {
   _printf("Q3Light v1.0 (c) 1999 Id Software Inc.\n");
 
   if (argc < 2) {
     Error("usage: light [options] bspfile\n"
-          "Standard lighting: light -light [options] bspfile\n"
-          "Vertex lighting:   light -vlight [options] bspfile\n");
+          "Standard lighting: light [options] bspfile\n");
   }
 
   if (!strcmp(argv[1], "-light")) {
     return LightMain(argc - 1, argv + 1);
   }
-  if (!strcmp(argv[1], "-vlight")) {
-    return VLightMain(argc - 1, argv + 1);
-  }
 
-  // Default to -light if no recognizable flag is provided
+  // Default to LightMain for all remaining paths
   return LightMain(argc, argv);
 }
