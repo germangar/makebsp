@@ -68,6 +68,10 @@ light_t *lights;
 int numPointLights;
 int numAreaLights;
 
+typedef struct {
+  vec3_t dir;
+  vec3_t color;
+} contribution_t;
 
 int c_visible, c_occluded;
 
@@ -93,53 +97,71 @@ typedef struct {
   vec3_t bounds[2];
 } skyBrush_t;
 
-float CalculateFalloff(float dot) {
-  float val = (dot > 1.0f) ? 1.0f : dot;
-  if (g_game->falloff == FALLOFF_HALFLAMBERT) {
-    val = val * 0.5f + 0.5f;
-    return val * val;
-  } else if (g_game->falloff == FALLOFF_WRAPPED) {
-    // 0.5 wrap rescaled to 0-1
-    val = (val + 0.5f) / 1.5f;
-    return (val < 0.0f) ? 0.0f : val;
-  } else if (g_game->falloff == FALLOFF_UNREAL) {
-    // Unreal angular part is standard Lambert
-    return (val < 0.0f) ? 0.0f : val;
-  } else if (g_game->falloff == FALLOFF_QUADRATIC) {
-    if (val < 0.0f)
-      return 0.0f;
-    val = 1.0f - val;
-    return 1.0f - (val * val);
-  } else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) {
-    if (val < 0.0f)
-      return 0.0f;
-    val = 1.0f - val;
-    return 1.0f - (val * val * val);
-  }
-  return (val < 0.0f) ? 0.0f : val;
-}
-
 int numSkyBrushes;
 skyBrush_t skyBrushes[MAX_MAP_BRUSHES];
 
+
+
 /*
+=================================================================
 
-the corners of a patch mesh will always be exactly at lightmap samples.
-The dimensions of the lightmap will be equal to the average length of the
-control mesh in each dimension divided by 2. The lightmap sample points should
-correspond to the chosen subdivision points.
+  LIGHT SETUP
 
+=================================================================
 */
 
 /*
-===============================================================
-
-SURFACE LOADING
-
-===============================================================
+================
+FindSkyBrushes
+================
 */
+void FindSkyBrushes(void) {
+  int i, j;
+  dbrush_t *b;
+  skyBrush_t *sb;
+  shaderInfo_t *si;
+  dbrushside_t *s;
 
-#define MAX_FACE_POINTS 128
+  // find the brushes
+  for (i = 0; i < numbrushes; i++) {
+    b = &dbrushes[i];
+    for (j = 0; j < b->numSides; j++) {
+      s = &dbrushsides[b->firstSide + j];
+      if (dshaders[s->shaderNum].surfaceFlags & SURF_SKY) {
+        sb = &skyBrushes[numSkyBrushes];
+        sb->b = b;
+        sb->bounds[0][0] =
+            -dplanes[dbrushsides[b->firstSide + 0].planeNum].dist - 1;
+        sb->bounds[1][0] =
+            dplanes[dbrushsides[b->firstSide + 1].planeNum].dist + 1;
+        sb->bounds[0][1] =
+            -dplanes[dbrushsides[b->firstSide + 2].planeNum].dist - 1;
+        sb->bounds[1][1] =
+            dplanes[dbrushsides[b->firstSide + 3].planeNum].dist + 1;
+        sb->bounds[0][2] =
+            -dplanes[dbrushsides[b->firstSide + 4].planeNum].dist - 1;
+        sb->bounds[1][2] =
+            dplanes[dbrushsides[b->firstSide + 5].planeNum].dist + 1;
+        numSkyBrushes++;
+        break;
+      }
+    }
+  }
+
+  // default
+  VectorNormalize(sunDirection, sunDirection);
+
+  // find the sky shader
+  for (i = 0; i < numDrawSurfaces; i++) {
+    si = ShaderInfoForShader(dshaders[drawSurfaces[i].shaderNum].shader);
+    if (si->surfaceFlags & SURF_SKY) {
+      VectorCopy(si->sunLight, sunLight);
+      VectorCopy(si->sunDirection, sunDirection);
+      break;
+    }
+  }
+}
+
 
 /*
 ===============
@@ -235,10 +257,324 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
 /*
 ===============
-CountLightmaps
+CreateSurfaceLights
+
+This creates area lights
 ===============
 */
-// CountLightmaps inlined in LightMain
+void CreateSurfaceLights(void) {
+  int i, j, side;
+  dsurface_t *ds;
+  shaderInfo_t *ls;
+  winding_t *w;
+  cFacet_t *f;
+  light_t *dl;
+  vec3_t origin;
+  drawVert_t *dv;
+  int c_lightSurfaces;
+  float lightSubdivide;
+  vec3_t normal;
+
+  qprintf("--- CreateSurfaceLights ---\n");
+  c_lightSurfaces = 0;
+
+  for (i = 0; i < numDrawSurfaces; i++) {
+    // see if this surface is light emiting
+    ds = &drawSurfaces[i];
+
+    ls = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+    if (ls->value == 0) {
+      continue;
+    }
+
+    // determine how much we need to chop up the surface
+    if (ls->lightSubdivide) {
+      lightSubdivide = ls->lightSubdivide;
+    } else {
+      lightSubdivide = defaultLightSubdivide;
+    }
+
+    c_lightSurfaces++;
+
+    // an autosprite shader will become
+    // a point light instead of an area light
+    if (ls->autosprite) {
+      // autosprite geometry should only have four vertexes
+      if (surfaceTest[i]) {
+        // curve or misc_model
+        f = surfaceTest[i]->facets;
+        if (surfaceTest[i]->numFacets != 1 || f->numBoundaries != 4) {
+          _printf("WARNING: surface at (%i %i %i) has autosprite shader but "
+                  "isn't a quad\n",
+                  (int)f->points[0][0], (int)f->points[0][1],
+                  (int)f->points[0][2]);
+        }
+        VectorAdd(f->points[0], f->points[1], origin);
+        VectorAdd(f->points[2], origin, origin);
+        VectorAdd(f->points[3], origin, origin);
+        VectorScale(origin, 0.25, origin);
+      } else {
+        // normal polygon
+        dv = &drawVerts[ds->firstVert];
+        if (ds->numVerts != 4) {
+          _printf("WARNING: surface at (%i %i %i) has autosprite shader but %i "
+                  "verts\n",
+                  (int)dv->xyz[0], (int)dv->xyz[1], (int)dv->xyz[2]);
+          continue;
+        }
+
+        VectorAdd(dv[0].xyz, dv[1].xyz, origin);
+        VectorAdd(dv[2].xyz, origin, origin);
+        VectorAdd(dv[3].xyz, origin, origin);
+        VectorScale(origin, 0.25, origin);
+      }
+
+      numPointLights++;
+      dl = malloc(sizeof(*dl));
+      memset(dl, 0, sizeof(*dl));
+      dl->next = lights;
+      lights = dl;
+
+      VectorCopy(origin, dl->origin);
+      VectorCopy(ls->color, dl->color);
+      dl->photons = ls->value * pointScale;
+      dl->type = emit_point;
+      continue;
+    }
+
+    // possibly create for both sides of the polygon
+    for (side = 0; side <= ls->twoSided; side++) {
+      // create area lights
+      if (surfaceTest[i]) {
+        // curve or misc_model
+        for (j = 0; j < surfaceTest[i]->numFacets; j++) {
+          f = surfaceTest[i]->facets + j;
+          w = AllocWinding(f->numBoundaries);
+          w->numpoints = f->numBoundaries;
+          memcpy(w->points, f->points, f->numBoundaries * 12);
+
+          VectorCopy(f->surface, normal);
+          if (side) {
+            winding_t *t;
+
+            t = w;
+            w = ReverseWinding(t);
+            FreeWinding(t);
+            VectorSubtract(vec3_origin, normal, normal);
+          }
+          SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+        }
+      } else {
+        // normal polygon
+
+        w = AllocWinding(ds->numVerts);
+        w->numpoints = ds->numVerts;
+        for (j = 0; j < ds->numVerts; j++) {
+          VectorCopy(drawVerts[ds->firstVert + j].xyz, w->points[j]);
+        }
+        VectorCopy(ds->lightmapVecs[2], normal);
+        if (side) {
+          winding_t *t;
+
+          t = w;
+          w = ReverseWinding(t);
+          FreeWinding(t);
+          VectorSubtract(vec3_origin, normal, normal);
+        }
+        SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+      }
+    }
+  }
+
+  _printf("%5i light emitting surfaces\n", c_lightSurfaces);
+}
+
+/*
+==================
+FindTargetEntity
+==================
+*/
+entity_t *FindTargetEntity(const char *target) {
+  int i;
+  const char *n;
+
+  for (i = 0; i < num_entities; i++) {
+    n = ValueForKey(&entities[i], "targetname");
+    if (!strcmp(n, target)) {
+      return &entities[i];
+    }
+  }
+
+  return NULL;
+}
+
+/*
+=============
+CreateEntityLights
+=============
+*/
+void CreateEntityLights(void) {
+  int i;
+  light_t *dl;
+  entity_t *e, *e2;
+  const char *name;
+  const char *target;
+  vec3_t dest;
+  const char *_color;
+  float intensity;
+  int spawnflags;
+
+  //
+  // entities
+  //
+  for (i = 0; i < num_entities; i++) {
+    e = &entities[i];
+    name = ValueForKey(e, "classname");
+    if (strncmp(name, "light", 5))
+      continue;
+
+    numPointLights++;
+    dl = malloc(sizeof(*dl));
+    memset(dl, 0, sizeof(*dl));
+    dl->next = lights;
+    lights = dl;
+
+    spawnflags = FloatForKey(e, "spawnflags");
+    if (spawnflags & 1) {
+      dl->linearLight = qtrue;
+    }
+
+    GetVectorForKey(e, "origin", dl->origin);
+    dl->style = FloatForKey(e, "_style");
+    if (!dl->style)
+      dl->style = FloatForKey(e, "style");
+    if (dl->style < 0)
+      dl->style = 0;
+
+    intensity = FloatForKey(e, "light");
+    if (!intensity)
+      intensity = FloatForKey(e, "_light");
+    if (!intensity)
+      intensity = 300;
+    _color = ValueForKey(e, "_color");
+    if (_color && _color[0]) {
+      sscanf(_color, "%f %f %f", &dl->color[0], &dl->color[1], &dl->color[2]);
+      ColorNormalize(dl->color, dl->color);
+    } else
+      dl->color[0] = dl->color[1] = dl->color[2] = 1.0;
+
+    intensity = intensity * pointScale;
+    dl->photons = intensity;
+
+    dl->type = emit_point;
+
+    // lights with a target will be spotlights
+    target = ValueForKey(e, "target");
+
+    if (target[0]) {
+      float radius;
+      float dist;
+
+      e2 = FindTargetEntity(target);
+      if (!e2) {
+        _printf("WARNING: light at (%i %i %i) has missing target\n",
+                (int)dl->origin[0], (int)dl->origin[1], (int)dl->origin[2]);
+      } else {
+        GetVectorForKey(e2, "origin", dest);
+        VectorSubtract(dest, dl->origin, dl->normal);
+        dist = VectorNormalize(dl->normal, dl->normal);
+        radius = FloatForKey(e, "radius");
+        if (!radius) {
+          radius = 64;
+        }
+        if (!dist) {
+          dist = 64;
+        }
+        dl->radiusByDist = (radius + 16) / dist;
+        dl->type = emit_spotlight;
+      }
+    }
+  }
+}
+
+/*
+================
+SetEntityOrigins
+
+Find the offset values for inline models
+================
+*/
+void SetEntityOrigins(void) {
+  int i, j;
+  entity_t *e;
+  vec3_t origin;
+  const char *key;
+  int modelnum;
+  dmodel_t *dm;
+
+  for (i = 0; i < num_entities; i++) {
+    e = &entities[i];
+    key = ValueForKey(e, "model");
+    if (key[0] != '*') {
+      continue;
+    }
+    modelnum = atoi(key + 1);
+    dm = &dmodels[modelnum];
+
+    // set entity surface to true for all surfaces for this model
+    for (j = 0; j < dm->numSurfaces; j++) {
+      entitySurface[dm->firstSurface + j] = qtrue;
+    }
+
+    key = ValueForKey(e, "origin");
+    if (!key[0]) {
+      continue;
+    }
+    GetVectorForKey(e, "origin", origin);
+
+    // set origin for all surfaces for this model
+    for (j = 0; j < dm->numSurfaces; j++) {
+      VectorCopy(origin, surfaceOrigin[dm->firstSurface + j]);
+    }
+  }
+}
+
+
+
+/*
+===============================================================
+
+LIGHT TRACING EXECUTION
+
+===============================================================
+*/
+
+float CalculateFalloff(float dot) {
+  float val = (dot > 1.0f) ? 1.0f : dot;
+  if (g_game->falloff == FALLOFF_HALFLAMBERT) {
+    val = val * 0.5f + 0.5f;
+    return val * val;
+  } else if (g_game->falloff == FALLOFF_WRAPPED) {
+    // 0.5 wrap rescaled to 0-1
+    val = (val + 0.5f) / 1.5f;
+    return (val < 0.0f) ? 0.0f : val;
+  } else if (g_game->falloff == FALLOFF_UNREAL) {
+    // Unreal angular part is standard Lambert
+    return (val < 0.0f) ? 0.0f : val;
+  } else if (g_game->falloff == FALLOFF_QUADRATIC) {
+    if (val < 0.0f)
+      return 0.0f;
+    val = 1.0f - val;
+    return 1.0f - (val * val);
+  } else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) {
+    if (val < 0.0f)
+      return 0.0f;
+    val = 1.0f - val;
+    return 1.0f - (val * val * val);
+  }
+  return (val < 0.0f) ? 0.0f : val;
+}
+
 
 static qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
                                 float v2[2]) {
@@ -405,539 +741,6 @@ static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
 }
 
 /*
-==========================
-VisualizeLightmapAllocation
-==========================
-*/
-void VisualizeLightmapAllocation(void) {
-  int i, x, y, p, numPages;
-  char filename[1024];
-  dsurface_t *ds;
-  vec3_t v0, v1, v2;
-  int j, k;
-  byte color[3];
-  int rasterizedCount = 0;
-
-  _printf("--- VisualizeLightmapAllocation ---\n");
-  _printf("numLightBytes: %d, Page Size: %dx%d\n", numLightBytes, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
-
-  // Clear the entire lightmap buffer with a dark grey color
-  memset(lightBytes, 24, numLightBytes);
-
-  for (i = 0; i < numDrawSurfaces; i++) {
-    ds = &drawSurfaces[i];
-    if (ds->lightmapNum[0] < 0)
-      continue;
-
-    rasterizedCount++;
-
-    int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
-    int use_upscale = extra;
-    int scale = use_upscale ? 2 : 1;
-    int currentGutter = superSample ? (GUTTER * scale) : 0;
-
-    // generate a unique color for this surface based on index
-    color[0] = (i * 123) % 200 + 55;
-    color[1] = (i * 456) % 200 + 55;
-    color[2] = (i * 789) % 200 + 55;
-
-    if (debugLightmapsAlpha) {
-      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-        // Use the exact same logic as TraceLtm for model lightmaps
-        int extW = ds->lightmapWidth * scale + currentGutter * 2;
-        int extH = ds->lightmapHeight * scale + currentGutter * 2;
-
-        for (y = 0; y < extH; y++) {
-          for (x = 0; x < extW; x++) {
-            float st[2];
-            vec3_t temp_origin, normal;
-            float fi = (float)(x - currentGutter);
-            float fj = (float)(y - currentGutter);
-            float step = 1.0f / (float)scale;
-            float offset = 0.5f * step;
-
-            st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
-            st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
-
-            if (TriSoupSamplePoint(ds, st, temp_origin, normal)) {
-              int px = (int)floor(st[0]);
-              int py = (int)floor(st[1]);
-
-              if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
-                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
-                k = p * 3;
-                lightBytes[k] = color[0];
-                lightBytes[k + 1] = color[1];
-                lightBytes[k + 2] = color[2];
-              }
-            }
-          }
-        }
-      } else {
-        // For patches and planar surfaces, we also honor the dilated bounds
-        int extW = ds->lightmapWidth * scale + currentGutter * 2;
-        int extH = ds->lightmapHeight * scale + currentGutter * 2;
-
-        for (y = 0; y < extH; y++) {
-          for (x = 0; x < extW; x++) {
-            int px = ds->lightmapOffset[0][0] + (x - currentGutter) / scale;
-            int py = ds->lightmapOffset[0][1] + (y - currentGutter) / scale;
-
-            if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
-              p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
-              k = p * 3;
-              lightBytes[k] = color[0];
-              lightBytes[k + 1] = color[1];
-              lightBytes[k + 2] = color[2];
-            }
-          }
-        }
-      }
-    } else {
-      // FAST path: original debuglightmaps logic
-      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-        // Rasterize triangles into the lightmap
-        for (j = 0; j < ds->numIndexes; j += 3) {
-          int i0 = drawIndexes[ds->firstIndex + j];
-          int i1 = drawIndexes[ds->firstIndex + j + 1];
-          int i2 = drawIndexes[ds->firstIndex + j + 2];
-
-          drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
-          drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
-          drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
-
-          // UVs in lightmap space
-          float st0[2], st1[2], st2[2];
-          st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
-          st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
-          st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
-          st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
-          st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
-          st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
-
-          // Bounding box of the triangle in pixels
-          float fMinX = st0[0];
-          if (st1[0] < fMinX) fMinX = st1[0];
-          if (st2[0] < fMinX) fMinX = st2[0];
-          float fMaxX = st0[0];
-          if (st1[0] > fMaxX) fMaxX = st1[0];
-          if (st2[0] > fMaxX) fMaxX = st2[0];
-          float fMinY = st0[1];
-          if (st1[1] < fMinY) fMinY = st1[1];
-          if (st2[1] < fMinY) fMinY = st2[1];
-          float fMaxY = st0[1];
-          if (st1[1] > fMaxY) fMaxY = st1[1];
-          if (st2[1] > fMaxY) fMaxY = st2[1];
-
-          int minX = (int)floor(fMinX);
-          int maxX = (int)ceil(fMaxX);
-          int minY = (int)floor(fMinY);
-          int maxY = (int)ceil(fMaxY);
-
-          // Clamp to lightmap block bounds
-          if (minX < ds->lightmapOffset[0][0]) minX = ds->lightmapOffset[0][0];
-          if (maxX >= ds->lightmapOffset[0][0] + ds->lightmapWidth) maxX = ds->lightmapOffset[0][0] + ds->lightmapWidth - 1;
-          if (minY < ds->lightmapOffset[0][1]) minY = ds->lightmapOffset[0][1];
-          if (maxY >= ds->lightmapOffset[0][1] + ds->lightmapHeight) maxY = ds->lightmapOffset[0][1] + ds->lightmapHeight - 1;
-
-          for (y = minY; y <= maxY; y++) {
-            for (x = minX; x <= maxX; x++) {
-              if (PointInTriangle((float)x + 0.5f, (float)y + 0.5f, st0, st1, st2)) {
-                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + y) * LIGHTMAP_WIDTH + x;
-                k = p * 3;
-                lightBytes[k] = color[0];
-                lightBytes[k + 1] = color[1];
-                lightBytes[k + 2] = color[2];
-              }
-            }
-          }
-        }
-      } else {
-        // Standard rectangular filling for planar/patch surfaces
-        for (y = 0; y < ds->lightmapHeight; y++) {
-          for (x = 0; x < ds->lightmapWidth; x++) {
-            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
-                 ds->lightmapOffset[0][1] + y) *
-                    LIGHTMAP_WIDTH +
-                (ds->lightmapOffset[0][0] + x);
-            k = p * 3;
-            lightBytes[k] = color[0];
-            lightBytes[k + 1] = color[1];
-            lightBytes[k + 2] = color[2];
-          }
-        }
-      }
-    }
-  }
-
-  // export pages to BMP
-  _printf("%5i surfaces rasterized into debug lightmaps\n", rasterizedCount);
-
-  numPages = numLightBytes / (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3);
-  for (i = 0; i < numPages; i++) {
-    sprintf(filename, "lm_%04i.bmp", i);
-    _printf("Writing %s...\n", filename);
-    SaveBMP(filename, lightBytes + (i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3),
-            LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
-  }
-}
-
-/*
-===============
-CreateSurfaceLights
-
-This creates area lights
-===============
-*/
-void CreateSurfaceLights(void) {
-  int i, j, side;
-  dsurface_t *ds;
-  shaderInfo_t *ls;
-  winding_t *w;
-  cFacet_t *f;
-  light_t *dl;
-  vec3_t origin;
-  drawVert_t *dv;
-  int c_lightSurfaces;
-  float lightSubdivide;
-  vec3_t normal;
-
-  qprintf("--- CreateSurfaceLights ---\n");
-  c_lightSurfaces = 0;
-
-  for (i = 0; i < numDrawSurfaces; i++) {
-    // see if this surface is light emiting
-    ds = &drawSurfaces[i];
-
-    ls = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-    if (ls->value == 0) {
-      continue;
-    }
-
-    // determine how much we need to chop up the surface
-    if (ls->lightSubdivide) {
-      lightSubdivide = ls->lightSubdivide;
-    } else {
-      lightSubdivide = defaultLightSubdivide;
-    }
-
-    c_lightSurfaces++;
-
-    // an autosprite shader will become
-    // a point light instead of an area light
-    if (ls->autosprite) {
-      // autosprite geometry should only have four vertexes
-      if (surfaceTest[i]) {
-        // curve or misc_model
-        f = surfaceTest[i]->facets;
-        if (surfaceTest[i]->numFacets != 1 || f->numBoundaries != 4) {
-          _printf("WARNING: surface at (%i %i %i) has autosprite shader but "
-                  "isn't a quad\n",
-                  (int)f->points[0][0], (int)f->points[0][1],
-                  (int)f->points[0][2]);
-        }
-        VectorAdd(f->points[0], f->points[1], origin);
-        VectorAdd(f->points[2], origin, origin);
-        VectorAdd(f->points[3], origin, origin);
-        VectorScale(origin, 0.25, origin);
-      } else {
-        // normal polygon
-        dv = &drawVerts[ds->firstVert];
-        if (ds->numVerts != 4) {
-          _printf("WARNING: surface at (%i %i %i) has autosprite shader but %i "
-                  "verts\n",
-                  (int)dv->xyz[0], (int)dv->xyz[1], (int)dv->xyz[2]);
-          continue;
-        }
-
-        VectorAdd(dv[0].xyz, dv[1].xyz, origin);
-        VectorAdd(dv[2].xyz, origin, origin);
-        VectorAdd(dv[3].xyz, origin, origin);
-        VectorScale(origin, 0.25, origin);
-      }
-
-      numPointLights++;
-      dl = malloc(sizeof(*dl));
-      memset(dl, 0, sizeof(*dl));
-      dl->next = lights;
-      lights = dl;
-
-      VectorCopy(origin, dl->origin);
-      VectorCopy(ls->color, dl->color);
-      dl->photons = ls->value * pointScale;
-      dl->type = emit_point;
-      continue;
-    }
-
-    // possibly create for both sides of the polygon
-    for (side = 0; side <= ls->twoSided; side++) {
-      // create area lights
-      if (surfaceTest[i]) {
-        // curve or misc_model
-        for (j = 0; j < surfaceTest[i]->numFacets; j++) {
-          f = surfaceTest[i]->facets + j;
-          w = AllocWinding(f->numBoundaries);
-          w->numpoints = f->numBoundaries;
-          memcpy(w->points, f->points, f->numBoundaries * 12);
-
-          VectorCopy(f->surface, normal);
-          if (side) {
-            winding_t *t;
-
-            t = w;
-            w = ReverseWinding(t);
-            FreeWinding(t);
-            VectorSubtract(vec3_origin, normal, normal);
-          }
-          SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
-        }
-      } else {
-        // normal polygon
-
-        w = AllocWinding(ds->numVerts);
-        w->numpoints = ds->numVerts;
-        for (j = 0; j < ds->numVerts; j++) {
-          VectorCopy(drawVerts[ds->firstVert + j].xyz, w->points[j]);
-        }
-        VectorCopy(ds->lightmapVecs[2], normal);
-        if (side) {
-          winding_t *t;
-
-          t = w;
-          w = ReverseWinding(t);
-          FreeWinding(t);
-          VectorSubtract(vec3_origin, normal, normal);
-        }
-        SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
-      }
-    }
-  }
-
-  _printf("%5i light emitting surfaces\n", c_lightSurfaces);
-}
-
-/*
-================
-FindSkyBrushes
-================
-*/
-void FindSkyBrushes(void) {
-  int i, j;
-  dbrush_t *b;
-  skyBrush_t *sb;
-  shaderInfo_t *si;
-  dbrushside_t *s;
-
-  // find the brushes
-  for (i = 0; i < numbrushes; i++) {
-    b = &dbrushes[i];
-    for (j = 0; j < b->numSides; j++) {
-      s = &dbrushsides[b->firstSide + j];
-      if (dshaders[s->shaderNum].surfaceFlags & SURF_SKY) {
-        sb = &skyBrushes[numSkyBrushes];
-        sb->b = b;
-        sb->bounds[0][0] =
-            -dplanes[dbrushsides[b->firstSide + 0].planeNum].dist - 1;
-        sb->bounds[1][0] =
-            dplanes[dbrushsides[b->firstSide + 1].planeNum].dist + 1;
-        sb->bounds[0][1] =
-            -dplanes[dbrushsides[b->firstSide + 2].planeNum].dist - 1;
-        sb->bounds[1][1] =
-            dplanes[dbrushsides[b->firstSide + 3].planeNum].dist + 1;
-        sb->bounds[0][2] =
-            -dplanes[dbrushsides[b->firstSide + 4].planeNum].dist - 1;
-        sb->bounds[1][2] =
-            dplanes[dbrushsides[b->firstSide + 5].planeNum].dist + 1;
-        numSkyBrushes++;
-        break;
-      }
-    }
-  }
-
-  // default
-  VectorNormalize(sunDirection, sunDirection);
-
-  // find the sky shader
-  for (i = 0; i < numDrawSurfaces; i++) {
-    si = ShaderInfoForShader(dshaders[drawSurfaces[i].shaderNum].shader);
-    if (si->surfaceFlags & SURF_SKY) {
-      VectorCopy(si->sunLight, sunLight);
-      VectorCopy(si->sunDirection, sunDirection);
-      break;
-    }
-  }
-}
-
-/*
-=================================================================
-
-  LIGHT SETUP
-
-=================================================================
-*/
-
-/*
-==================
-FindTargetEntity
-==================
-*/
-entity_t *FindTargetEntity(const char *target) {
-  int i;
-  const char *n;
-
-  for (i = 0; i < num_entities; i++) {
-    n = ValueForKey(&entities[i], "targetname");
-    if (!strcmp(n, target)) {
-      return &entities[i];
-    }
-  }
-
-  return NULL;
-}
-
-/*
-=============
-CreateEntityLights
-=============
-*/
-void CreateEntityLights(void) {
-  int i;
-  light_t *dl;
-  entity_t *e, *e2;
-  const char *name;
-  const char *target;
-  vec3_t dest;
-  const char *_color;
-  float intensity;
-  int spawnflags;
-
-  //
-  // entities
-  //
-  for (i = 0; i < num_entities; i++) {
-    e = &entities[i];
-    name = ValueForKey(e, "classname");
-    if (strncmp(name, "light", 5))
-      continue;
-
-    numPointLights++;
-    dl = malloc(sizeof(*dl));
-    memset(dl, 0, sizeof(*dl));
-    dl->next = lights;
-    lights = dl;
-
-    spawnflags = FloatForKey(e, "spawnflags");
-    if (spawnflags & 1) {
-      dl->linearLight = qtrue;
-    }
-
-    GetVectorForKey(e, "origin", dl->origin);
-    dl->style = FloatForKey(e, "_style");
-    if (!dl->style)
-      dl->style = FloatForKey(e, "style");
-    if (dl->style < 0)
-      dl->style = 0;
-
-    intensity = FloatForKey(e, "light");
-    if (!intensity)
-      intensity = FloatForKey(e, "_light");
-    if (!intensity)
-      intensity = 300;
-    _color = ValueForKey(e, "_color");
-    if (_color && _color[0]) {
-      sscanf(_color, "%f %f %f", &dl->color[0], &dl->color[1], &dl->color[2]);
-      ColorNormalize(dl->color, dl->color);
-    } else
-      dl->color[0] = dl->color[1] = dl->color[2] = 1.0;
-
-    intensity = intensity * pointScale;
-    dl->photons = intensity;
-
-    dl->type = emit_point;
-
-    // lights with a target will be spotlights
-    target = ValueForKey(e, "target");
-
-    if (target[0]) {
-      float radius;
-      float dist;
-
-      e2 = FindTargetEntity(target);
-      if (!e2) {
-        _printf("WARNING: light at (%i %i %i) has missing target\n",
-                (int)dl->origin[0], (int)dl->origin[1], (int)dl->origin[2]);
-      } else {
-        GetVectorForKey(e2, "origin", dest);
-        VectorSubtract(dest, dl->origin, dl->normal);
-        dist = VectorNormalize(dl->normal, dl->normal);
-        radius = FloatForKey(e, "radius");
-        if (!radius) {
-          radius = 64;
-        }
-        if (!dist) {
-          dist = 64;
-        }
-        dl->radiusByDist = (radius + 16) / dist;
-        dl->type = emit_spotlight;
-      }
-    }
-  }
-}
-
-//=================================================================
-
-/*
-================
-SetEntityOrigins
-
-Find the offset values for inline models
-================
-*/
-void SetEntityOrigins(void) {
-  int i, j;
-  entity_t *e;
-  vec3_t origin;
-  const char *key;
-  int modelnum;
-  dmodel_t *dm;
-
-  for (i = 0; i < num_entities; i++) {
-    e = &entities[i];
-    key = ValueForKey(e, "model");
-    if (key[0] != '*') {
-      continue;
-    }
-    modelnum = atoi(key + 1);
-    dm = &dmodels[modelnum];
-
-    // set entity surface to true for all surfaces for this model
-    for (j = 0; j < dm->numSurfaces; j++) {
-      entitySurface[dm->firstSurface + j] = qtrue;
-    }
-
-    key = ValueForKey(e, "origin");
-    if (!key[0]) {
-      continue;
-    }
-    GetVectorForKey(e, "origin", origin);
-
-    // set origin for all surfaces for this model
-    for (j = 0; j < dm->numSurfaces; j++) {
-      VectorCopy(origin, surfaceOrigin[dm->firstSurface + j]);
-    }
-  }
-}
-
-/*
-=================================================================
-
-
-=================================================================
-*/
-
-#define MAX_POINTS_ON_WINDINGS 64
-
-/*
 ================
 PointToPolygonFormFactor
 ================
@@ -999,11 +802,10 @@ float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
 }
 
 /*
-/*
 ================
 SunToPoint
 
-Returns an amount of light to add at the point
+Returns an amount of light to add at the point (grid)
 ================
 */
 int c_sunHit, c_sunMiss;
@@ -1060,6 +862,7 @@ void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight, qboolean 
 /*
 ================
 SunToPlane
+Returns an amount of light to add at the texel (surface)
 ================
 */
 void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
@@ -1965,10 +1768,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   return qtrue;
 }
 
-typedef struct {
-  vec3_t dir;
-  vec3_t color;
-} contribution_t;
 
 /*
 =============
@@ -1978,7 +1777,9 @@ Grid samples are foe quickly determining the lighting
 of dynamically placed entities in the world
 =============
 */
+
 #define MAX_CONTRIBUTIONS 1024
+
 void TraceGrid(int num) {
   int x, y, z;
   vec3_t origin;
@@ -2074,16 +1875,16 @@ void TraceGrid(int num) {
     VectorSubtract(light->origin, origin, dir);
     VectorNormalize(dir, dir);
 
+    if (numCon >= MAX_CONTRIBUTIONS - 1) {
+      Error("TraceGrid: MAX_CONTRIBUTIONS reached. Too many light sources (>= %i) affecting a single grid point.", MAX_CONTRIBUTIONS);
+    }
+
     VectorCopy(add, contributions[numCon].color);
     VectorCopy(dir, contributions[numCon].dir);
     numCon++;
 
     addSize = VectorLength(add);
     VectorMA(summedDir, addSize, dir, summedDir);
-
-    if (numCon == MAX_CONTRIBUTIONS - 1) {
-      break;
-    }
   }
 
   //
@@ -2142,48 +1943,9 @@ void TraceGrid(int num) {
   free(tw);
 }
 
-/*
-=============
-SetupGrid
-=============
-*/
-// SetupGrid inlined in LightMain
 
 //=============================================================================
 
-/*
-=============
-RemoveLightsInSolid
-=============
-*/
-void RemoveLightsInSolid(void) {
-  light_t *light, *prev;
-  int numsolid = 0;
-
-  prev = NULL;
-  for (light = lights; light;) {
-    if (PointInSolid(light->origin)) {
-      if (prev)
-        prev->next = light->next;
-      else
-        lights = light->next;
-      if (light->w)
-        FreeWinding(light->w);
-      free(light);
-      numsolid++;
-      if (prev)
-        light = prev->next;
-      else
-        light = lights;
-    } else {
-      prev = light;
-      light = light->next;
-    }
-  }
-  _printf(" %7i lights in solid\n", numsolid);
-}
-
-/*
 /*
 =============
 LightWorld
@@ -2221,6 +1983,188 @@ void LightWorld(void) {
   _printf("%5i visible samples\n", c_visible);
   _printf("%5i occluded samples\n", c_occluded);
   _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
+}
+
+
+
+/*
+==========================
+VisualizeLightmapAllocation
+Note: This function doesn't really belong to tracing
+nor geometry initialization, but uses TriSoupSamplePoint
+==========================
+*/
+void VisualizeLightmapAllocation(void) {
+  int i, x, y, p, numPages;
+  char filename[1024];
+  dsurface_t *ds;
+
+  int j, k;
+  byte color[3];
+  int rasterizedCount = 0;
+
+  _printf("--- VisualizeLightmapAllocation ---\n");
+  _printf("numLightBytes: %d, Page Size: %dx%d\n", numLightBytes, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
+
+  // Clear the entire lightmap buffer with a dark grey color
+  memset(lightBytes, 24, numLightBytes);
+
+  for (i = 0; i < numDrawSurfaces; i++) {
+    ds = &drawSurfaces[i];
+    if (ds->lightmapNum[0] < 0)
+      continue;
+
+    rasterizedCount++;
+
+    int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
+    int use_upscale = extra;
+    int scale = use_upscale ? 2 : 1;
+    int currentGutter = superSample ? (GUTTER * scale) : 0;
+
+    // generate a unique color for this surface based on index
+    color[0] = (i * 123) % 200 + 55;
+    color[1] = (i * 456) % 200 + 55;
+    color[2] = (i * 789) % 200 + 55;
+
+    if (debugLightmapsAlpha) {
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        // Use the exact same logic as TraceLtm for model lightmaps
+        int extW = ds->lightmapWidth * scale + currentGutter * 2;
+        int extH = ds->lightmapHeight * scale + currentGutter * 2;
+
+        for (y = 0; y < extH; y++) {
+          for (x = 0; x < extW; x++) {
+            float st[2];
+            vec3_t temp_origin, normal;
+            float fi = (float)(x - currentGutter);
+            float fj = (float)(y - currentGutter);
+            float step = 1.0f / (float)scale;
+            float offset = 0.5f * step;
+
+            st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
+            st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
+
+            if (TriSoupSamplePoint(ds, st, temp_origin, normal)) {
+              int px = (int)floor(st[0]);
+              int py = (int)floor(st[1]);
+
+              if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
+                k = p * 3;
+                lightBytes[k] = color[0];
+                lightBytes[k + 1] = color[1];
+                lightBytes[k + 2] = color[2];
+              }
+            }
+          }
+        }
+      } else {
+        // For patches and planar surfaces, we also honor the dilated bounds
+        int extW = ds->lightmapWidth * scale + currentGutter * 2;
+        int extH = ds->lightmapHeight * scale + currentGutter * 2;
+
+        for (y = 0; y < extH; y++) {
+          for (x = 0; x < extW; x++) {
+            int px = ds->lightmapOffset[0][0] + (x - currentGutter) / scale;
+            int py = ds->lightmapOffset[0][1] + (y - currentGutter) / scale;
+
+            if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
+              p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
+              k = p * 3;
+              lightBytes[k] = color[0];
+              lightBytes[k + 1] = color[1];
+              lightBytes[k + 2] = color[2];
+            }
+          }
+        }
+      }
+    } else {
+      // FAST path: original debuglightmaps logic
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        // Rasterize triangles into the lightmap
+        for (j = 0; j < ds->numIndexes; j += 3) {
+          int i0 = drawIndexes[ds->firstIndex + j];
+          int i1 = drawIndexes[ds->firstIndex + j + 1];
+          int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+          drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
+          drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
+          drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
+
+          // UVs in lightmap space
+          float st0[2], st1[2], st2[2];
+          st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
+          st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
+          st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
+          st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
+
+          // Bounding box of the triangle in pixels
+          float fMinX = st0[0];
+          if (st1[0] < fMinX) fMinX = st1[0];
+          if (st2[0] < fMinX) fMinX = st2[0];
+          float fMaxX = st0[0];
+          if (st1[0] > fMaxX) fMaxX = st1[0];
+          if (st2[0] > fMaxX) fMaxX = st2[0];
+          float fMinY = st0[1];
+          if (st1[1] < fMinY) fMinY = st1[1];
+          if (st2[1] < fMinY) fMinY = st2[1];
+          float fMaxY = st0[1];
+          if (st1[1] > fMaxY) fMaxY = st1[1];
+          if (st2[1] > fMaxY) fMaxY = st2[1];
+
+          int minX = (int)floor(fMinX);
+          int maxX = (int)ceil(fMaxX);
+          int minY = (int)floor(fMinY);
+          int maxY = (int)ceil(fMaxY);
+
+          // Clamp to lightmap block bounds
+          if (minX < ds->lightmapOffset[0][0]) minX = ds->lightmapOffset[0][0];
+          if (maxX >= ds->lightmapOffset[0][0] + ds->lightmapWidth) maxX = ds->lightmapOffset[0][0] + ds->lightmapWidth - 1;
+          if (minY < ds->lightmapOffset[0][1]) minY = ds->lightmapOffset[0][1];
+          if (maxY >= ds->lightmapOffset[0][1] + ds->lightmapHeight) maxY = ds->lightmapOffset[0][1] + ds->lightmapHeight - 1;
+
+          for (y = minY; y <= maxY; y++) {
+            for (x = minX; x <= maxX; x++) {
+              if (PointInTriangle((float)x + 0.5f, (float)y + 0.5f, st0, st1, st2)) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + y) * LIGHTMAP_WIDTH + x;
+                k = p * 3;
+                lightBytes[k] = color[0];
+                lightBytes[k + 1] = color[1];
+                lightBytes[k + 2] = color[2];
+              }
+            }
+          }
+        }
+      } else {
+        // Standard rectangular filling for planar/patch surfaces
+        for (y = 0; y < ds->lightmapHeight; y++) {
+          for (x = 0; x < ds->lightmapWidth; x++) {
+            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
+                 ds->lightmapOffset[0][1] + y) *
+                    LIGHTMAP_WIDTH +
+                (ds->lightmapOffset[0][0] + x);
+            k = p * 3;
+            lightBytes[k] = color[0];
+            lightBytes[k + 1] = color[1];
+            lightBytes[k + 2] = color[2];
+          }
+        }
+      }
+    }
+  }
+
+  // export pages to BMP
+  _printf("%5i surfaces rasterized into debug lightmaps\n", rasterizedCount);
+
+  numPages = numLightBytes / (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3);
+  for (i = 0; i < numPages; i++) {
+    sprintf(filename, "lm_%04i.bmp", i);
+    _printf("Writing %s...\n", filename);
+    SaveBMP(filename, lightBytes + (i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3),
+            LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
+  }
 }
 
 /*
