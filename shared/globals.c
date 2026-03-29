@@ -10,7 +10,7 @@ int numGames = 2;
 game_t games[MAX_GAMES] = {
 	{
 		"quake3",
-		"baseq3",
+		".",
 		"IBSP",
 		46,
 		17,
@@ -30,7 +30,7 @@ game_t games[MAX_GAMES] = {
 	},
 	{
 		"qfusion",
-		"base",
+		".",
 		"FBSP",
 		1,
 		18,

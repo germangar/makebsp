@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
   pointScale = 7500;
   lightmapSmoothPasses = -1;
   lightmapSmoothRadius = -1.0f;
+  embree = qtrue;
 
   JSON_LoadPackages("games");
 
@@ -92,7 +93,12 @@ int main(int argc, char **argv) {
       _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
     } else if (!strcmp(argv[i], "-game")) {
       char *arg = argv[++i];
-      strcpy(gamedir, arg);
+      for (int j = 0; j < numGames; j++) {
+        if (!strcmp(games[j].arg, arg)) {
+          g_game = &games[j];
+          break;
+        }
+      }
     } else if (!strcmp(argv[i], "-sRGB")) {
       g_game->lightmapsRGB = qtrue;
       lightmapsRGBOverridden = qtrue;
@@ -124,6 +130,8 @@ int main(int argc, char **argv) {
       _printf("Legacy BSP-brush tracing enabled\n");
     } else if (!strcmp(argv[i], "-embree")) {
       embree = qtrue;
+    } else if (!strcmp(argv[i], "-surface")) {
+      embree = qfalse;
     } else if (!strcmp(argv[i], "-bruteforce")) {
       bruteTrace = qtrue;
       _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
@@ -165,7 +173,8 @@ int main(int argc, char **argv) {
             "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
             "   oldtrace       = use legacy BSP-brush occlusion for all surfaces\n"
             "   bruteforce     = skip all culling and use legacy trace\n"
-            "   embree         = use high-performance Embree tracing path (brute-force only)\n"
+            "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
+            "   surface        = use legacy surface tracing path\n"
             "   smooth <N>     = set number of smoothing passes (default from game profile, -smooth 0 to disable)\n"
             "   smoothradius <R> = set smoothing radius (default from game profile)\n");
     exit(0);
@@ -174,6 +183,10 @@ int main(int argc, char **argv) {
   start = I_FloatTime();
 
   SetQdirFromPath(argv[i]);
+  if (g_game->gamePath[0] && strcmp(g_game->gamePath, ".")) {
+    strcat(gamedir, g_game->gamePath);
+    strcat(gamedir, "/");
+  }
 
 #ifdef _WIN32
   InitPakFile(gamedir, NULL);
@@ -203,12 +216,16 @@ int main(int argc, char **argv) {
   else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
   else if (g_game->falloff == FALLOFF_WRAPPED) fLog = "wrapped";
 
+  const char *tLog = "Surface";
+  if (oldTrace || bruteTrace) tLog = "Legacy";
+  else if (embree) tLog = "Embree";
+
   _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
   _printf("Falloff mode: %s\n", fLog);
   _printf("Lighting flags: %s %s %s\n", 
           g_game->lightmapsRGB ? "sRGB" : "Linear",
           g_game->deluxeMap ? "Deluxe" : "Standard",
-          embree ? "Embree" : "Surface");
+          tLog);
 
   if (samplesize == 0) {
     samplesize = g_game->defaultSampleSize;

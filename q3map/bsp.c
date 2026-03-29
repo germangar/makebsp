@@ -588,6 +588,10 @@ int main(int argc, char **argv) {
   // numthreads = 1;		// multiple threads aren't helping because of
   // heavy malloc use
   SetQdirFromPath(argv[i]);
+  if (g_game->gamePath[0] && strcmp(g_game->gamePath, ".")) {
+    strcat(gamedir, g_game->gamePath);
+    strcat(gamedir, "/");
+  }
 
 #ifdef _WIN32
   InitPakFile(gamedir, NULL);

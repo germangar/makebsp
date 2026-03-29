@@ -1,6 +1,6 @@
 {
   "arg": "qfusion",
-  "gamePath": "base",
+  "gamePath": ".",
   "bspIdent": "FBSP",
   "bspVersion": 1,
   "lumpCount": 18,
