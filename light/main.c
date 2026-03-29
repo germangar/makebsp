@@ -238,6 +238,9 @@ int main(int argc, char **argv) {
           g_game->lightmapsRGB ? "sRGB" : "Linear",
           g_game->deluxeMap ? "Deluxe" : "Standard",
           tLog);
+  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
+  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
+
   if (superSampleMode != SUPERSAMPLE_NONE) {
     const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
     int ssCnt = (lightmapSmoothRadius >= 2.0f) ? 16 : 8;
@@ -255,9 +258,6 @@ int main(int argc, char **argv) {
 
   // Call core lighting process
   LightMain();
-
-  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
-  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
 
   if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
     _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
