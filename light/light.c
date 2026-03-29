@@ -31,11 +31,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 int numSuperSamples = 0;
 #define GUTTER 1
 
-// Rotated Grid super-sampling pattern (8-point)
-// Tilted ~26.6 degrees for optimal diagonal anti-aliasing.
+// Super-sampling patterns.
 // Points are in [-1, 1] range, scaled by jitterRadius at runtime.
-static const float ssPattern[][2] = {
-  { 0.0f,  0.0f},   // center
+// The pattern is chosen automatically based on smoothradius:
+//   radius <= 1  ->  8-point Rotated Grid
+//   radius >= 2  -> 16-point Halton(2,3) quasi-random sequence
+
+// 8-point Rotated Grid (tilted ~26.6 degrees)
+static const float ssPattern8[][2] = {
+  { 0.000f,  0.000f},   // center
   {-0.354f, -0.854f},
   { 0.354f, -0.354f},
   { 0.854f,  0.146f},
@@ -44,7 +48,28 @@ static const float ssPattern[][2] = {
   {-0.646f, -0.146f},
   {-0.854f,  0.354f},
 };
-#define SS_PATTERN_COUNT 8
+#define SS_PATTERN8_COUNT 8
+
+// 16-point Halton(2,3) quasi-random sequence
+static const float ssPattern16[][2] = {
+  { 0.000f,  0.000f},   // center
+  { 0.000f, -0.333f},
+  {-0.500f,  0.333f},
+  { 0.500f, -0.778f},
+  {-0.750f, -0.111f},
+  { 0.250f,  0.556f},
+  {-0.250f, -0.556f},
+  { 0.750f,  0.111f},
+  {-0.875f,  0.778f},
+  { 0.125f, -0.926f},
+  {-0.375f, -0.259f},
+  { 0.625f,  0.407f},
+  {-0.625f, -0.704f},
+  { 0.375f, -0.037f},
+  {-0.125f,  0.630f},
+  { 0.875f, -0.481f},
+};
+#define SS_PATTERN16_COUNT 16
 
 
 qboolean notrace;
@@ -1384,27 +1409,41 @@ void TraceLtm(int num) {
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
-      // --- Stochastic super-sampling refinement ---
-      // 0 = OFF, 1 = Models Only (MST_TRIANGLE_SOUP), 2 = Everything
-      int actualSamples = 1;
+      // --- Super-sampling ---
+      // Mode: 0 = OFF, 1 = Models Only, 2 = Everything
+      // Pattern: radius <= 1 -> 8 samples, radius >= 2 -> 16 samples
+      qboolean doSS = qfalse;
       if (numSuperSamples == 2) {
-          actualSamples = SS_PATTERN_COUNT; // 8
+          doSS = qtrue;
       } else if (numSuperSamples == 1 && ds->surfaceType == MST_TRIANGLE_SOUP) {
-          actualSamples = SS_PATTERN_COUNT; // 8
+          doSS = qtrue;
+      }
+
+      // Pick pattern based on smoothradius
+      const float (*pattern)[2];
+      int actualSamples;
+      if (!doSS) {
+          actualSamples = 1;
+          pattern = ssPattern8; // unused, but avoids uninitialized warning
+      } else if (lightmapSmoothRadius >= 2.0f) {
+          actualSamples = SS_PATTERN16_COUNT;
+          pattern = ssPattern16;
+      } else {
+          actualSamples = SS_PATTERN8_COUNT;
+          pattern = ssPattern8;
       }
       
-      float jitterRadius = (actualSamples > 1 && lightmapSmoothRadius > 0.0f) 
-                           ? lightmapSmoothRadius : 0.0f;
+      float jitterRadius = doSS ? lightmapSmoothRadius : 0.0f;
       vec3_t accumColor = {0, 0, 0};
       int hitCount = 0;
 
       for (int ss = 0; ss < actualSamples; ss++) {
-        // Generate jitter offset for this sub-sample using Rotated Grid pattern
+        // Generate jitter offset using the selected pattern
         float jdx = 0.0f, jdy = 0.0f;
         if (jitterRadius > 0.0f && ss > 0) {
-          int pidx = ss % SS_PATTERN_COUNT;
-          jdx = ssPattern[pidx][0] * jitterRadius;
-          jdy = ssPattern[pidx][1] * jitterRadius;
+          int pidx = ss % actualSamples;
+          jdx = pattern[pidx][0] * jitterRadius;
+          jdy = pattern[pidx][1] * jitterRadius;
         }
 
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {

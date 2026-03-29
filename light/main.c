@@ -235,7 +235,8 @@ int main(int argc, char **argv) {
           tLog);
   if (numSuperSamples > 0) {
     const char *modeLog = (numSuperSamples == 2) ? "Everything" : "Models Only";
-    _printf("Super-sampling (%s): 8 samples per texel (radius %.2f)\n", modeLog, lightmapSmoothRadius);
+    int ssCnt = (lightmapSmoothRadius >= 2.0f) ? 16 : 8;
+    _printf("Super-sampling (%s): %d samples per texel (radius %.2f)\n", modeLog, ssCnt, lightmapSmoothRadius);
   }
 
   if (samplesize == 0) {
