@@ -18,14 +18,7 @@ game_t games[MAX_GAMES] = {
 		999,
 		6000,
 		128,
-		// Global Map Limits
-		0x100000,	// maxMapDrawVerts
-		0x40000,	// maxMapDrawSurfs
-		0x100000,	// maxMapNodes
-		0x100000,	// maxMapLeafs
-		0x100000,	// maxMapPlanes
-		0x100000,	// maxMapBrushes
-		0x100000,	// maxMapDrawIndexes
+		// Global Map Limits removed
 		8,          // defaultSampleSize
 		qfalse,     // lightmapsRGB
 		qfalse,     // texturesRGB
@@ -43,14 +36,7 @@ game_t games[MAX_GAMES] = {
 		65535,
 		393210,
 		512,
-		// Global Map Limits (QFusion)
-		0x100000,	// maxMapDrawVerts
-		0x40000,	// maxMapDrawSurfs
-		0x100000,	// maxMapNodes
-		0x100000,	// maxMapLeafs
-		0x100000,	// maxMapPlanes
-		0x100000,	// maxMapBrushes
-		0x100000,	// maxMapDrawIndexes
+		// Global Map Limits removed
 		4,          // defaultSampleSize
 		qtrue,      // lightmapsRGB
 		qtrue,      // texturesRGB
@@ -60,4 +46,4 @@ game_t games[MAX_GAMES] = {
 	}
 };
 
-game_t *g_game = &games[0];
+game_t *g_game = &games[1];

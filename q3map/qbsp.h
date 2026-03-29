@@ -37,13 +37,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define MAX_SURFACE_VERTS (g_game->maxSurfaceVerts)
 #define MAX_SURFACE_INDEXES (g_game->maxSurfaceIndexes)
 
-#define MAX_MAP_DRAW_VERTS_LIMIT (g_game->maxMapDrawVerts)
-#define MAX_MAP_DRAW_SURFS_LIMIT (g_game->maxMapDrawSurfs)
-#define MAX_MAP_NODES_LIMIT (g_game->maxMapNodes)
-#define MAX_MAP_LEAFS_LIMIT (g_game->maxMapLeafs)
-#define MAX_MAP_PLANES_LIMIT (g_game->maxMapPlanes)
-#define MAX_MAP_BRUSHES_LIMIT (g_game->maxMapBrushes)
-#define MAX_MAP_DRAW_INDEXES_LIMIT (g_game->maxMapDrawIndexes)
+#define MAX_MAP_DRAW_VERTS_LIMIT 0x100000
+#define MAX_MAP_DRAW_SURFS_LIMIT 0x40000
+#define MAX_MAP_NODES_LIMIT 0x100000
+#define MAX_MAP_LEAFS_LIMIT 0x100000
+#define MAX_MAP_PLANES_LIMIT 0x100000
+#define MAX_MAP_BRUSHES_LIMIT 0x100000
+#define MAX_MAP_DRAW_INDEXES_LIMIT 0x100000
 
 #define MAX_PATCH_SIZE 32
 

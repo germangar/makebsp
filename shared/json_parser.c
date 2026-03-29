@@ -71,20 +71,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapSize")) {
       game->lightmapSize = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapDrawVerts")) {
-      game->maxMapDrawVerts = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapDrawSurfs")) {
-      game->maxMapDrawSurfs = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapNodes")) {
-      game->maxMapNodes = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapLeafs")) {
-      game->maxMapLeafs = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapPlanes")) {
-      game->maxMapPlanes = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapBrushes")) {
-      game->maxMapBrushes = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxMapDrawIndexes")) {
-      game->maxMapDrawIndexes = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "defaultSampleSize")) {
       game->defaultSampleSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapsRGB")) {
@@ -114,14 +100,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     el = el->next;
   }
 
-  // Global Map Limits validation
-  VALIDATE_LIMIT(game->maxMapDrawVerts, MAX_MAP_DRAW_VERTS, "maxMapDrawVerts");
-  VALIDATE_LIMIT(game->maxMapDrawIndexes, MAX_MAP_DRAW_INDEXES, "maxMapDrawIndexes");
-  VALIDATE_LIMIT(game->maxMapDrawSurfs, MAX_MAP_DRAW_SURFS, "maxMapDrawSurfs");
-  VALIDATE_LIMIT(game->maxMapNodes, MAX_MAP_NODES, "maxMapNodes");
-  VALIDATE_LIMIT(game->maxMapLeafs, MAX_MAP_LEAFS, "maxMapLeafs");
-  VALIDATE_LIMIT(game->maxMapPlanes, MAX_MAP_PLANES, "maxMapPlanes");
-  VALIDATE_LIMIT(game->maxMapBrushes, MAX_MAP_BRUSHES, "maxMapBrushes");
 
   // Lightmap size validation: must be power of 2, max 4096 (reasonable limit for modern GPUs)
   if (game->lightmapSize > 4096) {

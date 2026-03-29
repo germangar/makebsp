@@ -22,15 +22,6 @@ typedef struct {
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
 
-	// Global Map Limits
-	int         maxMapDrawVerts;
-	int         maxMapDrawSurfs;
-	int         maxMapNodes;
-	int         maxMapLeafs;
-	int         maxMapPlanes;
-	int         maxMapBrushes;
-	int         maxMapDrawIndexes;
-
 	// Lighting flags
 	int         defaultSampleSize;
 	qboolean	lightmapsRGB;

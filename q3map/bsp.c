@@ -389,13 +389,6 @@ static void ExportGameToJson(const char *filename, game_t *game) {
           "  \"maxLMSurfaceVerts\": %d,\n"
           "  \"maxSurfaceVerts\": %d,\n"
           "  \"maxSurfaceIndexes\": %d,\n"
-          "  \"lightmapSize\": %d,\n"
-          "  \"maxMapDrawVerts\": %d,\n"
-          "  \"maxMapDrawSurfs\": %d,\n"
-          "  \"maxMapNodes\": %d,\n"
-          "  \"maxMapLeafs\": %d,\n"
-          "  \"maxMapPlanes\": %d,\n"
-          "  \"maxMapBrushes\": %d,\n"
           "  \"maxMapDrawIndexes\": %d,\n"
           "  \"defaultSampleSize\": %d,\n"
           "  \"lightmapsRGB\": %s,\n"
@@ -406,9 +399,7 @@ static void ExportGameToJson(const char *filename, game_t *game) {
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
-          game->maxSurfaceIndexes, game->lightmapSize, game->maxMapDrawVerts,
-          game->maxMapDrawSurfs, game->maxMapNodes, game->maxMapLeafs,
-          game->maxMapPlanes, game->maxMapBrushes, game->maxMapDrawIndexes,
+          game->maxSurfaceIndexes, game->lightmapSize,
           game->defaultSampleSize, game->lightmapsRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false", falloffStr,
