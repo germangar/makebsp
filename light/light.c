@@ -28,7 +28,23 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 #define EXTRASCALE 2
+int numSuperSamples = 0;
 #define GUTTER 1
+
+// Rotated Grid super-sampling pattern (8-point)
+// Tilted ~26.6 degrees for optimal diagonal anti-aliasing.
+// Points are in [-1, 1] range, scaled by jitterRadius at runtime.
+static const float ssPattern[][2] = {
+  { 0.0f,  0.0f},   // center
+  {-0.354f, -0.854f},
+  { 0.354f, -0.354f},
+  { 0.854f,  0.146f},
+  { 0.354f,  0.646f},
+  {-0.146f,  0.354f},
+  {-0.646f, -0.146f},
+  {-0.854f,  0.354f},
+};
+#define SS_PATTERN_COUNT 8
 
 
 qboolean notrace;
@@ -1368,110 +1384,161 @@ void TraceLtm(int num) {
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
-      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-        float st[2];
-        vec3_t temp_origin;
-        
-        // Calculate the target (s,t) coordinate in the lightmap
-        // Account for the Gutter shift and the optional 0.5x supersampling
-        float fi = (float)(i - currentGutter);
-        float fj = (float)(j - currentGutter);
-        float step = 1.0f / (float)scale;
-        float offset = 0.5f * step;
-        
-        st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
-        st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
+      // --- Stochastic super-sampling refinement ---
+      // 0 = OFF, 1 = Models Only (MST_TRIANGLE_SOUP), 2 = Everything
+      int actualSamples = 1;
+      if (numSuperSamples == 2) {
+          actualSamples = SS_PATTERN_COUNT; // 8
+      } else if (numSuperSamples == 1 && ds->surfaceType == MST_TRIANGLE_SOUP) {
+          actualSamples = SS_PATTERN_COUNT; // 8
+      }
+      
+      float jitterRadius = (actualSamples > 1 && lightmapSmoothRadius > 0.0f) 
+                           ? lightmapSmoothRadius : 0.0f;
+      vec3_t accumColor = {0, 0, 0};
+      int hitCount = 0;
 
-        if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) {
-          sampleHit[i][j] = qfalse;
-          continue; // totally outside any dilated triangle
+      for (int ss = 0; ss < actualSamples; ss++) {
+        // Generate jitter offset for this sub-sample using Rotated Grid pattern
+        float jdx = 0.0f, jdy = 0.0f;
+        if (jitterRadius > 0.0f && ss > 0) {
+          int pidx = ss % SS_PATTERN_COUNT;
+          jdx = ssPattern[pidx][0] * jitterRadius;
+          jdy = ssPattern[pidx][1] * jitterRadius;
         }
-        sampleHit[i][j] = qtrue;
-        numPositions = 9;
+
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          float st[2];
+          vec3_t temp_origin;
+          
+          // Calculate the target (s,t) coordinate in the lightmap
+          // Account for the Gutter shift and the optional 0.5x supersampling
+          float fi = (float)(i - currentGutter) + jdx;
+          float fj = (float)(j - currentGutter) + jdy;
+          float step = 1.0f / (float)scale;
+          float offset = 0.5f * step;
+          
+          st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
+          st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
+
+          if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) {
+            continue; // jittered sample missed geometry, skip
+          }
+          numPositions = 9;
+          for (k = 0; k < 3; k++) {
+            origin_d[k] = (double)temp_origin[k];
+            base[k] = origin_d[k] + (double)normal[k] * SAMPLE_NUDGE;
+          }
+          MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+        } else if (ds->patchWidth) {
+          numPositions = 9;
+          // Dilation: clamp to mesh bounds for the gutter
+          int mi = i - currentGutter;
+          int mj = j - currentGutter;
+          if (mi < 0) mi = 0; 
+          if (mi >= mesh->width) mi = mesh->width - 1;
+          if (mj < 0) mj = 0;
+          if (mj >= mesh->height) mj = mesh->height - 1;
+
+          VectorCopy(mesh->verts[mj * mesh->width + mi].normal, normal);
+          // push off of the curve a bit
+          for (k = 0; k < 3; k++) {
+            base[k] = (double)mesh->verts[mj * mesh->width + mi].xyz[k] +
+                      (double)normal[k] * SAMPLE_NUDGE;
+          }
+          // Apply jitter in world space along the surface tangent plane
+          if (jitterRadius > 0.0f && ss > 0) {
+            MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+            for (k = 0; k < 3; k++) {
+              base[k] += (double)jdx * ssize * lightmapVecs[0][k] +
+                         (double)jdy * ssize * lightmapVecs[1][k];
+            }
+          }
+
+          MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+        } else {
+          numPositions = 9;
+          // Dilation: offset the planar calculation
+          float pi = (float)(i - currentGutter) + jdx;
+          float pj = (float)(j - currentGutter) + jdy;
+          for (k = 0; k < 3; k++) {
+            base[k] = (double)lightmapOrigin[k] +
+                      (double)normal[k] * SAMPLE_NUDGE +
+                      (double)pi * lightmapVecs[0][k] +
+                      (double)pj * lightmapVecs[1][k];
+          }
+        }
         for (k = 0; k < 3; k++) {
-          origin_d[k] = (double)temp_origin[k];
-          base[k] = origin_d[k] + (double)normal[k] * SAMPLE_NUDGE;
-        }
-        MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
-      } else if (ds->patchWidth) {
-        numPositions = 9;
-        // Dilation: clamp to mesh bounds for the gutter
-        int mi = i - currentGutter;
-        int mj = j - currentGutter;
-        if (mi < 0) mi = 0; 
-        if (mi >= mesh->width) mi = mesh->width - 1;
-        if (mj < 0) mj = 0;
-        if (mj >= mesh->height) mj = mesh->height - 1;
-
-        VectorCopy(mesh->verts[mj * mesh->width + mi].normal, normal);
-        // push off of the curve a bit
-        for (k = 0; k < 3; k++) {
-          base[k] = (double)mesh->verts[mj * mesh->width + mi].xyz[k] +
-                    (double)normal[k] * SAMPLE_NUDGE;
+          base[k] += surfaceOrigin[num][k];
         }
 
-        MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+        // we may need to slightly nudge the sample point
+        // if directly on a wall
+        for (position = 0; position < numPositions; position++) {
+          // calculate lightmap sample position
+          for (k = 0; k < 3; k++) {
+            origin_d[k] = base[k] +
+                          ((double)nudge[0][position] / 16.0) * lightmapVecs[0][k] +
+                          ((double)nudge[1][position] / 16.0) * lightmapVecs[1][k];
+            origin[k] = (float)origin_d[k];
+          }
+
+          if (notrace) {
+            break;
+          }
+
+          // --- PointInSolid Bypass (q3map2 style) ---
+          // We always use the nominal position (position 0) because our raytracer
+          // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
+          // geometry at junctions.
+          break; 
+
+          if (!PointInSolid(origin)) {
+            break;
+          }
+        }
+
+        // if none of the nudges worked, this sub-sample is occluded
+        if (position == numPositions) {
+          continue;
+        }
+
+        // Trace this sub-sample
+        vec3_t subColor = {0, 0, 0};
+        tw->ignoreSurface = num;
+        LightingAtSample(origin, normal, subColor, qtrue, qfalse, qtrue, tw);
+        VectorAdd(accumColor, subColor, accumColor);
+        hitCount++;
+      } // end super-sample loop
+
+      // Resolve: set the texel color from accumulated sub-samples
+      if (hitCount > 0) {
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          sampleHit[i][j] = qtrue;
+        }
+        occluded[i][j] = qfalse;
+        if (numthreads == 1) {
+          c_visible++;
+        }
+        float invHits = 1.0f / (float)hitCount;
+        color[i][j][0] = accumColor[0] * invHits;
+        color[i][j][1] = accumColor[1] * invHits;
+        color[i][j][2] = accumColor[2] * invHits;
       } else {
-        numPositions = 9;
-        // Dilation: offset the planar calculation
-        int pi = i - currentGutter;
-        int pj = j - currentGutter;
-        for (k = 0; k < 3; k++) {
-          base[k] = (double)lightmapOrigin[k] +
-                    (double)normal[k] * SAMPLE_NUDGE +
-                    (double)pi * lightmapVecs[0][k] +
-                    (double)pj * lightmapVecs[1][k];
+        // No sub-samples hit — mark as occluded/miss
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          sampleHit[i][j] = qfalse;
         }
-      }
-      for (k = 0; k < 3; k++) {
-        base[k] += surfaceOrigin[num][k];
-      }
-
-      if (ds->surfaceType != MST_TRIANGLE_SOUP) {
-        sampleHit[i][j] = qtrue;
-      }
-
-      // we may need to slightly nudge the sample point
-      // if directly on a wall
-      for (position = 0; position < numPositions; position++) {
-        // calculate lightmap sample position
-        for (k = 0; k < 3; k++) {
-          origin_d[k] = base[k] +
-                        ((double)nudge[0][position] / 16.0) * lightmapVecs[0][k] +
-                        ((double)nudge[1][position] / 16.0) * lightmapVecs[1][k];
-          origin[k] = (float)origin_d[k];
-        }
-
-        if (notrace) {
-          break;
-        }
-
-        // --- PointInSolid Bypass (q3map2 style) ---
-        // We always use the nominal position (position 0) because our raytracer
-        // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
-        // geometry at junctions.
-        break; 
-
-        if (!PointInSolid(origin)) {
-          break;
-        }
-      }
-
-      // if none of the nudges worked, this sample is occluded
-      if (position == numPositions) {
         occluded[i][j] = qtrue;
         if (numthreads == 1) {
           c_occluded++;
         }
-        continue;
       }
 
-      if (numthreads == 1) {
-        c_visible++;
+      // For non-trisoups with numSuperSamples == 1, preserve original sampleHit behavior
+      if (ds->surfaceType != MST_TRIANGLE_SOUP && actualSamples == 1) {
+        sampleHit[i][j] = qtrue;
       }
-      occluded[i][j] = qfalse;
-      tw->ignoreSurface = num;
-      LightingAtSample(origin, normal, color[i][j], qtrue, qfalse, qtrue, tw);
     }
   }
 

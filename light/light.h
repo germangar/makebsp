@@ -178,6 +178,7 @@ extern qboolean deluxeMapOverridden;
 
 extern float lightmapSmoothRadius;
 extern int lightmapSmoothPasses;
+extern int numSuperSamples;
 void SmoothLightmaps(float radius);
 
 // Program flow

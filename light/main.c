@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
   pointScale = 7500;
   lightmapSmoothPasses = -1;
   lightmapSmoothRadius = -1.0f;
+  numSuperSamples = 1;
   embree = qtrue;
 
   JSON_LoadPackages("games");
@@ -145,6 +146,11 @@ int main(int argc, char **argv) {
       if (lightmapSmoothRadius < 0)
         lightmapSmoothRadius = 0;
       i++;
+    } else if (!strcmp(argv[i], "-samples")) {
+      numSuperSamples = atoi(argv[i + 1]);
+      if (numSuperSamples < 1) numSuperSamples = 1;
+      if (numSuperSamples > 64) numSuperSamples = 64;
+      i++;
     } else {
       break;
     }
@@ -176,7 +182,8 @@ int main(int argc, char **argv) {
             "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
             "   surface        = use legacy surface tracing path\n"
             "   smooth <N>     = set number of smoothing passes (default from game profile, -smooth 0 to disable)\n"
-            "   smoothradius <R> = set smoothing radius (default from game profile)\n");
+            "   smoothradius <R> = set smoothing radius (default from game profile)\n"
+            "   samples <mode> = super-sampling mode (0=OFF, 1=Models only [DEFAULT], 2=Everything)\n");
     exit(0);
   }
 
@@ -226,6 +233,10 @@ int main(int argc, char **argv) {
           g_game->lightmapsRGB ? "sRGB" : "Linear",
           g_game->deluxeMap ? "Deluxe" : "Standard",
           tLog);
+  if (numSuperSamples > 0) {
+    const char *modeLog = (numSuperSamples == 2) ? "Everything" : "Models Only";
+    _printf("Super-sampling (%s): 8 samples per texel (radius %.2f)\n", modeLog, lightmapSmoothRadius);
+  }
 
   if (samplesize == 0) {
     samplesize = g_game->defaultSampleSize;
