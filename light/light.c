@@ -1409,7 +1409,7 @@ void TraceLtm(int num) {
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
-      // --- Super-sampling ---
+      // sample at a closer spacing for anti-aliasing
       // Mode: 0 = OFF, 1 = Models Only, 2 = Everything
       // Pattern: radius <= 1 -> 8 samples, radius >= 2 -> 16 samples
       qboolean doSS = qfalse;

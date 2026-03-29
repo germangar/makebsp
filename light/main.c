@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
             "   area <V>       = set the area light scale to V\n"
             "   point <W>      = set the point light scale to W\n"
             "   notrace        = don't cast any shadows\n"
-            "   extra          = enable super sampling for anti-aliasing\n"
+            "   extra          = enable super-sampling for anti-aliasing\n"
             "   nogrid         = don't calculate light grid for dynamic model "
             "lighting\n"
             "   novertex       = don't calculate vertex lighting\n"
@@ -184,12 +184,11 @@ int main(int argc, char **argv) {
             "   bruteforce     = skip all culling and use legacy trace\n"
             "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
             "   surface        = use legacy surface tracing path\n"
-            "   surface        = use legacy surface tracing path\n"
-            "   smooth <mode>  = lightmap quality mode:\n"
+            "   smooth <mode>  = lightmap anti-aliasing mode:\n"
             "                     0 = OFF\n"
-            "                     1 = (DEFAULT) smoothing world + supersampling models\n"
-            "                     2 = supersampling EVERYTHING (post-process smoothing OFF)\n"
-            "   smoothradius <R> = set smoothing/jitter radius (default from game profile)\n");
+            "                     1 = (DEFAULT) smoothing world + super-sampling models\n"
+            "                     2 = super-sampling EVERYTHING (post-process smoothing OFF)\n"
+            "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n");
     exit(0);
   }
 
