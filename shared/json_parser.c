@@ -85,6 +85,10 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     } else if (!strcmp(key, "deluxeMap")) {
       if (val->type == json_type_true) game->deluxeMap = qtrue;
       else if (val->type == json_type_false) game->deluxeMap = qfalse;
+    } else if (!strcmp(key, "defaultSmoothPasses") && val->type == json_type_number) {
+      game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "defaultSmoothRadius") && val->type == json_type_number) {
+      game->defaultSmoothRadius = (float)atof(json_value_as_number(val)->number);
     } else if (!strcmp(key, "falloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
       if (!strcmp(f, "halflambert"))

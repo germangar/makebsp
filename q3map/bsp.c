@@ -396,7 +396,9 @@ static void ExportGameToJson(const char *filename, game_t *game) {
           "  \"texturesRGB\": %s,\n"
           "  \"colorsRGB\": %s,\n"
           "  \"falloff\": \"%s\",\n"
-          "  \"deluxeMap\": %s\n"
+          "  \"deluxeMap\": %s,\n"
+          "  \"defaultSmoothPasses\": %d,\n"
+          "  \"defaultSmoothRadius\": %.2f\n"
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
@@ -404,7 +406,8 @@ static void ExportGameToJson(const char *filename, game_t *game) {
           game->defaultSampleSize, game->lightmapsRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false", falloffStr,
-          game->deluxeMap ? "true" : "false");
+          game->deluxeMap ? "true" : "false",
+          game->defaultSmoothPasses, game->defaultSmoothRadius);
   SaveFile(filename, buffer, strlen(buffer));
 }
 

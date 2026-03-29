@@ -13,5 +13,7 @@
   "texturesRGB": true,
   "colorsRGB": true,
   "falloff": "halflambert",
-  "deluxeMap": true
+  "deluxeMap": true,
+  "defaultSmoothPasses": 6,
+  "defaultSmoothRadius": 1.00
 }

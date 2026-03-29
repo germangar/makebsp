@@ -21,7 +21,7 @@ int lightmapSmoothPasses = 0;
 
 #define MAX_KERNEL_RADIUS 16
 
-void SmoothLightmaps(void) {
+void SmoothLightmaps(float radius) {
 	int i, x, y, p, s;
 	int numPixels;
 	float *tempFloats;
@@ -30,7 +30,7 @@ void SmoothLightmaps(void) {
 	float sigma;
 	dsurface_t *ds;
 
-	if (lightmapSmoothRadius <= 0.0f) {
+	if (radius <= 0.0f) {
 		return;
 	}
 
@@ -42,10 +42,10 @@ void SmoothLightmaps(void) {
 
 	// 1. Prepare Gaussian Kernel
 	// We treat the radius as 3*sigma
-	sigma = lightmapSmoothRadius / 3.0f;
+	sigma = radius / 3.0f;
 	if (sigma < 0.5f) sigma = 0.5f;
 
-	kernelRadius = (int)ceil(lightmapSmoothRadius);
+	kernelRadius = (int)ceil(radius);
 	if (kernelRadius > MAX_KERNEL_RADIUS) kernelRadius = MAX_KERNEL_RADIUS;
 
 	float kernelSum = 0.0f;

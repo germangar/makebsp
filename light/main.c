@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../common/cmdlib.h"
 #include "light.h"
+#include "../shared/json_parser.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -95,27 +96,20 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-sRGB")) {
       g_game->lightmapsRGB = qtrue;
       lightmapsRGBOverridden = qtrue;
-      _printf("sRGB lightmaps enabled\n");
     } else if (!strcmp(argv[i], "-falloff")) {
       char *arg = argv[++i];
       if (!strcmp(arg, "halflambert")) {
         g_game->falloff = FALLOFF_HALFLAMBERT;
-        _printf("Half-Lambert attenuation enabled\n");
       } else if (!strcmp(arg, "lambert")) {
         g_game->falloff = FALLOFF_LAMBERT;
-        _printf("Lambert attenuation enabled\n");
       } else if (!strcmp(arg, "quadratic")) {
         g_game->falloff = FALLOFF_QUADRATIC;
-        _printf("Quadratic attenuation enabled\n");
       } else if (!strcmp(arg, "doublequadratic")) {
         g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
-        _printf("Double Quadratic attenuation enabled\n");
       } else if (!strcmp(arg, "unreal")) {
         g_game->falloff = FALLOFF_UNREAL;
-        _printf("Unreal Windowed Inverse Square attenuation enabled\n");
       } else if (!strcmp(arg, "wrapped")) {
         g_game->falloff = FALLOFF_WRAPPED;
-        _printf("Wrapped Lambert (0.5) attenuation enabled\n");
       } else {
         Error("Unknown falloff type: %s", arg);
       }
@@ -130,7 +124,6 @@ int main(int argc, char **argv) {
       _printf("Legacy BSP-brush tracing enabled\n");
     } else if (!strcmp(argv[i], "-embree")) {
       embree = qtrue;
-      _printf("Embree-accelerated tracing enabled\n");
     } else if (!strcmp(argv[i], "-bruteforce")) {
       bruteTrace = qtrue;
       _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
@@ -139,13 +132,11 @@ int main(int argc, char **argv) {
       if (lightmapSmoothPasses < 0)
         lightmapSmoothPasses = 0;
       i++;
-      _printf("Lightmap smoothing passes set to %d\n", lightmapSmoothPasses);
     } else if (!strcmp(argv[i], "-smoothradius")) {
       lightmapSmoothRadius = (float)atof(argv[i + 1]);
       if (lightmapSmoothRadius < 0)
         lightmapSmoothRadius = 0;
       i++;
-      _printf("Lightmap smoothing radius set to %.2f\n", lightmapSmoothRadius);
     } else {
       break;
     }
@@ -198,21 +189,26 @@ int main(int argc, char **argv) {
 
   LoadBSPFile(source);
   UpConvertLightingData();
-  _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
 
-  // Re-apply CLI overrides
-  if (falloffOverridden) {
-    g_game->falloff = overrideFalloff;
-    _printf("Restoring CLI override: Falloff mode\n");
-  }
-  if (lightmapsRGBOverridden) {
-    g_game->lightmapsRGB = qtrue;
-    _printf("Restoring CLI override: sRGB lightmaps\n");
-  }
-  if (deluxeMapOverridden) {
-    g_game->deluxeMap = qtrue;
-    _printf("Restoring CLI override: Deluxemaps\n");
-  }
+  // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
+  if (falloffOverridden) g_game->falloff = overrideFalloff;
+  if (lightmapsRGBOverridden) g_game->lightmapsRGB = qtrue;
+  if (deluxeMapOverridden) g_game->deluxeMap = qtrue;
+
+  // Print active configuration summary
+  const char *fLog = "lambert";
+  if (g_game->falloff == FALLOFF_HALFLAMBERT) fLog = "halflambert";
+  else if (g_game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
+  else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
+  else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
+  else if (g_game->falloff == FALLOFF_WRAPPED) fLog = "wrapped";
+
+  _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+  _printf("Falloff mode: %s\n", fLog);
+  _printf("Lighting flags: %s %s %s\n", 
+          g_game->lightmapsRGB ? "sRGB" : "Linear",
+          g_game->deluxeMap ? "Deluxe" : "Standard",
+          embree ? "Embree" : "Surface");
 
   if (samplesize == 0) {
     samplesize = g_game->defaultSampleSize;
@@ -226,14 +222,14 @@ int main(int argc, char **argv) {
   // Call core lighting process
   LightMain();
 
-  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
-  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = 0;
+  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
+  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
 
   if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
     _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
     for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
         _printf("%d...", pnum);
-        SmoothLightmaps();
+        SmoothLightmaps(lightmapSmoothRadius);
     }
     _printf(" Done\n");
   }
