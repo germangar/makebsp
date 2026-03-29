@@ -67,11 +67,13 @@ float linearScale = 1.0 / 8000;
 light_t *lights;
 int numPointLights;
 int numAreaLights;
+ 
+vec3_t gridMins;
+vec3_t gridSize = {64, 64, 128};
+int gridBounds[3];
+int numGridPoints;
 
-typedef struct {
-  vec3_t dir;
-  vec3_t color;
-} contribution_t;
+
 
 int c_visible, c_occluded;
 
@@ -809,19 +811,19 @@ Returns an amount of light to add at the point (grid)
 ================
 */
 int c_sunHit, c_sunMiss;
-void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight, qboolean applyColorFilter) {
+qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
+                    qboolean applyColorFilter) {
   int i;
   trace_t trace;
   skyBrush_t *b;
   vec3_t end;
 
   if (!numSkyBrushes) {
-    VectorClear(addLight);
-    return;
+    return qfalse;
   }
 
   VectorMA(origin, MAX_WORLD_COORD * 2, sunDirection, end);
- 
+
   TraceLine(origin, end, &trace, qtrue, tw);
 
   // see if trace.hit is inside a sky brush
@@ -845,18 +847,20 @@ void SunToPoint(const vec3_t origin, traceWork_t *tw, vec3_t addLight, qboolean 
     if (!applyColorFilter) {
       trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
     }
-    addLight[0] = trace.filter[0] * sunLight[0];
-    addLight[1] = trace.filter[1] * sunLight[1];
-    addLight[2] = trace.filter[2] * sunLight[2];
 
-    return;
+    VectorCopy(sunDirection, out->dir);
+    out->color[0] = trace.filter[0] * sunLight[0];
+    out->color[1] = trace.filter[1] * sunLight[1];
+    out->color[2] = trace.filter[2] * sunLight[2];
+
+    return qtrue;
   }
 
   if (numthreads == 1) {
     c_sunMiss++;
   }
 
-  VectorClear(addLight);
+  return qfalse;
 }
 
 /*
@@ -865,33 +869,38 @@ SunToPlane
 Returns an amount of light to add at the texel (surface)
 ================
 */
-void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
-                qboolean applyColorFilter, traceWork_t *tw) {
+qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
+                      contribution_t *out, qboolean applyColorFilter,
+                      traceWork_t *tw) {
   float angle;
-  vec3_t sunColor;
 
   if (!numSkyBrushes) {
-    return;
+    return qfalse;
   }
 
   // if the sun is behind the surface
   if (tw->forceFrontOnly) {
     if (DotProduct(normal, sunDirection) < -0.125f) {
-      return; // facing away
+      return qfalse; // facing away
     }
-  } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
+  } else if (g_game->falloff != FALLOFF_HALFLAMBERT &&
+             g_game->falloff != FALLOFF_WRAPPED) {
     if (DotProduct(normal, sunDirection) <= 0) {
-      return; // facing away
+      return qfalse; // facing away
     }
   }
 
   angle = CalculateFalloff(DotProduct(normal, sunDirection));
   if (angle <= 0) {
-    return; // facing away
+    return qfalse; // facing away
   }
 
-  SunToPoint(origin, tw, sunColor, applyColorFilter);
-  VectorMA(color, angle, sunColor, color);
+  if (SunToPoint(origin, tw, out, applyColorFilter)) {
+    VectorScale(out->color, angle, out->color);
+    return qtrue;
+  }
+
+  return qfalse;
 }
 
 /*
@@ -899,224 +908,180 @@ void SunToPlane(const vec3_t origin, const vec3_t normal, vec3_t color,
 LightingAtSample
 ================
 */
-void LightingAtSample(vec3_t origin, vec3_t normal, vec3_t color,
-                      qboolean testOcclusion, qboolean forceSunLight,
-                      qboolean applyColorFilter, traceWork_t *tw) {
-  light_t *light;
+/*
+========================
+LightContributionToPoint
+========================
+*/
+qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
+                                  const vec3_t normal, contribution_t *out,
+                                  traceWork_t *tw) {
   trace_t trace;
-  float angle;
   float add = 0;
-  float dist;
   vec3_t dir;
+  float dist;
+  float angle = 1.0f;
 
-  VectorCopy(ambientColor, color);
+  // area light with exact PTPFF
+  if (exactPointToPolygon && light->type == emit_area) {
+    float factor;
+    float d;
+    vec3_t n;
 
-  // trace to all the lights
-  for (light = lights; light; light = light->next) {
-
-    // if the light is behind the surface
-    if (!bruteTrace) {
-      if (tw->forceFrontOnly) {
-        if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < -0.125f)
-          continue;
-      } else if (g_game->falloff != FALLOFF_HALFLAMBERT && g_game->falloff != FALLOFF_WRAPPED) {
-        if (DotProduct(light->origin, normal) - DotProduct(normal, origin) < 0)
-          continue;
+    // see if the point is behind the light
+    d = DotProduct(origin, light->normal) - light->dist;
+    if (!light->twosided) {
+      if (d < 1) {
+        return qfalse;
       }
     }
-    // testing exact PTPFF
-    if (exactPointToPolygon && light->type == emit_area) {
-      float factor;
-      float d;
-      vec3_t pushedOrigin;
 
-      // see if the point is behind the light
-      d = DotProduct(origin, light->normal) - light->dist;
-      if (!light->twosided) {
-        if (d < -1) {
-          continue; // point is behind light
-        }
-      }
-
-      // test occlusion and find light filters
-      // clip the line, tracing from the surface towards the light
-      if (!notrace && testOcclusion) {
-        TraceLine(origin, light->origin, &trace, qfalse, tw);
-
-        // other light rays must not hit anything
-        if (trace.passSolid) {
-          continue;
-        }
-      } else {
-        trace.filter[0] = 1.0;
-        trace.filter[1] = 1.0;
-        trace.filter[2] = 1.0;
-      }
-      if (!applyColorFilter) {
-        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
-      }
-
-      // nudge the point so that it is clearly forward of the light
-      // so that surfaces meeting a light emiter don't get black edges
-      if (d > -8 && d < 8) {
-        VectorMA(origin, (8 - d), light->normal, pushedOrigin);
-      } else {
-        VectorCopy(origin, pushedOrigin);
-      }
-
-      // calculate the contribution
-      {
-        float formFactor = PointToPolygonFormFactor(pushedOrigin, normal, light->w);
-        if (formFactor < 0 && light->twosided) {
-          formFactor = -formFactor;
-        }
-        factor = CalculateFalloff(formFactor);
-        if (factor <= 0) {
-          continue;
-        }
-      }
-      color[0] += factor * light->emitColor[0] * trace.filter[0];
-      color[1] += factor * light->emitColor[1] * trace.filter[1];
-      color[2] += factor * light->emitColor[2] * trace.filter[2];
-
-      continue;
+    // test occlusion
+    TraceLine(origin, light->origin, &trace, qfalse, tw);
+    if (trace.passSolid) {
+      return qfalse;
     }
 
-    // calculate the amount of light at this sample
-    if (light->type == emit_point) {
-      if (!notrace && testOcclusion) {
-        TraceLine(origin, light->origin, &trace, qfalse, tw);
-        if (trace.passSolid)
-          continue;
-      } else {
-        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
-      }
+    // calculate the contribution
+    VectorSubtract(light->origin, origin, n);
+    if (VectorNormalize(n, n) == 0) {
+      return qfalse;
+    }
+    VectorCopy(n, out->dir);
 
-      VectorSubtract(light->origin, origin, dir);
-      dist = VectorNormalize(dir, dir);
-      // clamp the distance to prevent super hot spots
-      if (dist < 16) {
-        dist = 16;
-      }
-      angle = CalculateFalloff(DotProduct(normal, dir));
-      if (g_game->falloff == FALLOFF_UNREAL) {
-        // Unreal Windowed Inverse Square
-        // R is the distance where light would naturally fall below 1.0 (clamped)
-        float R = sqrt(light->photons);
-        if (dist > R || R < 0.001f) {
-           add = 0;
-        } else {
-           float ratio = dist / R;
-           float ratio2 = ratio * ratio;
-           float window = 1.0f - ratio2 * ratio2;
-           if (window < 0) window = 0;
-           // + 1.0f on bottom to prevent hotspots
-           add = (light->photons / (dist * dist + 1.0f)) * (window * window) * angle;
-        }
-      } else if (light->linearLight) {
-        add = angle * light->photons * linearScale - dist;
-        if (add < 0) {
-          add = 0;
-        }
+    factor = PointToPolygonFormFactor(origin, n, light->w);
+    if (factor <= 0) {
+      if (light->twosided) {
+        factor = -factor;
       } else {
-        add = light->photons / (dist * dist) * angle;
+        return qfalse;
       }
-    } else if (light->type == emit_spotlight) {
+    }
+    angle = CalculateFalloff(factor);
+    if (angle <= 0) {
+      return qfalse;
+    }
+
+    out->color[0] = light->emitColor[0] * angle * trace.filter[0];
+    out->color[1] = light->emitColor[1] * angle * trace.filter[1];
+    out->color[2] = light->emitColor[2] * angle * trace.filter[2];
+    return qtrue;
+  }
+
+  // point or spotlight logic
+  if (light->type == emit_point || light->type == emit_spotlight) {
+    VectorSubtract(light->origin, origin, dir);
+    dist = VectorNormalize(dir, out->dir);
+    if (dist < 16) {
+      dist = 16;
+    }
+    
+    // surface falloff
+    if (normal) {
+      angle = CalculateFalloff(DotProduct(normal, out->dir));
+      if (angle <= 0) {
+        return qfalse;
+      }
+    }
+
+    if (light->type == emit_spotlight) {
       float distByNormal;
-      vec3_t pointAtDist;
-      float radiusAtDist;
       float sampleRadius;
+      vec3_t pointAtDist;
       vec3_t distToSample;
-      float coneScale;
+      float radiusAtDist;
 
-      VectorSubtract(light->origin, origin, dir);
-
-      distByNormal = -DotProduct(dir, light->normal);
+      distByNormal = -DotProduct(out->dir, light->normal) * dist;
       if (distByNormal < 0) {
-        continue;
+        return qfalse;
       }
-      VectorMA(light->origin, distByNormal, light->normal, pointAtDist);
+      VectorMA(light->origin, distByNormal * (1.0f / dist), out->dir, pointAtDist);
       radiusAtDist = light->radiusByDist * distByNormal;
-
       VectorSubtract(origin, pointAtDist, distToSample);
       sampleRadius = VectorLength(distToSample);
 
       if (sampleRadius >= radiusAtDist) {
-        continue; // outside the cone
+        return qfalse;
       }
-      if (sampleRadius <= radiusAtDist - 32) {
-        coneScale = 1.0; // fully inside
-      } else {
-        coneScale = (radiusAtDist - sampleRadius) / 32.0;
-      }
-
-      dist = VectorNormalize(dir, dir);
-      // clamp the distance to prevent super hot spots
-      if (dist < 16) {
-        dist = 16;
-      }
-      angle = CalculateFalloff(DotProduct(normal, dir));
-      add = light->photons / (dist * dist) * angle * coneScale;
-
-    } else if (light->type == emit_area) {
-      VectorSubtract(light->origin, origin, dir);
-      dist = VectorNormalize(dir, dir);
-      // clamp the distance to prevent super hot spots
-      if (dist < 16) {
-        dist = 16;
-      }
-      angle = CalculateFalloff(DotProduct(normal, dir));
-      if (angle <= 0) {
-        continue;
-      }
-      angle *= -DotProduct(light->normal, dir);
-      if (angle <= 0) {
-        continue;
-      }
-
-      if (light->linearLight) {
-        add = angle * light->photons * linearScale - dist;
-        if (add < 0) {
-          add = 0;
-        }
-      } else {
-        add = light->photons / (dist * dist) * angle;
+      if (sampleRadius > radiusAtDist - 32) {
+        angle *= (radiusAtDist - sampleRadius) / 32.0;
       }
     }
 
-    float minAdd = embree ? MIN_EMBREE_LIGHT_ADD : MIN_LIGHT_ADD;
-    if (add <= minAdd) {
-      continue;
-    }
-
-    // clip the line, tracing from the surface towards the light
-    if (!notrace && testOcclusion) {
-      TraceLine(origin, light->origin, &trace, qfalse, tw);
-
-      // other light rays must not hit anything
-      if (trace.passSolid) {
-        continue;
-      }
+    if (light->linearLight) {
+      add = angle * light->photons * 0.000125f - dist;
+      if (add < 0) return qfalse;
     } else {
-      trace.filter[0] = 1.0f;
-      trace.filter[1] = 1.0f;
-      trace.filter[2] = 1.0f;
+      add = (light->photons / (dist * dist)) * angle;
     }
-    if (!applyColorFilter) {
-      trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+  } else if (light->type == emit_area) {
+    // legacy/approximate area light logic
+    VectorSubtract(light->origin, origin, dir);
+    dist = VectorNormalize(dir, out->dir);
+    if (dist < 16) dist = 16;
+    
+    if (normal) {
+      angle = CalculateFalloff(DotProduct(normal, out->dir));
+      if (angle <= 0) return qfalse;
     }
+    
+    // light surface orientation check
+    float emitAngle = -DotProduct(light->normal, out->dir);
+    if (emitAngle <= 0) return qfalse;
+    angle *= emitAngle;
 
-    // add the result
-    color[0] += add * light->color[0] * trace.filter[0];
-    color[1] += add * light->color[1] * trace.filter[1];
-    color[2] += add * light->color[2] * trace.filter[2];
+    if (light->linearLight) {
+      add = angle * light->photons * 0.000125f - dist;
+      if (add < 0) return qfalse;
+    } else {
+      add = (light->photons / (dist * dist)) * angle;
+    }
+  } else {
+    return qfalse;
   }
 
-  //
+  if (add <= MIN_LIGHT_ADD) {
+    return qfalse;
+  }
+
+  // occlusion check
+  TraceLine(origin, light->origin, &trace, qfalse, tw);
+  if (trace.passSolid) {
+    return qfalse;
+  }
+
+  out->color[0] = add * light->color[0] * trace.filter[0];
+  out->color[1] = add * light->color[1] * trace.filter[1];
+  out->color[2] = add * light->color[2] * trace.filter[2];
+
+  return qtrue;
+}
+
+/*
+========================
+LightingAtSample
+========================
+*/
+void LightingAtSample(const vec3_t origin, const vec3_t normal,
+                      vec3_t color, qboolean testOcclusion,
+                      qboolean forceSunLight, qboolean applyColorFilter,
+                      traceWork_t *tw) {
+  light_t *light;
+  contribution_t cont;
+
+  VectorCopy(ambientColor, color);
+
+  for (light = lights; light; light = light->next) {
+    if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
+      VectorAdd(color, cont.color, color);
+    }
+  }
+
   // trace directly to the sun
-  //
   if (testOcclusion || forceSunLight) {
-    SunToPlane(origin, normal, color, applyColorFilter, tw);
+    if (SunToPlane(origin, normal, &cont, applyColorFilter, tw)) {
+      VectorAdd(color, cont.color, color);
+    }
   }
 }
 
@@ -1677,41 +1642,42 @@ LightContributionToPoint
 ========================
 */
 qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
-                                  vec3_t color, traceWork_t *tw) {
+                                  const vec3_t normal, contribution_t *out,
+                                  traceWork_t *tw) {
   trace_t trace;
-  float add;
+  float add = 0;
+  vec3_t dir;
+  float dist;
+  float angle = 1.0f;
 
-  add = 0;
-
-  VectorClear(color);
-
-  // testing exact PTPFF
+  // area light with exact PTPFF
   if (exactPointToPolygon && light->type == emit_area) {
     float factor;
     float d;
-    vec3_t normal;
+    vec3_t n;
 
     // see if the point is behind the light
     d = DotProduct(origin, light->normal) - light->dist;
     if (!light->twosided) {
       if (d < 1) {
-        return qfalse; // point is behind light
+        return qfalse;
       }
     }
 
     // test occlusion
-    // clip the line, tracing from the surface towards the light
     TraceLine(origin, light->origin, &trace, qfalse, tw);
     if (trace.passSolid) {
       return qfalse;
     }
 
     // calculate the contribution
-    VectorSubtract(light->origin, origin, normal);
-    if (VectorNormalize(normal, normal) == 0) {
+    VectorSubtract(light->origin, origin, n);
+    if (VectorNormalize(n, n) == 0) {
       return qfalse;
     }
-    factor = PointToPolygonFormFactor(origin, normal, light->w);
+    VectorCopy(n, out->dir);
+
+    factor = PointToPolygonFormFactor(origin, n, light->w);
     if (factor <= 0) {
       if (light->twosided) {
         factor = -factor;
@@ -1719,30 +1685,84 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qfalse;
       }
     }
-    color[0] = light->emitColor[0] * factor * trace.filter[0];
-    color[1] = light->emitColor[1] * factor * trace.filter[1];
-    color[2] = light->emitColor[2] * factor * trace.filter[2];
+    angle = CalculateFalloff(factor);
+    if (angle <= 0) {
+      return qfalse;
+    }
+
+    out->color[0] = light->emitColor[0] * angle * trace.filter[0];
+    out->color[1] = light->emitColor[1] * angle * trace.filter[1];
+    out->color[2] = light->emitColor[2] * angle * trace.filter[2];
     return qtrue;
   }
 
-  // calculate the amount of light at this sample
+  // point or spotlight logic
   if (light->type == emit_point || light->type == emit_spotlight) {
-    vec3_t dir;
-    float dist;
-
     VectorSubtract(light->origin, origin, dir);
-    dist = VectorLength(dir);
-    // clamp the distance to prevent super hot spots
+    dist = VectorNormalize(dir, out->dir);
     if (dist < 16) {
       dist = 16;
     }
-    if (light->linearLight) {
-      add = light->photons * linearScale - dist;
-      if (add < 0) {
-        add = 0;
+    
+    // surface falloff
+    if (normal) {
+      angle = CalculateFalloff(DotProduct(normal, out->dir));
+      if (angle <= 0) {
+        return qfalse;
       }
+    }
+
+    if (light->type == emit_spotlight) {
+      float distByNormal;
+      float sampleRadius;
+      vec3_t pointAtDist;
+      vec3_t distToSample;
+      float radiusAtDist;
+
+      distByNormal = -DotProduct(out->dir, light->normal) * dist;
+      if (distByNormal < 0) {
+        return qfalse;
+      }
+      VectorMA(light->origin, distByNormal * (1.0f / dist), out->dir, pointAtDist);
+      radiusAtDist = light->radiusByDist * distByNormal;
+      VectorSubtract(origin, pointAtDist, distToSample);
+      sampleRadius = VectorLength(distToSample);
+
+      if (sampleRadius >= radiusAtDist) {
+        return qfalse;
+      }
+      if (sampleRadius > radiusAtDist - 32) {
+        angle *= (radiusAtDist - sampleRadius) / 32.0;
+      }
+    }
+
+    if (light->linearLight) {
+      add = angle * light->photons * 0.000125f - dist; // using linearScale constant
+      if (add < 0) return qfalse;
     } else {
-      add = light->photons / (dist * dist);
+      add = (light->photons / (dist * dist)) * angle;
+    }
+  } else if (light->type == emit_area) {
+    // legacy/approximate area light logic
+    VectorSubtract(light->origin, origin, dir);
+    dist = VectorNormalize(dir, out->dir);
+    if (dist < 16) dist = 16;
+    
+    if (normal) {
+      angle = CalculateFalloff(DotProduct(normal, out->dir));
+      if (angle <= 0) return qfalse;
+    }
+    
+    // light surface orientation check
+    float emitAngle = -DotProduct(light->normal, out->dir);
+    if (emitAngle <= 0) return qfalse;
+    angle *= emitAngle;
+
+    if (light->linearLight) {
+      add = angle * light->photons * 0.000125f - dist;
+      if (add < 0) return qfalse;
+    } else {
+      add = (light->photons / (dist * dist)) * angle;
     }
   } else {
     return qfalse;
@@ -1752,18 +1772,15 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     return qfalse;
   }
 
-  // clip the line, tracing from the surface towards the light
+  // occlusion check
   TraceLine(origin, light->origin, &trace, qfalse, tw);
-
-  // other light rays must not hit anything
   if (trace.passSolid) {
     return qfalse;
   }
 
-  // add the result
-  color[0] = add * light->color[0] * trace.filter[0];
-  color[1] = add * light->color[1] * trace.filter[1];
-  color[2] = add * light->color[2] * trace.filter[2];
+  out->color[0] = add * light->color[0] * trace.filter[0];
+  out->color[1] = add * light->color[1] * trace.filter[1];
+  out->color[2] = add * light->color[2] * trace.filter[2];
 
   return qtrue;
 }
@@ -1857,46 +1874,29 @@ void TraceGrid(int num) {
 
   VectorClear(summedDir);
 
-  // trace to all the lights
-
-  // find the major light direction, and divide the
-  // total light between that along the direction and
-  // the remaining in the ambient
+  // trace all lights
   numCon = 0;
   for (light = lights; light; light = light->next) {
-    vec3_t add;
-    vec3_t dir;
-    float addSize;
-
-    if (!LightContributionToPoint(light, origin, add, tw)) {
-      continue;
+    if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw)) {
+      float addSize = VectorLength(contributions[numCon].color);
+      VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
+      numCon++;
+      if (numCon >= MAX_CONTRIBUTIONS) {
+        Error("TraceGrid: MAX_CONTRIBUTIONS (%i) exceeded at grid point (%f %f %f)",
+              MAX_CONTRIBUTIONS, origin[0], origin[1], origin[2]);
+      }
     }
-
-    VectorSubtract(light->origin, origin, dir);
-    VectorNormalize(dir, dir);
-
-    if (numCon >= MAX_CONTRIBUTIONS - 1) {
-      Error("TraceGrid: MAX_CONTRIBUTIONS reached. Too many light sources (>= %i) affecting a single grid point.", MAX_CONTRIBUTIONS);
-    }
-
-    VectorCopy(add, contributions[numCon].color);
-    VectorCopy(dir, contributions[numCon].dir);
-    numCon++;
-
-    addSize = VectorLength(add);
-    VectorMA(summedDir, addSize, dir, summedDir);
   }
 
-  //
-  // trace directly to the sun
-  //
-  SunToPoint(origin, tw, color, qtrue);
-  addSize = VectorLength(color);
-  if (addSize > 0) {
-    VectorCopy(color, contributions[numCon].color);
-    VectorCopy(sunDirection, contributions[numCon].dir);
-    VectorMA(summedDir, addSize, sunDirection, summedDir);
+  // sun
+  if (SunToPoint(origin, tw, &contributions[numCon], qtrue)) {
+    float addSize = VectorLength(contributions[numCon].color);
+    VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
     numCon++;
+    if (numCon >= MAX_CONTRIBUTIONS) {
+      Error("TraceGrid: MAX_CONTRIBUTIONS (%i) exceeded with sun at grid point (%f %f %f)",
+            MAX_CONTRIBUTIONS, origin[0], origin[1], origin[2]);
+    }
   }
 
   // now that we have identified the primary light direction,
