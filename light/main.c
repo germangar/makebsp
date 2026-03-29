@@ -226,8 +226,8 @@ int main(int argc, char **argv) {
   // Call core lighting process
   LightMain();
 
-  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
-  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
+  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
+  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = 0;
 
   if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
     _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);

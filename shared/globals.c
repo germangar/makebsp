@@ -31,9 +31,7 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
 		FALLOFF_LAMBERT,
-		qfalse,      // deluxeMap
-        6,
-        1
+		qfalse      // deluxeMap
 	},
 	{
 		"qfusion",
@@ -58,9 +56,7 @@ game_t games[MAX_GAMES] = {
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
 		FALLOFF_HALFLAMBERT,
-		qtrue,       // deluxeMap
-        6,
-        1
+		qtrue       // deluxeMap
 	}
 };
 

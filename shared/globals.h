@@ -38,10 +38,6 @@ typedef struct {
 	qboolean	colorsRGB;
 	falloff_t   falloff;
 	qboolean    deluxeMap;
-
-	// Smoothing defaults
-	int         defaultSmoothPasses;
-	float       defaultSmoothRadius;
 } game_t;
 
 #define MAX_GAMES 128
