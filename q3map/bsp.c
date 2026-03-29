@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
+#include "../shared/json_parser.h"
 
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
@@ -389,7 +390,7 @@ static void ExportGameToJson(const char *filename, game_t *game) {
           "  \"maxLMSurfaceVerts\": %d,\n"
           "  \"maxSurfaceVerts\": %d,\n"
           "  \"maxSurfaceIndexes\": %d,\n"
-          "  \"maxMapDrawIndexes\": %d,\n"
+          "  \"lightmapSize\": %d,\n"
           "  \"defaultSampleSize\": %d,\n"
           "  \"lightmapsRGB\": %s,\n"
           "  \"texturesRGB\": %s,\n"
@@ -433,6 +434,8 @@ int main(int argc, char **argv) {
   // do a bsp if nothing else was specified
 
   _printf("---- q3map ----\n");
+
+  JSON_LoadPackages("games");
 
   tempsource[0] = '\0';
 
@@ -511,7 +514,15 @@ int main(int argc, char **argv) {
       // Try load first
       if (FileExists(gameJsonPath)) {
         if (numGames < MAX_GAMES) {
-          memcpy(&games[numGames], &games[0], sizeof(game_t));
+          // Use 'qfusion' as template
+          int j, templateIdx = 0;
+          for (j = 0; j < numGames; j++) {
+            if (games[j].arg && !strcmp(games[j].arg, "qfusion")) {
+              templateIdx = j;
+              break;
+            }
+          }
+          memcpy(&games[numGames], &games[templateIdx], sizeof(game_t));
           if (JSON_LoadGame(gameJsonPath, &games[numGames])) {
             g_game = &games[numGames];
             numGames++;

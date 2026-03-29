@@ -53,35 +53,39 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     const char *key = el->name->string;
     struct json_value_s *val = el->value;
 
-    if (!strcmp(key, "arg")) {
+    if (!strcmp(key, "arg") && val->type == json_type_string) {
       game->arg = copystring(json_value_as_string(val)->string);
-    } else if (!strcmp(key, "gamePath")) {
+    } else if (!strcmp(key, "gamePath") && val->type == json_type_string) {
       game->gamePath = copystring(json_value_as_string(val)->string);
-    } else if (!strcmp(key, "bspIdent")) {
+    } else if (!strcmp(key, "bspIdent") && val->type == json_type_string) {
       game->bspIdent = copystring(json_value_as_string(val)->string);
-    } else if (!strcmp(key, "bspVersion")) {
+    } else if (!strcmp(key, "bspVersion") && val->type == json_type_number) {
       game->bspVersion = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "lumpCount")) {
+    } else if (!strcmp(key, "lumpCount") && val->type == json_type_number) {
       game->lumpCount = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxLMSurfaceVerts")) {
+    } else if (!strcmp(key, "maxLMSurfaceVerts") && val->type == json_type_number) {
       game->maxLMSurfaceVerts = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxSurfaceVerts")) {
+    } else if (!strcmp(key, "maxSurfaceVerts") && val->type == json_type_number) {
       game->maxSurfaceVerts = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "maxSurfaceIndexes")) {
+    } else if (!strcmp(key, "maxSurfaceIndexes") && val->type == json_type_number) {
       game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "lightmapSize")) {
+    } else if (!strcmp(key, "lightmapSize") && val->type == json_type_number) {
       game->lightmapSize = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "defaultSampleSize")) {
+    } else if (!strcmp(key, "defaultSampleSize") && val->type == json_type_number) {
       game->defaultSampleSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapsRGB")) {
-      game->lightmapsRGB = (val->type == json_type_true);
+      if (val->type == json_type_true) game->lightmapsRGB = qtrue;
+      else if (val->type == json_type_false) game->lightmapsRGB = qfalse;
     } else if (!strcmp(key, "texturesRGB")) {
-      game->texturesRGB = (val->type == json_type_true);
+      if (val->type == json_type_true) game->texturesRGB = qtrue;
+      else if (val->type == json_type_false) game->texturesRGB = qfalse;
     } else if (!strcmp(key, "colorsRGB")) {
-      game->colorsRGB = (val->type == json_type_true);
+      if (val->type == json_type_true) game->colorsRGB = qtrue;
+      else if (val->type == json_type_false) game->colorsRGB = qfalse;
     } else if (!strcmp(key, "deluxeMap")) {
-      game->deluxeMap = (val->type == json_type_true);
-    } else if (!strcmp(key, "falloff")) {
+      if (val->type == json_type_true) game->deluxeMap = qtrue;
+      else if (val->type == json_type_false) game->deluxeMap = qfalse;
+    } else if (!strcmp(key, "falloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
       if (!strcmp(f, "halflambert"))
         game->falloff = FALLOFF_HALFLAMBERT;
@@ -124,8 +128,17 @@ static void JSON_LoadGameCallback(const char *filename) {
   char fullpath[1024];
   sprintf(fullpath, "%s/%s", g_loadDir, filename);
 
-  // Initialize with some sensible defaults before loading JSON
-  memcpy(&games[numGames], &games[0], sizeof(game_t));
+  // Use 'qfusion' as the template for all loaded JSON definitions
+  int j, templateIdx = 0;
+  for (j = 0; j < numGames; j++) {
+    if (!strcmp(games[j].arg, "qfusion")) {
+      templateIdx = j;
+      break;
+    }
+  }
+
+  // Initialize with the qfusion template before loading JSON overrides
+  memcpy(&games[numGames], &games[templateIdx], sizeof(game_t));
 
   if (JSON_LoadGame(fullpath, &games[numGames])) {
     numGames++;
