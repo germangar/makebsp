@@ -1713,8 +1713,9 @@ void TraceGrid(int num) {
     }
     if (step > 18) {
       // can't find a valid point at all
-      if (gridData32) memset(&gridData32[num], 0, sizeof(gridData32[num]));
-      memset(&gridData[num], 0, sizeof(gridData[num]));
+      if (gridData32) {
+        memset(&gridData32[num], 0, sizeof(gridData32[num]));
+      }
       free(tw);
       return;
     }
@@ -1782,12 +1783,6 @@ void TraceGrid(int num) {
     gridData32[num].styles[3] = 0xff;
   }
 
-  memset(&gridData[num], 0, sizeof(gridData[num]));
-  InternalColorToBytes(color, (byte *)gridData[num].ambient[0], g_game->lightmapsRGB);
-  InternalColorToBytes(directedColor, (byte *)gridData[num].directed[0], g_game->lightmapsRGB);
-
-  VectorNormalize(summedDir, summedDir);
-  NormalToLatLong(summedDir, gridData[num].latLong);
   free(tw);
 }
 
