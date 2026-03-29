@@ -31,7 +31,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 int numSortShaders;
 mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
 
-#define MAX_LIGHTMAPS 512
+#define MAX_LIGHTMAPS 2048
 #define MAX_LIGHTMAP_WIDTH 1024
 int *lightmapHeights = NULL;
 
@@ -168,10 +168,7 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   float uvHeight = max_t - min_t;
   float uvArea = uvWidth * uvHeight;
   if (uvArea > 0.0001f) {
-    float minDimension = (LIGHTMAP_WIDTH / 4.0f);
-    if (minDimension < 96.0f) {
-        minDimension = 96.0f;
-    }
+    float minDimension = 192.0f;
     float targetArea = minDimension * minDimension;
     float minScale = sqrt(targetArea / uvArea);
     if (scale < minScale) {

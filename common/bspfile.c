@@ -619,6 +619,8 @@ void	WriteBSPFile( const char *filename ) {
 	fseek (bspfile, 0, SEEK_SET);
 	SafeWrite (bspfile, header, sizeof(dheader_t));
 	fclose (bspfile);	
+
+	_printf( "BSP written to %s\n", filename );
 }
 
 //============================================================================

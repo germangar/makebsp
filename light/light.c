@@ -1603,16 +1603,16 @@ void TraceLtm(int num) {
             // However, a more robust way is to check the Hit status.
             // For now, if we are in this loop, we are within the lightmap bounds.
             if (color[i][j][0] != 0 || color[i][j][1] != 0 || color[i][j][2] != 0) {
-                 lightAlphaMask[k] = 1;
+                 lightAlphaMask[k] = ALPHA_NO_SMOOTH;
             }
           } else {
             if (sampleHit[i][j]) {
-              lightAlphaMask[k] = 1;
+              lightAlphaMask[k] = ALPHA_NO_SMOOTH;
             }
           }
         } else {
           // For standard patches and faces, the entire allocated rectangle is valid
-          lightAlphaMask[k] = 1;
+          lightAlphaMask[k] = ALPHA_SMOOTH;
         }
       }
     }

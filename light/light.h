@@ -35,6 +35,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 extern RTCDevice g_device;
 extern RTCScene g_scene;
 
+#define ALPHA_SMOOTH 1
+#define ALPHA_NO_SMOOTH 2
+
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
 #define MIN_LIGHT_ADD 0.1f
@@ -172,6 +175,10 @@ extern qboolean falloffOverridden;
 extern falloff_t overrideFalloff;
 extern qboolean lightmapsRGBOverridden;
 extern qboolean deluxeMapOverridden;
+
+extern float lightmapSmoothRadius;
+extern int lightmapSmoothPasses;
+void SmoothLightmaps(void);
 
 // Program flow
 void LightMain(void);

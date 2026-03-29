@@ -40,6 +40,8 @@ int main(int argc, char **argv) {
   extra = qfalse;
   areaScale = 0.25;
   pointScale = 7500;
+  lightmapSmoothPasses = -1;
+  lightmapSmoothRadius = -1.0f;
 
   JSON_LoadPackages("games");
 
@@ -132,6 +134,18 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-bruteforce")) {
       bruteTrace = qtrue;
       _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
+    } else if (!strcmp(argv[i], "-smooth")) {
+      lightmapSmoothPasses = atoi(argv[i + 1]);
+      if (lightmapSmoothPasses < 0)
+        lightmapSmoothPasses = 0;
+      i++;
+      _printf("Lightmap smoothing passes set to %d\n", lightmapSmoothPasses);
+    } else if (!strcmp(argv[i], "-smoothradius")) {
+      lightmapSmoothRadius = (float)atof(argv[i + 1]);
+      if (lightmapSmoothRadius < 0)
+        lightmapSmoothRadius = 0;
+      i++;
+      _printf("Lightmap smoothing radius set to %.2f\n", lightmapSmoothRadius);
     } else {
       break;
     }
@@ -160,7 +174,9 @@ int main(int argc, char **argv) {
             "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
             "   oldtrace       = use legacy BSP-brush occlusion for all surfaces\n"
             "   bruteforce     = skip all culling and use legacy trace\n"
-            "   embree         = use high-performance Embree tracing path (brute-force only)\n");
+            "   embree         = use high-performance Embree tracing path (brute-force only)\n"
+            "   smooth <N>     = set number of smoothing passes (default from game profile, -smooth 0 to disable)\n"
+            "   smoothradius <R> = set smoothing radius (default from game profile)\n");
     exit(0);
   }
 
@@ -209,6 +225,18 @@ int main(int argc, char **argv) {
 
   // Call core lighting process
   LightMain();
+
+  if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
+  if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
+
+  if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+    _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
+    for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+        _printf("%d...", pnum);
+        SmoothLightmaps();
+    }
+    _printf(" Done\n");
+  }
 
   _printf("writing %s\n", source);
   DownConvertLightingData();

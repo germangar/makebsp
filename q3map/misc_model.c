@@ -322,7 +322,9 @@ static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel) {
   xatlasPackOptions packOptions;
   xatlasPackOptionsInit(&packOptions);
   packOptions.padding = 2;
-  packOptions.resolution = 1024; 
+  // Sync packing resolution with the game's actual lightmap size
+  int targetRes = (LIGHTMAP_WIDTH >= 64) ? LIGHTMAP_WIDTH : 1024;
+  packOptions.resolution = targetRes; 
   packOptions.texelsPerUnit = 0.0f; 
   xatlasPackCharts(atlas, &packOptions);
 
