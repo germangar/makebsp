@@ -60,9 +60,11 @@ typedef struct shaderInfo_s {
   qboolean notjunc;         // don't use this surface for tjunction fixing
   float vertexScale;        // vertex light scale
 
-  char editorimage[MAX_QPATH]; // use this image to generate texture coordinates
-  char lightimage[MAX_QPATH]; // use this image to generate color / averageColor
-  vec3_t color;               // colorNormalized
+  char editorimage[MAX_QPATH];  // use this image to generate texture coordinates
+  char lightimage[MAX_QPATH];   // use this image to generate color / averageColor
+  char materialImage[MAX_QPATH]; // use this image to generate color if none of the
+                                 // above exist
+  vec3_t color;                  // colorNormalized
   vec3_t averageColor;
 
   int width, height;

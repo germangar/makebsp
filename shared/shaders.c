@@ -168,6 +168,15 @@ static void LoadShaderImage(shaderInfo_t *si) {
     }
   }
 
+  // look for the materialImage if it is specified
+  if (si->materialImage[0]) {
+    sprintf(filename, "%s%s", gamedir, si->materialImage);
+    nLen = LoadImageFile(filename, &buffer, &bTGA);
+    if (buffer != NULL) {
+      goto loadTga;
+    }
+  }
+
   // try the shader name 
   sprintf(filename, "%s%s", gamedir, si->shader);
   nLen = LoadImageFile(filename, &buffer, &bTGA);
@@ -240,6 +249,7 @@ static shaderInfo_t *AllocShaderInfo(void) {
   si->forceSunLight = qfalse;
   si->vertexScale = 1.0;
   si->notjunc = qfalse;
+  si->materialImage[0] = 0;
 
   return si;
 }
@@ -314,6 +324,13 @@ static void ParseShaderFile(const char *filename) {
           }
           if (!strcmp(token, "}")) {
             break;
+          }
+
+          // QFusion: scan for material keyword inside passes
+          if (!Q_stricmp(token, "material") && !si->materialImage[0]) {
+            GetToken(qfalse);
+            strcpy(si->materialImage, token);
+            DefaultExtension(si->materialImage, ".tga");
           }
         }
         continue;
