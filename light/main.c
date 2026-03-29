@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   pointScale = 7500;
   lightmapSmoothPasses = -1;
   lightmapSmoothRadius = -1.0f;
-  numSuperSamples = 1;
+  superSampleMode = SUPERSAMPLE_MODELS;
   embree = qtrue;
 
   JSON_LoadPackages("games");
@@ -137,19 +137,22 @@ int main(int argc, char **argv) {
       bruteTrace = qtrue;
       _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
     } else if (!strcmp(argv[i], "-smooth")) {
-      lightmapSmoothPasses = atoi(argv[i + 1]);
-      if (lightmapSmoothPasses < 0)
-        lightmapSmoothPasses = 0;
+      int mode = atoi(argv[i + 1]);
+      if (mode == 1) {
+          superSampleMode = SUPERSAMPLE_MODELS; // Combined: Smoothing (world) + Super-sampling (models)
+          lightmapSmoothPasses = -1; // Use g_game defaults
+      } else if (mode == 2) {
+          superSampleMode = SUPERSAMPLE_ALL; // Trace-time Super-sampling for EVERYTHING (no smoothing)
+          lightmapSmoothPasses = 0; 
+      } else if (mode == 0) {
+          superSampleMode = SUPERSAMPLE_NONE; // OFF
+          lightmapSmoothPasses = 0;
+      }
       i++;
     } else if (!strcmp(argv[i], "-smoothradius")) {
       lightmapSmoothRadius = (float)atof(argv[i + 1]);
       if (lightmapSmoothRadius < 0)
         lightmapSmoothRadius = 0;
-      i++;
-    } else if (!strcmp(argv[i], "-samples")) {
-      numSuperSamples = atoi(argv[i + 1]);
-      if (numSuperSamples < 1) numSuperSamples = 1;
-      if (numSuperSamples > 64) numSuperSamples = 64;
       i++;
     } else {
       break;
@@ -181,9 +184,12 @@ int main(int argc, char **argv) {
             "   bruteforce     = skip all culling and use legacy trace\n"
             "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
             "   surface        = use legacy surface tracing path\n"
-            "   smooth <N>     = set number of smoothing passes (default from game profile, -smooth 0 to disable)\n"
-            "   smoothradius <R> = set smoothing radius (default from game profile)\n"
-            "   samples <mode> = super-sampling mode (0=OFF, 1=Models only [DEFAULT], 2=Everything)\n");
+            "   surface        = use legacy surface tracing path\n"
+            "   smooth <mode>  = lightmap quality mode:\n"
+            "                     0 = OFF\n"
+            "                     1 = (DEFAULT) smoothing world + supersampling models\n"
+            "                     2 = supersampling EVERYTHING (post-process smoothing OFF)\n"
+            "   smoothradius <R> = set smoothing/jitter radius (default from game profile)\n");
     exit(0);
   }
 
@@ -233,10 +239,10 @@ int main(int argc, char **argv) {
           g_game->lightmapsRGB ? "sRGB" : "Linear",
           g_game->deluxeMap ? "Deluxe" : "Standard",
           tLog);
-  if (numSuperSamples > 0) {
-    const char *modeLog = (numSuperSamples == 2) ? "Everything" : "Models Only";
+  if (superSampleMode != SUPERSAMPLE_NONE) {
+    const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
     int ssCnt = (lightmapSmoothRadius >= 2.0f) ? 16 : 8;
-    _printf("Super-sampling (%s): %d samples per texel (radius %.2f)\n", modeLog, ssCnt, lightmapSmoothRadius);
+    _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, lightmapSmoothRadius);
   }
 
   if (samplesize == 0) {

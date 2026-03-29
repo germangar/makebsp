@@ -178,7 +178,13 @@ extern qboolean deluxeMapOverridden;
 
 extern float lightmapSmoothRadius;
 extern int lightmapSmoothPasses;
-extern int numSuperSamples;
+typedef enum {
+    SUPERSAMPLE_NONE = 0,
+    SUPERSAMPLE_MODELS = 1,
+    SUPERSAMPLE_ALL = 2
+} ssMode_t;
+
+extern ssMode_t superSampleMode;
 void SmoothLightmaps(float radius);
 
 // Program flow

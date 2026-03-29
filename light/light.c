@@ -28,7 +28,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 #define EXTRASCALE 2
-int numSuperSamples = 0;
+ssMode_t superSampleMode = SUPERSAMPLE_NONE;
 #define GUTTER 1
 
 // Super-sampling patterns.
@@ -1413,9 +1413,9 @@ void TraceLtm(int num) {
       // Mode: 0 = OFF, 1 = Models Only, 2 = Everything
       // Pattern: radius <= 1 -> 8 samples, radius >= 2 -> 16 samples
       qboolean doSS = qfalse;
-      if (numSuperSamples == 2) {
+      if (superSampleMode == SUPERSAMPLE_ALL) {
           doSS = qtrue;
-      } else if (numSuperSamples == 1 && ds->surfaceType == MST_TRIANGLE_SOUP) {
+      } else if (superSampleMode == SUPERSAMPLE_MODELS && ds->surfaceType == MST_TRIANGLE_SOUP) {
           doSS = qtrue;
       }
 
@@ -1574,7 +1574,7 @@ void TraceLtm(int num) {
         }
       }
 
-      // For non-trisoups with numSuperSamples == 1, preserve original sampleHit behavior
+      // For non-trisoups with superSampleMode == SUPERSAMPLE_MODELS, preserve original sampleHit behavior
       if (ds->surfaceType != MST_TRIANGLE_SOUP && actualSamples == 1) {
         sampleHit[i][j] = qtrue;
       }
