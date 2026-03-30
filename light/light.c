@@ -1365,9 +1365,10 @@ void TraceLtm(int num) {
         VectorMA(lightmapOrigin, -0.5, lightmapVecs[1], lightmapOrigin);
       }
 
-      // Dilation: shift origin for gutter
-      VectorMA(lightmapOrigin, -currentGutter, lightmapVecs[0], lightmapOrigin);
-      VectorMA(lightmapOrigin, -currentGutter, lightmapVecs[1], lightmapOrigin);
+      // NOTE: do NOT shift origin by -currentGutter here. The trace loop uses
+      // pi = i - currentGutter, which already compensates for the gutter offset.
+      // Shifting origin here as well would double-displace all samples by 1 LR
+      // texel, placing edge blocks outside the polygon and producing black borders.
       sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
       sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
     }
@@ -1608,46 +1609,43 @@ void TraceLtm(int num) {
       }
       if (count) {
         VectorScale(average, 1.0 / count, color[i][j]);
+        sampleHit[i][j] = qtrue;
       }
     }
   }
 
-  // average together the values if we are extra sampling
+  // downscale HD buffer to LR: pick the strongest (brightest) lit HD sample
   if (superSample && use_upscale) {
     for (i = 0; i < ds->lightmapWidth; i++) {
       for (j = 0; j < ds->lightmapHeight; j++) {
-        vec3_t value;
-        float coverage;
+        float maxIntensity = -1.0f;
+        int bestX = -1, bestY = -1;
 
-        int i2 = i * scale + currentGutter;
-        int j2 = j * scale + currentGutter;
+        int baseI = i * scale + currentGutter;
+        int baseJ = j * scale + currentGutter;
 
-        VectorClear(value);
-        coverage = 0;
-
-        if (sampleHit[i2][j2]) {
-          VectorAdd(value, color[i2][j2], value);
-          coverage++;
-        }
-        if (sampleHit[i2][j2 + 1]) {
-          VectorAdd(value, color[i2][j2 + 1], value);
-          coverage++;
-        }
-        if (sampleHit[i2 + 1][j2]) {
-          VectorAdd(value, color[i2 + 1][j2], value);
-          coverage++;
-        }
-        if (sampleHit[i2 + 1][j2 + 1]) {
-          VectorAdd(value, color[i2 + 1][j2 + 1], value);
-          coverage++;
+        for (int sx = 0; sx < scale; sx++) {
+          for (int sy = 0; sy < scale; sy++) {
+            int i2 = baseI + sx;
+            int j2 = baseJ + sy;
+            if (!sampleHit[i2][j2]) {
+              continue;
+            }
+            float intensity = color[i2][j2][0] + color[i2][j2][1] + color[i2][j2][2];
+            if (intensity > maxIntensity) {
+              maxIntensity = intensity;
+              bestX = i2;
+              bestY = j2;
+            }
+          }
         }
 
-        if (coverage > 0.0f) {
-          color[i][j][0] = value[0] / coverage;
-          color[i][j][1] = value[1] / coverage;
-          color[i][j][2] = value[2] / coverage;
+        if (bestX >= 0) {
+          VectorCopy(color[bestX][bestY], color[i][j]);
+          sampleHit[i][j] = qtrue;
         } else {
           VectorClear(color[i][j]);
+          sampleHit[i][j] = qfalse;
         }
       }
     }
@@ -1701,20 +1699,10 @@ void TraceLtm(int num) {
         // For standard, we just mark the pixel if it's within the surface's rectangle
         // since Q3Map traces all texels in the allocated lightmap for planar/patch types.
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-          // For models, we must be careful to only mark pixels that actually contain geometry
-          if (superSample) {
-            // Check if this pixel had any coverage during dilation
-            // This is actually already handled by the 'coverage' check in the superSample block
-            // but we can just check if the final color is not the clear color if we prefer.
-            // However, a more robust way is to check the Hit status.
-            // For now, if we are in this loop, we are within the lightmap bounds.
-            if (color[i][j][0] != 0 || color[i][j][1] != 0 || color[i][j][2] != 0) {
-                 lightAlphaMask[k] = ALPHA_NO_SMOOTH;
-            }
-          } else {
-            if (sampleHit[i][j]) {
-              lightAlphaMask[k] = ALPHA_NO_SMOOTH;
-            }
+          // sampleHit is set for direct ray hits AND dilation-filled pixels,
+          // so it is the authoritative source for whether this texel has any light.
+          if (sampleHit[i][j]) {
+            lightAlphaMask[k] = ALPHA_NO_SMOOTH;
           }
         } else {
           // For standard patches and faces, the entire allocated rectangle is valid
