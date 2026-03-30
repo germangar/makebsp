@@ -22,11 +22,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "qtypes.h"
 
 extern int numthreads;
+extern long long total_work;
+extern long long completed_work;
 
 void ThreadSetDefault(void);
 int GetThreadWork(void);
 void RunThreadsOnIndividual(int workcnt, qboolean showpacifier,
                             void (*func)(int));
+void RunThreadsOnWeighted(int workcnt, long long total_w, qboolean showpacifier,
+                            void (*func)(int));
 void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int));
+void ThreadCompleted(void);
+void ThreadCompletedWeighted(int weight);
 void ThreadLock(void);
 void ThreadUnlock(void);

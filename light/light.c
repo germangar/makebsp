@@ -99,6 +99,29 @@ float areaScale = 0.25;
 // for run time tweaking of all point sources in the level
 float pointScale = 7500;
 
+static int *surfaceWorkOrder;
+
+static int CompareSurfaces(const void *a, const void *b) {
+  int i1 = *(int *)a;
+  int i2 = *(int *)b;
+  dsurface_t *ds1 = &drawSurfaces[i1];
+  dsurface_t *ds2 = &drawSurfaces[i2];
+  int w1 = ds1->lightmapWidth * ds1->lightmapHeight;
+  int w2 = ds2->lightmapWidth * ds2->lightmapHeight;
+
+  // Bonus weight for patches and triangle soups as they take more CPU cycles per luxel
+  if (ds1->surfaceType == MST_PATCH || ds1->surfaceType == MST_TRIANGLE_SOUP)
+    w1 *= 2;
+  if (ds2->surfaceType == MST_PATCH || ds2->surfaceType == MST_TRIANGLE_SOUP)
+    w2 *= 2;
+
+  if (w1 > w2)
+    return -1;
+  if (w1 < w2)
+    return 1;
+  return 0;
+}
+
 qboolean exactPointToPolygon = qtrue;
 
 float formFactorValueScale = 3;
@@ -1249,6 +1272,7 @@ TraceLtm
 */
 void TraceLtm(int num) {
   dsurface_t *ds;
+  int realSurfIndex;
   int i, j, k;
   int x, y;
   int position, numPositions;
@@ -1275,18 +1299,24 @@ void TraceLtm(int num) {
   vec3_t lightmapOrigin, lightmapVecs[2];
   int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
 
-  ds = &drawSurfaces[num];
+  realSurfIndex = surfaceWorkOrder[num];
+  ds = &drawSurfaces[realSurfIndex];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+
+  int surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+
 
   // vertex-lit triangle model if no lightmap allocated
   if (ds->surfaceType == MST_TRIANGLE_SOUP && ds->lightmapNum[0] == -1) {
     VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
     free(tw);
+    ThreadCompletedWeighted(surfWeight);
     return;
   }
 
   if (ds->lightmapNum[0] == -1) {
     free(tw);
+    ThreadCompletedWeighted(surfWeight);
     return; // doesn't need lighting at all
   }
 
@@ -1298,6 +1328,7 @@ void TraceLtm(int num) {
 
   if (ds->lightmapNum[0] < 0) {
     free(tw);
+    ThreadCompletedWeighted(surfWeight);
     return; // doesn't need lightmap lighting
   }
 
@@ -1725,6 +1756,8 @@ void TraceLtm(int num) {
   free(occluded_data);
   free(color);
   free(color_data);
+
+  ThreadCompletedWeighted(surfWeight);
 }
 
 //=============================================================================
@@ -1893,6 +1926,19 @@ LightWorld
 */
 void LightWorld(void) {
   double start, end;
+  int i;
+  long long totalLuxels = 0;
+
+  surfaceWorkOrder = malloc(numDrawSurfaces * sizeof(int));
+  for (i = 0; i < numDrawSurfaces; i++) {
+    surfaceWorkOrder[i] = i;
+    if (drawSurfaces[i].lightmapNum[0] >= 0) {
+      totalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
+    } else {
+      totalLuxels += 1;
+    }
+  }
+  qsort(surfaceWorkOrder, numDrawSurfaces, sizeof(int), CompareSurfaces);
 
   if (!nogridlighting) {
     if (embree) {
@@ -1918,11 +1964,13 @@ void LightWorld(void) {
     _printf("--- TraceLtm (surface) ---\n");
   }
   start = I_FloatTime();
-  RunThreadsOnIndividual(numDrawSurfaces, qtrue, TraceLtm);
+  RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceLtm);
   end = I_FloatTime();
   _printf("%5i visible samples\n", c_visible);
   _printf("%5i occluded samples\n", c_occluded);
   _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
+
+  free(surfaceWorkOrder);
 }
 
 

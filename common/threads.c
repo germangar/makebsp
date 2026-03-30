@@ -25,22 +25,18 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define MAX_THREADS 64
 
-int dispatch;
 int workcount;
+int dispatch;
+int completed;
+long long total_work;
+long long completed_work;
 int oldf;
 qboolean pacifier;
 
 qboolean threaded;
 
-/*
-=============
-GetThreadWork
-
-=============
-*/
 int GetThreadWork(void) {
   int r;
-  int f;
 
   ThreadLock();
 
@@ -49,21 +45,36 @@ int GetThreadWork(void) {
     return -1;
   }
 
-  f = 10 * dispatch / workcount;
-  if (f != oldf) {
-    oldf = f;
-    if (pacifier)
-      _printf("%i...", f);
-  }
-
   r = dispatch;
   dispatch++;
-  if (dispatch == workcount && pacifier) {
-    _printf(" [waiting for threads]");
-  }
   ThreadUnlock();
 
   return r;
+}
+
+void ThreadCompletedWeighted(int weight) {
+  int f;
+
+  ThreadLock();
+  completed++;
+  completed_work += weight;
+  
+  if (total_work > 0) {
+    f = (int)(10 * completed_work / total_work);
+  } else {
+    f = 10 * completed / workcount;
+  }
+
+  if (f != oldf) {
+    oldf = f;
+    if (pacifier)
+        _printf("%i...", f);
+  }
+  ThreadUnlock();
+}
+
+void ThreadCompleted(void) {
+  ThreadCompletedWeighted(1);
 }
 
 void (*workfunction)(int);
@@ -77,6 +88,7 @@ void ThreadWorkerFunction(int threadnum) {
       break;
     //_printf ("thread %i, work %i\n", threadnum, work);
     workfunction(work);
+    ThreadCompleted();
   }
 }
 
@@ -85,6 +97,16 @@ void RunThreadsOnIndividual(int workcnt, qboolean showpacifier,
   if (numthreads == -1)
     ThreadSetDefault();
   workfunction = func;
+  total_work = 0; // standard progress
+  RunThreadsOn(workcnt, showpacifier, ThreadWorkerFunction);
+}
+
+void RunThreadsOnWeighted(int workcnt, long long total_w, qboolean showpacifier,
+                            void (*func)(int)) {
+  if (numthreads == -1)
+    ThreadSetDefault();
+  workfunction = func;
+  total_work = total_w;
   RunThreadsOn(workcnt, showpacifier, ThreadWorkerFunction);
 }
 
@@ -150,6 +172,8 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int)) {
 
   start = I_FloatTime();
   dispatch = 0;
+  completed = 0;
+  completed_work = 0;
   workcount = workcnt;
   oldf = -1;
   pacifier = showpacifier;
