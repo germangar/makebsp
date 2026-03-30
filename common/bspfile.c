@@ -24,7 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "mathlib.h"
 #include "bspfile.h"
 #include "scriplib.h"
-#include "globals.h"
+#include "../shared/globals.h"
 
 void GetLeafNums (void);
 
@@ -260,33 +260,40 @@ LoadBSPFile
 =============
 */
 void	LoadBSPFile( const char *filename ) {
-	dheader_t	*header;
-	int			i, j, k;
-	int			ident, version;
+    dheader_t	*header;
+    int			i, j, k;
+    int			ident, version;
 
-	// load the file header
-	LoadFile (filename, (void **)&header);
+    // load the file header
+    LoadFile (filename, (void **)&header);
 
-	ident = LittleLong( header->ident );
-	version = LittleLong( header->version );
+    ident = LittleLong( header->ident );
+    version = LittleLong( header->version );
 
-  ident = LittleLong(header->ident);
-  version = LittleLong(header->version);
-
-  g_game = NULL;
-  for (i = 0; i < numGames; i++) {
-    int gameIdent = *(int *)games[i].bspIdent;
-    if (ident == gameIdent && version == games[i].bspVersion) {
-      g_game = &games[i];
-      break;
+    // Check if the current game profile already matches this BSP format.
+    // This allows the -game switch to take precedence over automatic detection.
+    if (g_game) {
+        int activeIdent = *(int *)g_game->bspIdent;
+        if (ident != activeIdent || version != (int)g_game->bspVersion) {
+            g_game = NULL;
+        }
     }
-  }
 
-  if (!g_game) {
-    Error("%s is an unknown BSP format (ident: %c%c%c%c, version: %d)", filename,
-          ident & 0xFF, (ident >> 8) & 0xFF, (ident >> 16) & 0xFF,
-          (ident >> 24) & 0xFF, version);
-  }
+    if (!g_game) {
+        for (i = numGames - 1; i >= 0; i--) {
+            int gameIdent = *(int *)games[i].bspIdent;
+            if (ident == gameIdent && version == (int)games[i].bspVersion) {
+            g_game = &games[i];
+            break;
+            }
+        }
+    }
+
+    if (!g_game) {
+        Error("%s is an unknown BSP format (ident: %c%c%c%c, version: %d)", filename,
+            ident & 0xFF, (ident >> 8) & 0xFF, (ident >> 16) & 0xFF,
+            (ident >> 24) & 0xFF, version);
+    }
 
 	// swap the header
 	for ( i = 0 ; i < g_game->lumpCount ; i++ ) {

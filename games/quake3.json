@@ -1,0 +1,19 @@
+{
+  "arg": "quake3",
+  "gamePath": ".",
+  "bspIdent": "IBSP",
+  "bspVersion": 46,
+  "lumpCount": 17,
+  "maxLMSurfaceVerts": 64,
+  "maxSurfaceVerts": 999,
+  "maxSurfaceIndexes": 6000,
+  "lightmapSize": 128,
+  "defaultSampleSize": 8,
+  "lightmapsRGB": false,
+  "texturesRGB": false,
+  "colorsRGB": false,
+  "falloff": "lambert",
+  "deluxeMap": false,
+  "defaultSmoothPasses": 6,
+  "defaultSmoothRadius": 1.00
+}

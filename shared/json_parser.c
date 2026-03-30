@@ -48,6 +48,24 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     return qfalse;
   }
 
+  // Smart template selection: Peek at 'bspIdent' to decide between Quake 3 or Qfusion baseline.
+  // Defaults to games[0] (quake3) unless "FBSP" is explicitly found.
+  int templateIdx = 0; // quake3
+  struct json_object_element_s *peek_el = obj->start;
+  while (peek_el) {
+    if (!strcmp(peek_el->name->string, "bspIdent") && peek_el->value->type == json_type_string) {
+      const char *ident = json_value_as_string(peek_el->value)->string;
+      if (!strcmp(ident, "FBSP")) {
+        templateIdx = 1; // qfusion
+      }
+      break;
+    }
+    peek_el = peek_el->next;
+  }
+  
+  // Initialize with the selected template baseline
+  memcpy(game, &games[templateIdx], sizeof(game_t));
+
   struct json_object_element_s *el = obj->start;
   while (el) {
     const char *key = el->name->string;
@@ -132,18 +150,7 @@ static void JSON_LoadGameCallback(const char *filename) {
   char fullpath[1024];
   sprintf(fullpath, "%s/%s", g_loadDir, filename);
 
-  // Use 'qfusion' as the template for all loaded JSON definitions
-  int j, templateIdx = 0;
-  for (j = 0; j < numGames; j++) {
-    if (!strcmp(games[j].arg, "qfusion")) {
-      templateIdx = j;
-      break;
-    }
-  }
-
-  // Initialize with the qfusion template before loading JSON overrides
-  memcpy(&games[numGames], &games[templateIdx], sizeof(game_t));
-
+  // Template selection is now handled internally by JSON_LoadGame
   if (JSON_LoadGame(fullpath, &games[numGames])) {
     numGames++;
     g_loadCount++;
@@ -155,4 +162,79 @@ int JSON_LoadPackages(const char *directory) {
   g_loadCount = 0;
   Sys_ListFiles(directory, "*.json", JSON_LoadGameCallback);
   return g_loadCount;
+}
+
+void JSON_ExportGame(const char *filename, game_t *game) {
+  char buffer[4096];
+  const char *falloffStr;
+  switch (game->falloff) {
+  case FALLOFF_LAMBERT:
+    falloffStr = "lambert";
+    break;
+  case FALLOFF_HALFLAMBERT:
+    falloffStr = "halflambert";
+    break;
+  case FALLOFF_QUADRATIC:
+    falloffStr = "quadratic";
+    break;
+  case FALLOFF_DOUBLEQUADRATIC:
+    falloffStr = "doublequadratic";
+    break;
+  case FALLOFF_UNREAL:
+    falloffStr = "unreal";
+    break;
+  case FALLOFF_WRAPPED:
+    falloffStr = "wrapped";
+    break;
+  default:
+    falloffStr = "unknown";
+    break;
+  }
+
+  sprintf(buffer,
+          "{\n"
+          "  \"arg\": \"%s\",\n"
+          "  \"gamePath\": \"%s\",\n"
+          "  \"bspIdent\": \"%s\",\n"
+          "  \"bspVersion\": %d,\n"
+          "  \"lumpCount\": %d,\n"
+          "  \"maxLMSurfaceVerts\": %d,\n"
+          "  \"maxSurfaceVerts\": %d,\n"
+          "  \"maxSurfaceIndexes\": %d,\n"
+          "  \"lightmapSize\": %d,\n"
+          "  \"defaultSampleSize\": %d,\n"
+          "  \"lightmapsRGB\": %s,\n"
+          "  \"texturesRGB\": %s,\n"
+          "  \"colorsRGB\": %s,\n"
+          "  \"falloff\": \"%s\",\n"
+          "  \"deluxeMap\": %s,\n"
+          "  \"defaultSmoothPasses\": %d,\n"
+          "  \"defaultSmoothRadius\": %.2f\n"
+          "}\n",
+          game->arg, game->gamePath, game->bspIdent, game->bspVersion,
+          game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
+          game->maxSurfaceIndexes, game->lightmapSize,
+          game->defaultSampleSize, game->lightmapsRGB ? "true" : "false",
+          game->texturesRGB ? "true" : "false",
+          game->colorsRGB ? "true" : "false", falloffStr,
+          game->deluxeMap ? "true" : "false",
+          game->defaultSmoothPasses, game->defaultSmoothRadius);
+  SaveFile(filename, buffer, strlen(buffer));
+}
+
+void JSON_ExportStandardPackages(const char *directory) {
+  char path[1024];
+  Q_mkdir(directory);
+
+  sprintf(path, "%s/quake3.json", directory);
+  if (!FileExists(path)) {
+    JSON_ExportGame(path, &games[0]);
+    _printf("Exporting default 'quake3.json'...\n");
+  }
+
+  sprintf(path, "%s/qfusion.json", directory);
+  if (!FileExists(path)) {
+    JSON_ExportGame(path, &games[1]);
+    _printf("Exporting default 'qfusion.json'...\n");
+  }
 }

@@ -15,4 +15,8 @@ void JSON_Free(struct json_value_s *value);
 qboolean JSON_LoadGame(const char *filename, game_t *game);
 int JSON_LoadPackages(const char *directory);
 
+// Game definition exporting
+void JSON_ExportGame(const char *filename, game_t *game);
+void JSON_ExportStandardPackages(const char *directory);
+
 #endif // JSON_PARSER_H
