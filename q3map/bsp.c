@@ -475,16 +475,45 @@ int main(int argc, char **argv) {
         samplesize = 1;
       i++;
       _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
-    } else if (argv[i][0] == '-')
-      Error("Unknown option \"%s\"", argv[i]);
-    else
+    } else {
       break;
+    }
+  }
+
+  if (i != argc - 1) {
+    if (i < argc) {
+      _printf("Error: Unrecognized switch or extra argument '%s'\n", argv[i]);
+    }
+    _printf("usage: q3map [-<switch> [-<switch> ...]] <mapname>\n"
+            "\n"
+            "Switches:\n"
+            "   v              = verbose output\n"
+            "   draw           = enable draw flag\n"
+            "   nowater        = don't process water surfaces\n"
+            "   noopt          = don't optimize the BSP tree\n"
+            "   nofill         = don't fill outside volumes\n"
+            "   nodetail       = ignore detail brushes\n"
+            "   fulldetail     = treat all brushes as structural\n"
+            "   onlyents       = only update entities in an existing BSP\n"
+            "   onlytextures   = only update textures in an existing BSP\n"
+            "   micro <V>      = set the micro volume threshold to V\n"
+            "   nofog          = don't process fog volumes\n"
+            "   nosubdivide    = don't subdivide large surfaces\n"
+            "   leaktest       = abort on first leak found\n"
+            "   verboseentities = verbose entity processing output\n"
+            "   nocurves       = ignore curved surfaces (patches)\n"
+            "   notjunc        = skip T-junction narrowing and fixing\n"
+            "   expand         = write out an expanded map (debugging)\n"
+            "   showseams      = show seams on terrain surfaces\n"
+            "   tmpout         = write output files to /tmp\n"
+            "   basepath <P>   = set the base filesystem path to P\n"
+            "   game <G>       = set the active game profile to G\n"
+            "   fakemap        = generate a fakemap.map after processing\n"
+            "   samplesize <N> = set the default lightmap sample size to NxN\n");
+    exit(0);
   }
 
   _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
-
-  if (i != argc - 1)
-    Error("usage: q3map [options] mapfile");
 
   start = I_FloatTime();
 
