@@ -30,15 +30,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../libs/pakstuff.h"
 #endif
 
+extern qboolean upscale;
+
 int main(int argc, char **argv) {
     int i;
     double start, end;
 
     _printf("----- Lighting (Ag Build v1.1) ----\n");
 
-    // Default settings
     verbose = qfalse;
-    extra = qfalse;
+    upscale = qfalse;
     areaScale = 0.25;
     pointScale = 7500;
     lightmapSmoothPasses = -1;
@@ -68,9 +69,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-notrace")) {
             notrace = qtrue;
             _printf("No occlusion tracing\n");
-        } else if (!strcmp(argv[i], "-extra")) {
-            extra = qtrue;
-            _printf("Extra detail tracing\n");
+        } else if (!strcmp(argv[i], "-upscale")) {
+            upscale = qtrue;
+            _printf("Upscale detail tracing enabled (2x grid)\n");
         } else if (!strcmp(argv[i], "-samplesize")) {
             samplesize = atoi(argv[i + 1]);
             if (samplesize < 1) samplesize = 1;
@@ -179,7 +180,7 @@ int main(int argc, char **argv) {
                 "   area <V>       = set the area light scale to V\n"
                 "   point <W>      = set the point light scale to W\n"
                 "   notrace        = don't cast any shadows\n"
-                "   extra          = enable super-sampling for anti-aliasing\n"
+                "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   nogrid         = don't calculate light grid for dynamic model "
                 "lighting\n"
                 "   novertex       = don't calculate vertex lighting\n"

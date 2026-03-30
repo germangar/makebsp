@@ -74,7 +74,7 @@ static const float ssPattern16[][2] = {
 
 qboolean notrace;
 qboolean patchshadows = qtrue;
-qboolean extra;
+qboolean upscale;
 qboolean lightmapBorder;
 
 qboolean debugLightmaps;
@@ -1302,8 +1302,8 @@ void TraceLtm(int num) {
   }
 
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-  int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
-  int use_upscale = extra;
+  int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
+  int use_upscale = upscale;
   ssize = samplesize;
   if (si->lightmapSampleSize)
     ssize = si->lightmapSampleSize;
@@ -1953,8 +1953,8 @@ void VisualizeLightmapAllocation(void) {
 
     rasterizedCount++;
 
-    int superSample = extra || (ds->surfaceType == MST_TRIANGLE_SOUP);
-    int use_upscale = extra;
+    int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
+    int use_upscale = upscale;
     int scale = use_upscale ? 2 : 1;
     int currentGutter = superSample ? (GUTTER * scale) : 0;
 

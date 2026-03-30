@@ -166,7 +166,7 @@ typedef struct {
 extern float areaScale;
 extern float pointScale;
 extern qboolean notrace;
-extern qboolean extra;
+extern qboolean upscale;
 extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
