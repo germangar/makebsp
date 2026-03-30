@@ -72,11 +72,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-upscale")) {
             upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
-        } else if (!strcmp(argv[i], "-samplesize")) {
-            samplesize = atoi(argv[i + 1]);
-            if (samplesize < 1) samplesize = 1;
-            i++;
-            _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
         } else if (!strcmp(argv[i], "-novertex")) {
             novertexlighting = qtrue;
             _printf("no vertex lighting = true\n");
@@ -184,7 +179,6 @@ int main(int argc, char **argv) {
                 "   nogrid         = don't calculate light grid for dynamic model "
                 "lighting\n"
                 "   novertex       = don't calculate vertex lighting\n"
-                "   samplesize <N> = set the lightmap pixel size to NxN units\n"
                 "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
                 "                     quadratic, doublequadratic, unreal, wrapped)\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
@@ -257,14 +251,23 @@ int main(int argc, char **argv) {
         _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, lightmapSmoothRadius);
     }
 
-    if (samplesize == 0) {
-        samplesize = g_game->defaultSampleSize;
-        _printf("Defaulting lightmap sample size to %dx%d units\n", samplesize,
-                samplesize);
-    }
-
     // Parse entity strings into structs
     ParseEntities();
+
+    // Determine samplesize from worldspawn or game default
+    if (num_entities > 0) {
+        const char *val = ValueForKey(&entities[0], "__texelsize");
+        if (val[0]) {
+            samplesize = atoi(val);
+            _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
+            RemoveKeyValue(&entities[0], "__texelsize");
+        }
+    }
+
+    if (samplesize <= 0) {
+        samplesize = g_game->defaultSampleSize;
+        _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
+    }
 
     // Call core lighting process
     LightMain();

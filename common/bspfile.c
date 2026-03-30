@@ -857,6 +857,25 @@ void 	SetKeyValue( entity_t *ent, const char *key, const char *value ) {
 	ep->value = copystring(value);
 }
 
+void RemoveKeyValue(entity_t *ent, const char *key) {
+  epair_t *ep, *prev;
+
+  prev = NULL;
+  for (ep = ent->epairs; ep; prev = ep, ep = ep->next) {
+    if (!strcmp(ep->key, key)) {
+      if (prev) {
+        prev->next = ep->next;
+      } else {
+        ent->epairs = ep->next;
+      }
+      free(ep->key);
+      free(ep->value);
+      free(ep);
+      return;
+    }
+  }
+}
+
 const char 	*ValueForKey( const entity_t *ent, const char *key ) {
 	epair_t	*ep;
 	

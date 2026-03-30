@@ -1329,7 +1329,10 @@ void TraceLtm(int num) {
                               heighttable);
     if (mesh->width != ds->lightmapWidth ||
         mesh->height != ds->lightmapHeight) {
-      Error("Mesh lightmap miscount");
+      Error("Mesh lightmap miscount (%dx%d != %dx%d)\n"
+            "This usually happens when 'q3map' and 'light' use different -samplesize values.\n"
+            "Make sure both tools use the same -samplesize flag.",
+            mesh->width, mesh->height, ds->lightmapWidth, ds->lightmapHeight);
     }
 
     if (superSample) {

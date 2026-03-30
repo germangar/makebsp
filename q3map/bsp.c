@@ -587,6 +587,13 @@ int main(int argc, char **argv) {
   SetLightStyles();
 
   ProcessModels();
+  
+  // Store the lightmap texel resolution in worldspawn for light.exe
+  if (num_entities > 0) {
+    char buf[16];
+    sprintf(buf, "%d", samplesize);
+    SetKeyValue(&entities[0], "__texelsize", buf);
+  }
 
   EndBSPFile();
 
