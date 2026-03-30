@@ -27,7 +27,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../libs/pakstuff.h"
 #endif
 
-#define EXTRASCALE 2
+#define UPSCALE_FACTOR 2
 ssMode_t superSampleMode = SUPERSAMPLE_NONE;
 #define GUTTER 1
 
@@ -1342,7 +1342,7 @@ void TraceLtm(int num) {
   tw->patchshadows = patchshadows;
   tw->forceFrontOnly = qtrue;
 
-  int scale = use_upscale ? 2 : 1;
+  int scale = use_upscale ? UPSCALE_FACTOR : 1;
   int currentGutter = superSample ? (GUTTER * scale) : 0;
 
   if (ds->surfaceType == MST_PATCH) {
@@ -1368,13 +1368,24 @@ void TraceLtm(int num) {
 
     if (superSample) {
       mesh_t *mp;
+      int steps = 0;
+      int tempScale = scale;
 
       // chop it up for more light samples (leaking memory...)
-      mp = mesh; // CopyMesh( mesh );
-      mp = LinearSubdivideMesh(mp);
-      mp = TransposeMesh(mp);
-      mp = LinearSubdivideMesh(mp);
-      mp = TransposeMesh(mp);
+      mp = mesh;
+
+      // Calculate log2(scale) for subdivision steps
+      while (tempScale > 1) {
+        tempScale >>= 1;
+        steps++;
+      }
+
+      for (int s = 0; s < steps; s++) {
+        mp = LinearSubdivideMesh(mp);
+        mp = TransposeMesh(mp);
+        mp = LinearSubdivideMesh(mp);
+        mp = TransposeMesh(mp);
+      }
 
       mesh = mp;
     }
@@ -1393,10 +1404,11 @@ void TraceLtm(int num) {
       // sample at a closer spacing for antialiasing
       VectorCopy(ds->lightmapOrigin, lightmapOrigin);
       if (use_upscale) {
-        VectorScale(ds->lightmapVecs[0], 0.5, lightmapVecs[0]);
-        VectorScale(ds->lightmapVecs[1], 0.5, lightmapVecs[1]);
-        VectorMA(lightmapOrigin, -0.5, lightmapVecs[0], lightmapOrigin);
-        VectorMA(lightmapOrigin, -0.5, lightmapVecs[1], lightmapOrigin);
+        float invScale = 1.0f / (float)scale;
+        VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
+        VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
+        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, lightmapVecs[0], lightmapOrigin);
+        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, lightmapVecs[1], lightmapOrigin);
       }
 
       // NOTE: do NOT shift origin by -currentGutter here. The trace loop uses
