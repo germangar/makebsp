@@ -25,10 +25,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 RTCDevice g_device = NULL;
 RTCScene g_scene = NULL;
 
-struct MyRayQueryContext {
-  struct RTCRayQueryContext context;
-  traceWork_t *tw;
-};
 
 static void AddBrushesToEmbree(RTCScene scene);
 void AlphaFilter(const struct RTCFilterFunctionNArguments *args);
@@ -796,6 +792,8 @@ Embree intersection filter for handling ignoreSurface and alpha shadows
 void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
   if (args->valid[0] != -1)
     return;
+  if (!args->context)
+    return; // No context provided, skip advanced filtering
   struct MyRayQueryContext *mcontext = (struct MyRayQueryContext *)args->context;
   traceWork_t *tw = mcontext->tw;
   struct RTCHit *hit = (struct RTCHit *)args->hit;

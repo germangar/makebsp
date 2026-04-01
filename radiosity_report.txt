@@ -1,0 +1,45 @@
+# Radiosity Implementation Strategy Report (Extended)
+# Analysis of Non-Quake Engine Techniques and Modern Baked GI
+
+## 1. Executive Summary: The Valve/Overwatch Perspective
+While Quake-style radiosity is the structural basis for lightmap baking, engines like Source (Valve) and modern TITANS like Overwatch provide the "Secret Sauce" for making baked lightmaps look professional. The two most important takeaways are **Analytic Form Factor Integration** for filling surfaces and **Directional Basis Updating** for DeluxeMaps.
+
+## 2. Filling Surfaces: The "Ray Spread" Problem
+The user correctly identified that "one ray per texel" creates gaps. Modern baked GI systems solve this using **Analytic Area Integration** (Form Factors) rather than simple Path Tracing.
+
+### A. The Point-to-Area Formula
+Instead of treating a bounced luxel as a single dot, we treat it as its actual physical area (a quadrilateral polygon).
+- **The Technique**: We use a closed-form geometric solution (often based on Nusselt's Analog) that integrates the light contribution across the entire surface of the emitter luxel.
+- **Why it works**: This provides **zero-noise, perfectly smooth gradients**. It "fills" the receiving surface naturally because it accounts for the entire shape of the light source, not just a single ray's hit point.
+
+### B. Irradiance Interpolation
+- **Aperture Filling**: Radiosity can be calculated at a lower resolution than the final lightmap and then upsampled using a **Joint Bilinear Filter** that respects the geometry's normals and depth. This prevents "bleeding" through thin corners while filling in the lighting "gaps."
+
+## 3. Radiosity and Directionality (DeluxeMaps)
+If radiosity is purely diffuse (one color value), our DeluxeMaps will look "flat" in bounced-light areas. Valve's **Radiosity Normal Mapping (RNM)** solved this by storing GI in three tangent-space directions.
+
+### A. Updating the Dominant Direction
+For our project's **DeluxeMaps**, the radiosity pass MUST impact the `Average Direction`:
+- **The Math**: When a luxel receives light from multiple bounce sources, we must calculate the **Vector-Weighted Average Direction** of all incoming bounced rays.
+- **Outcome**: A floor illuminated by a red wall (bounce) and a blue ceiling (bounce) will have a dominant light direction that correctly represents the energy balance between those two major bounce sources. This ensures normal maps stay "alive" even in the deepest shadows.
+
+## 4. Stability in Thin Spaces (Engine-Specific Hacks)
+Baking in thin corridors often leads to "Nuclear Glow" or light-leakage.
+
+### A. The "Visible Source" Test (Blizzard's Overwatch Trick)
+Overwatch uses a "probe-based visibility" check. For our lightmapper:
+- **Hack**: Instead of just doing a single trace, perform a "Self-Shadow" check at the emitter. If the emitter luxel is located in a concave corner, it is automatically discouraged from bouncing light into its own corner, preventing the "unbounded glow" problem.
+
+### B. Min-Dist Clamping (Source Engine Trick)
+- **Hack**: Clamp the $1/r^2$ falloff distance. Source's VRAD often uses a minimum distance to prevent light sources that are touching geometry from blowing out the exposure. A safe threshold is `EXTRASCALE * samplesize` units.
+
+## 5. Summary of Engine Research
+- **Source (Valve)**: Mastered **RNM** (Tangent-space lighting) to integrate radiosity with normal maps. Use their "Basis Vector" approach to inform our DeluxeMap updates.
+- **Overwatch (Blizzard)**: Uses **Spherical Harmonics (SH)** for complex directionality. We can mirror this by ensuring our "Average Direction" is accurately averaged during the bounce accumulation.
+- **Unity (Progressive)**: Relies on **Monte Carlo + Denoising**. Since we chose NOT to use MC, we must stick with **Analytic Polygon Integration** for smoothness.
+
+## 6. Implementation Checklist (Updated)
+1. [ ] Implement **`PolygonAreaIntegration()`**: Replace point-to-point rays with geometric area integration for "smooth fill."
+2. [ ] Implement **`UpdateDeluxeMapDirection()`**: Accumulate weighted average directions during the radiosity pass.
+3. [ ] Add **`DistanceClamp`** to the intensity calculation to prevent "Nuclear Glow."
+4. [ ] Implement **`NormalBiasNudge`**: Offset emitters by $+1.0$ and inward toward the luxel center to prevent corner leaks.

@@ -145,9 +145,14 @@ qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t fi
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
+struct MyRayQueryContext {
+  struct RTCRayQueryContext context;
+  traceWork_t *tw;
+};
 
 //===============================================================
-
+extern vec3_t surfaceOrigin[MAX_MAP_DRAW_SURFS];
+extern int entitySurface[MAX_MAP_DRAW_SURFS];
 //===============================================================
 
 typedef struct {
@@ -191,3 +196,4 @@ void SmoothLightmaps(float radius);
 void LightMain(void);
 void VisualizeLightmapAllocation(void);
 void CountLightmaps(void);
+qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);

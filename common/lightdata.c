@@ -9,6 +9,8 @@
 
 drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
+float *radiosityFloats = NULL;
+float *accumRadiosityFloats = NULL;
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -402,17 +404,18 @@ void UpConvertLightingData(void) {
 
 	// 2. Lightmaps - Start from zero (total blackness) for the new passes
 	if (lightFloats) free(lightFloats);
-	lightFloats = malloc(MAX_MAP_LIGHTING / 3 * sizeof(vec3_t));
+	_printf("UpConvertLightingData: Allocating %d pixel buffers for lightmaps...\n", numLightBytes / 3);
+	lightFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
 	if (!lightFloats) Error("UpConvertLightingData: malloc lightFloats failed");
-	memset(lightFloats, 0, MAX_MAP_LIGHTING / 3 * sizeof(vec3_t));
+	memset(lightFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 	// Note: We skip loading from lightBytes to ensure a clean additive start
 
 	// 2.5 Alpha Mask - Persistent across multiple passes
 	// We only allocate it the first time it's needed
 	if (!lightAlphaMask) {
-		lightAlphaMask = malloc(MAX_MAP_LIGHTING / 3 * sizeof(byte));
+		lightAlphaMask = malloc((numLightBytes / 3) * sizeof(byte));
 		if (!lightAlphaMask) Error("UpConvertLightingData: malloc lightAlphaMask failed");
-		memset(lightAlphaMask, 0, MAX_MAP_LIGHTING / 3 * sizeof(byte));
+		memset(lightAlphaMask, 0, (numLightBytes / 3) * sizeof(byte));
 	}
 
 	// 3. Light Grid - Start from zero (total blackness) for the new passes
@@ -459,4 +462,42 @@ void DownConvertLightingData(void) {
 		}
 	}
 	_printf("DownConvert: Done\n");
+}
+
+void AllocateRadiosityFloats(void) {
+	if (numLightBytes <= 0) {
+		_printf("AllocateRadiosityFloats: ERROR! numLightBytes is %d\n", numLightBytes);
+		return;
+	}
+
+	if (radiosityFloats)
+		free(radiosityFloats);
+	if (accumRadiosityFloats)
+		free(accumRadiosityFloats);
+
+	_printf("AllocateRadiosityFloats: Allocating %d pixel buffers for radiosity...\n", numLightBytes / 3);
+	radiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+	if (!radiosityFloats)
+		Error("AllocateRadiosityFloats: malloc failed (radiosity). numLightBytes: %d", numLightBytes);
+	_printf("  radiosityFloats: %p. Memsetting...\n", (void *)radiosityFloats);
+	memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+	_printf("  Allocating accumRadiosityFloats...\n");
+	accumRadiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+	if (!accumRadiosityFloats)
+		Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
+	_printf("  accumRadiosityFloats: %p. Memsetting...\n", (void *)accumRadiosityFloats);
+	memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+	_printf("AllocateRadiosityFloats: Done.\n");
+}
+
+void FreeRadiosityFloats(void) {
+	if (radiosityFloats) {
+		free(radiosityFloats);
+		radiosityFloats = NULL;
+	}
+	if (accumRadiosityFloats) {
+		free(accumRadiosityFloats);
+		accumRadiosityFloats = NULL;
+	}
 }

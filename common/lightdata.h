@@ -30,6 +30,8 @@ typedef struct {
 // 32-bit floating-point lighting data
 extern drawVert32_t *internalDrawVerts;
 extern float *lightFloats;
+extern float *radiosityFloats;
+extern float *accumRadiosityFloats;
 extern byte *lightAlphaMask;
 extern bspGridPoint32_t *gridData32;
 
@@ -39,6 +41,8 @@ void CheckGridData32(void);
 
 // Down-conversion: Internal 32-bit float buffers -> Standard 8-bit data
 void DownConvertLightingData(void);
+void AllocateRadiosityFloats(void);
+void FreeRadiosityFloats(void);
 
 // Canonical Color -> Byte conversion
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB);

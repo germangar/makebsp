@@ -23,6 +23,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/cmdlib.h"
 #include "light.h"
 #include "../shared/json_parser.h"
+#include "radiosity.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -31,6 +33,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 extern qboolean upscale;
+int radiosityPasses = 0;
+
 
 int main(int argc, char **argv) {
     int i;
@@ -156,6 +160,28 @@ int main(int argc, char **argv) {
             if (lightmapSmoothRadius < 0)
                 lightmapSmoothRadius = 0;
             i++;
+        } else if (!strcmp(argv[i], "-radiosity")) {
+            radiosityPasses = atoi(argv[i + 1]);
+            if (radiosityPasses < 0)
+                radiosityPasses = 0;
+            i++;
+        } else if (!strcmp(argv[i], "-rad_min_dist")) {
+            rad_min_dist = (float)atof(argv[i + 1]);
+            if (rad_min_dist < 16.0f) rad_min_dist = 16.0f;
+            i++;
+        } else if (!strcmp(argv[i], "-rad_min_energy")) {
+            rad_min_energy = (float)atof(argv[i + 1]);
+            i++;
+        } else if (!strcmp(argv[i], "-rad_scale")) {
+            rad_scale = atoi(argv[i + 1]);
+            if (rad_scale < 1) rad_scale = 1;
+            i++;
+        } else if (!strcmp(argv[i], "-rad_color_ratio")) {
+            rad_color_ratio = (float)atof(argv[i + 1]);
+            i++;
+        } else if (!strcmp(argv[i], "-rad_bounce_scale")) {
+            rad_bounce_scale = (float)atof(argv[i + 1]);
+            i++;
         } else {
             break;
         }
@@ -192,7 +218,13 @@ int main(int argc, char **argv) {
                 "                     0 = OFF\n"
                 "                     1 = (DEFAULT) smoothing world + super-sampling models\n"
                 "                     2 = super-sampling EVERYTHING (post-process smoothing OFF)\n"
-                "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n");
+                "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
+                "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
+                "   rad_min_dist <F> = set min distance clamp for 1/r2 (Prevents nuclear glow)\n"
+                "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
+                "   rad_scale <I>    = set sparse grid scale (1=Every luxel, 4=4x4 blocks)\n"
+                "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
+                "   rad_bounce_scale <F>= set final bounce energy multiplier\n");
         exit(0);
     }
 
@@ -271,6 +303,9 @@ int main(int argc, char **argv) {
 
     // Call core lighting process
     LightMain();
+
+    // Call radiosity passes
+    LightRadiosity(radiosityPasses);
 
     if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
         _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);

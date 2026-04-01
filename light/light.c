@@ -695,7 +695,7 @@ Finds the position and normal for a lightmap sample point (st in pixel space)
 on a triangle soup surface using barycentric interpolation.
 =================
 */
-static qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
+qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
                                    vec3_t normal) {
   int j, k;
   float st0[2], st1[2], st2[2];
@@ -1734,25 +1734,29 @@ void TraceLtm(int num) {
           ds->lightmapOffset[0][0] + i;
 
       if (lightFloats) {
-        lightFloats[k * 3 + 0] += color[i][j][0];
-        lightFloats[k * 3 + 1] += color[i][j][1];
-        lightFloats[k * 3 + 2] += color[i][j][2];
+        if (k >= 0 && k < numLightBytes / 3) {
+            lightFloats[k * 3 + 0] += color[i][j][0];
+            lightFloats[k * 3 + 1] += color[i][j][1];
+            lightFloats[k * 3 + 2] += color[i][j][2];
+        } else {
+            // This should never happen if numLightBytes and lightmapNum are consistent
+            static qboolean warned = qfalse;
+            if (!warned) {
+                _printf("\nWARNING: TraceLtm: lightmap index %d out of bounds (max %d) on surface %d\n", k, numLightBytes / 3, realSurfIndex);
+                warned = qtrue;
+            }
+        }
       }
 
       if (lightAlphaMask) {
-        // If this pixel ended up with any coverage/hits, mark it as processed
-        // For superSampled, dilation ensures coverage > 0 if there was any hit nearby.
-        // For standard, we just mark the pixel if it's within the surface's rectangle
-        // since Q3Map traces all texels in the allocated lightmap for planar/patch types.
-        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-          // sampleHit is set for direct ray hits AND dilation-filled pixels,
-          // so it is the authoritative source for whether this texel has any light.
-          if (sampleHit[i][j]) {
-            lightAlphaMask[k] = ALPHA_NO_SMOOTH;
-          }
-        } else {
-          // For standard patches and faces, the entire allocated rectangle is valid
-          lightAlphaMask[k] = ALPHA_SMOOTH;
+        if (k >= 0 && k < numLightBytes / 3) {
+            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+              if (sampleHit[i][j]) {
+                lightAlphaMask[k] = ALPHA_NO_SMOOTH;
+              }
+            } else {
+              lightAlphaMask[k] = ALPHA_SMOOTH;
+            }
         }
       }
     }
@@ -1773,8 +1777,6 @@ void TraceLtm(int num) {
 }
 
 //=============================================================================
-
-int gridBounds[3];
 
 /*
 =============
@@ -2259,3 +2261,4 @@ void LightMain(void) {
   InitTrace();
   LightWorld();
 }
+
