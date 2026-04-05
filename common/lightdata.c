@@ -14,6 +14,9 @@ float *accumRadiosityFloats = NULL;
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
+float maxLightIntensity = 0.0f;
+
+
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {
 	float max;
 	vec3_t sample;
@@ -54,6 +57,52 @@ void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {
 		colorBytes[i] = (byte)c;
 	}
 }
+
+void InternalColorToBytesScaled(const float *color, byte *colorBytes, float scale, qboolean sRGB) {
+	vec3_t sample;
+	int i;
+
+	VectorScale(color, scale, sample);
+
+	if (sRGB) {
+		for (i = 0; i < 3; i++) {
+			float l = sample[i] / 255.0f;
+			if (l <= 0.0031308f)
+				l *= 12.92f;
+			else
+				l = 1.055f * (float)pow(l, 1.0f / 2.4f) - 0.055f;
+			sample[i] = l * 255.0f;
+		}
+	}
+
+	for (i = 0; i < 3; i++) {
+		int c = (int)floor(sample[i] + 0.5f);
+		if (c < 0) {
+			c = 0;
+		} else if (c > 255) {
+			c = 255;
+		}
+		colorBytes[i] = (byte)c;
+	}
+}
+
+void ScanLightmapIntensity(void) {
+	int i, j;
+	maxLightIntensity = 0.0f;
+
+	if (!lightFloats) return;
+
+	_printf("--- ScanLightmapIntensity ---\n");
+	for (i = 0; i < numLightBytes / 3; i++) {
+        for (j = 0; j < 3; j++) {
+            if (lightFloats[i * 3 + j] > maxLightIntensity) {
+                maxLightIntensity = lightFloats[i * 3 + j];
+            }
+        }
+    }
+	_printf("Peak lightmap intensity found: %.3f\n", maxLightIntensity);
+}
+
 
 void LerpDrawVert32(drawVert32_t *a, drawVert32_t *b, drawVert32_t *out) {
 	int i, j;
@@ -426,15 +475,34 @@ void UpConvertLightingData(void) {
 
 void DownConvertLightingData(void) {
 	int i, j;
+	float scale = 1.0f;
+    qboolean lightmapRange = (g_game->hdr == HDR_8BIT);
 
 	_printf("--- DownConvertLightingData ---\n");
+
+	if (lightmapRange) {
+		ScanLightmapIntensity();
+		if (maxLightIntensity > 255.0f) {
+			scale = 255.0f / maxLightIntensity;
+			float engineIntensity = maxLightIntensity / 255.0f;
+			_printf("Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
+			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
+		} else {
+			_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
+			lightmapRange = qfalse; // Disable scaling for this pass
+		}
+	}
 
 	// 1. Draw Verts
 	if (!internalDrawVerts) { _printf("DownConvert: internalDrawVerts is NULL\n"); return; }
 	_printf("DownConvert: Converting %d DrawVerts\n", numDrawVerts);
 	for (i = 0; i < numDrawVerts; i++) {
 		for (j = 0; j < 4; j++) {
-			InternalColorToBytes(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], g_game->lightmapsRGB);
+			if (lightmapRange) {
+				InternalColorToBytesScaled(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], scale, g_game->colorsRGB);
+			} else {
+				InternalColorToBytes(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], g_game->colorsRGB);
+			}
 		}
 	}
 
@@ -443,7 +511,11 @@ void DownConvertLightingData(void) {
 	_printf("DownConvert: Converting %d Lightmap pixels\n", numLightBytes / 3);
 	int processedCount = 0;
 	for (i = 0; i < numLightBytes / 3; i++) {
-		InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], g_game->lightmapsRGB);
+		if (lightmapRange) {
+			InternalColorToBytesScaled(&lightFloats[i * 3], &lightBytes[i * 3], scale, g_game->lightmapsRGB);
+		} else {
+			InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], g_game->lightmapsRGB);
+		}
 		if (lightAlphaMask && lightAlphaMask[i]) processedCount++;
 	}
 	_printf("DownConvert: %d pixels marked in alpha mask\n", processedCount);
@@ -452,8 +524,13 @@ void DownConvertLightingData(void) {
 	if (!gridData32) return;
 	for (i = 0; i < numGridPoints; i++) {
 		for (j = 0; j < 4; j++) {
-			InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], g_game->lightmapsRGB);
-			InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], g_game->lightmapsRGB);
+			if (lightmapRange) {
+				InternalColorToBytesScaled(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], scale, g_game->lightgridRGB);
+				InternalColorToBytesScaled(gridData32[i].directed[j], (byte *)gridData[i].directed[j], scale, g_game->lightgridRGB);
+			} else {
+				InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], g_game->lightgridRGB);
+				InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], g_game->lightgridRGB);
+			}
 		}
 		gridData[i].latLong[0] = gridData32[i].latLong[0];
 		gridData[i].latLong[1] = gridData32[i].latLong[1];
@@ -463,6 +540,7 @@ void DownConvertLightingData(void) {
 	}
 	_printf("DownConvert: Done\n");
 }
+
 
 void AllocateRadiosityFloats(void) {
 	if (numLightBytes <= 0) {

@@ -91,9 +91,22 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       game->lightmapSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "defaultSampleSize") && val->type == json_type_number) {
       game->defaultSampleSize = atoi(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "hdr") && val->type == json_type_string) {
+      const char *h = json_value_as_string(val)->string;
+      if (!strcmp(h, "rgb8"))
+        game->hdr = HDR_8BIT;
+      else if (!strcmp(h, "rgba16f"))
+        game->hdr = HDR_16BIT;
+      else if (!strcmp(h, "rgba32f"))
+        game->hdr = HDR_32BIT;
+      else
+        game->hdr = HDR_OFF;
     } else if (!strcmp(key, "lightmapsRGB")) {
       if (val->type == json_type_true) game->lightmapsRGB = qtrue;
       else if (val->type == json_type_false) game->lightmapsRGB = qfalse;
+    } else if (!strcmp(key, "lightgridRGB")) {
+      if (val->type == json_type_true) game->lightgridRGB = qtrue;
+      else if (val->type == json_type_false) game->lightgridRGB = qfalse;
     } else if (!strcmp(key, "texturesRGB")) {
       if (val->type == json_type_true) game->texturesRGB = qtrue;
       else if (val->type == json_type_false) game->texturesRGB = qfalse;
@@ -191,6 +204,22 @@ void JSON_ExportGame(const char *filename, game_t *game) {
     break;
   }
 
+  const char *hdrStr;
+  switch (game->hdr) {
+  case HDR_8BIT:
+    hdrStr = "rgb8";
+    break;
+  case HDR_16BIT:
+    hdrStr = "rgba16f";
+    break;
+  case HDR_32BIT:
+    hdrStr = "rgba32f";
+    break;
+  default:
+    hdrStr = "off";
+    break;
+  }
+
   sprintf(buffer,
           "{\n"
           "  \"arg\": \"%s\",\n"
@@ -203,7 +232,9 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"maxSurfaceIndexes\": %d,\n"
           "  \"lightmapSize\": %d,\n"
           "  \"defaultSampleSize\": %d,\n"
+          "  \"hdr\": \"%s\",\n"
           "  \"lightmapsRGB\": %s,\n"
+          "  \"lightgridRGB\": %s,\n"
           "  \"texturesRGB\": %s,\n"
           "  \"colorsRGB\": %s,\n"
           "  \"falloff\": \"%s\",\n"
@@ -214,7 +245,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
           game->maxSurfaceIndexes, game->lightmapSize,
-          game->defaultSampleSize, game->lightmapsRGB ? "true" : "false",
+          game->defaultSampleSize, hdrStr, game->lightmapsRGB ? "true" : "false",
+          game->lightgridRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false", falloffStr,
           game->deluxeMap ? "true" : "false",

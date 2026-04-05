@@ -182,6 +182,10 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-rad_bounce_scale")) {
             rad_bounce_scale = (float)atof(argv[i + 1]);
             i++;
+        } else if (!strcmp(argv[i], "-oldrad")) {
+            oldrad = qtrue;
+        } else if (!strcmp(argv[i], "-lightmaprange")) {
+            g_game->hdr = HDR_8BIT;
         } else {
             break;
         }
@@ -224,7 +228,9 @@ int main(int argc, char **argv) {
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   rad_scale <I>    = set sparse grid scale (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
-                "   rad_bounce_scale <F>= set final bounce energy multiplier\n");
+                "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
+                "   oldrad           = use legacy (charming) radiosity math\n"
+                "   lightmaprange    = normalize intensities to the peak light found\n");
         exit(0);
     }
 
@@ -270,9 +276,10 @@ int main(int argc, char **argv) {
 
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
     _printf("Falloff mode: %s\n", fLog);
-    _printf("Lighting flags: %s %s %s\n", 
+    _printf("Lighting flags: %s %s %s %s\n", 
             g_game->lightmapsRGB ? "sRGB" : "Linear",
             g_game->deluxeMap ? "Deluxe" : "Standard",
+            (g_game->hdr == HDR_8BIT) ? "range" : "clamped",
             tLog);
     if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
     if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
@@ -292,7 +299,6 @@ int main(int argc, char **argv) {
         if (val[0]) {
             samplesize = atoi(val);
             _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
-            RemoveKeyValue(&entities[0], "__texelsize");
         }
     }
 

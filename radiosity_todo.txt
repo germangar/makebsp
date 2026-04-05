@@ -1,0 +1,12 @@
+--- RADIOSITY REFINEMENT TODO ---
+
+1. [BUGFIX] Implement -oldrad toggle (Legacy math comparison).
+2. [BUGFIX] Normalize drawVerts normals for Triangle Soup (Energy stability).
+3. [BUGFIX] Refine luxelArea using Cross Product for accurate patches.
+4. [FEATURE] Per-pixel texture sampling for emitters (Color Bleeding precision).
+5. [FEATURE] Deluxe Mapping: Directional light bounce support.
+6. [FEATURE] Sky surface emission: Radiosity from sky shaders.
+7. [OPTIMIZATION] Disk-based lightmap cache (Low memory mode).
+8. [BUGFIX] Identify sky surfaces in RadiosityEmit to prevent "bounce" from sky.
+
+NOTE: Items 2 and 3 are technically already in the "newrad" code, but -oldrad will allow us to see their isolated impact.

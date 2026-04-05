@@ -20,7 +20,9 @@ game_t games[MAX_GAMES] = {
 		128,
 		// Global Map Limits removed
 		8,          // defaultSampleSize
+        HDR_OFF,    // hdr
 		qfalse,     // lightmapsRGB
+		qfalse,     // lightgridRGB
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
 		FALLOFF_LAMBERT,
@@ -40,7 +42,9 @@ game_t games[MAX_GAMES] = {
 		512,
 		// Global Map Limits removed
 		4,          // defaultSampleSize
+        HDR_8BIT,   // hdr
 		qtrue,      // lightmapsRGB
+		qfalse,     // lightgridRGB
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
 		FALLOFF_HALFLAMBERT,

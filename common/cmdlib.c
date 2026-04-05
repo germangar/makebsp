@@ -208,6 +208,27 @@ void _printf(const char *format, ...) {
 }
 
 /*
+================
+va
+
+Returns a static buffer cycling between 4 possible buffers
+================
+*/
+char *va(const char *format, ...) {
+    va_list argptr;
+    static char string[4][1024];
+    static int curstring;
+
+    curstring = (curstring + 1) & 3;
+    va_start(argptr, format);
+    vsprintf(string[curstring], format, argptr);
+    va_end(argptr);
+
+    return string[curstring];
+}
+
+
+/*
 
 qdir will hold the path up to the quake directory, including the slash
 

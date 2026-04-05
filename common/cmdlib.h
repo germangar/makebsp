@@ -137,6 +137,7 @@ extern char archivedir[1024];
 extern qboolean verbose;
 void qprintf(const char *format, ...);
 void _printf(const char *format, ...);
+char *va(const char *format, ...);
 
 void ExpandWildcards(int *argc, char ***argv);
 

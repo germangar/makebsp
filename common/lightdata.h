@@ -35,6 +35,8 @@ extern float *accumRadiosityFloats;
 extern byte *lightAlphaMask;
 extern bspGridPoint32_t *gridData32;
 
+extern float maxLightIntensity;
+
 // Up-conversion: Standard 8-bit data -> Internal 32-bit float buffers
 void UpConvertLightingData(void);
 void CheckGridData32(void);
@@ -43,6 +45,10 @@ void CheckGridData32(void);
 void DownConvertLightingData(void);
 void AllocateRadiosityFloats(void);
 void FreeRadiosityFloats(void);
+
+// Scaling logic
+void ScanLightmapIntensity(void);
+void InternalColorToBytesScaled(const float *color, byte *colorBytes, float scale, qboolean sRGB);
 
 // Canonical Color -> Byte conversion
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB);

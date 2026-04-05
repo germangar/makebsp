@@ -5,6 +5,13 @@
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL, FALLOFF_WRAPPED } falloff_t;
 
+typedef enum {
+    HDR_OFF = 0,
+    HDR_8BIT = 1,
+    HDR_16BIT = 2,
+    HDR_32BIT = 3
+} hdrFormat_t;
+
 extern int samplesize;
 extern char source[1024];
 extern char name[1024];
@@ -24,7 +31,9 @@ typedef struct {
 
 	// Lighting flags
 	int         defaultSampleSize;
+    hdrFormat_t hdr;
 	qboolean	lightmapsRGB;
+	qboolean	lightgridRGB;
 	qboolean	texturesRGB;
 	qboolean	colorsRGB;
 	falloff_t   falloff;
