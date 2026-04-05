@@ -12,6 +12,8 @@ typedef enum {
     HDR_32BIT = 3
 } hdrFormat_t;
 
+typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
+
 extern int samplesize;
 extern char source[1024];
 extern char name[1024];
@@ -40,6 +42,7 @@ typedef struct {
 	qboolean    deluxeMap;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
+    tonemap_t   exposureFilter;
 } game_t;
 
 #define MAX_GAMES 128

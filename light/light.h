@@ -41,9 +41,9 @@ extern RTCScene g_scene;
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
 #define MIN_LIGHT_ADD 0.1f
-#define MIN_EMBREE_LIGHT_ADD 0.01f
-
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
+
+extern tonemap_t tonemapMode;
 
 typedef struct {
   vec3_t dir;

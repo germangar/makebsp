@@ -1,5 +1,5 @@
 {
-  "arg": "quake3",
+  "game": "quake3",
   "gamePath": ".",
   "bspIdent": "IBSP",
   "bspVersion": 46,
@@ -8,14 +8,15 @@
   "maxSurfaceVerts": 999,
   "maxSurfaceIndexes": 6000,
   "lightmapSize": 128,
-  "defaultSampleSize": 8,
-  "hdr": "off",
+  "sampleSize": 8,
+  "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "lightmapsRGB": false,
   "lightgridRGB": false,
   "texturesRGB": false,
   "colorsRGB": false,
-  "falloff": "lambert",
+  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
   "deluxeMap": false,
-  "defaultSmoothPasses": 6,
-  "defaultSmoothRadius": 1.00
+  "smoothPasses": 6, /* passes of blurring lightmaps */
+  "smoothRadius": 1.00, /* affects both blurring and supersampling */
+  "exposurefilter": "off" /* [ off, softknee, reinhard, filmic ] */
 }

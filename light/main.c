@@ -34,6 +34,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 extern qboolean upscale;
 int radiosityPasses = 0;
+tonemap_t tonemapMode = (tonemap_t)-1;
 
 
 int main(int argc, char **argv) {
@@ -184,11 +185,27 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-oldrad")) {
             oldrad = qtrue;
+        } else if (!strcmp(argv[i], "-tonemap")) {
+            const char *mode = argv[i + 1];
+            if (!strcmp(mode, "softknee")) {
+                tonemapMode = TONEMAP_SOFTKNEE;
+            } else if (!strcmp(mode, "reinhard")) {
+                tonemapMode = TONEMAP_REINHARD;
+            } else if (!strcmp(mode, "filmic")) {
+                tonemapMode = TONEMAP_FILMIC;
+            } else {
+                tonemapMode = TONEMAP_LINEAR;
+            }
+            i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
             g_game->hdr = HDR_8BIT;
         } else {
             break;
         }
+    }
+    
+    if (tonemapMode == (tonemap_t)-1) {
+        tonemapMode = g_game->exposureFilter;
     }
 
     ThreadSetDefault();
@@ -230,6 +247,7 @@ int main(int argc, char **argv) {
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   oldrad           = use legacy (charming) radiosity math\n"
+                "   tonemap <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n");
         exit(0);
     }
@@ -312,6 +330,9 @@ int main(int argc, char **argv) {
 
     // Call radiosity passes
     LightRadiosity(radiosityPasses);
+
+    _printf("--- Post Processing ---\n");
+    ScanLightmapIntensity();
 
     if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
         _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);

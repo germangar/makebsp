@@ -71,7 +71,7 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     const char *key = el->name->string;
     struct json_value_s *val = el->value;
 
-    if (!strcmp(key, "arg") && val->type == json_type_string) {
+    if (!strcmp(key, "game") && val->type == json_type_string) {
       game->arg = copystring(json_value_as_string(val)->string);
     } else if (!strcmp(key, "gamePath") && val->type == json_type_string) {
       game->gamePath = copystring(json_value_as_string(val)->string);
@@ -89,7 +89,7 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapSize") && val->type == json_type_number) {
       game->lightmapSize = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "defaultSampleSize") && val->type == json_type_number) {
+    } else if (!strcmp(key, "sampleSize") && val->type == json_type_number) {
       game->defaultSampleSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "hdr") && val->type == json_type_string) {
       const char *h = json_value_as_string(val)->string;
@@ -116,9 +116,9 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     } else if (!strcmp(key, "deluxeMap")) {
       if (val->type == json_type_true) game->deluxeMap = qtrue;
       else if (val->type == json_type_false) game->deluxeMap = qfalse;
-    } else if (!strcmp(key, "defaultSmoothPasses") && val->type == json_type_number) {
+    } else if (!strcmp(key, "smoothPasses") && val->type == json_type_number) {
       game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
-    } else if (!strcmp(key, "defaultSmoothRadius") && val->type == json_type_number) {
+    } else if (!strcmp(key, "smoothRadius") && val->type == json_type_number) {
       game->defaultSmoothRadius = (float)atof(json_value_as_number(val)->number);
     } else if (!strcmp(key, "falloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
@@ -134,6 +134,16 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->falloff = FALLOFF_WRAPPED;
       else
         game->falloff = FALLOFF_LAMBERT;
+    } else if (!strcmp(key, "exposurefilter") && val->type == json_type_string) {
+      const char *ef = json_value_as_string(val)->string;
+      if (!strcmp(ef, "softknee"))
+        game->exposureFilter = TONEMAP_SOFTKNEE;
+      else if (!strcmp(ef, "reinhard"))
+        game->exposureFilter = TONEMAP_REINHARD;
+      else if (!strcmp(ef, "filmic"))
+        game->exposureFilter = TONEMAP_FILMIC;
+      else
+        game->exposureFilter = TONEMAP_LINEAR;
     }
 
     el = el->next;
@@ -220,9 +230,25 @@ void JSON_ExportGame(const char *filename, game_t *game) {
     break;
   }
 
+  const char *filterStr;
+  switch (game->exposureFilter) {
+  case TONEMAP_SOFTKNEE:
+    filterStr = "softknee";
+    break;
+  case TONEMAP_REINHARD:
+    filterStr = "reinhard";
+    break;
+  case TONEMAP_FILMIC:
+    filterStr = "filmic";
+    break;
+  default:
+    filterStr = "off";
+    break;
+  }
+
   sprintf(buffer,
           "{\n"
-          "  \"arg\": \"%s\",\n"
+          "  \"game\": \"%s\",\n"
           "  \"gamePath\": \"%s\",\n"
           "  \"bspIdent\": \"%s\",\n"
           "  \"bspVersion\": %d,\n"
@@ -231,16 +257,17 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"maxSurfaceVerts\": %d,\n"
           "  \"maxSurfaceIndexes\": %d,\n"
           "  \"lightmapSize\": %d,\n"
-          "  \"defaultSampleSize\": %d,\n"
-          "  \"hdr\": \"%s\",\n"
+          "  \"sampleSize\": %d,\n"
+          "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
           "  \"lightmapsRGB\": %s,\n"
           "  \"lightgridRGB\": %s,\n"
           "  \"texturesRGB\": %s,\n"
           "  \"colorsRGB\": %s,\n"
-          "  \"falloff\": \"%s\",\n"
+          "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */\n"
           "  \"deluxeMap\": %s,\n"
-          "  \"defaultSmoothPasses\": %d,\n"
-          "  \"defaultSmoothRadius\": %.2f\n"
+          "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
+          "  \"smoothRadius\": %.2f, /* affects both blurring and supersampling */\n"
+          "  \"exposurefilter\": \"%s\" /* [ off, softknee, reinhard, filmic ] */\n"
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
@@ -250,7 +277,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false", falloffStr,
           game->deluxeMap ? "true" : "false",
-          game->defaultSmoothPasses, game->defaultSmoothRadius);
+          game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr);
   SaveFile(filename, buffer, strlen(buffer));
 }
 

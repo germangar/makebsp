@@ -28,7 +28,8 @@ game_t games[MAX_GAMES] = {
 		FALLOFF_LAMBERT,
 		qfalse,     // deluxeMap
 		6,          // defaultSmoothPasses
-		1.0f        // defaultSmoothRadius
+		1.0f,       // defaultSmoothRadius
+        TONEMAP_LINEAR // exposureFilter
 	},
 	{
 		"qfusion",
@@ -50,7 +51,8 @@ game_t games[MAX_GAMES] = {
 		FALLOFF_HALFLAMBERT,
 		qtrue,       // deluxeMap
 		6,           // defaultSmoothPasses
-		1.0f         // defaultSmoothRadius
+		1.0f,        // defaultSmoothRadius
+        TONEMAP_REINHARD // exposureFilter
 	}
 };
 

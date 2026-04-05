@@ -1,5 +1,5 @@
 {
-  "arg": "qfusion",
+  "game": "qfusion",
   "gamePath": ".",
   "bspIdent": "FBSP",
   "bspVersion": 1,
@@ -8,14 +8,15 @@
   "maxSurfaceVerts": 65535,
   "maxSurfaceIndexes": 393210,
   "lightmapSize": 512,
-  "defaultSampleSize": 4,
-  "hdr": "rgb8",
+  "sampleSize": 4,
+  "hdr": "rgb8", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "lightmapsRGB": true,
   "lightgridRGB": false,
   "texturesRGB": true,
   "colorsRGB": true,
-  "falloff": "halflambert",
+  "falloff": "halflambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
   "deluxeMap": true,
-  "defaultSmoothPasses": 6,
-  "defaultSmoothRadius": 1.00
+  "smoothPasses": 6, /* passes of blurring lightmaps */
+  "smoothRadius": 1.00, /* affects both blurring and supersampling */
+  "exposurefilter": "reinhard" /* [ off, softknee, reinhard, filmic ] */
 }

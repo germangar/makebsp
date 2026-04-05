@@ -15,6 +15,7 @@ byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
+extern tonemap_t tonemapMode;
 
 
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {
@@ -61,8 +62,38 @@ void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {
 void InternalColorToBytesScaled(const float *color, byte *colorBytes, float scale, qboolean sRGB) {
 	vec3_t sample;
 	int i;
+	VectorCopy(color, sample);
 
-	VectorScale(color, scale, sample);
+	if (tonemapMode != TONEMAP_LINEAR) {
+		float maxC = sample[0];
+		if (sample[1] > maxC) maxC = sample[1];
+		if (sample[2] > maxC) maxC = sample[2];
+
+		if (maxC > 0.001f) {
+			float limit = (g_game->hdr == HDR_8BIT) ? maxLightIntensity : 255.0f;
+			float threshold = limit * 0.75f;
+
+			if (tonemapMode == TONEMAP_SOFTKNEE) {
+				if (maxC > threshold) {
+					// Math: y = threshold + (x - threshold) / (1 + ((x - threshold) / (limit - threshold)))
+					float softMax = threshold + (maxC - threshold) / (1.0f + ((maxC - threshold) / (limit - threshold)));
+					VectorScale(sample, softMax / maxC, sample);
+				}
+			} else if (tonemapMode == TONEMAP_REINHARD) {
+				// Reinhard relative to 'limit'
+				float normalized = maxC / limit;
+				float reinhard = normalized / (1.0f + normalized);
+				VectorScale(sample, (reinhard * limit) / maxC, sample);
+			} else if (tonemapMode == TONEMAP_FILMIC) {
+				// Filmic exponential relative to 'limit'
+				float normalized = maxC / limit;
+				float filmic = 1.0f - (float)exp(-normalized);
+				VectorScale(sample, (filmic * limit) / maxC, sample);
+			}
+		}
+	}
+
+	VectorScale(sample, scale, sample);
 
 	if (sRGB) {
 		for (i = 0; i < 3; i++) {
