@@ -15,7 +15,7 @@ byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
-extern tonemap_t tonemapMode;
+tonemap_t tonemapMode = TONEMAP_LINEAR;
 
 
 void InternalColorToBytes(const float *color, byte *colorBytes, qboolean sRGB) {

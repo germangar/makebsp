@@ -27,7 +27,6 @@ float rad_color_ratio   = 0.5f;   // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
 float rad_min_dist      = 16.0f;  // Singularity guard (dist clamp)
 int   rad_scale         = 4;      // Sparse grid resolution (4 = 4x4)
-qboolean oldrad         = qfalse; // Use legacy (charming but buggy) math
 #define RAD_PI  3.14159265358979323846f
 
 // Amount to nudge the emitter origin off the surface along its normal.
@@ -124,44 +123,22 @@ static void RadiosityEmit(const float *srcBuffer) {
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0)
             continue;
 
-        // Compute surface normal
+        // Compute surface normal from lightmapVecs cross-product (planar/patch)
         vec3_t surfNormal;
-        if (oldrad) {
-            // Legacy math (unnormalized, raw vertex normals for triangle soup)
-            if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
-                CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
-                VectorNormalize(surfNormal, surfNormal);
-            } else {
-                if (ds->numVerts < 3) continue;
-                VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
-            }
+        if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
+            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
+            VectorNormalize(surfNormal, surfNormal);
         } else {
-            // Refined math (standard lightmapVecs[2] with fallback and normalization)
-            if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
-                VectorCopy(ds->lightmapVecs[2], surfNormal);
-                if (VectorNormalize(surfNormal, surfNormal) < 0.0001f) {
-                    VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
-                    VectorNormalize(surfNormal, surfNormal);
-                }
-            } else {
-                if (ds->numVerts < 3) continue;
-                VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
-                VectorNormalize(surfNormal, surfNormal);
-            }
+            // Triangle soup: use the normal from drawVerts (average of first tri)
+            if (ds->numVerts < 3) continue;
+            VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
         }
 
         // World-space area of a single luxel quad on this surface
-        float luxelArea;
-        if (oldrad) {
-            // Legacy math (simplified rectangle area)
-            luxelArea = VectorLength(ds->lightmapVecs[0]) * VectorLength(ds->lightmapVecs[1]);
-        } else {
-            // Refined math (accurate parallelogram area via cross product)
-            vec3_t v_cross;
-            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], v_cross);
-            luxelArea = VectorLength(v_cross);
-            if (luxelArea < 0.0001f) luxelArea = 1.0f; // safety floor
-        }
+        // ||V0 cross V1|| = area of the parallelogram, /2 per triangle
+        // For a square luxel winding it's just ||V0|| * ||V1||.
+        float luxelArea = VectorLength(ds->lightmapVecs[0]) *
+                          VectorLength(ds->lightmapVecs[1]);
 
         // Surface albedo (average texture colour, normalised 0-1)
         vec3_t albedo;
@@ -266,28 +243,14 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
     // Destination surface normal
     vec3_t dstNormal;
-    if (oldrad) {
-        // Legacy math
-        if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
-            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
-            VectorNormalize(dstNormal, dstNormal);
-        } else {
-            if (ds->numVerts < 3) return;
+    if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
+        CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
+        if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) {
             VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
         }
     } else {
-        // Refined math
-        if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
-            VectorCopy(ds->lightmapVecs[2], dstNormal);
-            if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) {
-                VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
-                VectorNormalize(dstNormal, dstNormal);
-            }
-        } else {
-            if (ds->numVerts < 3) return;
-            VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
-            VectorNormalize(dstNormal, dstNormal);
-        }
+        if (ds->numVerts < 3) return;
+        VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
     }
 
     int lx, ly;

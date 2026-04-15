@@ -34,7 +34,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 extern qboolean upscale;
 int radiosityPasses = 0;
-tonemap_t tonemapMode = (tonemap_t)-1;
+extern tonemap_t tonemapMode;
 
 
 int main(int argc, char **argv) {
@@ -183,9 +183,7 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-rad_bounce_scale")) {
             rad_bounce_scale = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-oldrad")) {
-            oldrad = qtrue;
-        } else if (!strcmp(argv[i], "-tonemap")) {
+        } else if (!strcmp(argv[i], "-exposurefilter")) {
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
                 tonemapMode = TONEMAP_SOFTKNEE;
@@ -246,8 +244,7 @@ int main(int argc, char **argv) {
                 "   rad_scale <I>    = set sparse grid scale (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
-                "   oldrad           = use legacy (charming) radiosity math\n"
-                "   tonemap <type>   = highlight compression (softknee, reinhard, filmic)\n"
+                "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n");
         exit(0);
     }

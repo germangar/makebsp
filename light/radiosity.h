@@ -20,7 +20,6 @@ extern float rad_color_ratio;
 extern float rad_min_energy;
 extern float rad_min_dist;
 extern int   rad_scale;
-extern qboolean oldrad;
 
 void LightRadiosity(int radiosityPasses);
 
