@@ -610,7 +610,7 @@ void LoadTriangleModels(void) {
         if (mesh->mTextureCoords[uvChannel]) {
           // Most Basic Check: UV Area Ratio Detection (Sampled).
           // Ratio > 1.1 means significant overlaps/mirroring.
-          qboolean potentialOverlap = qfalse;
+          qboolean potentialOverlap = forceUVGen;
           float areaSum = 0;
           float uvMins[2] = {999999, 999999}, uvMaxs[2] = {-999999, -999999};
           int sampleStep = (mesh->mNumFaces > 200) ? 10 : 1;

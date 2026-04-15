@@ -226,6 +226,7 @@ extern qboolean coplanar;
 extern qboolean nofog;
 extern qboolean testExpand;
 extern qboolean showseams;
+extern qboolean forceUVGen;
 
 extern vec_t microvolume;
 

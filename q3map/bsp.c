@@ -48,6 +48,7 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
+qboolean forceUVGen;
 
 char outbase[32];
 
@@ -475,6 +476,9 @@ int main(int argc, char **argv) {
         samplesize = 1;
       i++;
       _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
+    } else if (!strcmp(argv[i], "-forceuvgen")) {
+      forceUVGen = qtrue;
+      _printf("forceUVGen = qtrue\n");
     } else {
       break;
     }
@@ -509,7 +513,8 @@ int main(int argc, char **argv) {
             "   basepath <P>   = set the base filesystem path to P\n"
             "   game <G>       = set the active game profile to G\n"
             "   fakemap        = generate a fakemap.map after processing\n"
-            "   samplesize <N> = set the default lightmap sample size to NxN\n");
+            "   samplesize <N> = set the default lightmap sample size to NxN\n"
+            "   forceuvgen     = force UV reconstruction for all misc_models\n");
     exit(0);
   }
 
