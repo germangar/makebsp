@@ -25,7 +25,9 @@ Architecture:
 float rad_bounce_scale  = 0.5f;   // Energy per bounce (conserved)
 float rad_color_ratio   = 0.5f;   // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
-float rad_min_dist      = MIN_RAD_DISTANCE * 2;  // Singularity guard (dist clamp)
+float rad_depth_min     = RAD_DEPTH_MIN_DEFAULT;
+float rad_depth_intensity = RAD_DEPTH_INTENSITY_DEFAULT;
+float rad_depth_max     = RAD_DEPTH_MIN_DEFAULT * 2;  // Singularity guard (dist clamp)
 int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
 // #define RAD_PI  3.14159265358979323846f
 // #define M_PI	3.14159265358979323846
@@ -326,7 +328,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                 // --- Singularity guard (Source Engine trick) ---
                 // Clamp distance so nearby emitters can't blow up the integral.
-                float distClamped = dist < rad_min_dist ? rad_min_dist : dist;
+                float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
 
                 // --- Analytic form-factor (double-cosine) ---
                 // Lambertian area-to-point transfer:
@@ -335,12 +337,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                                    (RAD_PI * distClamped * distClamped);
 
                 // --- Graduate attenuation (Min Distance soft-clamping) ---
-                // MIN_RAD_DISTANCE = Hard floor (0 light).
-                // Scale from 0 at MIN_RAD_DISTANCE up to 1.0 (full light) at rad_min_dist.
-                if (dist < MIN_RAD_DISTANCE) {
-                    formFactor = 0.0f;
-                } else if (dist < rad_min_dist) {
-                    float factor = (dist - MIN_RAD_DISTANCE) / (rad_min_dist - MIN_RAD_DISTANCE);
+                // We allow a baseline "plateau" of light (Intensity) in tight spaces,
+                // then ramp up to 1.0 between DepthMin and DepthMax.
+                if (dist < rad_depth_min) {
+                    formFactor *= rad_depth_intensity;
+                } else if (dist < rad_depth_max) {
+                    float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                    float factor = rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
                     formFactor *= factor;
                 }
 
