@@ -15,11 +15,13 @@ Call LightRadiosity() AFTER LightMain() and BEFORE SmoothLightmaps().
 */
 
 // Tuning parameters (managed via main.c CLI)
+#define MIN_RAD_DISTANCE 8.0f
+
 extern float rad_bounce_scale;
 extern float rad_color_ratio;
 extern float rad_min_energy;
 extern float rad_min_dist;
-extern int   rad_scale;
+extern int   rad_interval;
 
 void LightRadiosity(int radiosityPasses);
 

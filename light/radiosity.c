@@ -25,9 +25,11 @@ Architecture:
 float rad_bounce_scale  = 0.5f;   // Energy per bounce (conserved)
 float rad_color_ratio   = 0.5f;   // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
-float rad_min_dist      = 16.0f;  // Singularity guard (dist clamp)
-int   rad_scale         = 4;      // Sparse grid resolution (4 = 4x4)
-#define RAD_PI  3.14159265358979323846f
+float rad_min_dist      = MIN_RAD_DISTANCE * 2;  // Singularity guard (dist clamp)
+int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
+// #define RAD_PI  3.14159265358979323846f
+// #define M_PI	3.14159265358979323846
+#define RAD_PI M_PI
 
 // Amount to nudge the emitter origin off the surface along its normal.
 // Prevents the emitter from self-shadowing via Embree.
@@ -151,8 +153,8 @@ static void RadiosityEmit(const float *srcBuffer) {
         }
 
         // Iterate over the luxel grid in sparse steps
-        for (ly = 0; ly < ds->lightmapHeight; ly += rad_scale) {
-            for (lx = 0; lx < ds->lightmapWidth; lx += rad_scale) {
+        for (ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
+            for (lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
                 // Flat index into lightFloats
                 int k_lm = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
                             ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH +
@@ -184,8 +186,8 @@ static void RadiosityEmit(const float *srcBuffer) {
                 // World-space centre of this virtual patch
                 if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                     float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + (float)rad_scale * 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_scale * 0.5f;
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + (float)rad_interval * 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_interval * 0.5f;
                     if (!TriSoupSamplePoint(ds, st, em->center, em->normal)) {
                         // If sampling fails (e.g. edge of triangle), use a safe fallback
                         for (k = 0; k < 3; k++) em->center[k] = 0;
@@ -199,16 +201,16 @@ static void RadiosityEmit(const float *srcBuffer) {
                 } else {
                     for (k = 0; k < 3; k++) {
                         em->center[k] = ds->lightmapOrigin[k]
-                                       + ((float)lx + (float)rad_scale * 0.5f) * ds->lightmapVecs[0][k]
-                                       + ((float)ly + (float)rad_scale * 0.5f) * ds->lightmapVecs[1][k]
+                                       + ((float)lx + (float)rad_interval * 0.5f) * ds->lightmapVecs[0][k]
+                                       + ((float)ly + (float)rad_interval * 0.5f) * ds->lightmapVecs[1][k]
                                        + surfNormal[k] * RAD_ORIGIN_NUDGE;
                         em->center[k] += surfaceOrigin[i][k];
                     }
                     VectorCopy(surfNormal, em->normal);
                 }
                 
-                // One sparse emitter represents a RAD_SCALE x RAD_SCALE block area
-                em->area = luxelArea * (float)(rad_scale * rad_scale);
+                // One sparse emitter represents a rad_interval x rad_interval block area
+                em->area = luxelArea * (float)(rad_interval * rad_interval);
 
                 // Effective bounce colour = source * albedo * globalScale
                 for (k = 0; k < 3; k++)
@@ -228,8 +230,6 @@ static void RadiosityEmit(const float *srcBuffer) {
 // For each destination luxel on a surface, accumulate irradiance from all
 // visible emitters using the analytic area-light form-factor formula.
 // ---------------------------------------------------------------------------
-
-#define RAD_PI  3.14159265358979323846f
 
 static void RadiosityIntegrateOneSurface(int surfIdx) {
     dsurface_t   *ds = &drawSurfaces[surfIdx];
@@ -254,8 +254,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     }
 
     int lx, ly;
-    for (ly = 0; ly < ds->lightmapHeight; ly += rad_scale) {
-        for (lx = 0; lx < ds->lightmapWidth; lx += rad_scale) {
+    for (ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
+        for (lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
 
             // Flat index into radiosityFloats
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
@@ -335,12 +335,12 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                                    (RAD_PI * distClamped * distClamped);
 
                 // --- Graduate attenuation (Min Distance soft-clamping) ---
-                // 16.0 = Hard floor (0 light).
-                // Scale from 0 at 16.0 up to 1.0 (full light) at rad_min_dist.
-                if (dist < 16.0f) {
+                // MIN_RAD_DISTANCE = Hard floor (0 light).
+                // Scale from 0 at MIN_RAD_DISTANCE up to 1.0 (full light) at rad_min_dist.
+                if (dist < MIN_RAD_DISTANCE) {
                     formFactor = 0.0f;
                 } else if (dist < rad_min_dist) {
-                    float factor = (dist - 16.0f) / (rad_min_dist - 16.0f);
+                    float factor = (dist - MIN_RAD_DISTANCE) / (rad_min_dist - MIN_RAD_DISTANCE);
                     formFactor *= factor;
                 }
 
@@ -391,7 +391,7 @@ static void RadiosityBilinearFillOneSurface(int surfIdx) {
     for (ly = 0; ly < ds->lightmapHeight; ly++) {
         for (lx = 0; lx < ds->lightmapWidth; lx++) {
             // Already computed grid point
-            if (lx % rad_scale == 0 && ly % rad_scale == 0)
+            if (lx % rad_interval == 0 && ly % rad_interval == 0)
                 continue;
 
             int k_dst_pix = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
@@ -401,17 +401,17 @@ static void RadiosityBilinearFillOneSurface(int surfIdx) {
                 continue;
 
             // Identification of the 4 surrounding sparse grid points
-            int x0 = (lx / rad_scale) * rad_scale;
-            int x1 = x0 + rad_scale;
-            int y0 = (ly / rad_scale) * rad_scale;
-            int y1 = y0 + rad_scale;
+            int x0 = (lx / rad_interval) * rad_interval;
+            int x1 = x0 + rad_interval;
+            int y0 = (ly / rad_interval) * rad_interval;
+            int y1 = y0 + rad_interval;
 
             // Clamp to surface bounds
             if (x1 >= ds->lightmapWidth)  x1 = x0;
             if (y1 >= ds->lightmapHeight) y1 = y0;
 
-            float fx = (float)(lx - x0) / (float)rad_scale;
-            float fy = (float)(ly - y0) / (float)rad_scale;
+            float fx = (float)(lx - x0) / (float)rad_interval;
+            float fy = (float)(ly - y0) / (float)rad_interval;
 
             float *p00 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
             float *p10 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];

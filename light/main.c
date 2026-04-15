@@ -168,14 +168,14 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_min_dist")) {
             rad_min_dist = (float)atof(argv[i + 1]);
-            if (rad_min_dist < 16.0f) rad_min_dist = 16.0f;
+            if (rad_min_dist < MIN_RAD_DISTANCE) rad_min_dist = MIN_RAD_DISTANCE;
             i++;
         } else if (!strcmp(argv[i], "-rad_min_energy")) {
             rad_min_energy = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_scale")) {
-            rad_scale = atoi(argv[i + 1]);
-            if (rad_scale < 1) rad_scale = 1;
+        } else if (!strcmp(argv[i], "-rad_interval")) {
+            rad_interval = atoi(argv[i + 1]);
+            if (rad_interval < 1) rad_interval = 1;
             i++;
         } else if (!strcmp(argv[i], "-rad_color_ratio")) {
             rad_color_ratio = (float)atof(argv[i + 1]);
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
                 "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_min_dist <F> = set min distance clamp for 1/r2 (Prevents nuclear glow)\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
-                "   rad_scale <I>    = set sparse grid scale (1=Every luxel, 4=4x4 blocks)\n"
+                "   -rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"

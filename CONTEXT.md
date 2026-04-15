@@ -1,38 +1,47 @@
-# Q3Map & Light - Modernized Quake 3 BSP Compilers
+# AI Architecture Context: Modernized BSP Toolchain
 
-This project is a high-performance compiler suite for Quake III Arena (GPL licensed) level geometry. It modernizes the original id Software source code by integrating modern ray-tracing, geometry processing libraries, and a high-precision lighting pipeline.
+> [!IMPORTANT]
+> **Purpose of this Document**: This is NOT a log, a status report, or a change history. It is a high-level technical summary of the project's architecture, characteristics, and non-obvious logic. It is designed to provide AI coding assistants with immediate, high-fidelity context about the codebase before starting work.
 
-## Core Components
+## 1. Project Overview
+This project is a heavily modernized fork of the Quake III Arena BSP toolchain (`q3map.exe` and `light.exe`). The primary goal is to achieve high-fidelity, cinema-grade lighting for legacy engines (Quake 3, QFusion, etc.) by replacing 1990s integer-based arithmetic with modern 32-bit floating-point ray tracing and advanced geometry libraries.
 
-### q3map.exe
-The primary map-to-BSP compiler. It processes `.map` files into `.bsp` files, handling:
-- **CSG & Portals:** Traditional BSP tree construction and visibility calculation.
-- **Advanced Collision:** Integrates **CoACD** (Approximate Convex Decomposition) and **MeshLib-Lite** for generating high-fidelity collision brushes from complex `.obj` map models.
-- **Model Support:** Converts `misc_model` entities into `MST_TRIANGLE_SOUP` surfaces within the BSP.
+## 2. Core Architecture: High-Precision Lighting
+The most significant architectural change is the transition from the legacy 8-bit integer lighting pipeline to a full **32-bit Floating Point Pipeline**.
 
-### light.exe (Modernized Lighting)
-Directly integrates **Intel Embree 4.4.0** for hardware-accelerated ray tracing and features a full 32-bit floating-point internal pipeline.
-- **32-bit Float Pipeline:** All internal calculations (vertex lighting, lightmaps, grid data) use high-precision floats via `internalDrawVerts`, `lightFloats`, and `gridData32`.
-- **Binary Compatibility:** Uses a synchronization layer (`UpConvertLightingData` / `DownConvertLightingData`) to maintain compatibility with legacy 8-bit IBSP/FBSP formats.
-- **Acceleration:** Uses Embree's Bounding Volume Hierarchy (BVH) for high-speed intersection testing, replacing legacy BSP facet testing.
-- **Self-Shadowing:** Implements selective surface filtering in `AlphaFilter` to allow non-planar surfaces (trisoups, patches) to shadow themselves while preventing artifacts on planar map geometry.
-- **Additives Passes:** The pipeline is designed for fully additive multi-pass lighting (e.g., direct + radiosity passes) without precision loss.
+- **Internal Buffers**: All light data is processed using float32. High-precision replicas of BSP structures are maintained in:
+    - `internalDrawVerts`: 32-bit color per vertex.
+    - `lightFloats`: High-precision RGB lightmap data.
+    - `gridData32`: High-precision ambient/directed light grid.
+- **Up/Down Conversion**: A synchronization layer (`UpConvertLightingData` and `DownConvertLightingData` in `common/lightdata.c`) ensures binary compatibility with the final 8-bit BSP format while allowing infinite additive passes without precision loss.
+- **Additive Multi-Pass**: The system supports stacking multiple light passes (Direct, Radiosity, Bounce) additively using `+=` arithmetic on the float buffers.
 
-## Key Technologies
-- **Intel Embree 4.4.0:** High-performance ray-tracing kernels for CPU.
-- **xatlas:** Integrated for efficient UV packing during model lightmap generation.
-- **CoACD:** Convex decomposition of complex geometry into collision brushes.
-- **MeshLib-Lite:** Geometric operations and decimation for model-to-brush conversion.
-- **OpenMP:** Multi-threaded execution for lighting and geometry processing.
+## 3. Intersection Testing: Intel Embree 4
+Legacy BSP facet testing has been completely replaced with **Intel Embree 4.4.0**.
+- **Scene Construction**: Map brushes, subdivided patches, and triangle models (misc_models) are all flattened into an Embree BVH.
+- **Selective Shadowing**: `AlphaFilter` logic in `light/light_trace.c` allows complex geometry (TriSoups) to shadow themselves (Self-Shadowing) while preventing artifacts on planar map geometry using the `MST_PLANAR` check.
+- **Ray Nudging**: A unified `tnear` (nudge) of `0.0001f` is used to prevent self-intersection artifacts.
 
-## Project Structure
-- `q3map/`: Source code for the BSP compiler.
-- `light/`: Source code for the modernized, Embree-integrated lighting compiler.
-- `common/`: Shared Q3 BSP data structures, math libraries, and 32-bit internal lighting buffers (`lightdata.c/h`).
-- `libs/`: Third-party integrations (Embree, CoACD, Assimp, MeshLib, xatlas).
-- `shared/`: Global configuration, shader parsing, and shared mesh logic.
+## 4. Radiosity Pipeline (Global Illumination)
+The project implements a custom three-phase radiosity system:
+1.  **Phase 1 (Emit)**: Luxels from the direct pass spawn virtual emitters.
+2.  **Phase 2 (Integrate)**: Analytical area form-factors are used to simulate light bounce.
+3.  **Phase 4 (Merge)**: Bounced light is added back into the floating-point lightmap buffers.
 
-## Runtime Dependencies (Windows)
-- `embree4.dll` & `tbb12.dll`: Required for hardware-accelerated tracing.
-- `assimp-vc143-mt.dll`: Required for model importing via `assimp`.
-- `tbbmalloc.dll`: Optional optimization for high-thread-count environments.
+### Core Concepts
+- **Sparse Sampling**: To optimize performance, the system can sample emitters at a configurable interval (Sparse Grid) and then interpolate the results across the full lightmap.
+- **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
+
+## 5. Geometry Processing: xatlas & CoACD
+The BSP compiler (`q3map.exe`) leverages modern libraries for texture and collision:
+- **xatlas Integration**: Handles automatic lightmap UV unwrapping and atlas packing for complex 3D models and subdivided geometry, ensuring unique mappings for all surfaces.
+- **CoACD & MeshLib**: Performs Approximate Convex Decomposition and geometric decimation to convert complex triangle soup models into optimized convex collision brushes.
+
+## 6. Technical Stack
+- **Language**: C (some C++ wrappers for libraries).
+- **Parallelism**: OpenMP is used extensively in both `q3map` and `light` for multi-core scaling.
+- **File Formats**: Primary support for **FBSP** (QFusion/Xonotic) and **IBSP** (Quake 3).
+
+## 7. Developer Conventions
+- **Nomenclature**: Prefix `rad_` for radiosity, `lm_` for lightmap post-processing.
+- **Architecture**: Global settings are derived from `game_t` templates in `shared/globals.c`, while runtime overrides are handled via CLI switches in `main.c`.
