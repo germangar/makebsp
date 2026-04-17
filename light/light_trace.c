@@ -61,93 +61,12 @@ TextureMatrixFromPoints
 */
 void TextureMatrixFromPoints(cFacet_t *f, drawVert_t *a, drawVert_t *b,
                              drawVert_t *c) {
-  int i, j;
-  float t;
-  float m[3][4];
-  float s;
+  int i;
 
-  // This is an incredibly stupid way of solving a three variable equation
   for (i = 0; i < 2; i++) {
-
-    m[0][0] = a->xyz[0];
-    m[0][1] = a->xyz[1];
-    m[0][2] = a->xyz[2];
-    m[0][3] = a->st[i];
-
-    m[1][0] = b->xyz[0];
-    m[1][1] = b->xyz[1];
-    m[1][2] = b->xyz[2];
-    m[1][3] = b->st[i];
-
-    m[2][0] = c->xyz[0];
-    m[2][1] = c->xyz[1];
-    m[2][2] = c->xyz[2];
-    m[2][3] = c->st[i];
-
-    if (fabs(m[1][0]) > fabs(m[0][0]) && fabs(m[1][0]) > fabs(m[2][0])) {
-      for (j = 0; j < 4; j++) {
-        t = m[0][j];
-        m[0][j] = m[1][j];
-        m[1][j] = t;
-      }
-    } else if (fabs(m[2][0]) > fabs(m[0][0]) && fabs(m[2][0]) > fabs(m[1][0])) {
-      for (j = 0; j < 4; j++) {
-        t = m[0][j];
-        m[0][j] = m[2][j];
-        m[2][j] = t;
-      }
-    }
-
-    s = 1.0 / m[0][0];
-    m[0][0] *= s;
-    m[0][1] *= s;
-    m[0][2] *= s;
-    m[0][3] *= s;
-
-    s = m[1][0];
-    m[1][0] -= m[0][0] * s;
-    m[1][1] -= m[0][1] * s;
-    m[1][2] -= m[0][2] * s;
-    m[1][3] -= m[0][3] * s;
-
-    s = m[2][0];
-    m[2][0] -= m[0][0] * s;
-    m[2][1] -= m[0][1] * s;
-    m[2][2] -= m[0][2] * s;
-    m[2][3] -= m[0][3] * s;
-
-    if (fabs(m[2][1]) > fabs(m[1][1])) {
-      for (j = 0; j < 4; j++) {
-        t = m[1][j];
-        m[1][j] = m[2][j];
-        m[2][j] = t;
-      }
-    }
-
-    s = 1.0 / m[1][1];
-    m[1][0] *= s;
-    m[1][1] *= s;
-    m[1][2] *= s;
-    m[1][3] *= s;
-
-    s = m[2][1];
-    m[2][0] -= m[1][0] * s;
-    m[2][1] -= m[1][1] * s;
-    m[2][2] -= m[1][2] * s;
-    m[2][3] -= m[1][3] * s;
-
-    s = 1.0 / m[2][2];
-    m[2][0] *= s;
-    m[2][1] *= s;
-    m[2][2] *= s;
-    m[2][3] *= s;
-
-    f->textureMatrix[i][2] = m[2][3];
-    f->textureMatrix[i][1] = m[1][3] - f->textureMatrix[i][2] * m[1][2];
-    f->textureMatrix[i][0] = m[0][3] - f->textureMatrix[i][2] * m[0][2] -
-                             f->textureMatrix[i][1] * m[0][1];
-
-    f->textureMatrix[i][3] = 0;
+    TexturePlaneFromPoints(f->textureMatrix[i], a->xyz, a->st[i], b->xyz, b->st[i], c->xyz, c->st[i]);
+  }
+}
     /*
                     s = fabs( DotProduct( a->xyz, f->textureMatrix[i] ) -
        a->st[i] ); if ( s > 0.01 ) { Error( "Bad textureMatrix" );
@@ -159,8 +78,6 @@ void TextureMatrixFromPoints(cFacet_t *f, drawVert_t *a, drawVert_t *b,
        c->st[i] ); if ( s > 0.01 ) { Error( "Bad textureMatrix" );
                     }
     */
-  }
-}
 
 /*
 =====================
@@ -249,19 +166,7 @@ qboolean CM_GenerateFacetFor4Points(cFacet_t *f, drawVert_t *a, drawVert_t *b,
   return qtrue;
 }
 
-/*
-===============
-SphereFromBounds
-===============
-*/
-void SphereFromBounds(vec3_t mins, vec3_t maxs, vec3_t origin, float *radius) {
-  vec3_t temp;
 
-  VectorAdd(mins, maxs, origin);
-  VectorScale(origin, 0.5, origin);
-  VectorSubtract(maxs, origin, temp);
-  *radius = VectorLength(temp);
-}
 
 /*
 ====================

@@ -41,6 +41,9 @@ extern RTCScene g_scene;
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
 #define MIN_LIGHT_ADD 0.1f
+
+#define UPSCALE_FACTOR 2
+#define GUTTER 1
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 
 extern tonemap_t tonemapMode;
@@ -71,6 +74,17 @@ typedef struct light_s {
   winding_t *w;
   vec3_t emitColor; // full out-of-gamut value
 } light_t;
+
+typedef struct {
+  dbrush_t *b;
+  vec3_t bounds[2];
+} skyBrush_t;
+
+extern vec3_t sunDirection, sunLight, ambientColor;
+extern int numSkyBrushes;
+extern skyBrush_t skyBrushes[];
+extern vec3_t gridMins, gridSize;
+extern int gridBounds[3], numGridPoints;
 
 float CalculateFalloff(float dot);
 
@@ -193,6 +207,20 @@ void SmoothLightmaps(float radius);
 
 // Program flow
 void LightMain(void);
-void VisualizeLightmapAllocation(void);
+extern light_t *lights;
+extern qboolean patchshadows;
+extern qboolean exactPointToPolygon;
+extern int *surfaceWorkOrder;
+extern int c_visible, c_occluded;
+
+int CompareSurfaces(const void *a, const void *b);
+void LightWorld(void);
+void TraceLtm(int num);
+void TraceGrid(int num);
+void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
+                      qboolean testOcclusion, qboolean forceSunLight,
+                      qboolean applyColorFilter, traceWork_t *tw);
+void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
+                    qboolean forceSunLight, float scale, traceWork_t *tw);
 void CountLightmaps(void);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);

@@ -35,7 +35,7 @@ int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
 #define RAD_ORIGIN_NUDGE        1.5f
 
 // light.h/c exports
-qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);
+
 
 // ---------------------------------------------------------------------------
 // emitter_t
@@ -59,10 +59,8 @@ static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
     struct RTCIntersectArguments iargs;
     vec3_t  dir;
     float   len;
-    int     k;
 
-    for (k = 0; k < 3; k++)
-        dir[k] = to[k] - from[k];
+    VectorSubtract(to, from, dir);
 
     len = VectorLength(dir);
     if (len < 0.001f)
@@ -189,22 +187,17 @@ static void RadiosityEmit(const float *srcBuffer) {
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_interval * 0.5f;
                     if (!TriSoupSamplePoint(ds, st, em->center, em->normal)) {
                         // If sampling fails (e.g. edge of triangle), use a safe fallback
-                        for (k = 0; k < 3; k++) em->center[k] = 0;
+                        VectorClear(em->center);
                         VectorClear(em->normal);
                     }
                     // Apply nudge and offset
-                    for (k = 0; k < 3; k++) {
-                        em->center[k] += em->normal[k] * RAD_ORIGIN_NUDGE;
-                        em->center[k] += surfaceOrigin[i][k];
-                    }
+                    VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
+                    VectorAdd(em->center, surfaceOrigin[i], em->center);
                 } else {
-                    for (k = 0; k < 3; k++) {
-                        em->center[k] = ds->lightmapOrigin[k]
-                                       + ((float)lx + (float)rad_interval * 0.5f) * ds->lightmapVecs[0][k]
-                                       + ((float)ly + (float)rad_interval * 0.5f) * ds->lightmapVecs[1][k]
-                                       + surfNormal[k] * RAD_ORIGIN_NUDGE;
-                        em->center[k] += surfaceOrigin[i][k];
-                    }
+                    VectorMA(ds->lightmapOrigin, (float)lx + (float)rad_interval * 0.5f, ds->lightmapVecs[0], em->center);
+                    VectorMA(em->center, (float)ly + (float)rad_interval * 0.5f, ds->lightmapVecs[1], em->center);
+                    VectorMA(em->center, RAD_ORIGIN_NUDGE, surfNormal, em->center);
+                    VectorAdd(em->center, surfaceOrigin[i], em->center);
                     VectorCopy(surfNormal, em->normal);
                 }
                 
@@ -212,8 +205,9 @@ static void RadiosityEmit(const float *srcBuffer) {
                 em->area = luxelArea * (float)(rad_interval * rad_interval);
 
                 // Effective bounce colour = source * albedo * globalScale
+                VectorScale(src, rad_bounce_scale, em->color);
                 for (k = 0; k < 3; k++)
-                    em->color[k] = src[k] * albedo[k] * rad_bounce_scale;
+                    em->color[k] *= albedo[k];
 
             }
         }
@@ -278,18 +272,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) {
                     continue;
                 }
-                for (int k = 0; k < 3; k++) {
-                    dst[k] += dstNormal[k] * RAD_ORIGIN_NUDGE;
-                    dst[k] += surfaceOrigin[surfIdx][k];
-                }
+                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
+                VectorAdd(dst, surfaceOrigin[surfIdx], dst);
             } else {
-                for (int k = 0; k < 3; k++) {
-                    dst[k] = ds->lightmapOrigin[k]
-                            + ((float)lx + 0.5f) * ds->lightmapVecs[0][k]
-                            + ((float)ly + 0.5f) * ds->lightmapVecs[1][k]
-                            + dstNormal[k] * RAD_ORIGIN_NUDGE;
-                    dst[k] += surfaceOrigin[surfIdx][k];
-                }
+                VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], dst);
+                VectorMA(dst, (float)ly + 0.5f, ds->lightmapVecs[1], dst);
+                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
+                VectorAdd(dst, surfaceOrigin[surfIdx], dst);
             }
 
             // Accumulate irradiance from all emitters
@@ -301,8 +290,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                 // --- Direction from destination to emitter ---
                 vec3_t ray;
-                for (int k = 0; k < 3; k++)
-                    ray[k] = em->center[k] - dst[k];
+                VectorSubtract(em->center, dst, ray);
 
                 float dist = VectorLength(ray);
                 if (dist < 0.001f)
@@ -352,8 +340,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                     continue;
 
                 // --- Accumulate ---
-                for (int k = 0; k < 3; k++)
-                    accum[k] += em->color[k] * formFactor;
+                VectorMA(accum, formFactor, em->color, accum);
             }
 
             // Write accumulated GI into the isolated radiosity buffer
@@ -452,9 +439,7 @@ static void RadiosityMerge(const float *srcBuffer) {
     for (int i = 0; i < total; i++) {
         if (lightAlphaMask && !lightAlphaMask[i])
             continue;
-        lightFloats[i * 3 + 0] += srcBuffer[i * 3 + 0];
-        lightFloats[i * 3 + 1] += srcBuffer[i * 3 + 1];
-        lightFloats[i * 3 + 2] += srcBuffer[i * 3 + 2];
+        VectorAdd(lightFloats + i * 3, srcBuffer + i * 3, lightFloats + i * 3);
     }
 }
 
@@ -503,9 +488,7 @@ void LightRadiosity(int radiosityPasses) {
 
         // Accumulate current bounce into total GI sum
         for (int i = 0; i < numLightBytes / 3; i++) {
-            accumRadiosityFloats[i * 3 + 0] += radiosityFloats[i * 3 + 0];
-            accumRadiosityFloats[i * 3 + 1] += radiosityFloats[i * 3 + 1];
-            accumRadiosityFloats[i * 3 + 2] += radiosityFloats[i * 3 + 2];
+            VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);
         }
 
         // Cleanup emitters for this pass

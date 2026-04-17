@@ -432,3 +432,161 @@ void RotatePointAroundVector( vec3_t dst, const vec3_t dir, const vec3_t point,
 		dst[i] = rot[i][0] * point[0] + rot[i][1] * point[1] + rot[i][2] * point[2];
 	}
 }
+
+
+/*
+=================
+PointInTriangle
+
+2D point in triangle test using edge functions.
+=================
+*/
+qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
+                        float v2[2]) {
+  float d1, d2, d3;
+  qboolean has_neg, has_pos;
+
+  d1 = (px - v1[0]) * (v0[1] - v1[1]) - (v0[0] - v1[0]) * (py - v1[1]);
+  d2 = (px - v2[0]) * (v1[1] - v2[1]) - (v1[0] - v2[0]) * (py - v2[1]);
+  d3 = (px - v0[0]) * (v2[1] - v0[1]) - (v2[0] - v0[0]) * (py - v0[1]);
+
+  has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+  has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+  return !(has_neg && has_pos);
+}
+
+/*
+=================
+DistanceSqToSegment
+
+Returns the squared distance from a point to a line segment in 2D.
+Also returns the parametric 't' value of the closest point [0, 1].
+=================
+*/
+float DistanceSqToSegment(float px, float py, float v0[2], float v1[2],
+                          float *t) {
+  float dx = v1[0] - v0[0];
+  float dy = v1[1] - v0[1];
+  float l2 = dx * dx + dy * dy;
+  if (l2 == 0.0f) {
+    if (t)
+      *t = 0.0f;
+    return (px - v0[0]) * (px - v0[0]) + (py - v0[1]) * (py - v0[1]);
+  }
+  float tt = ((px - v0[0]) * dx + (py - v0[1]) * dy) / l2;
+  if (t)
+    *t = tt;
+  if (tt < 0.0f)
+    return (px - v0[0]) * (px - v0[0]) + (py - v0[1]) * (py - v0[1]);
+  if (tt > 1.0f)
+    return (px - v1[0]) * (px - v1[0]) + (py - v1[1]) * (py - v1[1]);
+  float projx = v0[0] + tt * dx;
+  float projy = v0[1] + tt * dy;
+  return (px - projx) * (px - projx) + (py - projy) * (py - projy);
+}
+
+/*
+=================
+SphereFromBounds
+=================
+*/
+void SphereFromBounds(vec3_t mins, vec3_t maxs, vec3_t origin, float *radius) {
+  vec3_t temp;
+
+  VectorAdd(mins, maxs, origin);
+  VectorScale(origin, 0.5, origin);
+  VectorSubtract(maxs, origin, temp);
+  *radius = VectorLength(temp);
+}
+
+/*
+=================
+TexturePlaneFromPoints
+
+Solves a 3x3 system to find a linear mapping (plane) from world coordinates 
+to a single texture coordinate (S or T).
+=================
+*/
+void TexturePlaneFromPoints(float plane[4], const vec3_t p0, float s0,
+                            const vec3_t p1, float s1, const vec3_t p2, float s2) {
+  int j;
+  float t;
+  float m[3][4];
+  float s;
+
+  m[0][0] = p0[0];
+  m[0][1] = p0[1];
+  m[0][2] = p0[2];
+  m[0][3] = s0;
+
+  m[1][0] = p1[0];
+  m[1][1] = p1[1];
+  m[1][2] = p1[2];
+  m[1][3] = s1;
+
+  m[2][0] = p2[0];
+  m[2][1] = p2[1];
+  m[2][2] = p2[2];
+  m[2][3] = s2;
+
+  // Gaussian elimination
+  if (fabs(m[1][0]) > fabs(m[0][0]) && fabs(m[1][0]) > fabs(m[2][0])) {
+    for (j = 0; j < 4; j++) {
+      t = m[0][j];
+      m[0][j] = m[1][j];
+      m[1][j] = t;
+    }
+  } else if (fabs(m[2][0]) > fabs(m[0][0]) && fabs(m[2][0]) > fabs(m[1][0])) {
+    for (j = 0; j < 4; j++) {
+      t = m[0][j];
+      m[0][j] = m[2][j];
+      m[2][j] = t;
+    }
+  }
+
+  s = 1.0 / m[0][0];
+  m[0][1] *= s;
+  m[0][2] *= s;
+  m[0][3] *= s;
+  m[0][0] = 1.0f;
+
+  s = m[1][0];
+  m[1][1] -= m[0][1] * s;
+  m[1][2] -= m[0][2] * s;
+  m[1][3] -= m[0][3] * s;
+  m[1][0] = 0;
+
+  s = m[2][0];
+  m[2][1] -= m[0][1] * s;
+  m[2][2] -= m[0][2] * s;
+  m[2][3] -= m[0][3] * s;
+  m[2][0] = 0;
+
+  if (fabs(m[2][1]) > fabs(m[1][1])) {
+    for (j = 1; j < 4; j++) {
+      t = m[1][j];
+      m[1][j] = m[2][j];
+      m[2][j] = t;
+    }
+  }
+
+  s = 1.0 / m[1][1];
+  m[1][2] *= s;
+  m[1][3] *= s;
+  m[1][1] = 1.0f;
+
+  s = m[2][1];
+  m[2][2] -= m[1][2] * s;
+  m[2][3] -= m[1][3] * s;
+  m[2][1] = 0;
+
+  s = 1.0 / m[2][2];
+  m[2][3] *= s;
+  m[2][2] = 1.0f;
+
+  plane[2] = m[2][3];
+  plane[1] = m[1][3] - plane[2] * m[1][2];
+  plane[0] = m[0][3] - plane[2] * m[0][2] - plane[1] * m[0][1];
+  plane[3] = 0;
+}
