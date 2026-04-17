@@ -16,6 +16,7 @@ Call LightRadiosity() AFTER LightMain() and BEFORE SmoothLightmaps().
 
 // Tuning parameters (managed via main.c CLI)
 #define RAD_DEPTH_MIN_DEFAULT 8.0f
+#define RAD_DEPTH_MAX_DEFAULT 24.0f
 #define RAD_DEPTH_INTENSITY_DEFAULT 0.5f
 
 extern float rad_bounce_scale;

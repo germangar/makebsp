@@ -26,12 +26,9 @@ float rad_bounce_scale  = 0.5f;   // Energy per bounce (conserved)
 float rad_color_ratio   = 0.5f;   // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
 float rad_depth_min     = RAD_DEPTH_MIN_DEFAULT;
+float rad_depth_max     = RAD_DEPTH_MAX_DEFAULT;
 float rad_depth_intensity = RAD_DEPTH_INTENSITY_DEFAULT;
-float rad_depth_max     = RAD_DEPTH_MIN_DEFAULT * 2;  // Singularity guard (dist clamp)
 int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
-// #define RAD_PI  3.14159265358979323846f
-// #define M_PI	3.14159265358979323846
-#define RAD_PI M_PI
 
 // Amount to nudge the emitter origin off the surface along its normal.
 // Prevents the emitter from self-shadowing via Embree.
@@ -334,7 +331,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 // Lambertian area-to-point transfer:
                 //   dE = (L * area * cosEmit * cosDst) / (π * dist²)
                 float formFactor = (em->area * cosEmit * cosDst) /
-                                   (RAD_PI * distClamped * distClamped);
+                                   (M_PI * distClamped * distClamped);
 
                 // --- Graduate attenuation (Min Distance soft-clamping) ---
                 // We allow a baseline "plateau" of light (Intensity) in tight spaces,

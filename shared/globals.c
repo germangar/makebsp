@@ -48,7 +48,7 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
-		FALLOFF_HALFLAMBERT,
+		FALLOFF_LAMBERT,
 		qtrue,       // deluxeMap
 		6,           // defaultSmoothPasses
 		1.0f,        // defaultSmoothRadius
