@@ -348,6 +348,15 @@ void InitTracingGeometry(void) {
     if (dsurf->numIndexes > 0 &&
         (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
          dsurf->surfaceType == MST_PLANAR)) {
+      shaderInfo_t *si = ShaderInfoForShader(dshaders[dsurf->shaderNum].shader);
+
+      // don't make surfaces for transparent objects
+      // because we want light to pass through them
+      if ((si->contents & CONTENTS_TRANSLUCENT) &&
+          !(si->surfaceFlags & SURF_ALPHASHADOW)) {
+        continue;
+      }
+
       RTCGeometry geom = rtcNewGeometry(g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
       rtcSetGeometryBuildQuality(geom, RTC_BUILD_QUALITY_HIGH);
 
@@ -730,6 +739,12 @@ static void AddBrushesToEmbree(RTCScene scene) {
 
   for (i = 0; i < numbrushes; i++) {
     b = &dbrushes[i];
+
+    if (dshaders[b->shaderNum].contentFlags &
+        (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
+         CONTENTS_TRANSLUCENT)) {
+      continue;
+    }
 
     for (j = 0; j < b->numSides; j++) {
       s = &dbrushsides[b->firstSide + j];
