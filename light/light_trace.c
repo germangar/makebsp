@@ -1089,37 +1089,55 @@ High-performance Embree tracing path
 =============
 */
 static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
-                             trace_t *trace, traceWork_t *tw) {
+                             trace_t *trace, qboolean testAll, traceWork_t *tw) {
   int i;
   struct RTCRayHit rayhit;
   struct MyRayQueryContext context;
   rtcInitRayQueryContext(&context.context);
   context.tw = tw;
 
+  vec3_t dir;
+  float length;
+
+  VectorSubtract(stop, start, dir);
+  length = VectorNormalize(dir, dir);
+
   rayhit.ray.org_x = start[0];
   rayhit.ray.org_y = start[1];
   rayhit.ray.org_z = start[2];
-  rayhit.ray.dir_x = stop[0] - start[0];
-  rayhit.ray.dir_y = stop[1] - start[1];
-  rayhit.ray.dir_z = stop[2] - start[2];
+  rayhit.ray.dir_x = dir[0];
+  rayhit.ray.dir_y = dir[1];
+  rayhit.ray.dir_z = dir[2];
   rayhit.ray.tnear = 0.0001f;
-  rayhit.ray.tfar = 1.0f;
+  rayhit.ray.tfar = length;
   rayhit.ray.mask = 0xFFFFFFFF;
   rayhit.ray.flags = 0;
   rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
   rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
 
-  struct RTCIntersectArguments iargs;
-  rtcInitIntersectArguments(&iargs);
-  iargs.context = &context.context;
+  if (testAll) {
+    struct RTCIntersectArguments iargs;
+    rtcInitIntersectArguments(&iargs);
+    iargs.context = &context.context;
+    rtcIntersect1(g_scene, &rayhit, &iargs);
+  } else {
+    // Optimization for simple occlusion checks
+    struct RTCOccludedArguments oargs;
+    rtcInitOccludedArguments(&oargs);
+    oargs.context = &context.context;
+    rtcOccluded1(g_scene, &rayhit.ray, &oargs);
 
-  rtcIntersect1(g_scene, &rayhit, &iargs);
+    // If occluded, tfar becomes -infinity in Embree 4
+    if (rayhit.ray.tfar < 0) {
+      rayhit.hit.geomID = 0; // Mark as hit
+    }
+  }
 
   trace->filter[0] = 1.0;
   trace->filter[1] = 1.0;
   trace->filter[2] = 1.0;
   trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
-  trace->hitFraction = (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? 1.0f : rayhit.ray.tfar;
+  trace->hitFraction = (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? 1.0f : (rayhit.ray.tfar / length);
 
   for (i = 0; i < 3; i++) {
     trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
@@ -1134,7 +1152,7 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw) {
   if (embree) {
-    TraceLine_Embree(start, stop, trace, tw);
+    TraceLine_Embree(start, stop, trace, testAll, tw);
     return;
   }
 
