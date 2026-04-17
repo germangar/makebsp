@@ -204,9 +204,10 @@ typedef enum {
 
 extern ssMode_t superSampleMode;
 void SmoothLightmaps(float radius);
+void PostProcessLightmaps(void);
 
 // Program flow
-void LightMain(void);
+void LightMain(int radiosityPasses);
 extern light_t *lights;
 extern qboolean patchshadows;
 extern qboolean exactPointToPolygon;

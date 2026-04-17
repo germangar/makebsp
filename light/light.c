@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // light.c
 
 #include "light.h"
+#include "radiosity.h"
 #include "../common/imagelib.h"
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
@@ -53,6 +54,7 @@ int nogridlighting = 0;
 float areaScale = 0.25;
 
 // for run time tweaking of all point sources in the level
+float lightscale = 1.0;
 float pointScale = 7500;
 
 int *surfaceWorkOrder;
@@ -728,7 +730,7 @@ LightMain
 
 ========
 */
-void LightMain(void) {
+void LightMain(int radiosityPasses) {
   float f;
   
   _printf("--- LightMain ---\n");
@@ -813,4 +815,9 @@ void LightMain(void) {
 
   InitTrace();
   LightWorld();
+
+  // Call radiosity passes
+  LightRadiosity(radiosityPasses);
+
+  PostProcessLightmaps();
 }

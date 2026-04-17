@@ -275,7 +275,6 @@ int main(int argc, char **argv) {
     _printf("reading %s\n", source);
 
     LoadBSPFile(source);
-    UpConvertLightingData();
 
     // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
     if (falloffOverridden) g_game->falloff = overrideFalloff;
@@ -327,23 +326,10 @@ int main(int argc, char **argv) {
         _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
     }
 
+    UpConvertLightingData();
+
     // Call core lighting process
-    LightMain();
-
-    // Call radiosity passes
-    LightRadiosity(radiosityPasses);
-
-    _printf("--- Post Processing ---\n");
-    ScanLightmapIntensity();
-
-    if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
-        _printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
-        for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
-            _printf("%d...", pnum);
-            SmoothLightmaps(lightmapSmoothRadius);
-        }
-        _printf(" Done\n");
-    }
+    LightMain(radiosityPasses);
 
     _printf("writing %s\n", source);
     DownConvertLightingData();

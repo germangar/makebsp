@@ -159,3 +159,28 @@ void SmoothLightmaps(float radius) {
 
 	free(tempFloats);
 }
+
+/*
+================
+PostProcessLightmaps
+
+HUB function for all lightmap post-processing steps.
+Called at the end of the direct lighting phase.
+================
+*/
+void PostProcessLightmaps(void) {
+	_printf("--- Post Processing ---\n");
+	
+	// 1. Scan for peak intensity (for normalization/HDR scaling)
+	ScanLightmapIntensity();
+
+	// 2. Multitransfert / Gaussian Smoothing
+	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+		_printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
+		for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+			_printf("%d...", pnum);
+			SmoothLightmaps(lightmapSmoothRadius);
+		}
+		_printf(" Done\n");
+	}
+}
