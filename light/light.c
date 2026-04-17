@@ -79,7 +79,6 @@ qboolean lightmapBorder;
 
 qboolean debugLightmaps;
 qboolean debugLightmapsAlpha;
-qboolean oldTrace = qfalse;
 qboolean bruteTrace = qfalse;
 qboolean embree = qfalse;
 
@@ -185,7 +184,6 @@ void FindSkyBrushes(void) {
   int i, j;
   dbrush_t *b;
   skyBrush_t *sb;
-  shaderInfo_t *si;
   dbrushside_t *s;
 
   // find the brushes
@@ -218,14 +216,8 @@ void FindSkyBrushes(void) {
   VectorNormalize(sunDirection, sunDirection);
 
   // find the sky shader
-  for (i = 0; i < numDrawSurfaces; i++) {
-    si = ShaderInfoForShader(dshaders[drawSurfaces[i].shaderNum].shader);
-    if (si->surfaceFlags & SURF_SKY) {
-      VectorCopy(si->sunLight, sunLight);
-      VectorCopy(si->sunDirection, sunDirection);
-      break;
-    }
-  }
+  // (NOTE: This is now handled by InjectSunEntity in the BSP stage
+  // and CreateEntityLights in the Light stage via the entity system)
 }
 
 
@@ -498,6 +490,59 @@ void CreateEntityLights(void) {
     name = ValueForKey(e, "classname");
     if (strncmp(name, "light", 5))
       continue;
+
+    // Check if this is a sun entity (injected or manual)
+    if (ValueForKey(e, "_sun")[0]) {
+      float intensity;
+      const char *t;
+      entity_t *tEnt;
+
+      _printf("Processing sun entity: origin %s, target %s\n", 
+              ValueForKey(e, "origin"), ValueForKey(e, "target"));
+
+      // 1. Direction Calculation (Targeting > Vector Fallback)
+      t = ValueForKey(e, "target");
+      if (t && t[0] && (tEnt = FindTargetEntity(t))) {
+        vec3_t sunOrigin, targetOrigin;
+        GetVectorForKey(e, "origin", sunOrigin);
+        GetVectorForKey(tEnt, "origin", targetOrigin);
+        VectorSubtract(sunOrigin, targetOrigin, sunDirection);
+      } else {
+        // Fallback to high-precision dir from injector or default
+        const char *sunDirKey = ValueForKey(e, "_sun_dir");
+        if (sunDirKey && sunDirKey[0]) {
+          GetVectorForKey(e, "_sun_dir", sunDirection);
+        } else {
+          VectorSet(sunDirection, -0.45, -0.3, 0.9); // Q3 default-ish (UP)
+        }
+      }
+      VectorNormalize(sunDirection, sunDirection);
+
+      // 2. Intensity and Color
+      intensity = FloatForKey(e, "light");
+      if (!intensity)
+        intensity = FloatForKey(e, "_light");
+
+      _color = ValueForKey(e, "_color");
+      if (_color && _color[0]) {
+        sscanf(_color, "%f %f %f", &sunLight[0], &sunLight[1], &sunLight[2]);
+        
+        // If the mapper provided a separate 'light' key, we treat _color as a normalized multiplier
+        if (intensity > 0) {
+          ColorNormalize(sunLight, sunLight);
+          VectorScale(sunLight, intensity, sunLight);
+        }
+      } else {
+        // Default white sun if no color provided
+        if (intensity <= 0) intensity = 300.0f;
+        VectorSet(sunLight, intensity, intensity, intensity);
+      }
+
+      _printf("Sun entity found: Direction (%f %f %f), Intensity (%f %f %f)\n",
+              sunDirection[0], sunDirection[1], sunDirection[2],
+              sunLight[0], sunLight[1], sunLight[2]);
+      continue;
+    }
 
     numPointLights++;
     dl = malloc(sizeof(*dl));
@@ -1957,8 +2002,6 @@ void LightWorld(void) {
   if (!nogridlighting) {
     if (embree) {
       _printf("--- TraceGrid (embree) ---\n");
-    } else if (oldTrace) {
-      _printf("--- TraceGrid (legacy) ---\n");
     } else {
       _printf("--- TraceGrid (surface) ---\n");
     }
@@ -1972,8 +2015,6 @@ void LightWorld(void) {
 
   if (embree) {
     _printf("--- TraceLtm (embree) ---\n");
-  } else if (oldTrace) {
-    _printf("--- TraceLtm (legacy) ---\n");
   } else {
     _printf("--- TraceLtm (surface) ---\n");
   }

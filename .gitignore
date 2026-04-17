@@ -4,6 +4,7 @@ scripts/
 maps/
 textures/
 models/
+env/
 testmapbuild.bat
 libs/assimp_src/
 build_assimp_static.bat

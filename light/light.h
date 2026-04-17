@@ -82,7 +82,6 @@ extern float entity_scale;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
-extern qboolean oldTrace;
 extern qboolean bruteTrace;
 extern qboolean embree;
 

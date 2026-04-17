@@ -94,6 +94,12 @@ qboolean VectorCompare(const vec3_t v1, const vec3_t v2);
     x[1] = -x[1];                                                              \
     x[2] = -x[2];                                                              \
   }
+#define VectorSet(v, x, y, z)                                                  \
+  {                                                                            \
+    (v)[0] = (x);                                                              \
+    (v)[1] = (y);                                                              \
+    (v)[2] = (z);                                                              \
+  }
 void Vec10Copy(vec_t *in, vec_t *out);
 
 vec_t Q_rint(vec_t in);

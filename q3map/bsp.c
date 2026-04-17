@@ -345,6 +345,73 @@ void OnlyTextures(void) { // FIXME!!!
 }
 
 /*
+================
+InjectSunEntity
+
+Finds the first sky shader with sun info and creates a light entity if needed
+================
+*/
+void InjectSunEntity(void) {
+  int i;
+  shaderInfo_t *si;
+  entity_t *e;
+  char buf[1024];
+
+  // Check if a sun entity already exists
+  for (i = 0; i < num_entities; i++) {
+    if (ValueForKey(&entities[i], "_sun")[0]) {
+      _printf("Sun entity already exists, skipping shader injection.\n");
+      return;
+    }
+  }
+
+  // Scan unique shaders emitted into the BSP for any sky sun definitions
+  for (i = 0; i < numShaders; i++) {
+    // Only look at shaders that have the sky surface flag
+    if (!(dshaders[i].surfaceFlags & SURF_SKY)) {
+      continue;
+    }
+
+    si = ShaderInfoForShader(dshaders[i].shader);
+    if (!si) {
+      continue;
+    }
+
+    // Check if it has any sun intensity defined
+    if (si->sunLight[0] || si->sunLight[1] || si->sunLight[2]) {
+      if (num_entities >= MAX_MAP_ENTITIES) {
+        _printf("WARNING: Could not inject sun entity, MAX_MAP_ENTITIES "
+                "reached.\n");
+        return;
+      }
+
+      _printf("--- InjectSunEntity ---\n");
+      _printf("Injecting sun entity from shader: %s\n", si->shader);
+
+      e = &entities[num_entities];
+      num_entities++;
+      memset(e, 0, sizeof(*e));
+
+      SetKeyValue(e, "classname", "light");
+      SetKeyValue(e, "_sun", "1");
+
+      // Store the normalized direction vector to avoid precision loss
+      sprintf(buf, "%f %f %f", si->sunDirection[0], si->sunDirection[1],
+              si->sunDirection[2]);
+      SetKeyValue(e, "_sun_dir", buf);
+
+      // Store the color and intensity
+      sprintf(buf, "%f %f %f", si->sunLight[0], si->sunLight[1],
+              si->sunLight[2]);
+      SetKeyValue(e, "_color", buf);
+
+      // We only ever support ONE global sun direction in our engine
+      break;
+    }
+  }
+}
+
+/*
 ============
 main
 ============
@@ -599,6 +666,8 @@ int main(int argc, char **argv) {
     sprintf(buf, "%d", samplesize);
     SetKeyValue(&entities[0], "__texelsize", buf);
   }
+
+  InjectSunEntity();
 
   EndBSPFile();
 

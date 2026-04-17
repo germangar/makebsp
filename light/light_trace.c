@@ -731,56 +731,7 @@ void TraceAgainstFacet(traceWork_t *tr, shaderInfo_t *shader, cFacet_t *facet) {
 ===============================================================
 */
 
-typedef struct tnode_s {
-  int type;
-  vec3_t normal;
-  float dist;
-  int children[2];
-  int planeNum;
-} tnode_t;
 
-#define MAX_TNODES (MAX_MAP_NODES * 4)
-tnode_t *tnodes, *tnode_p;
-
-/*
-==============
-MakeTnode
-
-Converts the disk node structure into the efficient tracing structure
-==============
-*/
-void MakeTnode(int nodenum) {
-  tnode_t *t;
-  dplane_t *plane;
-  int i;
-  dnode_t *node;
-  int leafNum;
-
-  t = tnode_p++;
-
-  node = dnodes + nodenum;
-  plane = dplanes + node->planeNum;
-
-  t->planeNum = node->planeNum;
-  t->type = PlaneTypeForNormal(plane->normal);
-  VectorCopy(plane->normal, t->normal);
-  t->dist = plane->dist;
-
-  for (i = 0; i < 2; i++) {
-    if (node->children[i] < 0) {
-      leafNum = -node->children[i] - 1;
-      if (dleafs[leafNum].cluster == -1) {
-        // solid
-        t->children[i] = leafNum | (1 << 31) | (1 << 30);
-      } else {
-        t->children[i] = leafNum | (1 << 31);
-      }
-    } else {
-      t->children[i] = tnode_p - tnodes;
-      MakeTnode(node->children[i]);
-    }
-  }
-}
 
 /*
 =============
@@ -933,13 +884,6 @@ Loads the node structure out of a .bsp file to be used for light occlusion
 =============
 */
 void InitTrace(void) {
-  // 32 byte align the structs
-  tnodes = malloc((MAX_TNODES + 1) * sizeof(tnode_t));
-  tnodes = (tnode_t *)(((size_t)tnodes + 31) & ~31);
-  tnode_p = tnodes;
-
-  MakeTnode(0);
-
   InitTracingGeometry();
 }
 
@@ -949,44 +893,41 @@ PointInSolid
 ===================
 */
 qboolean PointInSolid_r(vec3_t start, int node) {
-  tnode_t *tnode;
+  dnode_t *dnode;
+  dplane_t *dplane;
   double front;
 
-  while (!(node & (1 << 31))) {
-    tnode = &tnodes[node];
-    switch (tnode->type) {
-    case PLANE_X:
-      front = (double)start[0] - tnode->dist;
-      break;
-    case PLANE_Y:
-      front = (double)start[1] - tnode->dist;
-      break;
-    case PLANE_Z:
-      front = (double)start[2] - tnode->dist;
-      break;
-    default:
-      front = ((double)start[0] * tnode->normal[0] +
-               (double)start[1] * tnode->normal[1] +
-               (double)start[2] * tnode->normal[2]) -
-              tnode->dist;
-      break;
+  while (node >= 0) {
+    dnode = &dnodes[node];
+    dplane = &dplanes[dnode->planeNum];
+
+    int type = PlaneTypeForNormal(dplane->normal);
+    if (type <= PLANE_Z) {
+      front = (double)start[type] - dplane->dist;
+    } else {
+      front = ((double)start[0] * dplane->normal[0] +
+               (double)start[1] * dplane->normal[1] +
+               (double)start[2] * dplane->normal[2]) -
+              dplane->dist;
     }
 
     if (front > -TRACE_EPSILON && front < TRACE_EPSILON) {
       // exactly on node, must check both sides
-      return (qboolean)(PointInSolid_r(start, tnode->children[0]) |
-                        PointInSolid_r(start, tnode->children[1]));
+      return (qboolean)(PointInSolid_r(start, dnode->children[0]) |
+                        PointInSolid_r(start, dnode->children[1]));
     }
 
     if (front >= TRACE_EPSILON) {
-      node = tnode->children[0];
+      node = dnode->children[0];
     } else {
-      node = tnode->children[1];
+      node = dnode->children[1];
     }
   }
 
-  if (node & (1 << 30)) {
-    return qtrue;
+  // Handle leaf
+  int leafNum = -node - 1;
+  if (dleafs[leafNum].cluster == -1) {
+    return qtrue; // Opaque cluster is solid
   }
   return qfalse;
 }
@@ -1000,87 +941,6 @@ PointInSolid
 qboolean PointInSolid(vec3_t start) { return PointInSolid_r(start, 0); }
 
 /*
-=============
-TraceLine_r
-
-Returns qtrue if something is hit and tracing can stop
-=============
-*/
-int TraceLine_r(int node, const vec3_t start, const vec3_t stop,
-                traceWork_t *tw) {
-  tnode_t *tnode;
-  double d1, d2, frac;
-  int side;
-  vec3_t mid;
-  int r;
-
-  if (node & (1 << 31)) {
-    if (node & (1 << 30)) {
-      VectorCopy(start, tw->trace->hit);
-      tw->trace->passSolid = qtrue;
-      return qtrue;
-    } else {
-      // save the node off for more exact testing
-      if (tw->numOpenLeafs == MAX_MAP_LEAFS) {
-        return qfalse;
-      }
-      tw->openLeafNumbers[tw->numOpenLeafs] = node & ~(3 << 30);
-      tw->numOpenLeafs++;
-      return qfalse;
-    }
-  }
-
-  tnode = &tnodes[node];
-
-  switch (tnode->type) {
-  case PLANE_X:
-    d1 = (double)start[0] - tnode->dist;
-    d2 = (double)stop[0] - tnode->dist;
-    break;
-  case PLANE_Y:
-    d1 = (double)start[1] - tnode->dist;
-    d2 = (double)stop[1] - tnode->dist;
-    break;
-  case PLANE_Z:
-    d1 = (double)start[2] - tnode->dist;
-    d2 = (double)stop[2] - tnode->dist;
-    break;
-  default:
-    d1 = ((double)start[0] * tnode->normal[0] +
-          (double)start[1] * tnode->normal[1] +
-          (double)start[2] * tnode->normal[2]) -
-         tnode->dist;
-    d2 = ((double)stop[0] * tnode->normal[0] +
-          (double)stop[1] * tnode->normal[1] +
-          (double)stop[2] * tnode->normal[2]) -
-         tnode->dist;
-    break;
-  }
-
-  if (d1 >= TRACE_EPSILON && d2 >= TRACE_EPSILON) {
-    return TraceLine_r(tnode->children[0], start, stop, tw);
-  }
-
-  if (d1 <= -TRACE_EPSILON && d2 <= -TRACE_EPSILON) {
-    return TraceLine_r(tnode->children[1], start, stop, tw);
-  }
-
-  side = d1 < 0;
-
-  frac = d1 / (d1 - d2);
-
-  mid[0] = start[0] + (stop[0] - start[0]) * frac;
-  mid[1] = start[1] + (stop[1] - start[1]) * frac;
-  mid[2] = start[2] + (stop[2] - start[2]) * frac;
-
-  r = TraceLine_r(tnode->children[side], start, mid, tw);
-
-  if (r) {
-    return r;
-  }
-
-  return TraceLine_r(tnode->children[!side], mid, stop, tw);
-}
 
 //==========================================================================================
 
@@ -1171,55 +1031,47 @@ Recursive traversal that collects ALL leaves along the ray (ignoring Solid/Empty
 */
 void TraceLine_Surface_r(int node, const vec3_t start, const vec3_t stop,
                          traceWork_t *tw) {
-  tnode_t *tnode;
+  dnode_t *dnode;
+  dplane_t *dplane;
   double d1, d2, frac;
   int side;
   vec3_t mid;
 
-  if (node & (1 << 31)) {
+  if (node < 0) {
     // save the leaf number for surface testing
     if (tw->numOpenLeafs == MAX_MAP_LEAFS) {
       return;
     }
-    tw->openLeafNumbers[tw->numOpenLeafs] = node & ~(3 << 30);
+    tw->openLeafNumbers[tw->numOpenLeafs] = -node - 1;
     tw->numOpenLeafs++;
     return;
   }
 
-  tnode = &tnodes[node];
+  dnode = &dnodes[node];
+  dplane = &dplanes[dnode->planeNum];
 
-  switch (tnode->type) {
-  case PLANE_X:
-    d1 = (double)start[0] - tnode->dist;
-    d2 = (double)stop[0] - tnode->dist;
-    break;
-  case PLANE_Y:
-    d1 = (double)start[1] - tnode->dist;
-    d2 = (double)stop[1] - tnode->dist;
-    break;
-  case PLANE_Z:
-    d1 = (double)start[2] - tnode->dist;
-    d2 = (double)stop[2] - tnode->dist;
-    break;
-  default:
-    d1 = ((double)start[0] * tnode->normal[0] +
-          (double)start[1] * tnode->normal[1] +
-          (double)start[2] * tnode->normal[2]) -
-         tnode->dist;
-    d2 = ((double)stop[0] * tnode->normal[0] +
-          (double)stop[1] * tnode->normal[1] +
-          (double)stop[2] * tnode->normal[2]) -
-         tnode->dist;
-    break;
+  int type = PlaneTypeForNormal(dplane->normal);
+  if (type <= PLANE_Z) {
+    d1 = (double)start[type] - dplane->dist;
+    d2 = (double)stop[type] - dplane->dist;
+  } else {
+    d1 = ((double)start[0] * dplane->normal[0] +
+          (double)start[1] * dplane->normal[1] +
+          (double)start[2] * dplane->normal[2]) -
+         dplane->dist;
+    d2 = ((double)stop[0] * dplane->normal[0] +
+          (double)stop[1] * dplane->normal[1] +
+          (double)stop[2] * dplane->normal[2]) -
+         dplane->dist;
   }
 
   if (d1 >= TRACE_EPSILON && d2 >= TRACE_EPSILON) {
-    TraceLine_Surface_r(tnode->children[0], start, stop, tw);
+    TraceLine_Surface_r(dnode->children[0], start, stop, tw);
     return;
   }
 
   if (d1 <= -TRACE_EPSILON && d2 <= -TRACE_EPSILON) {
-    TraceLine_Surface_r(tnode->children[1], start, stop, tw);
+    TraceLine_Surface_r(dnode->children[1], start, stop, tw);
     return;
   }
 
@@ -1231,8 +1083,8 @@ void TraceLine_Surface_r(int node, const vec3_t start, const vec3_t stop,
   mid[1] = start[1] + (stop[1] - start[1]) * frac;
   mid[2] = start[2] + (stop[2] - start[2]) * frac;
 
-  TraceLine_Surface_r(tnode->children[side], start, mid, tw);
-  TraceLine_Surface_r(tnode->children[!side], mid, stop, tw);
+  TraceLine_Surface_r(dnode->children[side], start, mid, tw);
+  TraceLine_Surface_r(dnode->children[!side], mid, stop, tw);
 }
 
 /*
@@ -1370,109 +1222,6 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
 }
 
 /*
-=============
-TraceLine_Legacy
-
-Legacy BSP tree-based tracing path
-=============
-*/
-static void TraceLine_Legacy(const vec3_t start, const vec3_t stop,
-                             trace_t *trace, qboolean testAll,
-                             traceWork_t *tw) {
-  int i, r, j;
-  float oldHitFrac;
-  dleaf_t *leaf;
-  int surfaceNum;
-  surfaceTest_t *test;
-  byte surfaceTested[MAX_MAP_DRAW_SURFS / 8];
-
-  if (numthreads == 1) {
-    c_totalTrace++;
-  }
-
-  // assume all light gets through, unless the ray crosses
-  // a translucent surface
-  trace->filter[0] = 1.0;
-  trace->filter[1] = 1.0;
-  trace->filter[2] = 1.0;
-
-  VectorCopy(start, tw->start);
-  VectorCopy(stop, tw->end);
-  tw->trace = trace;
-
-  tw->numOpenLeafs = 0;
-
-  trace->passSolid = qfalse;
-  trace->hitFraction = 1.0;
-
-  // --- Legacy Junction Fix (q3map2 style) ---
-  // We shift the start point of the legacy trace by 1.25 units
-  // to avoid being trapped inside intersecting geometry at junctions.
-  {
-    vec3_t dir;
-    float len;
-    vec3_t shiftedStart;
-
-    VectorSubtract(stop, start, dir);
-    len = VectorNormalize(dir, dir);
-
-    if (len > SELF_SHADOW_EPSILON) {
-      VectorMA(start, SELF_SHADOW_EPSILON, dir, shiftedStart);
-      r = TraceLine_r(0, shiftedStart, stop, tw);
-      if (r) {
-        // Adjust hitFraction to be relative to the ORIGINAL start point
-        float hitDist = (trace->hitFraction * (len - SELF_SHADOW_EPSILON)) +
-                        SELF_SHADOW_EPSILON;
-        trace->hitFraction = hitDist / len;
-      }
-    } else {
-      r = TraceLine_r(0, start, stop, tw);
-    }
-  }
-
-  // if we hit a solid leaf, stop without testing the leaf
-  // surfaces.  Note that the plane and endpoint might not
-  // be the first solid intersection along the ray.
-  if (r && !testAll) {
-    return;
-  }
-
-  memset(surfaceTested, 0, (numDrawSurfaces + 7) / 8);
-  oldHitFrac = trace->hitFraction;
-
-  for (i = 0; i < tw->numOpenLeafs; i++) {
-    leaf = &dleafs[tw->openLeafNumbers[i]];
-    for (j = 0; j < leaf->numLeafSurfaces; j++) {
-      surfaceNum = dleafsurfaces[leaf->firstLeafSurface + j];
-
-      // make sure we don't test the same ray against a surface more than once
-      if (surfaceTested[surfaceNum >> 3] & (1 << (surfaceNum & 7))) {
-        continue;
-      }
-      surfaceTested[surfaceNum >> 3] |= (1 << (surfaceNum & 7));
-
-      test = surfaceTest[surfaceNum];
-      if (!test) {
-        continue;
-      }
-      //
-      if (!tw->patchshadows && test->patch) {
-        continue;
-      }
-      TraceAgainstSurface(tw, test);
-    }
-
-    // if the trace is now solid, we can't possibly hit anything closer
-    if (trace->hitFraction < oldHitFrac) {
-      trace->passSolid = qtrue;
-      break;
-    }
-  }
-
-  for (i = 0; i < 3; i++) {
-    trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
-  }
-}
 
 /*
 =============
@@ -1484,12 +1233,7 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
     return;
   }
 
-  if (!oldTrace) {
-    TraceLine_Surface(start, stop, trace, testAll, tw);
-    return;
-  }
-
-  TraceLine_Legacy(start, stop, trace, testAll, tw);
+  TraceLine_Surface(start, stop, trace, testAll, tw);
 }
 
 /*

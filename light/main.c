@@ -133,9 +133,6 @@ int main(int argc, char **argv) {
             g_game->deluxeMap = qtrue;
             deluxeMapOverridden = qtrue;
             _printf("Deluxemaps enabled\n");
-        } else if (!strcmp(argv[i], "-oldtrace")) {
-            oldTrace = qtrue;
-            _printf("Legacy BSP-brush tracing enabled\n");
         } else if (!strcmp(argv[i], "-embree")) {
             embree = qtrue;
         } else if (!strcmp(argv[i], "-surface")) {
@@ -236,7 +233,6 @@ int main(int argc, char **argv) {
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
-                "   oldtrace       = use legacy BSP-brush occlusion for all surfaces\n"
                 "   bruteforce     = skip all culling and use legacy trace\n"
                 "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
                 "   surface        = use legacy surface tracing path\n"
@@ -295,7 +291,7 @@ int main(int argc, char **argv) {
     else if (g_game->falloff == FALLOFF_WRAPPED) fLog = "wrapped";
 
     const char *tLog = "Surface";
-    if (oldTrace || bruteTrace) tLog = "Legacy";
+    if (bruteTrace) tLog = "Legacy";
     else if (embree) tLog = "Embree";
 
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);

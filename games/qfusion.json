@@ -14,7 +14,7 @@
   "lightgridRGB": false,
   "texturesRGB": true,
   "colorsRGB": true,
-  "falloff": "halflambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
+  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
   "deluxeMap": true,
   "smoothPasses": 6, /* passes of blurring lightmaps */
   "smoothRadius": 1.00, /* affects both blurring and supersampling */
