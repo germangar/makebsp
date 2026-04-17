@@ -481,8 +481,9 @@ static void ParseShaderFile(const char *filename) {
       // intensity falls off with angle but not distance 100 is a fairly bright
       // sun degree of 0 = from the east, 90 = north, etc.  altitude of 0 =
       // sunrise/set, 90 = noon
-      if (!Q_stricmp(token, "q3map_sun")) {
+      if (!Q_stricmp(token, "q3map_sun") || !Q_stricmp(token, "q3map_sunExt")) {
         float a, b;
+        qboolean isExt = !Q_stricmp(token, "q3map_sunExt");
 
         GetToken(qfalse);
         si->sunLight[0] = atof(token);
@@ -508,6 +509,12 @@ static void ParseShaderFile(const char *filename) {
         si->sunDirection[0] = cos(a) * cos(b);
         si->sunDirection[1] = sin(a) * cos(b);
         si->sunDirection[2] = sin(b);
+
+        // Consume extra parameters for sunExt without storing them
+        if (isExt) {
+          GetToken(qfalse); // deviance
+          GetToken(qfalse); // samples
+        }
 
         si->surfaceFlags |= SURF_SKY;
         continue;
