@@ -227,6 +227,7 @@ extern qboolean nofog;
 extern qboolean testExpand;
 extern qboolean showseams;
 extern qboolean forceUVGen;
+extern qboolean snapUVs;
 
 extern vec_t microvolume;
 

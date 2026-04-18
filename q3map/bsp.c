@@ -49,6 +49,7 @@ qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
 qboolean forceUVGen;
+qboolean snapUVs;
 
 char outbase[32];
 
@@ -546,6 +547,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-forceuvgen")) {
       forceUVGen = qtrue;
       _printf("forceUVGen = qtrue\n");
+    } else if (!strcmp(argv[i], "-snapuvs")) {
+      snapUVs = qtrue;
+      _printf("snapUVs = qtrue\n");
     } else {
       break;
     }
