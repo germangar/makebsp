@@ -228,6 +228,7 @@ extern qboolean testExpand;
 extern qboolean showseams;
 extern qboolean forceUVGen;
 extern qboolean snapUVs;
+extern qboolean stitchSeams;
 
 extern vec_t microvolume;
 

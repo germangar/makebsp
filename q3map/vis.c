@@ -1073,6 +1073,7 @@ int VisMain(int argc, char **argv) {
   strcat(name, ".bsp");
   _printf("reading %s\n", name);
   LoadBSPFile(name);
+  ParseEntities();
 
   // load the portal file
   sprintf(portalfile, "%s%s", inbase, ExpandArg(argv[i]));

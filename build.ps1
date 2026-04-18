@@ -25,11 +25,11 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "[2/3] Running q3map -v maps/modeltest.map..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./q3map.exe -v maps/modeltest.map
+    ./q3map.exe -v -samplesize 16 maps/modeltest.map
     Write-Host ""
     Write-Host "[3/3] Running light -radiosity 1 -v maps/modeltest.bsp..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./light.exe -radiosity 1 -v maps/modeltest.bsp
+    ./light.exe -smooth 0 -radiosity 1 -v maps/modeltest.bsp
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red

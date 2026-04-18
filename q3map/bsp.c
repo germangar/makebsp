@@ -50,6 +50,7 @@ qboolean testExpand;
 qboolean showseams;
 qboolean forceUVGen;
 qboolean snapUVs;
+qboolean stitchSeams;
 
 char outbase[32];
 
@@ -550,6 +551,11 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-snapuvs")) {
       snapUVs = qtrue;
       _printf("snapUVs = qtrue\n");
+    } else if (!strcmp(argv[i], "-stitch")) {
+      stitchSeams = qtrue;
+      _printf("stitchSeams = qtrue\n");
+    } else if (!strcmp(argv[i], "-bsp")) {
+        // Redundant, just to satisfy usage
     } else {
       break;
     }
@@ -585,7 +591,9 @@ int main(int argc, char **argv) {
             "   game <G>       = set the active game profile to G\n"
             "   fakemap        = generate a fakemap.map after processing\n"
             "   samplesize <N> = set the default lightmap sample size to NxN\n"
-            "   forceuvgen     = force UV reconstruction for all misc_models\n");
+            "   forceuvgen     = force UV reconstruction for all misc_models\n"
+            "   snapuvs        = align misc_model UVs to lightmap grid\n"
+            "   stitch         = identify coincident world-space edges for radiosity stitching\n");
     exit(0);
   }
 

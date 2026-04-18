@@ -214,6 +214,14 @@ extern qboolean exactPointToPolygon;
 extern int *surfaceWorkOrder;
 extern int c_visible, c_occluded;
 
+typedef struct {
+  vec3_t xyz;
+} stitchPoint_t;
+
+#define MAX_STITCH_POINTS 4096
+extern stitchPoint_t g_stitchPoints[MAX_STITCH_POINTS];
+extern int g_numStitchPoints;
+
 int CompareSurfaces(const void *a, const void *b);
 void LightWorld(void);
 void TraceLtm(int num);

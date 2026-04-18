@@ -909,15 +909,17 @@ void LoadTriangleModels(void) {
 AddTriangleModels
 
 Second pass: Insert the pre-calculated surfaces into the BSP tree.
+Also performs Seam Discovery for Radiosity Stitching.
 =====================
 */
 void AddTriangleModels(tree_t *tree) {
-  int i;
+  int i, j, k;
 
+  // 1. Basic Stats
   for (i = 0; i < numModelInstances; i++) {
     modelInstance_t *inst = &modelInstances[i];
     c_triangleModels++;
-    for (int j = 0; j < inst->numDrawSurfs; j++) {
+    for (j = 0; j < inst->numDrawSurfs; j++) {
       c_triangleSurfaces++;
       mapDrawSurface_t *ds = inst->drawSurfs[j];
       c_triangleVertexes += ds->numVerts;
@@ -929,4 +931,94 @@ void AddTriangleModels(tree_t *tree) {
   qprintf("%5i triangle surfaces\n", c_triangleSurfaces);
   qprintf("%5i triangle vertexes\n", c_triangleVertexes);
   qprintf("%5i triangle indexes\n", c_triangleIndexes);
+
+  // 2. Seam Discovery (Radiosity Stitching)
+  if (!stitchSeams) return;
+
+  _printf("--- Seam Discovery ---\n");
+
+  typedef struct {
+    vec3_t xyz;
+    int dsIdx;
+    int vIdx;
+  } globalVert_t;
+
+  int totalGlobalVerts = c_triangleVertexes;
+  globalVert_t *gvList = malloc(sizeof(globalVert_t) * totalGlobalVerts);
+  int gvCount = 0;
+
+  // Collect all vertices in world space
+  int dsGlobalIdx = 0;
+  for (i = 0; i < numModelInstances; i++) {
+    modelInstance_t *inst = &modelInstances[i];
+    for (j = 0; j < inst->numDrawSurfs; j++) {
+      mapDrawSurface_t *ds = inst->drawSurfs[j];
+      for (k = 0; k < ds->numVerts; k++) {
+        VectorCopy(ds->verts[k].xyz, gvList[gvCount].xyz);
+        gvList[gvCount].dsIdx = dsGlobalIdx;
+        gvList[gvCount].vIdx = k;
+        gvCount++;
+      }
+      dsGlobalIdx++;
+    }
+  }
+
+  // Find coincident world-space vertices with different UVs/Surfaces
+  int compareGlobalVerts(const void *a, const void *b) {
+    globalVert_t *v1 = (globalVert_t *)a;
+    globalVert_t *v2 = (globalVert_t *)b;
+    if (v1->xyz[0] != v2->xyz[0]) return (v1->xyz[0] < v2->xyz[0]) ? -1 : 1;
+    if (v1->xyz[1] != v2->xyz[1]) return (v1->xyz[1] < v2->xyz[1]) ? -1 : 1;
+    if (v1->xyz[2] != v2->xyz[2]) return (v1->xyz[2] < v2->xyz[2]) ? -1 : 1;
+    return 0;
+  }
+  qsort(gvList, gvCount, sizeof(globalVert_t), compareGlobalVerts);
+
+  int maxStitchEdges = 10000; // Binary file can handle much more than worldspawn key
+  vec3_t *stitchResults = malloc(sizeof(vec3_t) * maxStitchEdges);
+  int finalCount = 0;
+
+  for (i = 0; i < gvCount - 1; i++) {
+    for (j = i + 1; j < gvCount; j++) {
+      if (fabs(gvList[i].xyz[0] - gvList[j].xyz[0]) > 0.1f ||
+          fabs(gvList[i].xyz[1] - gvList[j].xyz[1]) > 0.1f ||
+          fabs(gvList[i].xyz[2] - gvList[j].xyz[2]) > 0.1f) {
+        break;
+      }
+
+      if (finalCount < maxStitchEdges) {
+        VectorCopy(gvList[i].xyz, stitchResults[finalCount]);
+        finalCount++;
+      }
+    }
+    while (i < gvCount - 1 && 
+           fabs(gvList[i].xyz[0] - gvList[i+1].xyz[0]) < 0.1f &&
+           fabs(gvList[i].xyz[1] - gvList[i+1].xyz[1]) < 0.1f &&
+           fabs(gvList[i].xyz[2] - gvList[i+1].xyz[2]) < 0.1f) {
+      i++;
+    }
+  }
+
+  if (finalCount > 0) {
+    char stitchPath[MAX_OS_PATH];
+    char base[MAX_OS_PATH];
+    
+    ExtractFileBase(source, base);
+    sprintf(stitchPath, "cache/%s.stich", base);
+    
+    CreatePath(stitchPath);
+    
+    FILE *f = fopen(stitchPath, "wb");
+    if (f) {
+      fwrite(&finalCount, sizeof(int), 1, f);
+      fwrite(stitchResults, sizeof(vec3_t), finalCount, f);
+      fclose(f);
+      _printf("Exported %d seam vertices to %s\n", finalCount, stitchPath);
+    } else {
+      _printf("WARNING: Could not write stitch file %s\n", stitchPath);
+    }
+  }
+
+  free(gvList);
+  free(stitchResults);
 }

@@ -424,6 +424,122 @@ static void RadiosityBilinearFillThread(int surfIdx) {
     RadiosityBilinearFillOneSurface(surfIdx);
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2.5 — Stitching
+//
+// Synchronizes radiosity values at world-space coincident seam points.
+// ---------------------------------------------------------------------------
+
+extern qboolean stitchSeams;
+
+static void RadiosityStitch(void) {
+    if (!stitchSeams || g_numStitchPoints <= 0)
+        return;
+
+    _printf("  [stitch]     Processing %d seam points... ", g_numStitchPoints);
+    fflush(stdout);
+
+    typedef struct {
+        vec3_t xyz;
+        int k_dst;
+    } sparseSample_t;
+
+    // 1. Build a list of all sparse samples and their world positions
+    // We only need to do this once per radiosity pass.
+    int maxPotentialSamples = numLightBytes / (3 * rad_interval * rad_interval) + 1024;
+    sparseSample_t *samples = malloc(sizeof(sparseSample_t) * maxPotentialSamples);
+    int numSamples = 0;
+
+    for (int s = 0; s < numDrawSurfaces; s++) {
+        dsurface_t *ds = &drawSurfaces[s];
+        if (ds->lightmapNum[0] < 0) continue;
+        
+        for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
+            for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
+                int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT +
+                             ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH +
+                             ds->lightmapOffset[0][0] + lx;
+
+                if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
+
+                if (numSamples >= maxPotentialSamples) break;
+
+                sparseSample_t *samp = &samples[numSamples++];
+                samp->k_dst = k_dst;
+
+                // Calculate world position (standalone logic, identical to Integrate)
+                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    vec3_t dummyNormal;
+                    if (!TriSoupSamplePoint(ds, st, samp->xyz, dummyNormal)) {
+                        numSamples--; continue; // Sample missed geometry
+                    }
+                    VectorAdd(samp->xyz, surfaceOrigin[s], samp->xyz);
+                } else {
+                    VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], samp->xyz);
+                    VectorMA(samp->xyz, (float)ly + 0.5f, ds->lightmapVecs[1], samp->xyz);
+                    VectorAdd(samp->xyz, surfaceOrigin[s], samp->xyz);
+                }
+            }
+        }
+    }
+
+    // 2. Perform Proximity Search
+    // Optimized with OpenMP and coarse distance check
+    float epsilon = 2.0f;
+    #pragma omp parallel for
+    for (int i = 0; i < g_numStitchPoints; i++) {
+        vec3_t target;
+        VectorCopy(g_stitchPoints[i].xyz, target);
+
+        int matches[32];
+        float weights[32];
+        int numMatches = 0;
+        vec3_t avgColor = {0, 0, 0};
+        float totalWeight = 0;
+
+        for (int j = 0; j < numSamples; j++) {
+            vec3_t delta;
+            VectorSubtract(samples[j].xyz, target, delta);
+            
+            // Fast coarse check (BBox)
+            if (fabs(delta[0]) > epsilon || fabs(delta[1]) > epsilon || fabs(delta[2]) > epsilon) 
+                continue;
+
+            float dist = VectorLength(delta);
+            if (dist < epsilon) {
+                float weight = 1.0f - (dist / epsilon);
+                if (numMatches < 32) {
+                    matches[numMatches] = samples[j].k_dst;
+                    weights[numMatches] = weight;
+                    
+                    // Local accumulation is thread-safe inside the 'i' loop
+                    VectorMA(avgColor, weight, &radiosityFloats[samples[j].k_dst * 3], avgColor);
+                    totalWeight += weight;
+                    numMatches++;
+                }
+            }
+        }
+
+        if (numMatches > 1 && totalWeight > 0) {
+            VectorScale(avgColor, 1.0f / totalWeight, avgColor);
+            for (int m = 0; m < numMatches; m++) {
+                int k = matches[m] * 3;
+                float alpha = weights[m];
+                for (int c = 0; c < 3; c++) {
+                    radiosityFloats[k + c] = radiosityFloats[k + c] * (1.0f - alpha) + avgColor[c] * alpha;
+                }
+            }
+        }
+    }
+
+    free(samples);
+    _printf("done\n");
+    fflush(stdout);
+}
+
 static void RadiosityReconstruct(void) {
     _printf("  [reconstruct] ");
     RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityBilinearFillThread);
@@ -483,6 +599,8 @@ void LightRadiosity(int radiosityPasses) {
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
         fflush(stdout);
+
+        RadiosityStitch();
 
         RadiosityReconstruct();
 

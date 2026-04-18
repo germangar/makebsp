@@ -1,0 +1,55 @@
+--- LIGHTMAP SEAM STITCHING TECHNICAL REPORT ---
+
+1. OVERVIEW
+Visible seams in lightmaps occur when physically adjacent world-space surfaces are disconnected in UV space (charts). Bilinear interpolation and sparse radiosity sampling cause lighting gradients to diverge at these boundaries. This system implements "Stitching" by identifying coincident world-space edges and forcing their radiosity energy to match.
+
+2. DISCOVERY PHASE (q3map.exe)
+The discovery happens in q3map/misc_model.c during or after triangle model loading.
+
+   A. Spatial Vertex Mapping:
+      - Build a spatial hash or k-d tree of every vertex in all misc_models.
+      - Key: vec3_t position (with epsilon-based snapping).
+      - Value: List of (surface_index, vertex_index).
+
+   B. Seam Identification:
+      - Identify "Coincident Edges": Any edge (V1-V2) where both vertices exist at the same world-space coordinates but belong to different UV islands or surfaces.
+      - We specifically look for "Boundary Edges" — those that are shared between different mesh chunks or UV charts.
+
+   C. Data Serialization:
+      - To avoid breaking the BSP format, we store the stitch data in a worldspawn key: "__stiches".
+      - Format: "x1 y1 z1 x2 y2 z2;x3 y3 z3 x4 y4 z4;..."
+      - Each pair (V1-V2) defines a 3D line segment where a seam exists.
+      - Optimization: Only export edges that actually cross UV boundaries.
+
+3. TRANSPORT PHASE (The Worldspawn Cheat)
+   - q3map.exe writes the string to the worldspawn entity (entities[0]).
+   - The BSP is written normally.
+   - light.exe reads the "__stiches" key during initialization (light/main.c).
+   - The string is parsed into a global `stitchEdge_t` array.
+   - The key is immediately deleted from memory to keep the entity structure clean.
+
+4. INTEGRATION PHASE (light.exe)
+The stitching occurs in light/radiosity.c between Phase 2 (Integrate) and Phase 3 (Reconstruct).
+
+   A. Proximity Search:
+      - For every "sparse" radiosity sample (rad_interval grid), we check if its world-space position is "Near a Seam Edge".
+      - Distance Check: Luxel-to-Edge distance < (luxel_size * 0.5).
+
+   B. Energy Unification:
+      - If Luxel_A and Luxel_B (on different surfaces) are found to be near the same Seam Edge and are world-space coincident:
+        Irradiance_A = Irradiance_B = (Irradiance_A + Irradiance_B) / 2.0;
+
+   C. Bilinear Propagation:
+      - Because the "anchors" (sparse samples) at the edges are now identical, the standard RadiosityBilinearFill will naturally interpolate toward these matched values.
+      - This eliminates the gradient break across the seam.
+
+5. IMPLEMENTATION DETAILS
+   - Variable: `qboolean stitchSeams` (enabled via -stitch).
+   - Key: `__stiches` in worldspawn.
+   - Buffer: `stitchEdge_t *g_stitchEdges`.
+   - Max Edges: We should target a reasonable limit (e.g., 4096) to keep the worldspawn string manageable.
+
+6. EDGE CASES & SAFETY
+   - Normal Check: Do not stitch if surface normals differ by > 25 degrees (prevents floor-to-wall light leaking).
+   - Distance Epsilon: Use 0.1 units for world-space coincidence.
+   - Redundancy: Filter duplicate edges during q3map export.
