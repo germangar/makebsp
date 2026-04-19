@@ -36,7 +36,7 @@ extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 
-qboolean rad_voxel = qfalse;
+qboolean rad_voxel = qtrue;
 
 int main(int argc, char **argv) {
     int i;
@@ -188,9 +188,24 @@ int main(int argc, char **argv) {
             if (rad_depth_intensity < 0.0f) rad_depth_intensity = 0.0f;
             if (rad_depth_intensity > 1.0f) rad_depth_intensity = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-rad_voxel")) {
-            rad_voxel = qtrue;
-            _printf("Shared-bucket voxel reconstruction enabled\n");
+        } else if (!strcmp(argv[i], "-rad_fill")) {
+            const char *mode = argv[++i];
+            if (!strcmp(mode, "voxel")) {
+                rad_voxel = qtrue;
+                _printf("Voxel reconstruction fill enabled\n");
+            } else if (!strcmp(mode, "bilinear")) {
+                rad_voxel = qfalse;
+                _printf("Bilinear interpolation fill enabled\n");
+            } else {
+                Error("Unknown rad_fill mode: %s (use 'voxel' or 'bilinear')", mode);
+            }
+        } else if (!strcmp(argv[i], "-rad_voxelsize")) {
+            rad_voxel_size = (float)atof(argv[i + 1]);
+            if (rad_voxel_size < 0.1f) rad_voxel_size = 0.1f;
+            i++;
+        } else if (!strcmp(argv[i], "-rad_anglematch")) {
+            rad_angle_match = (float)atof(argv[i + 1]);
+            i++;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
@@ -251,7 +266,9 @@ int main(int argc, char **argv) {
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   -rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
-                "   rad_voxel        = enable shared-bucket voxel reconstruction (SEAM FIX)\n"
+                "   rad_fill <mode>   = GI reconstruction mode ('voxel' or 'bilinear')\n"
+                "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
+                "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   rad_depthintensity <F>= set min bounce carryover (0.0 to 1.0) for creases\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"

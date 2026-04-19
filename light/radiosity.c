@@ -33,6 +33,9 @@ float rad_depth_min     = RAD_DEPTH_MIN_DEFAULT;
 float rad_depth_max     = RAD_DEPTH_MAX_DEFAULT;
 float rad_depth_intensity = RAD_DEPTH_INTENSITY_DEFAULT;
 int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
+float rad_voxel_size    = 0.0f;   // Adaptive default: samplesize * rad_interval
+float rad_angle_match   = 60.0f;  // Angle in degrees (Default: 60)
+static float rad_angle_match_cos = 0.5f;
 
 // Amount to nudge the emitter origin off the surface along its normal.
 // Prevents the emitter from self-shadowing via Embree.
@@ -64,7 +67,6 @@ typedef struct radVoxel_s {
     struct radVoxel_s *next;
 } radVoxel_t;
 
-#define RAD_VOXEL_SIZE 16.0f // 16 unit voxels
 static radVoxel_t ***g_radVoxels = NULL;
 static vec3_t g_radVoxelMins;
 static int g_radVoxelDims[3];
@@ -91,9 +93,9 @@ static void RadiosityVoxelReset(void) {
 
     // Initialize dimensions based on map bounds
     for (int i = 0; i < 3; i++) {
-        g_radVoxelMins[i] = dmodels[0].mins[i] - RAD_VOXEL_SIZE;
-        float size = (dmodels[0].maxs[i] + RAD_VOXEL_SIZE) - g_radVoxelMins[i];
-        g_radVoxelDims[i] = (int)ceil(size / RAD_VOXEL_SIZE);
+        g_radVoxelMins[i] = dmodels[0].mins[i] - rad_voxel_size;
+        float size = (dmodels[0].maxs[i] + rad_voxel_size) - g_radVoxelMins[i];
+        g_radVoxelDims[i] = (int)ceil(size / rad_voxel_size);
     }
 
     g_radVoxels = malloc(sizeof(radVoxel_t**) * g_radVoxelDims[0]);
@@ -109,7 +111,7 @@ static void RadiosityVoxelReset(void) {
 static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_t color) {
     int v[3];
     for (int i = 0; i < 3; i++) {
-        v[i] = (int)((pos[i] - g_radVoxelMins[i]) / RAD_VOXEL_SIZE);
+        v[i] = (int)((pos[i] - g_radVoxelMins[i]) / rad_voxel_size);
         if (v[i] < 0 || v[i] >= g_radVoxelDims[i]) return;
     }
 
@@ -118,8 +120,9 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
     // Find a voxel bucket with a similar normal to avoid bleeding through walls
     radVoxel_t *curr = head;
     while (curr) {
-        if (curr->weight > 0 && DotProduct(curr->normal, normal) > 0.5f) {
+        if (curr->weight > 0 && DotProduct(curr->normal, normal) > rad_angle_match_cos) {
             VectorAdd(curr->color, color, curr->color);
+            VectorAdd(curr->normal, normal, curr->normal); // Accumulate normal for averaging
             curr->weight += 1.0f;
             return;
         }
@@ -405,7 +408,10 @@ static void RadiosityVoxelize(void) {
             for (int z = 0; z < g_radVoxelDims[2]; z++) {
                 radVoxel_t *v = g_radVoxels[x][y][z].next;
                 while (v) {
-                    if (v->weight > 0) VectorScale(v->color, 1.0f / v->weight, v->color);
+                    if (v->weight > 0) {
+                        VectorScale(v->color, 1.0f / v->weight, v->color);
+                        VectorNormalize(v->normal, v->normal); // Normalize the averaged surface normal
+                    }
                     v = v->next;
                 }
             }
@@ -418,15 +424,40 @@ static void RadiosityVoxelize(void) {
 // Phase 3 — Reconstruction (Trilinear Interpolated Sampling)
 // ---------------------------------------------------------------------------
 
-static void RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t outColor) {
+// Helper: Perform local 2D bilinear interpolation from the sparse integrated grid.
+static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, vec3_t outColor) {
+    int x0 = (lx / rad_interval) * rad_interval;
+    int x1 = x0 + rad_interval;
+    int y0 = (ly / rad_interval) * rad_interval;
+    int y1 = y0 + rad_interval;
+
+    if (x1 >= ds->lightmapWidth)  x1 = x0;
+    if (y1 >= ds->lightmapHeight) y1 = y0;
+
+    float fx = (float)(lx - x0) / (float)rad_interval;
+    float fy = (float)(ly - y0) / (float)rad_interval;
+
+    float *p00 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
+    float *p10 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
+    float *p01 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
+    float *p11 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
+
+    for (int k = 0; k < 3; k++) {
+        float row0 = p00[k] * (1.0f - fx) + p10[k] * fx;
+        float row1 = p01[k] * (1.0f - fx) + p11[k] * fx;
+        outColor[k] = row0 * (1.0f - fy) + row1 * fy;
+    }
+}
+
+static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t outColor) {
     int v[3];
     for (int i = 0; i < 3; i++) {
-        v[i] = (int)((pos[i] - g_radVoxelMins[i]) / RAD_VOXEL_SIZE);
-        if (v[i] < 0 || v[i] >= g_radVoxelDims[i]) { VectorClear(outColor); return; }
+        v[i] = (int)((pos[i] - g_radVoxelMins[i]) / rad_voxel_size);
+        if (v[i] < 0 || v[i] >= g_radVoxelDims[i]) return qfalse;
     }
 
     vec3_t totalColor = {0,0,0};
-    float totalWeight = 0.0001f;
+    float totalWeight = 0.0f;
 
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
@@ -437,11 +468,11 @@ static void RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t o
                 radVoxel_t *curr = g_radVoxels[nx][ny][nz].next;
                 while (curr) {
                     float dot = DotProduct(curr->normal, normal);
-                    if (dot > 0.5f) {
+                    if (dot > rad_angle_match_cos) {
                         vec3_t voxelCenter;
-                        voxelCenter[0] = g_radVoxelMins[0] + (nx + 0.5f) * RAD_VOXEL_SIZE;
-                        voxelCenter[1] = g_radVoxelMins[1] + (ny + 0.5f) * RAD_VOXEL_SIZE;
-                        voxelCenter[2] = g_radVoxelMins[2] + (nz + 0.5f) * RAD_VOXEL_SIZE;
+                        voxelCenter[0] = g_radVoxelMins[0] + (nx + 0.5f) * rad_voxel_size;
+                        voxelCenter[1] = g_radVoxelMins[1] + (ny + 0.5f) * rad_voxel_size;
+                        voxelCenter[2] = g_radVoxelMins[2] + (nz + 0.5f) * rad_voxel_size;
                         
                         vec3_t delta;
                         VectorSubtract(pos, voxelCenter, delta);
@@ -455,7 +486,11 @@ static void RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t o
             }
         }
     }
+
+    if (totalWeight < 0.0001f) return qfalse;
+
     VectorScale(totalColor, 1.0f / totalWeight, outColor);
+    return qtrue;
 }
 
 static void RadiosityReconstructOneSurface(int surfIdx) {
@@ -484,7 +519,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 VectorAdd(pos, surfaceOrigin[surfIdx], pos);
                 VectorCopy(surfNormal, normal);
             }
-            RadiosityVoxelSample(pos, normal, &radiosityFloats[k_dst * 3]);
+
+            if (!RadiosityVoxelSample(pos, normal, &radiosityFloats[k_dst * 3])) {
+                RadiosityBilinearSample(ds, lx, ly, &radiosityFloats[k_dst * 3]);
+            }
         }
     }
 }
@@ -564,6 +602,13 @@ void LightRadiosity(int radiosityPasses) {
     if (!embree) {
         _printf("WARNING: Radiosity is only supported with the Embree backend. Skipping.\n");
         return;
+    }
+
+    if (rad_voxel) {
+        if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
+        rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));
+        _printf("  Voxel Grid enabled (Size: %.1f, Angle Match: %.1f deg / %.2f cos)\n", 
+                rad_voxel_size, rad_angle_match, rad_angle_match_cos);
     }
 
     AllocateRadiosityFloats();
