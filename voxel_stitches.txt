@@ -1,0 +1,46 @@
+--- SHARED-BUCKET VOXEL RADIOSITY: ARCHITECTURAL OVERVIEW ---
+
+1. PURPOSE
+The system solves the problem of "Independent Tone Divergence" at UV seams, especially in misc_models (triangle soup). Standard bilinear reconstruction only sees lighting data within a single UV island, causing adjacent world-space surfaces to calculate different interpolated gradients. This system unifies that lighting into a global 3D volume.
+
+2. ARCHITECTURE (The 5-Phase Pipeline)
+The implementation in light/radiosity.c follows this sequence for every pass:
+
+   A. [Emit]: Standard. Lit luxels are turned into world-space emitters.
+   B. [Integrate]: Standard. Irradiance is gathered at sparse 4x4 intervals on each surface.
+   C. [Voxelize] (NEW):
+      - Every sparse sample is splatted into a global 3D Voxel Grid (radVoxel_t).
+      - Samples are sorted into "buckets" based on their surface normal to prevent light leaking through back-to-back walls.
+      - Voxel buckets store the average energy of all samples within that world-space volume.
+   D. [Reconstruct] (NEW):
+      - Every final pixel (not just the sparse ones) calculates its world-space XYZ and Normal.
+      - It samples the Voxel Grid using trilinear-weighted interpolation from the 8 nearest voxels.
+      - It only accepts energy from buckets where the normal alignment (DotProduct) is sufficient.
+   E. [Merge]: The unified, seamless results are merged back into the main lightmap.
+
+3. TWEAKABLE PARAMETERS
+These values can be adjusted in light/radiosity.c to refine visual quality:
+
+   A. RAD_VOXEL_SIZE (Current: 16.0f)
+      - The physical width of a 3D bucket in world units.
+      - Larger = More seamless, but lighting looks "flat" or "blurry".
+      - Smaller = More detailed shading, but risks re-introducing seams if UV islands are small.
+
+   B. Normal Match Threshold (Current: 0.5f)
+      - The minimum DotProduct required for two faces to share light.
+      - 0.5f (~60°) allows light to flow around the corners of pillars and columns.
+      - 0.8f+ (~36°) limits sharing to mostly flat/coplanar surfaces.
+      - <0.1 allows light to wrap around almost 90-degree corners.
+
+   C. Weight Formula (Current: 1.0f / (dist + 1.0f))
+      - Controls how quickly light fades between voxels.
+      - Changing to (1.0 / (dist*dist + 1.0)) creates sharper, punchier transitions.
+
+   D. rad_interval (Current: 4)
+      - The resolution of the initial sampling. 
+      - Increasing this speeds up Integrate/Voxelize but requires a larger RAD_VOXEL_SIZE to bridge the gaps.
+
+4. ADVANTAGES
+- Perfect Seamlessness: Adjacent pixels in world space are guaranteed to pull from the same world-space energy buckets.
+- Topology Agnostic: Works across different surfaces, models, and even disconnected geometry.
+- Low Distortion: Because it uses a 3D volume, UV stretching or rotation on the model does not affect the GI quality.

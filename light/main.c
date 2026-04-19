@@ -41,6 +41,8 @@ stitchPoint_t g_stitchPoints[MAX_STITCH_POINTS];
 int g_numStitchPoints = 0;
 
 
+qboolean rad_voxel = qfalse;
+
 int main(int argc, char **argv) {
     int i;
     double start, end;
@@ -191,6 +193,9 @@ int main(int argc, char **argv) {
             if (rad_depth_intensity < 0.0f) rad_depth_intensity = 0.0f;
             if (rad_depth_intensity > 1.0f) rad_depth_intensity = 1.0f;
             i++;
+        } else if (!strcmp(argv[i], "-rad_voxel")) {
+            rad_voxel = qtrue;
+            _printf("Shared-bucket voxel reconstruction enabled\n");
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
@@ -251,6 +256,7 @@ int main(int argc, char **argv) {
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   -rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
+                "   rad_voxel        = enable shared-bucket voxel reconstruction (SEAM FIX)\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   rad_depthintensity <F>= set min bounce carryover (0.0 to 1.0) for creases\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"

@@ -98,6 +98,7 @@ extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
 extern qboolean bruteTrace;
 extern qboolean embree;
+extern qboolean rad_voxel;
 
 //===============================================================
 
