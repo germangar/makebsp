@@ -1,4 +1,4 @@
---- SHARED-BUCKET VOXEL RADIOSITY: ARCHITECTURAL OVERVIEW ---
+wa--- SHARED-BUCKET VOXEL RADIOSITY: ARCHITECTURAL OVERVIEW ---
 
 1. PURPOSE
 The system solves the problem of "Independent Tone Divergence" at UV seams, especially in misc_models (triangle soup). Standard bilinear reconstruction only sees lighting data within a single UV island, causing adjacent world-space surfaces to calculate different interpolated gradients. This system unifies that lighting into a global 3D volume.

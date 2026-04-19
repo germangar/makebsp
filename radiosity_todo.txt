@@ -1,16 +1,7 @@
 --- RADIOSITY REFINEMENT TODO ---
 
-1. [BUGFIX] Implement -oldrad toggle (Legacy math comparison).
-2. [BUGFIX] Normalize drawVerts normals for Triangle Soup (Energy stability).
-3. [BUGFIX] Refine luxelArea using Cross Product for accurate patches.
-4. [FEATURE] Per-pixel texture sampling for emitters (Color Bleeding precision).
-5. [FEATURE] Deluxe Mapping: Directional light bounce support.
-6. [FEATURE] Sky surface emission: Radiosity from sky shaders.
-7. [OPTIMIZATION] Disk-based lightmap cache (Low memory mode).
-8. [BUGFIX] Identify sky surfaces in RadiosityEmit to prevent "bounce" from sky.
-9. [RESEARCH] Implement Hierarchical Pull-Push (Push-Pull) processing.
-   Use a multi-resolution pyramid pass to fill gaps in the sparse radiosity grid and 
-   potentially smooth Trisoup lightmaps. Faster than super-sampling for anti-aliasing, 
-   but requires island-aware masking to prevent inter-island bleeding.
-
-NOTE: Items 2 and 3 are technically already in the "newrad" code, but -oldrad will allow us to see their isolated impact.
+1. [BUGFIX] Refine luxelArea using Cross Product for accurate patches.
+2. [FEATURE] Per-pixel texture sampling for emitters (Color Bleeding precision).
+3. [FEATURE] Sky surface emission: Radiosity from sky shaders.
+4. [OPTIMIZATION] Disk-based lightmap cache (Low memory mode).
+5. [BUGFIX] Identify sky surfaces in RadiosityEmit to prevent "bounce" from sky.

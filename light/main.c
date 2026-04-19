@@ -35,11 +35,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
-qboolean stitchSeams = qfalse;
-
-stitchPoint_t g_stitchPoints[MAX_STITCH_POINTS];
-int g_numStitchPoints = 0;
-
 
 qboolean rad_voxel = qfalse;
 
@@ -334,26 +329,6 @@ int main(int argc, char **argv) {
     if (samplesize <= 0) {
         samplesize = g_game->defaultSampleSize;
         _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
-    }
-
-    // Parse seam stiches for radiosity (Binary Sidecar)
-    char stitchPath[MAX_OS_PATH];
-    char base[MAX_OS_PATH];
-    ExtractFileBase(source, base);
-    sprintf(stitchPath, "cache/%s.stich", base);
-
-    FILE *fStitch = fopen(stitchPath, "rb");
-    if (fStitch) {
-        int count = 0;
-        if (fread(&count, sizeof(int), 1, fStitch) == 1) {
-            if (count > MAX_STITCH_POINTS) count = MAX_STITCH_POINTS;
-            g_numStitchPoints = (int)fread(g_stitchPoints, sizeof(stitchPoint_t), count, fStitch);
-            _printf("Loaded %d stitch points from %s\n", g_numStitchPoints, stitchPath);
-            if (g_numStitchPoints > 0) stitchSeams = qtrue;
-        }
-        fclose(fStitch);
-        // Delete the file immediately after parsing
-        remove(stitchPath);
     }
 
     UpConvertLightingData();
