@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/cmdlib.h"
 #include "light.h"
 #include "../shared/json_parser.h"
+#include "../shared/surface_extra.h"
 #include "radiosity.h"
 
 #include <stdio.h>
@@ -298,6 +299,13 @@ int main(int argc, char **argv) {
 
     LoadBSPFile(source);
 
+    {
+        char mapName[1024];
+        strcpy(mapName, ExpandArg(argv[i]));
+        StripExtension(mapName);
+        LoadSurfaceExtraFile(mapName);
+    }
+
     // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
     if (falloffOverridden) g_game->falloff = overrideFalloff;
     if (lightmapsRGBOverridden) g_game->lightmapsRGB = qtrue;
@@ -356,6 +364,8 @@ int main(int argc, char **argv) {
     _printf("writing %s\n", source);
     DownConvertLightingData();
     WriteBSPFile(source);
+
+    ClearCacheDirectory();
 
     end = I_FloatTime();
     _printf("%5.0f seconds elapsed\n", end - start);

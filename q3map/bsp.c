@@ -449,6 +449,8 @@ int main(int argc, char **argv) {
 
   _printf("---- q3map ----\n");
 
+  ClearCacheDirectory();
+
   JSON_ExportStandardPackages("games");
   JSON_LoadPackages("games");
 
@@ -677,6 +679,8 @@ int main(int argc, char **argv) {
   InjectSunEntity();
 
   EndBSPFile();
+
+  WriteSurfaceExtraFile(source);
 
   end = I_FloatTime();
   _printf("%5.0f seconds elapsed\n", end - start);

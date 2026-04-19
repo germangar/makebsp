@@ -89,6 +89,9 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
   int j, k;
   float st0[2], st1[2], st2[2];
   float area, w0, w1, w2;
+  float bestExtrapolatedDistSq = 999999.0f;
+  vec3_t bestExtrapOrigin;
+  vec3_t bestExtrapNormal;
 
   for (j = 0; j < ds->numIndexes; j += 3) {
     int i0 = drawIndexes[ds->firstIndex + j];
@@ -165,8 +168,8 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
         edgeBest = 2;
       }
 
-      // Check if within dilation radius
-      if (edgeBest >= 0 && dMin < (float)GUTTER * GUTTER) {
+      // Check if within dilation radius AND better than previous extrapolation
+      if (edgeBest >= 0 && dMin < (float)GUTTER * GUTTER && dMin < bestExtrapolatedDistSq) {
         // Calculate raw barycentric coordinates (extrapolation)
         area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
                (st2[0] - st1[0]) * (st0[1] - st2[1]);
@@ -182,14 +185,21 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
         w2 = 1.0f - w0 - w1;
 
         for (k = 0; k < 3; k++) {
-          origin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
-          normal[k] =
+          bestExtrapOrigin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
+          bestExtrapNormal[k] =
               w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
         }
-        VectorNormalize(normal, normal);
-        return qtrue;
+        VectorNormalize(bestExtrapNormal, bestExtrapNormal);
+        bestExtrapolatedDistSq = dMin;
       }
     }
+  }
+
+  // If we found no exact match but found a valid extrapolation, use it
+  if (bestExtrapolatedDistSq < 999999.0f) {
+    VectorCopy(bestExtrapOrigin, origin);
+    VectorCopy(bestExtrapNormal, normal);
+    return qtrue;
   }
 
   return qfalse;

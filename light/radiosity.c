@@ -18,6 +18,7 @@ Architecture:
 
 #include "light.h"
 #include "radiosity.h"
+#include "../shared/surface_extra.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -497,86 +498,75 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0) return;
 
+    radFillMode_t mode = GetSurfaceExtraRadFillMode(surfIdx);
+
+    if (mode == RAD_FILL_DEFAULT) {
+        mode = rad_voxel ? RAD_FILL_VOXEL : RAD_FILL_BILINEAR;
+    }
+
     vec3_t surfNormal;
     if (ds->numVerts > 0) { VectorCopy(drawVerts[ds->firstVert].normal, surfNormal); }
     else { VectorSet(surfNormal, 0, 0, 1); }
 
+    int numPixels = ds->lightmapWidth * ds->lightmapHeight;
+    if (numPixels <= 0) return;
+
+    vec3_t *tempBuffer = malloc(numPixels * sizeof(vec3_t));
+    if (!tempBuffer) return;
+
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int k_temp = ly * ds->lightmapWidth + lx;
+            
+            // Default to the original Phase 2 integrated value
+            VectorCopy(&radiosityFloats[k_dst * 3], tempBuffer[k_temp]);
+
             if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
-            vec3_t pos, normal;
-            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
-                VectorAdd(pos, surfaceOrigin[surfIdx], pos);
-            } else {
-                VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
-                VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
-                VectorAdd(pos, surfaceOrigin[surfIdx], pos);
-                VectorCopy(surfNormal, normal);
+            // If bilinear mode, preserve original precise irradiance at grid intersection points
+            if (mode == RAD_FILL_BILINEAR && (lx % rad_interval == 0 && ly % rad_interval == 0)) {
+                continue; 
             }
 
-            if (!RadiosityVoxelSample(pos, normal, &radiosityFloats[k_dst * 3])) {
-                RadiosityBilinearSample(ds, lx, ly, &radiosityFloats[k_dst * 3]);
+            if (mode == RAD_FILL_VOXEL) {
+                vec3_t pos, normal;
+                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
+                    VectorAdd(pos, surfaceOrigin[surfIdx], pos);
+                } else {
+                    VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
+                    VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
+                    VectorAdd(pos, surfaceOrigin[surfIdx], pos);
+                    VectorCopy(surfNormal, normal);
+                }
+
+                if (!RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
+                    RadiosityBilinearSample(ds, lx, ly, tempBuffer[k_temp]);
+                }
+            } else {
+                RadiosityBilinearSample(ds, lx, ly, tempBuffer[k_temp]);
             }
         }
     }
+
+    // Flush temp buffer back to radiosityFloats for this surface
+    for (int ly = 0; ly < ds->lightmapHeight; ly++) {
+        for (int lx = 0; lx < ds->lightmapWidth; lx++) {
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int k_temp = ly * ds->lightmapWidth + lx;
+            VectorCopy(tempBuffer[k_temp], &radiosityFloats[k_dst * 3]);
+        }
+    }
+
+    free(tempBuffer);
 }
 
 static void RadiosityReconstructThread(int surfIdx) {
     RadiosityReconstructOneSurface(surfIdx);
-}
-
-// ---------------------------------------------------------------------------
-// Original Bilinear Fill (RESTORED FOR TESTING)
-// ---------------------------------------------------------------------------
-
-static void RadiosityBilinearFillOneSurface(int surfIdx) {
-    dsurface_t *ds = &drawSurfaces[surfIdx];
-    int lx, ly;
-
-    if (ds->lightmapNum[0] < 0) return;
-
-    for (ly = 0; ly < ds->lightmapHeight; ly++) {
-        for (lx = 0; lx < ds->lightmapWidth; lx++) {
-            if (lx % rad_interval == 0 && ly % rad_interval == 0) continue;
-
-            int k_dst_pix = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
-            if (k_dst_pix < 0 || k_dst_pix >= numLightBytes / 3) continue;
-            if (lightAlphaMask && !lightAlphaMask[k_dst_pix]) continue;
-
-            int x0 = (lx / rad_interval) * rad_interval;
-            int x1 = x0 + rad_interval;
-            int y0 = (ly / rad_interval) * rad_interval;
-            int y1 = y0 + rad_interval;
-
-            if (x1 >= ds->lightmapWidth)  x1 = x0;
-            if (y1 >= ds->lightmapHeight) y1 = y0;
-
-            float fx = (float)(lx - x0) / (float)rad_interval;
-            float fy = (float)(ly - y0) / (float)rad_interval;
-
-            float *p00 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
-            float *p10 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
-            float *p01 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
-            float *p11 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
-
-            int k_dst = k_dst_pix * 3;
-            for (int k = 0; k < 3; k++) {
-                float row0 = p00[k] * (1.0f - fx) + p10[k] * fx;
-                float row1 = p01[k] * (1.0f - fx) + p11[k] * fx;
-                radiosityFloats[k_dst + k] = row0 * (1.0f - fy) + row1 * fy;
-            }
-        }
-    }
-}
-
-static void RadiosityBilinearFillThread(int surfIdx) {
-    RadiosityBilinearFillOneSurface(surfIdx);
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +594,18 @@ void LightRadiosity(int radiosityPasses) {
         return;
     }
 
-    if (rad_voxel) {
+    qboolean anyVoxel = rad_voxel;
+    for (int i = 0; i < numDrawSurfaces; i++) {
+        if (GetSurfaceExtraRadFillMode(i) == RAD_FILL_VOXEL) {
+            anyVoxel = qtrue;
+            break;
+        }
+    }
+
+    if (anyVoxel) {
+        if (rad_voxel_size <= 0.0f) {
+            rad_voxel_size = (float)(samplesize * rad_interval);
+        }
         if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
         rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));
         _printf("  Voxel Grid enabled (Size: %.1f, Angle Match: %.1f deg / %.2f cos)\n", 
@@ -628,14 +629,12 @@ void LightRadiosity(int radiosityPasses) {
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
 
-        if (rad_voxel) {
+        if (anyVoxel) {
             RadiosityVoxelize();
-            _printf("  [reconstruct] Shared-bucket Voxel Fill ");
-            RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityReconstructThread);
-        } else {
-            _printf("  [reconstruct] Original Bilinear Fill ");
-            RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityBilinearFillThread);
         }
+        
+        _printf("  [reconstruct] Reconstruction Fill ");
+        RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityReconstructThread);
         _printf("done\n");
 
         for (int i = 0; i < numLightBytes / 3; i++) VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);

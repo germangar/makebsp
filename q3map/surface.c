@@ -930,6 +930,10 @@ void EmitPlanarSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[1], out->lightmapVecs[1]);
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
 
+  if (ds->radFillMode != RAD_FILL_DEFAULT) {
+    SetSurfaceExtraRadFillMode(numDrawSurfaces - 1, ds->radFillMode);
+  }
+
   for (j = 0; j < ds->numVerts; j++) {
     if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
       _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
@@ -999,6 +1003,10 @@ void EmitPatchSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]);
   VectorCopy(ds->lightmapVecs[1], out->lightmapVecs[1]);
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
+
+  if (ds->radFillMode != RAD_FILL_DEFAULT) {
+    SetSurfaceExtraRadFillMode(numDrawSurfaces - 1, ds->radFillMode);
+  }
 
   for (j = 0; j < ds->numVerts; j++) {
     if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
@@ -1112,6 +1120,10 @@ void EmitModelSurf(mapDrawSurface_t *ds) {
   VectorCopy(ds->lightmapVecs[0], out->lightmapVecs[0]);
   VectorCopy(ds->lightmapVecs[1], out->lightmapVecs[1]);
   VectorCopy(ds->lightmapVecs[2], out->lightmapVecs[2]);
+
+  if (ds->radFillMode != RAD_FILL_DEFAULT) {
+    SetSurfaceExtraRadFillMode(numDrawSurfaces - 1, ds->radFillMode);
+  }
 
   for (j = 0; j < ds->numVerts; j++) {
     if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT) {
