@@ -246,7 +246,7 @@ static void RadiosityEmit(const float *srcBuffer) {
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
 
         mesh_t *patchMesh = NULL;
-        vec3_t surfNormal;
+        vec3_t surfNormal = {0,0,0};
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = SubdividePatchToLightmap(ds);
         } else if (ds->surfaceType == MST_PLANAR) {
@@ -460,7 +460,7 @@ static void RadiosityVoxelize(void) {
         if (ds->lightmapNum[0] < 0) continue;
 
         mesh_t *patchMesh = NULL;
-        vec3_t surfNormal;
+        vec3_t surfNormal = {0,0,0};
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = SubdividePatchToLightmap(ds);
         } else if (ds->numVerts > 0) {
@@ -605,7 +605,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     }
 
     mesh_t *patchMesh = NULL;
-    vec3_t surfNormal;
+    vec3_t surfNormal = {0,0,0};
     if (ds->surfaceType == MST_PATCH) {
         patchMesh = SubdividePatchToLightmap(ds);
     } else if (ds->numVerts > 0) {

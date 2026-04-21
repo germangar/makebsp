@@ -1647,11 +1647,12 @@ static int unzlocal_GetCurrentFileInfoInternal(
     else
       uSizeRead = extraFieldBufferSize;
 
-    if (lSeek != 0)
+    if (lSeek != 0) {
       if (fseek(s->file, lSeek, SEEK_CUR) == 0)
         lSeek = 0;
       else
         err = UNZ_ERRNO;
+    }
     if ((file_info.size_file_extra > 0) && (extraFieldBufferSize > 0))
       if (fread(extraField, (uInt)uSizeRead, 1, s->file) != 1)
         err = UNZ_ERRNO;
@@ -1667,11 +1668,12 @@ static int unzlocal_GetCurrentFileInfoInternal(
     } else
       uSizeRead = commentBufferSize;
 
-    if (lSeek != 0)
+    if (lSeek != 0) {
       if (fseek(s->file, lSeek, SEEK_CUR) == 0)
         lSeek = 0;
       else
         err = UNZ_ERRNO;
+    }
     if ((file_info.size_file_comment > 0) && (commentBufferSize > 0))
       if (fread(szComment, (uInt)uSizeRead, 1, s->file) != 1)
         err = UNZ_ERRNO;

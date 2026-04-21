@@ -867,8 +867,6 @@ PointInSolid
 */
 qboolean PointInSolid(vec3_t start) { return PointInSolid_r(start, 0); }
 
-/*
-
 //==========================================================================================
 
 /*
@@ -1166,8 +1164,6 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
   }
 }
-
-/*
 
 /*
 =============

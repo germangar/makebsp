@@ -66,19 +66,6 @@ static hacdSettings_t hacd_settings_large = {
     qtrue     // facePoints
 };
 
-/* Settings for small props (Medium detail) - Normalized */
-static hacdSettings_t hacd_settings_small = {
-    1.0,      // scaleFactor (standard)
-    qfalse,   // disableNormalize (let HACD handle tiny scales)
-    0.1,      // compacity
-    0.0,      // volume
-    100.0,    // concavity
-    1,        // nClusters
-    0.0,      // ccConnectDist
-    qtrue,    // extraPoints
-    qtrue     // facePoints
-};
-
 /* Settings for wrap/soft-wrap (TINY/Default) - Normalized soft wrap for stability */
 static hacdSettings_t hacd_settings_wrap = {
     1.0,      // scaleFactor (standard)

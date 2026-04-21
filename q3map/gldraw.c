@@ -165,7 +165,6 @@ int draw_socket;
 
 void GLS_BeginScene(void) {
   WSADATA winsockdata;
-  WORD wVersionRequested;
   struct sockaddr_in address;
   int r;
 

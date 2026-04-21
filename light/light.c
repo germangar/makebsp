@@ -613,7 +613,7 @@ void VisualizeLightmapAllocation(void) {
   char filename[1024];
   dsurface_t *ds;
 
-  int j, k;
+  int k;
   byte color[3];
   int rasterizedCount = 0;
 

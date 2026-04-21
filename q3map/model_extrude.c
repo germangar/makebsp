@@ -1,78 +1,6 @@
 #include "qbsp.h"
 #include "model_collision.h"
 
-/*
-====================
-ExtrudeTrianglesToBrushesRaw
-
-Original raw extrusion: one brush per triangle, no merging.
-Kept for reference/fallback.
-====================
-*/
-static bspbrush_t *ExtrudeTrianglesToBrushesRaw(float *verts, unsigned int *indices, int numIndices, shaderInfo_t *si) {
-  bspbrush_t *hulls_list = NULL;
-  int i;
-  
-  for (i = 0; i < numIndices; i += 3) {
-    vec3_t p0, p1, p2;
-    p0[0] = (double)verts[indices[i+0] * 3 + 0];
-    p0[1] = (double)verts[indices[i+0] * 3 + 1];
-    p0[2] = (double)verts[indices[i+0] * 3 + 2];
-    p1[0] = (double)verts[indices[i+1] * 3 + 0];
-    p1[1] = (double)verts[indices[i+1] * 3 + 1];
-    p1[2] = (double)verts[indices[i+1] * 3 + 2];
-    p2[0] = (double)verts[indices[i+2] * 3 + 0];
-    p2[1] = (double)verts[indices[i+2] * 3 + 1];
-    p2[2] = (double)verts[indices[i+2] * 3 + 2];
-
-    vec3_t faceNormal, t1, t2;
-    VectorSubtract(p2, p0, t1);
-    VectorSubtract(p1, p0, t2);
-    CrossProduct(t1, t2, faceNormal);
-    if (VectorNormalize(faceNormal, faceNormal) < 0.0001f)
-      continue;
-
-    bspbrush_t *b = AllocBrush(5 + 6);
-    b->numsides = 5;
-    b->detail = qtrue;
-    b->contents = si->contents;
-    b->contentShader = si;
-
-    b->sides[0].planenum = MapPlaneFromPoints(p0, p1, p2);
-    b->sides[0].shaderInfo = si;
-
-    float extrudeDist = 0.5f;
-    vec3_t bp0, bp1, bp2;
-    VectorMA(p0, -extrudeDist, faceNormal, bp0);
-    VectorMA(p1, -extrudeDist, faceNormal, bp1);
-    VectorMA(p2, -extrudeDist, faceNormal, bp2);
-
-    b->sides[1].planenum = MapPlaneFromPoints(bp0, bp2, bp1); 
-    b->sides[1].shaderInfo = si;
-    b->sides[2].planenum = MapPlaneFromPoints(p0, bp0, p1);
-    b->sides[2].shaderInfo = si;
-    b->sides[3].planenum = MapPlaneFromPoints(p1, bp1, p2);
-    b->sides[3].shaderInfo = si;
-    b->sides[4].planenum = MapPlaneFromPoints(p2, bp2, p0);
-    b->sides[4].shaderInfo = si;
-
-    if (b->sides[0].planenum == -1 || b->sides[1].planenum == -1 ||
-        b->sides[2].planenum == -1 || b->sides[3].planenum == -1 || b->sides[4].planenum == -1) {
-      FreeBrush(b);
-      continue;
-    }
-    if (!CreateBrushWindings(b)) { FreeBrush(b); continue; }
-    if (!BoundBrush(b)) { FreeBrush(b); continue; }
-
-    AddBevelsToBrush(b);
-
-    b->next = hulls_list;
-    hulls_list = b;
-  }
-  return hulls_list;
-}
-
-
 /* =====================================================================
    Optimized extrusion with coplanar merging and axial-snapped normals
    ===================================================================== */
@@ -100,26 +28,6 @@ typedef struct {
 
 /*
 ====================
-MakeAxialNormal
-
-Snaps a normal to the nearest axis direction.
-Produces side planes that align with BSP axes for tighter splitting.
-(From Garux normal_make_axial)
-====================
-*/
-static void MakeAxialNormal(const vec3_t in, vec3_t out) {
-  int best = 0;
-  float bestVal = fabs(in[0]);
-  
-  if (fabs(in[1]) > bestVal) { best = 1; bestVal = fabs(in[1]); }
-  if (fabs(in[2]) > bestVal) { best = 2; }
-  
-  VectorClear(out);
-  out[best] = (in[best] >= 0) ? 1.0f : -1.0f;
-}
-
-/*
-====================
 PointsMatch
 
 Checks if two 3D points from the vertex buffer are the same (within epsilon).
@@ -132,44 +40,6 @@ static qboolean PointsMatch(float *verts, int idxA, int idxB) {
   return (fabs(dx) < MERGE_POINT_EPSILON && 
           fabs(dy) < MERGE_POINT_EPSILON && 
           fabs(dz) < MERGE_POINT_EPSILON) ? qtrue : qfalse;
-}
-
-/*
-====================
-FindSharedEdge
-
-Given two triangles, finds if they share exactly 2 vertices (a shared edge).
-Returns qtrue and sets sharedA0, sharedA1 (indices within tri A's index array 0-2)
-and sharedB0, sharedB1 (indices within tri B's index array 0-2).
-The shared edge runs A[sharedA0]->A[sharedA1] == B[sharedB1]->B[sharedB0] (reversed).
-====================
-*/
-static qboolean FindSharedEdge(clipTri_t *a, clipTri_t *b, float *verts,
-                               int *sharedA0, int *sharedA1, 
-                               int *sharedB0, int *sharedB1) {
-  int matches = 0;
-  int aIdx[2], bIdx[2];
-  
-  for (int ai = 0; ai < 3; ai++) {
-    for (int bi = 0; bi < 3; bi++) {
-      if (PointsMatch(verts, a->indices[ai], b->indices[bi])) {
-        if (matches < 2) {
-          aIdx[matches] = ai;
-          bIdx[matches] = bi;
-        }
-        matches++;
-      }
-    }
-  }
-  
-  if (matches != 2)
-    return qfalse;
-  
-  *sharedA0 = aIdx[0];
-  *sharedA1 = aIdx[1];
-  *sharedB0 = bIdx[0];
-  *sharedB1 = bIdx[1];
-  return qtrue;
 }
 
 /*
@@ -728,7 +598,6 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si) {
   bspbrush_t *hulls_list = NULL;
   float *verts = (float *)mesh->verts;
   unsigned int *indices = (unsigned int *)mesh->tris;
-  int numIndices = mesh->numTris * 3;
   int numTris = mesh->numTris;
   
   if (numTris == 0)

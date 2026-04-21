@@ -30,10 +30,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define GROW_INDICES 512
 #define GROW_SURFACES 128
 
+#ifndef VectorSet
 #define VectorSet(v, x, y, z)                                                  \
   v[0] = x;                                                                    \
   v[1] = y;                                                                    \
   v[2] = z;
+#endif
 
 void QuakeTextureVecs(plane_t *plane, vec_t shift[2], vec_t rotate,
                       vec_t scale[2], vec_t mappingVecs[2][4]);

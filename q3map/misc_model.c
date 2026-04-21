@@ -924,7 +924,7 @@ Second pass: Insert the pre-calculated surfaces into the BSP tree.
 =====================
 */
 void AddTriangleModels(tree_t *tree) {
-  int i, j, k;
+  int i, j;
 
   // 1. Basic Stats
   for (i = 0; i < numModelInstances; i++) {

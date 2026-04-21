@@ -134,7 +134,6 @@ int CSGMergeBrushList(bspbrush_t **pList) {
   int total_merges = 0;
   bspbrush_t *b1, *b2, *prev1, *prev2;
   bspbrush_t *merged_brush;
-  qboolean b1_merged;
 
   if (!pList || !*pList)
     return 0;
@@ -147,7 +146,6 @@ int CSGMergeBrushList(bspbrush_t **pList) {
     while (b1) {
       b2 = b1->next;
       prev2 = b1;
-      b1_merged = qfalse;
 
       while (b2) {
         merged_brush = NULL;
@@ -168,7 +166,6 @@ int CSGMergeBrushList(bspbrush_t **pList) {
 
           // b1 pointer now tracks the newly constructed unified brush
           b1 = merged_brush;
-          b1_merged = qtrue;
           merged_any = qtrue;
           total_merges++;
 

@@ -559,7 +559,7 @@ shadows would not be resolvable anyway.
 */
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
                     qboolean forceSunLight, float scale, traceWork_t *tw) {
-  int i, j;
+  int i;
   drawVert_t *dv;
   vec3_t sample, normal;
   float max;
@@ -570,14 +570,14 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
   for (i = 0; i < ds->numVerts; i++) {
     dv = &drawVerts[ds->firstVert + i];
 
-    if (ds->patchWidth) {
-      LightingAtSample(dv->xyz, dv->normal, sample, testOcclusion,
-                       forceSunLight, qfalse, tw);
-    } else if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-      LightingAtSample(dv->xyz, dv->normal, sample, testOcclusion,
+    vec3_t v_origin;
+    if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP) {
+      VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
+      LightingAtSample(v_origin, dv->normal, sample, testOcclusion,
                        forceSunLight, qfalse, tw);
     } else {
-      LightingAtSample(dv->xyz, normal, sample, testOcclusion, forceSunLight,
+      VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
+      LightingAtSample(v_origin, normal, sample, testOcclusion, forceSunLight,
                        qfalse, tw);
     }
 
@@ -682,6 +682,7 @@ void TraceLtm(int num) {
   if (!tw)
     Error("Failed to allocate TraceLtm memory (traceWork_t)");
   memset(tw, 0, sizeof(traceWork_t));
+  tw->ignoreSurface = -1;
 
   byte **occluded = NULL;
   byte *occluded_data = NULL;
@@ -707,6 +708,7 @@ void TraceLtm(int num) {
 
   // vertex-lit triangle model if no lightmap allocated
   if (ds->surfaceType == MST_TRIANGLE_SOUP && ds->lightmapNum[0] == -1) {
+    tw->ignoreSurface = realSurfIndex;
     VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
     free(tw);
     ThreadCompletedWeighted(surfWeight);
@@ -721,6 +723,7 @@ void TraceLtm(int num) {
 
   if (!novertexlighting) {
     // calculate the vertex lighting for gouraud shade mode
+    tw->ignoreSurface = realSurfIndex;
     VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale,
                    tw);
   }
@@ -1200,7 +1203,6 @@ void TraceGrid(int num) {
   int numCon;
   int i;
   traceWork_t *tw;
-  float addSize;
 
   tw = malloc(sizeof(traceWork_t));
   if (!tw)

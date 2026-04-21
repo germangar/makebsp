@@ -1076,9 +1076,6 @@ void QCopyFile(const char *from, const char *to) {
 void Sys_ListFiles(const char *directory, const char *extension,
                    void (*callback)(const char *filename)) {
   char search[MAX_OS_PATH];
-  int extLen;
-
-  extLen = strlen(extension);
 
 #ifdef _WIN32
   struct _finddata_t fileinfo;
@@ -1098,6 +1095,9 @@ void Sys_ListFiles(const char *directory, const char *extension,
   DIR *dir;
   struct dirent *entry;
   int nameLen;
+  int extLen;
+
+  extLen = strlen(extension);
 
   dir = opendir(directory);
   if (!dir)

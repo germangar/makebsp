@@ -252,7 +252,7 @@ void PatchMapDrawSurfs(entity_t *e) {
   }
 
   // build groups
-  memset(grouped, 0, sizeof(grouped));
+  memset(grouped, 0, patchCount * sizeof(*grouped));
   groupCount = 0;
   for (i = 0; i < patchCount; i++) {
     if (!grouped[i]) {

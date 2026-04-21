@@ -279,7 +279,6 @@ Reserved for future entity-specific classification for CoACD.
 ====================
 */
 static void CategorizeModel(modelInstance_t *inst) {
-  int j, k;
   mapDrawSurface_t *ds;
   vec3_t mins, maxs, centroid;
   float upArea = 0;
@@ -293,12 +292,12 @@ static void CategorizeModel(modelInstance_t *inst) {
   VectorClear(centroid);
 
   // Pass 1: AABB, Centroid and Vert counts
-  for (j = 0; j < inst->numDrawSurfs; j++) {
+  for (int j = 0; j < inst->numDrawSurfs; j++) {
     ds = inst->drawSurfs[j];
     if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
       continue;
     }
-    for (k = 0; k < ds->numVerts; k++) {
+    for (int k = 0; k < ds->numVerts; k++) {
       AddPointToBounds(ds->verts[k].xyz, mins, maxs);
       VectorAdd(centroid, ds->verts[k].xyz, centroid);
       totalVerts++;
@@ -313,7 +312,7 @@ static void CategorizeModel(modelInstance_t *inst) {
 
   // Count decimated collision triangles for density
   int totalColTriangles = 0;
-  for (j = 0; j < inst->num_collision_meshes; j++) {
+  for (int j = 0; j < inst->num_collision_meshes; j++) {
     totalColTriangles += inst->collision_meshes[j]->numTris;
   }
 
@@ -331,13 +330,13 @@ static void CategorizeModel(modelInstance_t *inst) {
   VectorScale(centroid, 1.0f / totalVerts, centroid);
 
   // Pass 2: Orientation and Ground heuristics
-  for (j = 0; j < inst->numDrawSurfs; j++) {
+  for (int j = 0; j < inst->numDrawSurfs; j++) {
     ds = inst->drawSurfs[j];
     if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) {
       continue;
     }
 
-    for (k = 0; k < ds->numIndexes; k += 3) {
+    for (int k = 0; k < ds->numIndexes; k += 3) {
       vec3_t v[3], edge1, edge2, normal, center;
       VectorCopy(ds->verts[ds->indexes[k + 0]].xyz, v[0]);
       VectorCopy(ds->verts[ds->indexes[k + 1]].xyz, v[1]);
@@ -419,7 +418,6 @@ Specialized pipeline for terrains:
 ====================
 */
 bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_t *shader) {
-  int j, k;
   int totalVerts = 0;
   int totalIndexes = 0;
   float *allVerts;
@@ -428,7 +426,7 @@ bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_
   int currentIndex = 0;
   
 
-  for (j = 0; j < inst->numDrawSurfs; j++) {
+  for (int j = 0; j < inst->numDrawSurfs; j++) {
     mapDrawSurface_t *ds = inst->drawSurfs[j];
     if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) continue;
     totalVerts += ds->numVerts;
@@ -440,17 +438,17 @@ bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_
   allVerts = malloc(totalVerts * 3 * sizeof(float));
   allIndexes = malloc(totalIndexes * sizeof(int));
 
-  for (j = 0; j < inst->numDrawSurfs; j++) {
+  for (int j = 0; j < inst->numDrawSurfs; j++) {
     mapDrawSurface_t *ds = inst->drawSurfs[j];
     if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID)) continue;
     int baseVert = currentVert;
-    for (k = 0; k < ds->numVerts; k++) {
+    for (int k = 0; k < ds->numVerts; k++) {
       allVerts[currentVert * 3 + 0] = (float)ds->verts[k].xyz[0];
       allVerts[currentVert * 3 + 1] = (float)ds->verts[k].xyz[1];
       allVerts[currentVert * 3 + 2] = (float)ds->verts[k].xyz[2];
       currentVert++;
     }
-    for (k = 0; k < ds->numIndexes; k++) {
+    for (int k = 0; k < ds->numIndexes; k++) {
       allIndexes[currentIndex++] = ds->indexes[k] + baseVert;
     }
   }
@@ -701,12 +699,10 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
                                     int *indexes, int numIndexes,
                                     const char *debugName) {
   int i;
-  int inputTris = numIndexes / 3;
-  int numTriangles = inputTris;
 
   /* --- Step 1: Build MRMesh from triangles --- */
   MRVector3f *mrVerts = malloc(numVerts * sizeof(MRVector3f));
-  MRThreeVertIds *mrTris = malloc(numTriangles * sizeof(MRThreeVertIds));
+  MRThreeVertIds *mrTris = malloc((numIndexes / 3) * sizeof(MRThreeVertIds));
 
   for (i = 0; i < numVerts; i++) {
     mrVerts[i].x = verts[i * 3 + 0];
@@ -714,7 +710,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
     mrVerts[i].z = verts[i * 3 + 2];
   }
 
-  for (i = 0; i < numTriangles; i++) {
+  for (i = 0; i < numIndexes / 3; i++) {
     mrTris[i][0].id = indexes[i * 3 + 0];
     mrTris[i][1].id = indexes[i * 3 + 1];
     mrTris[i][2].id = indexes[i * 3 + 2];
@@ -722,7 +718,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
 
   MRMesh *mesh = mrMeshFromTrianglesDuplicatingNonManifoldVertices(
       mrVerts, (size_t)numVerts,
-      mrTris, (size_t)numTriangles
+      mrTris, (size_t)(numIndexes / 3)
   );
 
   free(mrVerts);
@@ -733,13 +729,8 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
     return NULL;
   }
 
-  size_t origPoints = mrMeshPointsNum(mesh);
-  const MRMeshTopology *topo = mrMeshTopology(mesh);
-  int origHoles = mrMeshTopologyFindNumHoles(topo, NULL);
-
   /* --- Step 2: Vertex Welding --- */
-  int welded = mrMeshBuilderUniteCloseVertices(mesh, 0.001f, false, NULL);
-  if (welded > 0) {
+  if (mrMeshBuilderUniteCloseVertices(mesh, 0.001f, false, NULL) > 0) {
     mrMeshInvalidateCaches(mesh, true);
   }
 
@@ -775,8 +766,8 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
   }
 
   /* Verify holes after filling */
-  topo = mrMeshTopology(mesh);
-  int remainingHoles = mrMeshTopologyFindNumHoles(topo, NULL);
+  const MRMeshTopology *topo = mrMeshTopology(mesh);
+  mrMeshTopologyFindNumHoles(topo, NULL);
 
   /* --- Step 6: Decimate --- */
   {
@@ -789,13 +780,7 @@ static MRMesh *HealAndDecimateMesh(float *verts, int numVerts,
     settings.optimizeVertexPos = true;
     settings.packMesh = true;
 
-    MRDecimateResult result = mrDecimateMesh(mesh, &settings);
-    
-    /* Get final face count */
-    const MRMeshTopology *finalTopo = mrMeshTopology(mesh);
-    size_t finalFaces = mrBitSetCount((const MRBitSet *)mrMeshTopologyGetValidFaces(finalTopo));
-    double reduction = inputTris > 0 ? (1.0 - (double)finalFaces / inputTris) * 100.0 : 0.0;
-
+    mrDecimateMesh(mesh, &settings);
   }
 
   return mesh;
@@ -854,8 +839,6 @@ for a single instance, extracting cleaned `colMesh_t` objects prior to categoriz
 ====================
 */
 void CreateCollisionTris(modelInstance_t *inst) {
-  int j, k;
-
   int numRaw = inst->num_collision_meshes;
   colMesh_t **rawMeshes = malloc(sizeof(colMesh_t*) * numRaw);
   for (int i = 0; i < numRaw; i++) {
