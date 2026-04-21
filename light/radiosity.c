@@ -173,6 +173,7 @@ static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
     struct MyRayQueryContext context;
     rtcInitRayQueryContext(&context.context);
     context.tw = NULL;
+    context.patchshadows = patchshadows;
 
     rtcInitIntersectArguments(&iargs);
     iargs.context = &context.context;
@@ -180,6 +181,43 @@ static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
     rtcIntersect1(g_scene, &rayhit, &iargs);
 
     return (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? qtrue : qfalse;
+}
+
+// ---------------------------------------------------------------------------
+// Patch Subdivision Helper
+// ---------------------------------------------------------------------------
+
+static mesh_t *SubdividePatchToLightmap(dsurface_t *ds) {
+    mesh_t srcMesh, *mesh, *subdivided, *finalMesh;
+    int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
+    int ssize = samplesize;
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+    if (si && si->lightmapSampleSize) ssize = si->lightmapSampleSize;
+
+    srcMesh.width = ds->patchWidth;
+    srcMesh.height = ds->patchHeight;
+    srcMesh.verts = drawVerts + ds->firstVert;
+
+    mesh = SubdivideMesh(srcMesh, 8, 999);
+    PutMeshOnCurve(*mesh);
+    MakeMeshNormals(*mesh);
+
+    subdivided = RemoveLinearMeshColumnsRows(mesh);
+    FreeMesh(mesh);
+
+    finalMesh = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH, widthtable, heighttable);
+    FreeMesh(subdivided);
+
+    if (finalMesh->width != ds->lightmapWidth || finalMesh->height != ds->lightmapHeight) {
+        static qboolean warned = qfalse;
+        if (!warned) {
+            _printf("WARNING: Radiosity patch subdivision mismatch (%dx%d != %dx%d)\n",
+                    finalMesh->width, finalMesh->height, ds->lightmapWidth, ds->lightmapHeight);
+            warned = qtrue;
+        }
+    }
+
+    return finalMesh;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,8 +245,11 @@ static void RadiosityEmit(const float *srcBuffer) {
         if (ds->lightmapNum[0] < 0) continue;
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
 
+        mesh_t *patchMesh = NULL;
         vec3_t surfNormal;
-        if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
+        if (ds->surfaceType == MST_PATCH) {
+            patchMesh = SubdividePatchToLightmap(ds);
+        } else if (ds->surfaceType == MST_PLANAR) {
             CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
             VectorNormalize(surfNormal, surfNormal);
         } else {
@@ -232,6 +273,25 @@ static void RadiosityEmit(const float *srcBuffer) {
             }
             int numTexels = ds->lightmapWidth * ds->lightmapHeight;
             luxelArea = (numTexels > 0) ? (float)(total3DArea / numTexels) : 1.0f;
+        } else if (ds->surfaceType == MST_PATCH) {
+            double total3DArea = 0;
+            if (patchMesh && patchMesh->width > 1 && patchMesh->height > 1) {
+                for (int ty = 0; ty < patchMesh->height - 1; ty++) {
+                    for (int tx = 0; tx < patchMesh->width - 1; tx++) {
+                        vec3_t v1, v2, v3, v4, c;
+                        VectorSubtract(patchMesh->verts[ty * patchMesh->width + tx + 1].xyz, patchMesh->verts[ty * patchMesh->width + tx].xyz, v1);
+                        VectorSubtract(patchMesh->verts[(ty + 1) * patchMesh->width + tx].xyz, patchMesh->verts[ty * patchMesh->width + tx].xyz, v2);
+                        CrossProduct(v1, v2, c);
+                        total3DArea += 0.5 * VectorLength(c);
+                        VectorSubtract(patchMesh->verts[(ty + 1) * patchMesh->width + tx + 1].xyz, patchMesh->verts[ty * patchMesh->width + tx + 1].xyz, v3);
+                        VectorSubtract(patchMesh->verts[(ty + 1) * patchMesh->width + tx].xyz, patchMesh->verts[ty * patchMesh->width + tx + 1].xyz, v4);
+                        CrossProduct(v3, v4, c);
+                        total3DArea += 0.5 * VectorLength(c);
+                    }
+                }
+            }
+            int numTexels = ds->lightmapWidth * ds->lightmapHeight;
+            luxelArea = (numTexels > 0 && total3DArea > 0) ? (float)(total3DArea / numTexels) : 1.0f;
         } else {
             luxelArea = VectorLength(ds->lightmapVecs[0]) * VectorLength(ds->lightmapVecs[1]);
         }
@@ -268,6 +328,16 @@ static void RadiosityEmit(const float *srcBuffer) {
                     }
                     VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
                     VectorAdd(em->center, surfaceOrigin[i], em->center);
+                } else if (ds->surfaceType == MST_PATCH) {
+                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
+                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
+                        VectorCopy(dv->normal, em->normal);
+                        VectorMA(dv->xyz, RAD_ORIGIN_NUDGE, em->normal, em->center);
+                        VectorAdd(em->center, surfaceOrigin[i], em->center);
+                    } else {
+                        VectorClear(em->normal);
+                        VectorClear(em->center);
+                    }
                 } else {
                     VectorMA(ds->lightmapOrigin, (float)lx + (float)rad_interval * 0.5f, ds->lightmapVecs[0], em->center);
                     VectorMA(em->center, (float)ly + (float)rad_interval * 0.5f, ds->lightmapVecs[1], em->center);
@@ -281,6 +351,7 @@ static void RadiosityEmit(const float *srcBuffer) {
                 for (k = 0; k < 3; k++) em->color[k] *= albedo[k];
             }
         }
+        if (patchMesh) FreeMesh(patchMesh);
     }
     _printf("    %d emitters generated from lit luxels\n", g_numEmitters);
     fflush(stdout);
@@ -294,8 +365,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     dsurface_t   *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0 || ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0 || g_numEmitters <= 0) return;
 
+    mesh_t *patchMesh = NULL;
     vec3_t dstNormal;
-    if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_PATCH) {
+    if (ds->surfaceType == MST_PATCH) {
+        patchMesh = SubdividePatchToLightmap(ds);
+    } else if (ds->surfaceType == MST_PLANAR) {
         CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
         if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
     } else {
@@ -316,6 +390,15 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, surfaceOrigin[surfIdx], dst);
+            } else if (ds->surfaceType == MST_PATCH) {
+                if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
+                    drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
+                    VectorCopy(dv->normal, dstNormal);
+                    VectorMA(dv->xyz, RAD_ORIGIN_NUDGE, dstNormal, dst);
+                    VectorAdd(dst, surfaceOrigin[surfIdx], dst);
+                } else {
+                    continue;
+                }
             } else {
                 VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], dst);
                 VectorMA(dst, (float)ly + 0.5f, ds->lightmapVecs[1], dst);
@@ -357,6 +440,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             }
         }
     }
+    if (patchMesh) FreeMesh(patchMesh);
 }
 
 static void RadiosityIntegrateThread(int surfIdx) {
@@ -375,9 +459,15 @@ static void RadiosityVoxelize(void) {
         dsurface_t *ds = &drawSurfaces[s];
         if (ds->lightmapNum[0] < 0) continue;
 
+        mesh_t *patchMesh = NULL;
         vec3_t surfNormal;
-        if (ds->numVerts > 0) { VectorCopy(drawVerts[ds->firstVert].normal, surfNormal); }
-        else { VectorSet(surfNormal, 0, 0, 1); }
+        if (ds->surfaceType == MST_PATCH) {
+            patchMesh = SubdividePatchToLightmap(ds);
+        } else if (ds->numVerts > 0) {
+            VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+        } else {
+            VectorSet(surfNormal, 0, 0, 1);
+        }
 
         for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
             for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
@@ -393,6 +483,15 @@ static void RadiosityVoxelize(void) {
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
                     if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
                     VectorAdd(pos, surfaceOrigin[s], pos);
+                } else if (ds->surfaceType == MST_PATCH) {
+                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
+                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
+                        VectorCopy(dv->xyz, pos);
+                        VectorCopy(dv->normal, normal);
+                        VectorAdd(pos, surfaceOrigin[s], pos);
+                    } else {
+                        continue;
+                    }
                 } else {
                     VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
                     VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
@@ -402,6 +501,7 @@ static void RadiosityVoxelize(void) {
                 RadiosityVoxelAdd(pos, normal, &radiosityFloats[k_dst * 3]);
             }
         }
+        if (patchMesh) FreeMesh(patchMesh);
     }
 
     for (int x = 0; x < g_radVoxelDims[0]; x++) {
@@ -504,15 +604,27 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
         mode = rad_voxel ? RAD_FILL_VOXEL : RAD_FILL_BILINEAR;
     }
 
+    mesh_t *patchMesh = NULL;
     vec3_t surfNormal;
-    if (ds->numVerts > 0) { VectorCopy(drawVerts[ds->firstVert].normal, surfNormal); }
-    else { VectorSet(surfNormal, 0, 0, 1); }
+    if (ds->surfaceType == MST_PATCH) {
+        patchMesh = SubdividePatchToLightmap(ds);
+    } else if (ds->numVerts > 0) {
+        VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+    } else {
+        VectorSet(surfNormal, 0, 0, 1);
+    }
 
     int numPixels = ds->lightmapWidth * ds->lightmapHeight;
-    if (numPixels <= 0) return;
+    if (numPixels <= 0) {
+        if (patchMesh) FreeMesh(patchMesh);
+        return;
+    }
 
     vec3_t *tempBuffer = malloc(numPixels * sizeof(vec3_t));
-    if (!tempBuffer) return;
+    if (!tempBuffer) {
+        if (patchMesh) FreeMesh(patchMesh);
+        return;
+    }
 
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
@@ -537,6 +649,15 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
                     if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
                     VectorAdd(pos, surfaceOrigin[surfIdx], pos);
+                } else if (ds->surfaceType == MST_PATCH) {
+                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
+                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
+                        VectorCopy(dv->xyz, pos);
+                        VectorCopy(dv->normal, normal);
+                        VectorAdd(pos, surfaceOrigin[surfIdx], pos);
+                    } else {
+                        continue;
+                    }
                 } else {
                     VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
                     VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
@@ -563,6 +684,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     }
 
     free(tempBuffer);
+    if (patchMesh) FreeMesh(patchMesh);
 }
 
 static void RadiosityReconstructThread(int surfIdx) {
