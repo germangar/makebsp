@@ -665,18 +665,25 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
   unsigned int geomID = hit->geomID;
   unsigned int primID = hit->primID;
 
-  // Only skip ignoreSurface for planar surfaces (which can't shadow themselves).
-  // Non-planar surfaces like trisoups and patches MUST be allowed to self-shadow.
-  if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
-    if (drawSurfaces[geomID].surfaceType == MST_PLANAR) {
-      args->valid[0] = 0;
-      return;
-    }
-  }
-
   // Only perform additional checks for draw surfaces
   if (geomID < (unsigned int)numDrawSurfaces) {
     dsurface_t *ds = &drawSurfaces[geomID];
+
+    // Respect patchshadows setting
+    if (!mcontext->patchshadows && ds->surfaceType == MST_PATCH) {
+      args->valid[0] = 0;
+      return;
+    }
+
+    // Only skip ignoreSurface for planar surfaces (which can't shadow themselves).
+    // Non-planar surfaces like trisoups and patches MUST be allowed to self-shadow.
+    if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
+      if (ds->surfaceType == MST_PLANAR) {
+        args->valid[0] = 0;
+        return;
+      }
+    }
+
     shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
     if (si->surfaceFlags & SURF_ALPHASHADOW) {
@@ -1110,6 +1117,7 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
   struct MyRayQueryContext context;
   rtcInitRayQueryContext(&context.context);
   context.tw = tw;
+  context.patchshadows = tw ? tw->patchshadows : patchshadows;
 
   vec3_t dir;
   float length;

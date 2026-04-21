@@ -990,7 +990,7 @@ void TraceLtm(int num) {
 
         // Trace this sub-sample
         vec3_t subColor = {0, 0, 0};
-        tw->ignoreSurface = num;
+        tw->ignoreSurface = realSurfIndex;
         LightingAtSample(origin, normal, subColor, qtrue, qfalse, qtrue, tw);
         VectorAdd(accumColor, subColor, accumColor);
         hitCount++;
@@ -1206,6 +1206,7 @@ void TraceGrid(int num) {
   if (!tw)
     Error("Failed to allocate traceWork_t");
   memset(tw, 0, sizeof(traceWork_t));
+  tw->ignoreSurface = -1;
 
   mod = num;
   z = mod / (gridBounds[0] * gridBounds[1]);

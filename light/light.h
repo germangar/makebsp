@@ -162,6 +162,7 @@ qboolean PointInSolid(vec3_t start);
 struct MyRayQueryContext {
   struct RTCRayQueryContext context;
   traceWork_t *tw;
+  int patchshadows;
 };
 
 //===============================================================
