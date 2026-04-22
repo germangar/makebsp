@@ -520,16 +520,27 @@ void AntiAliasLightmaps(void) {
 			for (int Y = 0; Y < H2; Y++) {
 				for (int X = 0; X < W2; X++) {
 					if (mask2x[Y * W2 + X] == 0) { blurMask2x[Y * W2 + X] = 0; continue; }
+					
 					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 					for (k = 0; k < SS_PATTERN8_COUNT; k++) {
 						float px = (float)X + ssPattern8[k][0] * radius * 2.0f;
 						float py = (float)Y + ssPattern8[k][1] * radius * 2.0f;
 						int ix = (int)roundf(px), iy = (int)roundf(py);
-						if (ix < 0 || ix >= W2 || iy < 0 || iy >= H2) continue;
 						
-						if (mask2x[iy * W2 + ix] != 0) {
-							VectorAdd(sumColor, &temp2x[(iy * W2 + ix) * 3], sumColor);
-							sumWeight += 1.0f;
+						float sampleColor[3];
+						if (ix >= 0 && ix < W2 && iy >= 0 && iy < H2) {
+							if (mask2x[iy * W2 + ix] != 0) {
+								VectorAdd(sumColor, &temp2x[(iy * W2 + ix) * 3], sumColor);
+								sumWeight += 1.0f;
+							}
+						} else {
+							// Kernel reached beyond the upscaled grid, reach out to world space
+							float srcX = px * 0.5f - 0.25f;
+							float srcY = py * 0.5f - 0.25f;
+							if (GetFilteredTexel(s, srcX, srcY, sampleColor, tempFloats)) {
+								VectorAdd(sumColor, sampleColor, sumColor);
+								sumWeight += 1.0f;
+							}
 						}
 					}
 					if (sumWeight > 0.0001f) {
