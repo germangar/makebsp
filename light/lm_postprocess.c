@@ -6,12 +6,11 @@
 /*
 ===============================================================================
 
-LIGHTMAP POST-PROCESSING (SMOOTHING)
+LIGHTMAP POST-PROCESSING (SMOOTHING & AA)
 
-This module implements a multi-threaded, alpha-aware Gaussian blur.
-It uses Normalized Convolution (premultiplied-alpha) to ensure that
-lighting doesn't bleed into unmapped areas and unmapped areas don't
-darken the valid lighting.
+This module implements multi-threaded post-process filters for lightmaps.
+It features cross-surface sampling to prevent seams between coplanar
+world surfaces.
 
 ===============================================================================
 */
@@ -21,6 +20,412 @@ float lightmapSmoothRadius = 0.0f;
 int lightmapSmoothPasses = 0;
 
 #define MAX_KERNEL_RADIUS 16
+
+// --- Planar Surface Indexing for Cross-Surface Filtering ---
+
+typedef struct {
+	int surfaceNum;
+	vec3_t origin;
+	vec3_t vecs[2];
+	float invMagSq[2];
+	int width, height;
+	int lmNum;
+	int lmOffset[2];
+	vec3_t normal;
+	float dist;
+	int surfaceFlags;
+	int contentFlags;
+	
+	int numPartners;
+	int *partners; // Indices into planarSurfaces array
+} planarInfo_t;
+
+static planarInfo_t *planarSurfaces = NULL;
+static int numPlanarSurfaces = 0;
+
+typedef struct {
+	vec3_t normal;
+	float dist;
+	int firstSurface;
+	int numSurfaces;
+} planeGroup_t;
+
+static planeGroup_t *planeGroups = NULL;
+static int numPlaneGroups = 0;
+static int *planarSortIndex = NULL;
+
+static int ComparePlanarInfo(const void *a, const void *b) {
+	const planarInfo_t *pa = &planarSurfaces[*(const int *)a];
+	const planarInfo_t *pb = &planarSurfaces[*(const int *)b];
+
+	for (int i = 0; i < 3; i++) {
+		if (pa->normal[i] < pb->normal[i] - 0.0001f) return -1;
+		if (pa->normal[i] > pb->normal[i] + 0.0001f) return 1;
+	}
+	if (pa->dist < pb->dist - 0.01f) return -1;
+	if (pa->dist > pb->dist + 0.01f) return 1;
+	return 0;
+}
+
+#define POS_TO_INT(p) ((int)roundf((p) * 128.0f))
+
+// Edge tracking for adjacency
+typedef struct {
+	int v[2][3]; // Snapped world-space coordinates
+} edge_t;
+
+typedef struct {
+	edge_t edge;
+	int surfaceIdx; // Index into planarSurfaces
+} edgeRef_t;
+
+static int CompareEdges(const void *a, const void *b) {
+	const edgeRef_t *ea = (const edgeRef_t *)a;
+	const edgeRef_t *eb = (const edgeRef_t *)b;
+	for (int i = 0; i < 2; i++) {
+		for (int j = 0; j < 3; j++) {
+			if (ea->edge.v[i][j] < eb->edge.v[i][j]) return -1;
+			if (ea->edge.v[i][j] > eb->edge.v[i][j]) return 1;
+		}
+	}
+	return 0;
+}
+
+/*
+================
+BuildPlanarSurfaceIndex
+
+Builds a list of planar surfaces and determines adjacency via geometric shared edges.
+================
+*/
+void BuildPlanarSurfaceIndex(void) {
+	int i, j, k;
+	if (planarSurfaces) {
+		for (i = 0; i < numPlanarSurfaces; i++) {
+			if (planarSurfaces[i].partners) free(planarSurfaces[i].partners);
+		}
+		free(planarSurfaces);
+	}
+	if (planarSortIndex) free(planarSortIndex);
+	if (planeGroups) free(planeGroups);
+
+	planarSurfaces = malloc(numDrawSurfaces * sizeof(planarInfo_t));
+	planarSortIndex = malloc(numDrawSurfaces * sizeof(int));
+	numPlanarSurfaces = 0;
+
+	for (i = 0; i < numDrawSurfaces; i++) {
+		dsurface_t *ds = &drawSurfaces[i];
+		if (ds->surfaceType != MST_PLANAR || ds->lightmapNum[0] < 0) continue;
+
+		planarInfo_t *p = &planarSurfaces[numPlanarSurfaces];
+		planarSortIndex[numPlanarSurfaces] = numPlanarSurfaces;
+		numPlanarSurfaces++;
+
+		p->surfaceNum = i;
+		VectorCopy(ds->lightmapOrigin, p->origin);
+		VectorAdd(p->origin, surfaceOrigin[i], p->origin);
+		VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
+		VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
+		p->invMagSq[0] = 1.0f / DotProduct(p->vecs[0], p->vecs[0]);
+		p->invMagSq[1] = 1.0f / DotProduct(p->vecs[1], p->vecs[1]);
+		p->width = ds->lightmapWidth;
+		p->height = ds->lightmapHeight;
+		p->lmNum = ds->lightmapNum[0];
+		p->lmOffset[0] = ds->lightmapOffset[0][0];
+		p->lmOffset[1] = ds->lightmapOffset[0][1];
+
+		CrossProduct(p->vecs[0], p->vecs[1], p->normal);
+		VectorNormalize(p->normal, p->normal);
+		p->dist = DotProduct(p->origin, p->normal);
+
+		p->surfaceFlags = dshaders[ds->shaderNum].surfaceFlags;
+		p->contentFlags = dshaders[ds->shaderNum].contentFlags;
+		
+		p->numPartners = 0;
+		p->partners = NULL;
+	}
+
+	if (numPlanarSurfaces == 0) return;
+
+	// Adjacency Detection via Shared Geometric Edges
+	int maxPossibleEdges = numDrawIndexes; 
+	edgeRef_t *allEdges = malloc(maxPossibleEdges * sizeof(edgeRef_t));
+	int numEdges = 0;
+
+	for (i = 0; i < numPlanarSurfaces; i++) {
+		dsurface_t *ds = &drawSurfaces[planarSurfaces[i].surfaceNum];
+		for (j = 0; j < ds->numIndexes; j += 3) {
+			// For each triangle in the planar surface
+			for (k = 0; k < 3; k++) {
+				int idx1 = ds->firstVert + drawIndexes[ds->firstIndex + j + k];
+				int idx2 = ds->firstVert + drawIndexes[ds->firstIndex + j + ((k+1)%3)];
+				
+				vec3_t p1, p2;
+				VectorCopy(drawVerts[idx1].xyz, p1);
+				VectorCopy(drawVerts[idx2].xyz, p2);
+				
+				int ip1[3] = { POS_TO_INT(p1[0]), POS_TO_INT(p1[1]), POS_TO_INT(p1[2]) };
+				int ip2[3] = { POS_TO_INT(p2[0]), POS_TO_INT(p2[1]), POS_TO_INT(p2[2]) };
+				
+				edgeRef_t *edge = &allEdges[numEdges++];
+				edge->surfaceIdx = i;
+				
+				// Sort the two vertices to ensure consistent edge representation
+				qboolean p1First = qtrue;
+				if (ip1[0] > ip2[0]) p1First = qfalse;
+				else if (ip1[0] == ip2[0] && ip1[1] > ip2[1]) p1First = qfalse;
+				else if (ip1[0] == ip2[0] && ip1[1] == ip2[1] && ip1[2] > ip2[2]) p1First = qfalse;
+				
+				if (p1First) {
+					edge->edge.v[0][0] = ip1[0]; edge->edge.v[0][1] = ip1[1]; edge->edge.v[0][2] = ip1[2];
+					edge->edge.v[1][0] = ip2[0]; edge->edge.v[1][1] = ip2[1]; edge->edge.v[1][2] = ip2[2];
+				} else {
+					edge->edge.v[0][0] = ip2[0]; edge->edge.v[0][1] = ip2[1]; edge->edge.v[0][2] = ip2[2];
+					edge->edge.v[1][0] = ip1[0]; edge->edge.v[1][1] = ip1[1]; edge->edge.v[1][2] = ip1[2];
+				}
+			}
+		}
+	}
+
+	// Sort edges to find matches
+	qsort(allEdges, numEdges, sizeof(edgeRef_t), CompareEdges);
+
+	#define LIQUID_CONTENTS (CONTENTS_LAVA | CONTENTS_WATER | CONTENTS_SLIME)
+
+	// Link surfaces that share a geometric edge AND are coplanar
+	for (i = 0; i < numEdges; ) {
+		int next = i + 1;
+		while (next < numEdges && CompareEdges(&allEdges[i], &allEdges[next]) == 0) {
+			next++;
+		}
+
+		if (next > i + 1) {
+			// allEdges[i...next-1] all share the same edge
+			for (j = i; j < next; j++) {
+				for (k = j + 1; k < next; k++) {
+					int s1 = allEdges[j].surfaceIdx;
+					int s2 = allEdges[k].surfaceIdx;
+					if (s1 == s2) continue;
+
+					planarInfo_t *p1 = &planarSurfaces[s1];
+					planarInfo_t *p2 = &planarSurfaces[s2];
+					
+					// Compatibility constraints:
+					if (DotProduct(p1->normal, p2->normal) < 0.99f) continue;
+					if (fabs(p1->dist - p2->dist) > 0.1f) continue;
+					if (p1->surfaceFlags & SURF_SKY || p2->surfaceFlags & SURF_SKY) continue;
+					if ((p1->contentFlags & LIQUID_CONTENTS) != (p2->contentFlags & LIQUID_CONTENTS)) continue;
+
+					// Add s2 to s1's partners
+					qboolean found = qfalse;
+					for (int m = 0; m < p1->numPartners; m++) if (p1->partners[m] == s2) { found = qtrue; break; }
+					if (!found) {
+						p1->partners = realloc(p1->partners, (p1->numPartners + 1) * sizeof(int));
+						p1->partners[p1->numPartners++] = s2;
+					}
+
+					// Add s1 to s2's partners
+					found = qfalse;
+					for (int m = 0; m < p2->numPartners; m++) if (p2->partners[m] == s1) { found = qtrue; break; }
+					if (!found) {
+						p2->partners = realloc(p2->partners, (p2->numPartners + 1) * sizeof(int));
+						p2->partners[p2->numPartners++] = s1;
+					}
+				}
+			}
+		}
+		i = next;
+	}
+
+	free(allEdges);
+
+	// Sort surfaces by plane for remaining plane-group lookups (fallback)
+	qsort(planarSortIndex, numPlanarSurfaces, sizeof(int), ComparePlanarInfo);
+
+	planeGroups = malloc(numPlanarSurfaces * sizeof(planeGroup_t));
+	numPlaneGroups = 0;
+
+	for (i = 0; i < numPlanarSurfaces; i++) {
+		planarInfo_t *p = &planarSurfaces[planarSortIndex[i]];
+		if (i == 0 || ComparePlanarInfo(&planarSortIndex[i], &planarSortIndex[i-1]) != 0) {
+			planeGroup_t *g = &planeGroups[numPlaneGroups++];
+			VectorCopy(p->normal, g->normal);
+			g->dist = p->dist;
+			g->firstSurface = i;
+			g->numSurfaces = 1;
+		} else {
+			planeGroups[numPlaneGroups-1].numSurfaces++;
+		}
+	}
+}
+
+void FreePlanarSurfaceIndex(void) {
+	if (planarSurfaces) {
+		for (int i = 0; i < numPlanarSurfaces; i++) {
+			if (planarSurfaces[i].partners) free(planarSurfaces[i].partners);
+		}
+		free(planarSurfaces);
+	}
+	if (planarSortIndex) free(planarSortIndex);
+	if (planeGroups) free(planeGroups);
+	planarSurfaces = NULL;
+	planarSortIndex = NULL;
+	planeGroups = NULL;
+	numPlanarSurfaces = 0;
+	numPlaneGroups = 0;
+}
+
+/*
+================
+SampleLightmapWorldBilinear
+
+Finds and samples a lightmap pixel at a world position, crossing surfaces.
+ONLY considers adjacent surfaces (sharing an edge) to prevent leaks.
+================
+*/
+qboolean SampleLightmapWorldBilinear(int sourceSrfIdx, const vec3_t pos, const vec3_t normal, float *outColor, const float *buffer) {
+	int i;
+	if (sourceSrfIdx < 0 || sourceSrfIdx >= numPlanarSurfaces) return qfalse;
+
+	planarInfo_t *srcP = &planarSurfaces[sourceSrfIdx];
+
+	// Search ONLY the partners (shared edges)
+	for (i = 0; i < srcP->numPartners; i++) {
+		planarInfo_t *p = &planarSurfaces[srcP->partners[i]];
+		
+		vec3_t delta;
+		VectorSubtract(pos, p->origin, delta);
+		float u = DotProduct(delta, p->vecs[0]) * p->invMagSq[0];
+		float v = DotProduct(delta, p->vecs[1]) * p->invMagSq[1];
+
+		// The physical extent of the lightmap is [-0.5, width - 0.5].
+		// Allow a tiny epsilon for float precision.
+		if (u < -0.51f || u > (float)p->width - 0.49f || v < -0.51f || v > (float)p->height - 0.49f) continue;
+
+		// Bilinear sample
+		int x0 = (int)floorf(u);
+		int y0 = (int)floorf(v);
+		float fx = u - x0;
+		float fy = v - y0;
+
+		int x1 = x0 + 1, y1 = y0 + 1;
+		if (x0 < 0) x0 = 0; 
+		if (x0 >= p->width) x0 = p->width - 1;
+		if (x1 < 0) x1 = 0; 
+		if (x1 >= p->width) x1 = p->width - 1;
+		if (y0 < 0) y0 = 0; 
+		if (y0 >= p->height) y0 = p->height - 1;
+		if (y1 < 0) y1 = 0; 
+		if (y1 >= p->height) y1 = p->height - 1;
+
+		int p00 = (p->lmNum * LIGHTMAP_HEIGHT + p->lmOffset[1] + y0) * LIGHTMAP_WIDTH + p->lmOffset[0] + x0;
+		int p10 = (p->lmNum * LIGHTMAP_HEIGHT + p->lmOffset[1] + y0) * LIGHTMAP_WIDTH + p->lmOffset[0] + x1;
+		int p01 = (p->lmNum * LIGHTMAP_HEIGHT + p->lmOffset[1] + y1) * LIGHTMAP_WIDTH + p->lmOffset[0] + x0;
+		int p11 = (p->lmNum * LIGHTMAP_HEIGHT + p->lmOffset[1] + y1) * LIGHTMAP_WIDTH + p->lmOffset[0] + x1;
+
+		float w00 = (1.0f - fx) * (1.0f - fy);
+		float w10 = fx * (1.0f - fy);
+		float w01 = (1.0f - fx) * fy;
+		float w11 = fx * fy;
+
+		if (lightAlphaMask[p00] == 0) w00 = 0.0f;
+		if (lightAlphaMask[p10] == 0) w10 = 0.0f;
+		if (lightAlphaMask[p01] == 0) w01 = 0.0f;
+		if (lightAlphaMask[p11] == 0) w11 = 0.0f;
+
+		float sumW = w00 + w10 + w01 + w11;
+		if (sumW > 0.01f) {
+			for (int c = 0; c < 3; c++) {
+				outColor[c] = (w00 * buffer[p00*3+c] + w10 * buffer[p10*3+c] + w01 * buffer[p01*3+c] + w11 * buffer[p11*3+c]) / sumW;
+			}
+			return qtrue;
+		}
+	}
+	return qfalse;
+}
+
+/*
+================
+GetFilteredTexel
+
+Universal helper to fetch a color at (px, py) relative to planar surface 'sIdx'.
+'sIdx' is the index into the planarSurfaces array.
+================
+*/
+static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, const float *buffer) {
+	planarInfo_t *pInfo = &planarSurfaces[sIdx];
+	dsurface_t *ds = &drawSurfaces[pInfo->surfaceNum];
+	
+	int x0 = (int)floorf(px);
+	int y0 = (int)floorf(py);
+	float fx = px - (float)x0;
+	float fy = py - (float)y0;
+	
+	qboolean needsX1 = (fx > 0.001f);
+	qboolean needsY1 = (fy > 0.001f);
+	
+	int maxX = needsX1 ? x0 + 1 : x0;
+	int maxY = needsY1 ? y0 + 1 : y0;
+
+	// Fast path: strictly inside local bounds (no chance of atlas leaking)
+	if (x0 >= 0 && maxX < ds->lightmapWidth && 
+	    y0 >= 0 && maxY < ds->lightmapHeight) {
+		
+		int x1 = x0 + 1, y1 = y0 + 1;
+		if (x1 >= ds->lightmapWidth) x1 = ds->lightmapWidth - 1;
+		if (y1 >= ds->lightmapHeight) y1 = ds->lightmapHeight - 1;
+
+		int p00 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0;
+		int p10 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1;
+		int p01 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0;
+		int p11 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1;
+
+		float w00 = (1.0f - fx) * (1.0f - fy);
+		float w10 = fx * (1.0f - fy);
+		float w01 = (1.0f - fx) * fy;
+		float w11 = fx * fy;
+
+		if (lightAlphaMask[p00] == 0) w00 = 0.0f;
+		if (lightAlphaMask[p10] == 0) w10 = 0.0f;
+		if (lightAlphaMask[p01] == 0) w01 = 0.0f;
+		if (lightAlphaMask[p11] == 0) w11 = 0.0f;
+
+		float sumW = w00 + w10 + w01 + w11;
+		if (sumW > 0.01f) {
+			for (int c = 0; c < 3; c++) {
+				outColor[c] = (w00 * buffer[p00*3+c] + w10 * buffer[p10*3+c] + w01 * buffer[p01*3+c] + w11 * buffer[p11*3+c]) / sumW;
+			}
+			return qtrue;
+		}
+	}
+
+	// Slow path: cross-surface lookup (strictly via shared edges)
+	vec3_t worldPos;
+	VectorMA(ds->lightmapOrigin, px, ds->lightmapVecs[0], worldPos);
+	VectorMA(worldPos, py, ds->lightmapVecs[1], worldPos);
+	VectorAdd(worldPos, surfaceOrigin[pInfo->surfaceNum], worldPos);
+	
+	if (SampleLightmapWorldBilinear(sIdx, worldPos, ds->lightmapVecs[2], outColor, buffer)) {
+		return qtrue;
+	}
+
+	// Fallback: if no neighbor is found, clamp to our own surface edge (standard texture clamping)
+	int cx = x0;
+	if (cx < 0) cx = 0;
+	if (cx >= ds->lightmapWidth) cx = ds->lightmapWidth - 1;
+
+	int cy = y0;
+	if (cy < 0) cy = 0;
+	if (cy >= ds->lightmapHeight) cy = ds->lightmapHeight - 1;
+
+	int p00 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + cy) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + cx;
+	if (lightAlphaMask[p00] == 0) return qfalse;
+
+	outColor[0] = buffer[p00*3+0];
+	outColor[1] = buffer[p00*3+1];
+	outColor[2] = buffer[p00*3+2];
+	return qtrue;
+}
 
 // 8-point Rotated Grid (tilted ~26.6 degrees)
 static const float ssPattern8[][2] = {
@@ -41,40 +446,24 @@ void AntiAliasLightmaps(void) {
 	float *tempFloats;
 	dsurface_t *ds;
 
-	if (!lightFloats || !lightAlphaMask) {
-		return;
-	}
+	if (!lightFloats || !lightAlphaMask) return;
 
 	numPixels = numLightBytes / 3;
-
 	tempFloats = malloc(numPixels * sizeof(float) * 3);
-	if (!tempFloats) {
-		_printf("WARNING: AntiAliasLightmaps failed to allocate memory\n");
-		return;
-	}
-	// Copy original
+	if (!tempFloats) return;
 	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
-	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f; // Ensure a valid radius
+	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
 
 	if (lightmapAA == 1) {
 		#pragma omp parallel for private(s, ds, x, y, p, k)
-		for (s = 0; s < numDrawSurfaces; s++) {
-			ds = &drawSurfaces[s];
+		for (s = 0; s < numPlanarSurfaces; s++) {
+			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
 			
-			if (ds->lightmapNum[0] < 0 || ds->surfaceType == MST_TRIANGLE_SOUP) {
-				continue;
-			}
-
 			for (y = 0; y < ds->lightmapHeight; y++) {
 				for (x = 0; x < ds->lightmapWidth; x++) {
-					int globalX = ds->lightmapOffset[0][0] + x;
-					int globalY = ds->lightmapOffset[0][1] + y;
-					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + globalY) * LIGHTMAP_WIDTH + globalX;
-					
-					if (lightAlphaMask[p] != ALPHA_SMOOTH) {
-						continue;
-					}
+					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+					if (lightAlphaMask[p] != ALPHA_SMOOTH) continue;
 
 					float sumColor[3] = {0, 0, 0};
 					float sumWeight = 0.0f;
@@ -83,79 +472,28 @@ void AntiAliasLightmaps(void) {
 						float px = (float)x + ssPattern8[k][0] * radius;
 						float py = (float)y + ssPattern8[k][1] * radius;
 
-						// Clamp to edges for safe sampling
-						if (px < 0.0f) px = 0.0f;
-						if (px > (float)(ds->lightmapWidth - 1)) px = (float)(ds->lightmapWidth - 1);
-						if (py < 0.0f) py = 0.0f;
-						if (py > (float)(ds->lightmapHeight - 1)) py = (float)(ds->lightmapHeight - 1);
-
-						int ix = (int)floorf(px);
-						int iy = (int)floorf(py);
-						float fx = px - ix;
-						float fy = py - iy;
-
-						int nx0 = ix;
-						int nx1 = ix + 1;
-						int ny0 = iy;
-						int ny1 = iy + 1;
-
-						if (nx1 >= ds->lightmapWidth) nx1 = ds->lightmapWidth - 1;
-						if (ny1 >= ds->lightmapHeight) ny1 = ds->lightmapHeight - 1;
-
-						int p00 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx0;
-						int p10 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx1;
-						int p01 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx0;
-						int p11 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx1;
-
-						float w00 = (1.0f - fx) * (1.0f - fy);
-						float w10 = fx * (1.0f - fy);
-						float w01 = (1.0f - fx) * fy;
-						float w11 = fx * fy;
-
-						// Zero weight if out of bounds or masked
-						if (lightAlphaMask[p00] == 0) w00 = 0.0f;
-						if (lightAlphaMask[p10] == 0) w10 = 0.0f;
-						if (lightAlphaMask[p01] == 0) w01 = 0.0f;
-						if (lightAlphaMask[p11] == 0) w11 = 0.0f;
-
-						float sampleWeight = w00 + w10 + w01 + w11;
-
-						if (sampleWeight > 0.0001f) {
-							float r = w00 * tempFloats[p00*3+0] + w10 * tempFloats[p10*3+0] + w01 * tempFloats[p01*3+0] + w11 * tempFloats[p11*3+0];
-							float g = w00 * tempFloats[p00*3+1] + w10 * tempFloats[p10*3+1] + w01 * tempFloats[p01*3+1] + w11 * tempFloats[p11*3+1];
-							float b = w00 * tempFloats[p00*3+2] + w10 * tempFloats[p10*3+2] + w01 * tempFloats[p01*3+2] + w11 * tempFloats[p11*3+2];
-							
-							sumColor[0] += r / sampleWeight;
-							sumColor[1] += g / sampleWeight;
-							sumColor[2] += b / sampleWeight;
-							sumWeight += 1.0f; // Each pattern sample gets equal weight if it touched valid pixels
+						float sampleColor[3];
+						if (GetFilteredTexel(s, px, py, sampleColor, tempFloats)) {
+							VectorAdd(sumColor, sampleColor, sumColor);
+							sumWeight += 1.0f;
 						}
 					}
 
 					if (sumWeight > 0.0001f) {
-						lightFloats[p * 3 + 0] = sumColor[0] / sumWeight;
-						lightFloats[p * 3 + 1] = sumColor[1] / sumWeight;
-						lightFloats[p * 3 + 2] = sumColor[2] / sumWeight;
+						VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
 					}
 				}
 			}
 		}
 	} else if (lightmapAA == 2) {
 		#pragma omp parallel for private(s, ds, x, y, p, k)
-		for (s = 0; s < numDrawSurfaces; s++) {
-			ds = &drawSurfaces[s];
-			
-			if (ds->lightmapNum[0] < 0 || ds->surfaceType == MST_TRIANGLE_SOUP) {
-				continue;
-			}
+		for (s = 0; s < numPlanarSurfaces; s++) {
+			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
 
-			int W = ds->lightmapWidth;
-			int H = ds->lightmapHeight;
+			int W = ds->lightmapWidth, H = ds->lightmapHeight;
 			if (W <= 0 || H <= 0) continue;
 
-			int W2 = W * 2;
-			int H2 = H * 2;
-
+			int W2 = W * 2, H2 = H * 2;
 			float *temp2x = malloc(W2 * H2 * 3 * sizeof(float));
 			byte *mask2x = malloc(W2 * H2 * sizeof(byte));
 			float *blur2x = malloc(W2 * H2 * 3 * sizeof(float));
@@ -167,88 +505,37 @@ void AntiAliasLightmaps(void) {
 					float px = (float)X * 0.5f - 0.25f;
 					float py = (float)Y * 0.5f - 0.25f;
 
-					if (px < 0.0f) px = 0.0f;
-					if (px > (float)(W - 1) - 0.001f) px = (float)(W - 1) - 0.001f;
-					if (py < 0.0f) py = 0.0f;
-					if (py > (float)(H - 1) - 0.001f) py = (float)(H - 1) - 0.001f;
-
-					int ix = (int)floorf(px);
-					int iy = (int)floorf(py);
-					float fx = px - (float)ix;
-					float fy = py - (float)iy;
-
-					int nx0 = ix, nx1 = ix + 1;
-					int ny0 = iy, ny1 = iy + 1;
-					if (nx1 >= W) nx1 = W - 1;
-					if (ny1 >= H) ny1 = H - 1;
-
-					int p00 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx0;
-					int p10 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx1;
-					int p01 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx0;
-					int p11 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ny1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + nx1;
-
-					float w00 = (1.0f - fx) * (1.0f - fy);
-					float w10 = fx * (1.0f - fy);
-					float w01 = (1.0f - fx) * fy;
-					float w11 = fx * fy;
-
-					if (lightAlphaMask[p00] == 0) w00 = 0.0f;
-					if (lightAlphaMask[p10] == 0) w10 = 0.0f;
-					if (lightAlphaMask[p01] == 0) w01 = 0.0f;
-					if (lightAlphaMask[p11] == 0) w11 = 0.0f;
-
-					float sumW = w00 + w10 + w01 + w11;
-					if (sumW > 0.0001f) {
+					float sampleColor[3];
+					if (GetFilteredTexel(s, px, py, sampleColor, tempFloats)) {
 						mask2x[Y * W2 + X] = ALPHA_SMOOTH;
-						for (int c = 0; c < 3; c++) {
-							temp2x[(Y * W2 + X) * 3 + c] = (w00 * tempFloats[p00*3+c] + w10 * tempFloats[p10*3+c] + w01 * tempFloats[p01*3+c] + w11 * tempFloats[p11*3+c]) / sumW;
-						}
+						VectorCopy(sampleColor, &temp2x[(Y * W2 + X) * 3]);
 					} else {
 						mask2x[Y * W2 + X] = 0;
-						for (int c = 0; c < 3; c++) temp2x[(Y * W2 + X) * 3 + c] = 0.0f;
+						VectorClear(&temp2x[(Y * W2 + X) * 3]);
 					}
 				}
 			}
 
-			// 2. Apply pattern
+			// 2. Blur (Pattern)
 			for (int Y = 0; Y < H2; Y++) {
 				for (int X = 0; X < W2; X++) {
-					if (mask2x[Y * W2 + X] == 0) {
-						blurMask2x[Y * W2 + X] = 0;
-						continue;
-					}
-
-					float sumColor[3] = {0, 0, 0};
-					float sumWeight = 0.0f;
-
+					if (mask2x[Y * W2 + X] == 0) { blurMask2x[Y * W2 + X] = 0; continue; }
+					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 					for (k = 0; k < SS_PATTERN8_COUNT; k++) {
 						float px = (float)X + ssPattern8[k][0] * radius * 2.0f;
 						float py = (float)Y + ssPattern8[k][1] * radius * 2.0f;
-
-						int ix = (int)roundf(px);
-						int iy = (int)roundf(py);
-
-						if (ix < 0) ix = 0;
-						if (ix >= W2) ix = W2 - 1;
-						if (iy < 0) iy = 0;
-						if (iy >= H2) iy = H2 - 1;
-
+						int ix = (int)roundf(px), iy = (int)roundf(py);
+						if (ix < 0 || ix >= W2 || iy < 0 || iy >= H2) continue;
+						
 						if (mask2x[iy * W2 + ix] != 0) {
-							sumColor[0] += temp2x[(iy * W2 + ix) * 3 + 0];
-							sumColor[1] += temp2x[(iy * W2 + ix) * 3 + 1];
-							sumColor[2] += temp2x[(iy * W2 + ix) * 3 + 2];
+							VectorAdd(sumColor, &temp2x[(iy * W2 + ix) * 3], sumColor);
 							sumWeight += 1.0f;
 						}
 					}
-
 					if (sumWeight > 0.0001f) {
 						blurMask2x[Y * W2 + X] = ALPHA_SMOOTH;
-						blur2x[(Y * W2 + X) * 3 + 0] = sumColor[0] / sumWeight;
-						blur2x[(Y * W2 + X) * 3 + 1] = sumColor[1] / sumWeight;
-						blur2x[(Y * W2 + X) * 3 + 2] = sumColor[2] / sumWeight;
-					} else {
-						blurMask2x[Y * W2 + X] = 0;
-					}
+						VectorScale(sumColor, 1.0f / sumWeight, &blur2x[(Y * W2 + X) * 3]);
+					} else blurMask2x[Y * W2 + X] = 0;
 				}
 			}
 
@@ -257,201 +544,104 @@ void AntiAliasLightmaps(void) {
 				for (x = 0; x < W; x++) {
 					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
 					if (lightAlphaMask[p] != ALPHA_SMOOTH) continue;
-
-					float sumColor[3] = {0, 0, 0};
-					float sumWeight = 0.0f;
-
+					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 					for (int dy = 0; dy < 2; dy++) {
 						for (int dx = 0; dx < 2; dx++) {
-							int X = x * 2 + dx;
-							int Y = y * 2 + dy;
+							int X = x * 2 + dx, Y = y * 2 + dy;
 							if (blurMask2x[Y * W2 + X] != 0) {
-								sumColor[0] += blur2x[(Y * W2 + X) * 3 + 0];
-								sumColor[1] += blur2x[(Y * W2 + X) * 3 + 1];
-								sumColor[2] += blur2x[(Y * W2 + X) * 3 + 2];
+								VectorAdd(sumColor, &blur2x[(Y * W2 + X) * 3], sumColor);
 								sumWeight += 1.0f;
 							}
 						}
 					}
-
-					if (sumWeight > 0.0001f) {
-						lightFloats[p * 3 + 0] = sumColor[0] / sumWeight;
-						lightFloats[p * 3 + 1] = sumColor[1] / sumWeight;
-						lightFloats[p * 3 + 2] = sumColor[2] / sumWeight;
-					}
+					if (sumWeight > 0.0001f) VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
 				}
 			}
-
-			free(temp2x);
-			free(mask2x);
-			free(blur2x);
-			free(blurMask2x);
+			free(temp2x); free(mask2x); free(blur2x); free(blurMask2x);
 		}
 	}
-
 	free(tempFloats);
 }
 
 void SmoothLightmaps(float radius) {
-	int i, x, y, p, s;
-	int numPixels;
+	int i, j, x, y, p, s;
 	float *tempFloats;
-	float kernel[MAX_KERNEL_RADIUS * 2 + 1];
+	float kernel[MAX_KERNEL_RADIUS * 2 + 1][MAX_KERNEL_RADIUS * 2 + 1];
 	int kernelRadius;
 	float sigma;
 	dsurface_t *ds;
 
-	if (radius <= 0.0f) {
-		return;
-	}
+	if (radius <= 0.0f || !lightFloats || !lightAlphaMask) return;
 
-	if (!lightFloats || !lightAlphaMask) {
-		return;
-	}
-
-	numPixels = numLightBytes / 3;
-
-	// 1. Prepare Gaussian Kernel
-	// We treat the radius as 3*sigma
 	sigma = radius / 3.0f;
 	if (sigma < 0.5f) sigma = 0.5f;
-
 	kernelRadius = (int)ceil(radius);
 	if (kernelRadius > MAX_KERNEL_RADIUS) kernelRadius = MAX_KERNEL_RADIUS;
 
+	// Prepare 2D Gaussian Kernel
 	float kernelSum = 0.0f;
-	for (i = -kernelRadius; i <= kernelRadius; i++) {
-		kernel[i + kernelRadius] = expf(-(float)(i * i) / (2.0f * sigma * sigma));
-		kernelSum += kernel[i + kernelRadius];
+	for (j = -kernelRadius; j <= kernelRadius; j++) {
+		for (i = -kernelRadius; i <= kernelRadius; i++) {
+			float distSq = (float)(i * i + j * j);
+			kernel[j + kernelRadius][i + kernelRadius] = expf(-distSq / (2.0f * sigma * sigma));
+			kernelSum += kernel[j + kernelRadius][i + kernelRadius];
+		}
 	}
-	// Normalize kernel
-	for (i = 0; i <= kernelRadius * 2; i++) {
-		kernel[i] /= kernelSum;
+	for (j = 0; j <= kernelRadius * 2; j++) {
+		for (i = 0; i <= kernelRadius * 2; i++) {
+			kernel[j][i] /= kernelSum;
+		}
 	}
 
-	// 2. Allocate temporary buffer for the two-pass blur
+	int numPixels = numLightBytes / 3;
 	tempFloats = malloc(numPixels * sizeof(float) * 3);
-	if (!tempFloats) {
-		_printf("WARNING: SmoothLightmaps failed to allocate memory\n");
-		return;
-	}
-	// Default to original data for untagged areas
+	if (!tempFloats) return;
 	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
-	// --- Pass 1: Horizontal Blur ---
-	#pragma omp parallel for private(s, ds, y, x, i, p)
-	for (s = 0; s < numDrawSurfaces; s++) {
-		ds = &drawSurfaces[s];
-        
-		if (ds->lightmapNum[0] < 0 || ds->surfaceType == MST_TRIANGLE_SOUP) {
-			continue;
-		}
+	// --- Single Pass 2D Blur ---
+	#pragma omp parallel for private(s, ds, y, x, i, j, p)
+	for (s = 0; s < numPlanarSurfaces; s++) {
+		ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
 
 		for (y = 0; y < ds->lightmapHeight; y++) {
 			for (x = 0; x < ds->lightmapWidth; x++) {
-				int globalY = ds->lightmapOffset[0][1] + y;
-				int globalX = ds->lightmapOffset[0][0] + x;
-				p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + globalY) * LIGHTMAP_WIDTH + globalX;
+				p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+				if (lightAlphaMask[p] == 0) continue;
 				
-				float sumColor[3] = {0, 0, 0};
-				float sumWeight = 0.0f;
+				float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 
-				for (i = -kernelRadius; i <= kernelRadius; i++) {
-					int tx = x + i;
-					// CLAMP to surface bounds
-					if (tx < 0) tx = 0;
-					if (tx >= ds->lightmapWidth) tx = ds->lightmapWidth - 1;
-
-					int neighborGlobalX = ds->lightmapOffset[0][0] + tx;
-					int neighborIdx = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + globalY) * LIGHTMAP_WIDTH + neighborGlobalX;
-					
-					float weight = kernel[i + kernelRadius];
-					float *pix = &lightFloats[neighborIdx * 3];
-					sumColor[0] += weight * pix[0];
-					sumColor[1] += weight * pix[1];
-					sumColor[2] += weight * pix[2];
-					sumWeight += weight;
+				for (j = -kernelRadius; j <= kernelRadius; j++) {
+					for (i = -kernelRadius; i <= kernelRadius; i++) {
+						float weight = kernel[j + kernelRadius][i + kernelRadius];
+						float sampleColor[3];
+						
+						if (GetFilteredTexel(s, (float)(x + i), (float)(y + j), sampleColor, tempFloats)) {
+							VectorMA(sumColor, weight, sampleColor, sumColor);
+							sumWeight += weight;
+						}
+					}
 				}
-
-				float *out = &tempFloats[p * 3];
+				
 				if (sumWeight > 0.0001f) {
-					out[0] = sumColor[0] / sumWeight;
-					out[1] = sumColor[1] / sumWeight;
-					out[2] = sumColor[2] / sumWeight;
+					VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
 				}
 			}
 		}
 	}
-
-	// --- Pass 2: Vertical Blur ---
-	#pragma omp parallel for private(s, ds, x, y, i, p)
-	for (s = 0; s < numDrawSurfaces; s++) {
-		ds = &drawSurfaces[s];
-        
-		if (ds->lightmapNum[0] < 0 || ds->surfaceType == MST_TRIANGLE_SOUP) {
-			continue;
-		}
-
-		for (x = 0; x < ds->lightmapWidth; x++) {
-			for (y = 0; y < ds->lightmapHeight; y++) {
-				int globalX = ds->lightmapOffset[0][0] + x;
-				int globalY = ds->lightmapOffset[0][1] + y;
-				p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + globalY) * LIGHTMAP_WIDTH + globalX;
-
-				float sumColor[3] = {0, 0, 0};
-				float sumWeight = 0.0f;
-
-				for (i = -kernelRadius; i <= kernelRadius; i++) {
-					int ty = y + i;
-					// CLAMP to surface bounds
-					if (ty < 0) ty = 0;
-					if (ty >= ds->lightmapHeight) ty = ds->lightmapHeight - 1;
-
-					int neighborGlobalY = ds->lightmapOffset[0][1] + ty;
-					int neighborIdx = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + neighborGlobalY) * LIGHTMAP_WIDTH + globalX;
-
-					float weight = kernel[i + kernelRadius];
-					float *pix = &tempFloats[neighborIdx * 3];
-					sumColor[0] += weight * pix[0];
-					sumColor[1] += weight * pix[1];
-					sumColor[2] += weight * pix[2];
-					sumWeight += weight;
-				}
-
-				float *finalOut = &lightFloats[p * 3];
-				if (sumWeight > 0.0001f) {
-					finalOut[0] = sumColor[0] / sumWeight;
-					finalOut[1] = sumColor[1] / sumWeight;
-					finalOut[2] = sumColor[2] / sumWeight;
-				}
-			}
-		}
-	}
-
 	free(tempFloats);
 }
 
-/*
-================
-PostProcessLightmaps
-
-HUB function for all lightmap post-processing steps.
-Called at the end of the direct lighting phase.
-================
-*/
 void PostProcessLightmaps(void) {
 	_printf("--- Post Processing ---\n");
-	
-	// 1. Scan for peak intensity (for normalization/HDR scaling)
 	ScanLightmapIntensity();
 
-	// 2. Post-process Anti-Aliasing (RGSS Pattern)
+	BuildPlanarSurfaceIndex();
+
 	if (lightmapAA) {
-		_printf("Applying Anti-Aliasing pass...\n");
+		_printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
 		AntiAliasLightmaps();
 	}
 
-	// 3. Multitransfert / Gaussian Smoothing
 	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
 		_printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
 		for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
@@ -460,4 +650,6 @@ void PostProcessLightmaps(void) {
 		}
 		_printf(" Done\n");
 	}
+
+	FreePlanarSurfaceIndex();
 }

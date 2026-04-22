@@ -1,5 +1,0 @@
-g++ -o light.exe obj/common/bspfile.o obj/common/cmdlib.o obj/common/imagelib.o obj/common/lightdata.o obj/common/mathlib.o obj/common/mutex.o obj/common/polylib.o obj/common/scriplib.o obj/common/threads.o obj/shared/globals.o obj/shared/json_parser.o obj/shared/mesh.o obj/shared/shaders.o obj/light/light.o obj/light/light_trace.o obj/light/main.o obj/pak/pakstuff.o obj/pak/unzip.o -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm -lstdc++ -fopenmp -Wl,--stack,16777216 -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12
-E:/CODE/msys64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/10.3.0/../../../../x86_64-w64-mingw32/bin/ld.exe: obj/light/light.o:light.c:(.text+0x61c0): undefined reference to `CreateFilters'
-E:/CODE/msys64/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/10.3.0/../../../../x86_64-w64-mingw32/bin/ld.exe: obj/light/light.o:light.c:(.text+0x62f3): undefined reference to `CreateFilters'
-collect2.exe: error: ld returned 1 exit status
-make.bat: *** [Makefile:122: light.exe] Error 1
