@@ -155,6 +155,10 @@ int main(int argc, char **argv) {
                 lightmapSmoothPasses = 0;
             }
             i++;
+        } else if (!strcmp(argv[i], "-aa")) {
+            lightmapAA = atoi(argv[i + 1]);
+            _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", lightmapAA);
+            i++;
         } else if (!strcmp(argv[i], "-smoothradius")) {
             lightmapSmoothRadius = (float)atof(argv[i + 1]);
             if (lightmapSmoothRadius < 0)

@@ -198,6 +198,8 @@ extern qboolean deluxeMapOverridden;
 
 extern float lightmapSmoothRadius;
 extern int lightmapSmoothPasses;
+extern int lightmapAA;
+
 typedef enum {
     SUPERSAMPLE_NONE = 0,
     SUPERSAMPLE_MODELS = 1,
