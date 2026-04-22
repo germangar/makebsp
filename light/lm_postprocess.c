@@ -19,6 +19,9 @@ int lightmapAA = 0;
 float lightmapSmoothRadius = 0.0f;
 int lightmapSmoothPasses = 0;
 
+#define AA_ANGLE_MATCH_DEGREES 30.0f
+static float aa_angle_match_cos = 0.85f;
+
 #define MAX_KERNEL_RADIUS 16
 
 // --- Planar Surface Indexing for Cross-Surface Filtering ---
@@ -440,6 +443,156 @@ static const float ssPattern8[][2] = {
 };
 #define SS_PATTERN8_COUNT 8
 
+// ---------------------------------------------------------------------------
+// Voxel Grid Structure for Anti-Aliasing Triangle Soups (VPPS Spatial Hash)
+// ---------------------------------------------------------------------------
+
+extern int samplesize;
+#define AA_ANGLE_MATCH_COS 0.85f
+
+typedef struct aaTexel_s {
+    vec3_t pos;
+    vec3_t normal;
+    vec3_t color;
+    struct aaTexel_s *next;
+} aaTexel_t;
+
+static aaTexel_t ***g_aaVoxels = NULL;
+static vec3_t g_aaVoxelMins;
+static int g_aaVoxelDims[3];
+static float g_aaVoxelSize = 16.0f;
+
+static void AAVoxelReset(void) {
+    int i;
+    if (g_aaVoxels) {
+        for (int x = 0; x < g_aaVoxelDims[0]; x++) {
+            for (int y = 0; y < g_aaVoxelDims[1]; y++) {
+                for (int z = 0; z < g_aaVoxelDims[2]; z++) {
+                    aaTexel_t *v = g_aaVoxels[x][y][z].next;
+                    while(v) {
+                        aaTexel_t *next = v->next;
+                        free(v);
+                        v = next;
+                    }
+                }
+                free(g_aaVoxels[x][y]);
+            }
+            free(g_aaVoxels[x]);
+        }
+        free(g_aaVoxels);
+        g_aaVoxels = NULL;
+    }
+
+    g_aaVoxelSize = (float)samplesize * 1.5f;
+    if (g_aaVoxelSize < 4.0f) g_aaVoxelSize = 4.0f;
+
+    aa_angle_match_cos = cosf(DEG2RAD(AA_ANGLE_MATCH_DEGREES));
+
+    // Initialize dimensions based on map bounds
+    for (i = 0; i < 3; i++) {
+        g_aaVoxelMins[i] = dmodels[0].mins[i] - g_aaVoxelSize;
+        float size = (dmodels[0].maxs[i] + g_aaVoxelSize) - g_aaVoxelMins[i];
+        g_aaVoxelDims[i] = (int)ceil(size / g_aaVoxelSize);
+    }
+
+    g_aaVoxels = malloc(sizeof(aaTexel_t**) * g_aaVoxelDims[0]);
+    for (int x = 0; x < g_aaVoxelDims[0]; x++) {
+        g_aaVoxels[x] = malloc(sizeof(aaTexel_t*) * g_aaVoxelDims[1]);
+        for (int y = 0; y < g_aaVoxelDims[1]; y++) {
+            g_aaVoxels[x][y] = calloc(g_aaVoxelDims[2], sizeof(aaTexel_t));
+        }
+    }
+}
+
+static void AAVoxelAdd(const vec3_t pos, const vec3_t normal, const float *color) {
+    int v[3];
+    for (int i = 0; i < 3; i++) {
+        v[i] = (int)((pos[i] - g_aaVoxelMins[i]) / g_aaVoxelSize);
+        if (v[i] < 0 || v[i] >= g_aaVoxelDims[i]) return;
+    }
+
+    aaTexel_t *newT = malloc(sizeof(aaTexel_t));
+    VectorCopy(pos, newT->pos);
+    VectorCopy(normal, newT->normal);
+    newT->color[0] = color[0];
+    newT->color[1] = color[1];
+    newT->color[2] = color[2];
+    
+    // Prepend to list
+    newT->next = g_aaVoxels[v[0]][v[1]][v[2]].next;
+    g_aaVoxels[v[0]][v[1]][v[2]].next = newT;
+}
+
+static qboolean AAVoxelSample(const vec3_t pos, const vec3_t normal, float searchRadius, vec3_t outColor) {
+    int v[3];
+    for (int i = 0; i < 3; i++) {
+        v[i] = (int)((pos[i] - g_aaVoxelMins[i]) / g_aaVoxelSize);
+        if (v[i] < 0 || v[i] >= g_aaVoxelDims[i]) return qfalse;
+    }
+
+    vec3_t totalColor = {0,0,0};
+    float totalWeight = 0.0f;
+    float maxDistSq = searchRadius * searchRadius;
+
+    for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
+                if (nx < 0 || nx >= g_aaVoxelDims[0] || ny < 0 || ny >= g_aaVoxelDims[1] || nz < 0 || nz >= g_aaVoxelDims[2]) continue;
+                
+                aaTexel_t *curr = g_aaVoxels[nx][ny][nz].next;
+                while (curr) {
+                    float dot = DotProduct(curr->normal, normal);
+                    if (dot > aa_angle_match_cos) {
+                        vec3_t delta;
+                        VectorSubtract(pos, curr->pos, delta);
+                        float distSq = DotProduct(delta, delta);
+                        if (distSq <= maxDistSq) {
+                            float w = (1.0f / (sqrtf(distSq) + 0.1f)) * dot;
+                            VectorMA(totalColor, w, curr->color, totalColor);
+                            totalWeight += w;
+                        }
+                    }
+                    curr = curr->next;
+                }
+            }
+        }
+    }
+
+    if (totalWeight < 0.0001f) return qfalse;
+
+    VectorScale(totalColor, 1.0f / totalWeight, outColor);
+    return qtrue;
+}
+
+static void AAVoxelize(void) {
+    int s, x, y, p;
+    dsurface_t *ds;
+    
+    AAVoxelReset();
+
+    for (s = 0; s < numDrawSurfaces; s++) {
+        ds = &drawSurfaces[s];
+        if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+
+        for (y = 0; y < ds->lightmapHeight; y++) {
+            for (x = 0; x < ds->lightmapWidth; x++) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                if (lightAlphaMask[p] == 0) continue;
+
+                float st[2];
+                vec3_t origin, normal;
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+                if (TriSoupSamplePoint(ds, st, origin, normal)) {
+                    AAVoxelAdd(origin, normal, &lightFloats[p * 3]);
+                }
+            }
+        }
+    }
+}
+
 void AntiAliasLightmaps(void) {
 	int x, y, p, s, k;
 	int numPixels;
@@ -455,6 +608,34 @@ void AntiAliasLightmaps(void) {
 
 	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
 
+    // AA for Triangle Soups
+    #pragma omp parallel for private(s, ds, x, y, p)
+    for (s = 0; s < numDrawSurfaces; s++) {
+        ds = &drawSurfaces[s];
+        if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+
+        for (y = 0; y < ds->lightmapHeight; y++) {
+            for (x = 0; x < ds->lightmapWidth; x++) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                if (lightAlphaMask[p] == 0) continue;
+
+                float st[2];
+                vec3_t origin, normal;
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+                if (TriSoupSamplePoint(ds, st, origin, normal)) {
+                    vec3_t sampleColor;
+                    float searchRadius = radius * (float)samplesize * 1.5f;
+                    if (searchRadius < 4.0f) searchRadius = 4.0f;
+                    if (AAVoxelSample(origin, normal, searchRadius, sampleColor)) {
+                        VectorCopy(sampleColor, &lightFloats[p * 3]);
+                    }
+                }
+            }
+        }
+    }
+
 	if (lightmapAA == 1) {
 		#pragma omp parallel for private(s, ds, x, y, p, k)
 		for (s = 0; s < numPlanarSurfaces; s++) {
@@ -463,7 +644,7 @@ void AntiAliasLightmaps(void) {
 			for (y = 0; y < ds->lightmapHeight; y++) {
 				for (x = 0; x < ds->lightmapWidth; x++) {
 					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-					if (lightAlphaMask[p] != ALPHA_SMOOTH) continue;
+					if (lightAlphaMask[p] == 0) continue;
 
 					float sumColor[3] = {0, 0, 0};
 					float sumWeight = 0.0f;
@@ -554,7 +735,7 @@ void AntiAliasLightmaps(void) {
 			for (y = 0; y < H; y++) {
 				for (x = 0; x < W; x++) {
 					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-					if (lightAlphaMask[p] != ALPHA_SMOOTH) continue;
+					if (lightAlphaMask[p] == 0) continue;
 					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 					for (int dy = 0; dy < 2; dy++) {
 						for (int dx = 0; dx < 2; dx++) {
@@ -572,6 +753,7 @@ void AntiAliasLightmaps(void) {
 		}
 	}
 	free(tempFloats);
+	AAVoxelReset();
 }
 
 void SmoothLightmaps(float radius) {
@@ -609,7 +791,10 @@ void SmoothLightmaps(float radius) {
 	if (!tempFloats) return;
 	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
-	// --- Single Pass 2D Blur ---
+	// Ensure the voxel grid is up to date with current lightFloats for Trisoups
+	AAVoxelize();
+
+	// --- Single Pass Blur (2D for Planar/Patch, 3D for Trisoups) ---
 	#pragma omp parallel for private(s, ds, y, x, i, j, p)
 	for (s = 0; s < numPlanarSurfaces; s++) {
 		ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
@@ -639,6 +824,35 @@ void SmoothLightmaps(float radius) {
 			}
 		}
 	}
+
+	// 3D VPPS Blur for Triangle Soups
+	#pragma omp parallel for private(s, ds, x, y, p)
+    for (s = 0; s < numDrawSurfaces; s++) {
+        ds = &drawSurfaces[s];
+        if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+
+        for (y = 0; y < ds->lightmapHeight; y++) {
+            for (x = 0; x < ds->lightmapWidth; x++) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                if (lightAlphaMask[p] == 0) continue;
+
+                float st[2];
+                vec3_t origin, normal;
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+                if (TriSoupSamplePoint(ds, st, origin, normal)) {
+                    vec3_t sampleColor;
+                    float searchRadius = radius * (float)samplesize;
+                    if (searchRadius < g_aaVoxelSize) searchRadius = g_aaVoxelSize;
+                    if (AAVoxelSample(origin, normal, searchRadius, sampleColor)) {
+                        VectorCopy(sampleColor, &lightFloats[p * 3]);
+                    }
+                }
+            }
+        }
+    }
+
 	free(tempFloats);
 }
 
@@ -650,7 +864,11 @@ void PostProcessLightmaps(void) {
 
 	if (lightmapAA) {
 		_printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
+		// VPPS voxelization is now handled inside AAVoxelize, called explicitly here for AA pass
+		_printf("  [vpps] Voxelizing Trisoups...\n");
+		AAVoxelize();
 		AntiAliasLightmaps();
+		AAVoxelReset(); // Free grid after AA if Smoothing doesn't need it immediately
 	}
 
 	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
@@ -659,6 +877,7 @@ void PostProcessLightmaps(void) {
 			_printf("%d...", pnum);
 			SmoothLightmaps(lightmapSmoothRadius);
 		}
+		AAVoxelReset(); // Final free after all smooth passes
 		_printf(" Done\n");
 	}
 

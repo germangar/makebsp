@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     pointScale = 7500;
     lightmapSmoothPasses = -1;
     lightmapSmoothRadius = -1.0f;
-    superSampleMode = SUPERSAMPLE_MODELS;
+    superSampleMode = SUPERSAMPLE_NONE;
     embree = qtrue;
 
     JSON_ExportStandardPackages("games");
@@ -142,18 +142,22 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-bruteforce")) {
             bruteTrace = qtrue;
             _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
-        } else if (!strcmp(argv[i], "-smooth")) {
+        } else if (!strcmp(argv[i], "-supersampling")) {
             int mode = atoi(argv[i + 1]);
             if (mode == 1) {
-                superSampleMode = SUPERSAMPLE_MODELS; // Combined: Smoothing (world) + Super-sampling (models)
-                lightmapSmoothPasses = -1; // Use g_game defaults
+                superSampleMode = SUPERSAMPLE_ALL;
+                _printf("Super-sampling enabled for ALL surfaces\n");
             } else if (mode == 2) {
-                superSampleMode = SUPERSAMPLE_ALL; // Trace-time Super-sampling for EVERYTHING (no smoothing)
-                lightmapSmoothPasses = 0; 
-            } else if (mode == 0) {
-                superSampleMode = SUPERSAMPLE_NONE; // OFF
-                lightmapSmoothPasses = 0;
+                superSampleMode = SUPERSAMPLE_MODELS;
+                _printf("Super-sampling enabled for MODELS only\n");
+            } else {
+                superSampleMode = SUPERSAMPLE_NONE;
             }
+            i++;
+        } else if (!strcmp(argv[i], "-smooth")) {
+            lightmapSmoothPasses = atoi(argv[i + 1]);
+            if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
+            _printf("Smoothing passes set to %d\n", lightmapSmoothPasses);
             i++;
         } else if (!strcmp(argv[i], "-aa")) {
             lightmapAA = atoi(argv[i + 1]);
@@ -260,11 +264,12 @@ int main(int argc, char **argv) {
                 "   bruteforce     = skip all culling and use legacy trace\n"
                 "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
                 "   surface        = use legacy surface tracing path\n"
-                "   smooth <mode>  = lightmap anti-aliasing mode:\n"
-                "                     0 = OFF\n"
-                "                     1 = (DEFAULT) smoothing world + super-sampling models\n"
-                "                     2 = super-sampling EVERYTHING (post-process smoothing OFF)\n"
+                "   smooth <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
+                "   supersampling <mode> = trace-time super-sampling mode:\n"
+                "                     0 = OFF\n"
+                "                     1 = super-sampling EVERYTHING\n"
+                "                     2 = (DEFAULT) super-sampling models only\n"
                 "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_depthmin <F> = set inner distance limit for radiosity plateau\n"
                 "   rad_depthmax <F> = set outer distance limit for radiosity gradient\n"

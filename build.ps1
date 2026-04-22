@@ -29,7 +29,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "[3/3] Running light -radiosity 1 -v maps/modeltest.bsp..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./light.exe -smooth 0 -radiosity 1 -v maps/modeltest.bsp
+    ./light.exe -smooth 1 -radiosity 0 -v maps/modeltest.bsp
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red
