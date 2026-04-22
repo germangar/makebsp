@@ -45,3 +45,12 @@ The BSP compiler (`q3map.exe`) leverages modern libraries for texture and collis
 ## 7. Developer Conventions
 - **Nomenclature**: Prefix `rad_` for radiosity, `lm_` for lightmap post-processing.
 - **Architecture**: Global settings are derived from `game_t` templates in `shared/globals.c`, while runtime overrides are handled via CLI switches in `main.c`.
+
+## 8. Lightmap Post-Processing
+The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-space filters to the high-precision `lightFloats` buffer to eliminate aliasing and seams.
+
+- **Geometric Adjacency**: To allow filters to cross surface boundaries seamlessly, the system builds a world-space index of **Geometric Partners**. It identifies adjacent surfaces by hashing snapped world-space vertex coordinates (128-unit precision) to detect shared physical edges.
+- **Universal Lookup Helper**: Filters utilize a unified `GetFilteredTexel` helper. If a filter kernel extends beyond a surface's lightmap bounds, the helper automatically switches to world-space projection and samples from validated geometric neighbors.
+- **Normalized Convolution**: All filters are alpha-aware and use the `lightAlphaMask`. Sampling uses normalized convolution weights to ensure lighting data never bleeds into unmapped atlas space or pulls dark artifacts from empty pixels.
+- **Single-Pass 2D Gaussian Blur**: The smoothing filter (`-smooth`) utilizes a true 2D kernel in a single pass to ensure mathematical correctness and orientation-independence when crossing into rotated neighbor surfaces.
+- **Advanced Anti-Aliasing**: Implements 8-point Rotated Grid Super-Sampling (RGSS) in two modes: direct jittered sampling (Mode 1) and a high-fidelity 2x Upscale-Blur-Downscale pipeline (Mode 2).
