@@ -1,4 +1,5 @@
 #include "light.h"
+#include <omp.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -462,8 +463,11 @@ static vec3_t g_aaVoxelMins;
 static int g_aaVoxelDims[3];
 static float g_aaVoxelSize = 16.0f;
 
-static void AAVoxelReset(void) {
-    int i;
+#define NUM_AA_VOXEL_LOCKS 1024
+static omp_lock_t g_aaVoxelLocks[NUM_AA_VOXEL_LOCKS];
+static qboolean g_aaLocksInit = qfalse;
+
+static void AAVoxelFree(void) {
     if (g_aaVoxels) {
         for (int x = 0; x < g_aaVoxelDims[0]; x++) {
             for (int y = 0; y < g_aaVoxelDims[1]; y++) {
@@ -481,6 +485,18 @@ static void AAVoxelReset(void) {
         }
         free(g_aaVoxels);
         g_aaVoxels = NULL;
+    }
+}
+
+static void AAVoxelReset(void) {
+    int i;
+    AAVoxelFree();
+
+    if (!g_aaLocksInit) {
+        for (i = 0; i < NUM_AA_VOXEL_LOCKS; i++) {
+            omp_init_lock(&g_aaVoxelLocks[i]);
+        }
+        g_aaLocksInit = qtrue;
     }
 
     g_aaVoxelSize = (float)samplesize * 1.5f;
@@ -518,9 +534,14 @@ static void AAVoxelAdd(const vec3_t pos, const vec3_t normal, const float *color
     newT->color[1] = color[1];
     newT->color[2] = color[2];
     
+    int lockIdx = ((v[0] * 73) + (v[1] * 31) + v[2]) % NUM_AA_VOXEL_LOCKS;
+    if (lockIdx < 0) lockIdx += NUM_AA_VOXEL_LOCKS;
+
+    omp_set_lock(&g_aaVoxelLocks[lockIdx]);
     // Prepend to list
     newT->next = g_aaVoxels[v[0]][v[1]][v[2]].next;
     g_aaVoxels[v[0]][v[1]][v[2]].next = newT;
+    omp_unset_lock(&g_aaVoxelLocks[lockIdx]);
 }
 
 static qboolean AAVoxelSample(const vec3_t pos, const vec3_t normal, float searchRadius, vec3_t outColor) {
@@ -567,12 +588,12 @@ static qboolean AAVoxelSample(const vec3_t pos, const vec3_t normal, float searc
 
 static void AAVoxelize(void) {
     int s, x, y, p;
-    dsurface_t *ds;
     
     AAVoxelReset();
 
+    #pragma omp parallel for private(s, x, y, p)
     for (s = 0; s < numDrawSurfaces; s++) {
-        ds = &drawSurfaces[s];
+        dsurface_t *ds = &drawSurfaces[s];
         if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) continue;
 
         for (y = 0; y < ds->lightmapHeight; y++) {
@@ -791,9 +812,6 @@ void SmoothLightmaps(float radius) {
 	if (!tempFloats) return;
 	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
-	// Ensure the voxel grid is up to date with current lightFloats for Trisoups
-	AAVoxelize();
-
 	// --- Single Pass Blur (2D for Planar/Patch, 3D for Trisoups) ---
 	#pragma omp parallel for private(s, ds, y, x, i, j, p)
 	for (s = 0; s < numPlanarSurfaces; s++) {
@@ -862,23 +880,32 @@ void PostProcessLightmaps(void) {
 
 	BuildPlanarSurfaceIndex();
 
-	if (lightmapAA) {
-		_printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
-		// VPPS voxelization is now handled inside AAVoxelize, called explicitly here for AA pass
+	qboolean needsVPPS = (lightmapAA > 0) || (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f);
+
+	if (needsVPPS) {
 		_printf("  [vpps] Voxelizing Trisoups...\n");
 		AAVoxelize();
+	}
+
+	if (lightmapAA) {
+		_printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
 		AntiAliasLightmaps();
-		AAVoxelReset(); // Free grid after AA if Smoothing doesn't need it immediately
 	}
 
 	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
 		_printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
 		for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
 			_printf("%d...", pnum);
+			if (pnum > 1 || lightmapAA > 0) {
+				AAVoxelize(); // Re-voxelize since lightFloats were updated
+			}
 			SmoothLightmaps(lightmapSmoothRadius);
 		}
-		AAVoxelReset(); // Final free after all smooth passes
 		_printf(" Done\n");
+	}
+
+	if (needsVPPS) {
+		AAVoxelFree();
 	}
 
 	FreePlanarSurfaceIndex();
