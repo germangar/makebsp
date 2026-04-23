@@ -506,6 +506,8 @@ static float GetSurfaceTexelSize(dsurface_t *ds) {
     return (float)samplesize;
 }
 
+#define TRISOUP_SMOOTH_CHEAT 1.25f
+
 /*
 ================
 ProcessTrisoupVolumetric
@@ -516,15 +518,16 @@ It voxelizes the surface's pixels, then immediately samples them using a true
 "softness" of world geometry regardless of editor scaling or _lightmapscale.
 ================
 */
-static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloats) {
+static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloats, qboolean isAA) {
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return;
 
-    int x, y, p, i;
+    int x, y, p, i, k;
 
     // 1. Calculate true density and set up local bounds
     float texelSize = GetSurfaceTexelSize(ds);
-    float searchRadius = radius * texelSize;
+    float effectiveRadius = isAA ? radius : (radius * TRISOUP_SMOOTH_CHEAT);
+    float searchRadius = effectiveRadius * texelSize;
     if (searchRadius < 0.1f) return;
 
     // The grid cells must be large enough that a 3x3x3 search guarantees we reach 'searchRadius'
@@ -625,49 +628,63 @@ static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloat
             p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
             if (lightAlphaMask[p] == 0) continue;
 
-            float st[2];
-            vec3_t origin, normal;
-            st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
-            st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+            int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
+            vec3_t finalColor = {0,0,0};
+            float finalWeight = 0.0f;
 
-            if (TriSoupSamplePoint(ds, st, origin, normal)) {
-                int v[3];
-                for (i = 0; i < 3; i++) {
-                    v[i] = (int)((origin[i] - gridMins[i]) / voxelSize);
-                }
+            for (k = 0; k < numSamples; k++) {
+                float jx = isAA ? ssPattern8[k][0] * radius : 0.0f;
+                float jy = isAA ? ssPattern8[k][1] * radius : 0.0f;
 
-                vec3_t totalColor = {0,0,0};
-                float totalWeight = 0.0f;
+                float st[2];
+                vec3_t origin, normal;
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f + jx;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f + jy;
 
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dz = -1; dz <= 1; dz++) {
-                            int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
-                            if (nx < 0 || nx >= gridDims[0] || ny < 0 || ny >= gridDims[1] || nz < 0 || nz >= gridDims[2]) continue;
-                            
-                            aaTexel_t *curr = localGrid[nx][ny][nz];
-                            while (curr) {
-                                float dot = DotProduct(curr->normal, normal);
-                                if (dot > aa_angle_match_cos) {
-                                    vec3_t delta;
-                                    VectorSubtract(origin, curr->pos, delta);
-                                    float distSq = DotProduct(delta, delta);
-                                    if (distSq <= maxDistSq) {
-                                        // True 3D Gaussian Weight
-                                        float w = expf(-distSq / twoSigmaSq) * dot;
-                                        VectorMA(totalColor, w, curr->color, totalColor);
-                                        totalWeight += w;
+                if (TriSoupSamplePoint(ds, st, origin, normal)) {
+                    int v[3];
+                    for (i = 0; i < 3; i++) {
+                        v[i] = (int)((origin[i] - gridMins[i]) / voxelSize);
+                    }
+
+                    vec3_t totalColor = {0,0,0};
+                    float totalWeight = 0.0f;
+
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dz = -1; dz <= 1; dz++) {
+                                int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
+                                if (nx < 0 || nx >= gridDims[0] || ny < 0 || ny >= gridDims[1] || nz < 0 || nz >= gridDims[2]) continue;
+                                
+                                aaTexel_t *curr = localGrid[nx][ny][nz];
+                                while (curr) {
+                                    float dot = DotProduct(curr->normal, normal);
+                                    if (dot > aa_angle_match_cos) {
+                                        vec3_t delta;
+                                        VectorSubtract(origin, curr->pos, delta);
+                                        float distSq = DotProduct(delta, delta);
+                                        if (distSq <= maxDistSq) {
+                                            // True 3D Gaussian Weight
+                                            float w = expf(-distSq / twoSigmaSq) * dot;
+                                            VectorMA(totalColor, w, curr->color, totalColor);
+                                            totalWeight += w;
+                                        }
                                     }
+                                    curr = curr->next;
                                 }
-                                curr = curr->next;
                             }
                         }
                     }
-                }
 
-                if (totalWeight > 0.0001f) {
-                    VectorScale(totalColor, 1.0f / totalWeight, &lightFloats[p * 3]);
+                    if (totalWeight > 0.0001f) {
+                        VectorMA(finalColor, 1.0f / totalWeight, totalColor, finalColor);
+                        finalWeight += 1.0f;
+                    }
                 }
+            }
+
+            if (finalWeight > 0.0001f) {
+                VectorScale(finalColor, 1.0f / finalWeight, &lightFloats[p * 3]);
             }
         }
     }
@@ -708,7 +725,7 @@ void AntiAliasLightmaps(void) {
     // AA for Triangle Soups
     #pragma omp parallel for private(s)
     for (s = 0; s < numDrawSurfaces; s++) {
-        ProcessTrisoupVolumetric(s, radius, tempFloats);
+        ProcessTrisoupVolumetric(s, radius, tempFloats, qtrue);
     }
 
 	if (lightmapAA == 1) {
@@ -899,7 +916,7 @@ void SmoothLightmaps(float radius) {
 	// 3D VPPS Blur for Triangle Soups
 	#pragma omp parallel for private(s)
     for (s = 0; s < numDrawSurfaces; s++) {
-        ProcessTrisoupVolumetric(s, radius, tempFloats);
+        ProcessTrisoupVolumetric(s, radius, tempFloats, qfalse);
     }
 
 	free(tempFloats);
