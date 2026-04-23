@@ -970,7 +970,7 @@ void SmoothLightmaps(float radius) {
             int newPercent = (currentProgress * 10) / numPlanarSurfaces;
             if (newPercent > oldPercent) {
                 ThreadLock();
-                _printf("%d...", newPercent);
+                _printf(".");
                 ThreadUnlock();
             }
         }
@@ -991,7 +991,7 @@ void SmoothLightmaps(float radius) {
             int newPercent = (currentProgress * 10) / numDrawSurfaces;
             if (newPercent > oldPercent) {
                 ThreadLock();
-                _printf("%d...", newPercent);
+                _printf(".");
                 ThreadUnlock();
             }
         }
@@ -1014,7 +1014,7 @@ void PostProcessLightmaps(void) {
 	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
 		_printf("Smoothing (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
 		for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
-			_printf("%d...", pnum);
+			_printf("%d ", pnum);
 			SmoothLightmaps(lightmapSmoothRadius);
 		}
 		_printf(" Done\n");
