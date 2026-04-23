@@ -32,6 +32,7 @@ extern drawVert32_t *internalDrawVerts;
 extern float *lightFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
+extern float *irradianceVecFloats;  // 9 floats/pixel: irradiance vectors (R,G,B) × vec3 — sparse grid only, freed with FreeRadiosityFloats
 extern byte *lightAlphaMask;
 extern bspGridPoint32_t *gridData32;
 

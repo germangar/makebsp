@@ -406,37 +406,103 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 VectorAdd(dst, surfaceOrigin[surfIdx], dst);
             }
 
-            float accum[3] = {0, 0, 0};
-            for (int e = 0; e < g_numEmitters; e++) {
-                emitter_t *em = &g_emitters[e];
-                vec3_t ray; VectorSubtract(em->center, dst, ray);
-                float dist = VectorLength(ray);
-                if (dist < 0.001f) continue;
-                vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+            // ---------------------------------------------------------------
+            // Trisoup: original path — bake cosDst into scalar, write radiosityFloats.
+            // ---------------------------------------------------------------
+            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+                float accum[3] = {0, 0, 0};
+                for (int e = 0; e < g_numEmitters; e++) {
+                    emitter_t *em = &g_emitters[e];
+                    vec3_t ray; VectorSubtract(em->center, dst, ray);
+                    float dist = VectorLength(ray);
+                    if (dist < 0.001f) continue;
+                    vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
 
-                float cosEmit = -DotProduct(em->normal, rayDir);
-                if (cosEmit <= 0.0f) continue;
-                float cosDst = DotProduct(dstNormal, rayDir);
-                if (cosDst <= 0.0f) continue;
+                    float cosEmit = -DotProduct(em->normal, rayDir);
+                    if (cosEmit <= 0.0f) continue;
+                    float cosDst = DotProduct(dstNormal, rayDir);
+                    if (cosDst <= 0.0f) continue;
 
-                float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
-                float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
-
-                if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
-                else if (dist < rad_depth_max) {
-                    float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                    formFactor *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                    float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                    float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
+                    if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
+                    else if (dist < rad_depth_max) {
+                        float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                        formFactor *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                    }
+                    if (formFactor > 1.0f) formFactor = 1.0f;
+                    if (!RadVisCheck(dst, em->center)) continue;
+                    VectorMA(accum, formFactor, em->color, accum);
                 }
-                if (formFactor > 1.0f) formFactor = 1.0f;
+                if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
+                    ThreadLock();
+                    VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
+                    ThreadUnlock();
+                }
+            } else {
+                // ---------------------------------------------------------------
+                // Planar / Patch: irradiance vector path.
+                // Accumulate (formFactorBase * rayDir) per RGB channel.
+                // cosDst is NOT baked in — it will be applied at reconstruct time
+                // using each texel's own normal, fixing the faceting on curved patches.
+                // Layout: irradianceVecFloats[k*9 + c*3 + axis]
+                //   c=0 → R irradiance vec3, c=1 → G, c=2 → B
+                // ---------------------------------------------------------------
+                float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
 
-                if (!RadVisCheck(dst, em->center)) continue;
-                VectorMA(accum, formFactor, em->color, accum);
-            }
+                for (int e = 0; e < g_numEmitters; e++) {
+                    emitter_t *em = &g_emitters[e];
+                    vec3_t ray; VectorSubtract(em->center, dst, ray);
+                    float dist = VectorLength(ray);
+                    if (dist < 0.001f) continue;
+                    vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
 
-            if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
-                ThreadLock();
-                VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
-                ThreadUnlock();
+                    float cosEmit = -DotProduct(em->normal, rayDir);
+                    if (cosEmit <= 0.0f) continue;
+                    // Cull emitters behind the sparse sample's own hemisphere,
+                    // but do NOT bake cosDst into the stored value.
+                    float cosDst = DotProduct(dstNormal, rayDir);
+                    if (cosDst <= 0.0f) continue;
+
+                    float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                    float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
+                    if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
+                    else if (dist < rad_depth_max) {
+                        float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                        formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                    }
+                    // Clamp: formFactorBase * cosDst must not exceed 1.0
+                    if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
+                    if (!RadVisCheck(dst, em->center)) continue;
+
+                    for (int c = 0; c < 3; c++) {
+                        float energy = formFactorBase * em->color[c];
+                        ivec[c][0] += energy * rayDir[0];
+                        ivec[c][1] += energy * rayDir[1];
+                        ivec[c][2] += energy * rayDir[2];
+                    }
+                }
+
+                if (ivec[0][0] != 0 || ivec[0][1] != 0 || ivec[0][2] != 0 ||
+                    ivec[1][0] != 0 || ivec[1][1] != 0 || ivec[1][2] != 0 ||
+                    ivec[2][0] != 0 || ivec[2][1] != 0 || ivec[2][2] != 0) {
+
+                    // Write scalar result (dot with sparse-point normal) for voxel path compat
+                    float accum[3];
+                    for (int c = 0; c < 3; c++) {
+                        accum[c] = DotProduct(dstNormal, ivec[c]);
+                        if (accum[c] < 0.0f) accum[c] = 0.0f;
+                    }
+
+                    ThreadLock();
+                    VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
+                    for (int c = 0; c < 3; c++) {
+                        irradianceVecFloats[k_dst * 9 + c * 3 + 0] += ivec[c][0];
+                        irradianceVecFloats[k_dst * 9 + c * 3 + 1] += ivec[c][1];
+                        irradianceVecFloats[k_dst * 9 + c * 3 + 2] += ivec[c][2];
+                    }
+                    ThreadUnlock();
+                }
             }
         }
     }
@@ -525,8 +591,11 @@ static void RadiosityVoxelize(void) {
 // Phase 3 — Reconstruction (Trilinear Interpolated Sampling)
 // ---------------------------------------------------------------------------
 
-// Helper: Perform local 2D bilinear interpolation from the sparse integrated grid.
-static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, vec3_t outColor) {
+// Helper: Bilinearly interpolate irradiance vectors from the sparse grid, then apply
+// the per-texel normal to produce the final color. This is the key step that fixes
+// faceting on curved patches: instead of interpolating flat RGB, we interpolate the
+// directional irradiance and re-apply the correct normal at each texel.
+static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, const vec3_t normal, vec3_t outColor) {
     int x0 = (lx / rad_interval) * rad_interval;
     int x1 = x0 + rad_interval;
     int y0 = (ly / rad_interval) * rad_interval;
@@ -538,17 +607,29 @@ static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, vec3_t outCo
     float fx = (float)(lx - x0) / (float)rad_interval;
     float fy = (float)(ly - y0) / (float)rad_interval;
 
-    float *p00 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
-    float *p10 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
-    float *p01 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0) * 3];
-    float *p11 = &radiosityFloats[((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1) * 3];
+    int k00 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0);
+    int k10 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
+    int k01 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0);
+    int k11 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
 
-    for (int k = 0; k < 3; k++) {
-        float row0 = p00[k] * (1.0f - fx) + p10[k] * fx;
-        float row1 = p01[k] * (1.0f - fx) + p11[k] * fx;
-        outColor[k] = row0 * (1.0f - fy) + row1 * fy;
+    // Bilinearly interpolate each of the 3 per-channel irradiance vec3s, then dot with normal.
+    for (int c = 0; c < 3; c++) {
+        float *iv00 = &irradianceVecFloats[k00 * 9 + c * 3];
+        float *iv10 = &irradianceVecFloats[k10 * 9 + c * 3];
+        float *iv01 = &irradianceVecFloats[k01 * 9 + c * 3];
+        float *iv11 = &irradianceVecFloats[k11 * 9 + c * 3];
+
+        vec3_t row0, row1, interp;
+        for (int a = 0; a < 3; a++) {
+            row0[a] = iv00[a] * (1.0f - fx) + iv10[a] * fx;
+            row1[a] = iv01[a] * (1.0f - fx) + iv11[a] * fx;
+            interp[a] = row0[a] * (1.0f - fy) + row1[a] * fy;
+        }
+        float val = DotProduct(normal, interp);
+        outColor[c] = (val > 0.0f) ? val : 0.0f;
     }
 }
+
 
 static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t outColor) {
     int v[3];
@@ -601,7 +682,14 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     radFillMode_t mode = GetSurfaceExtraRadFillMode(surfIdx);
 
     if (mode == RAD_FILL_DEFAULT) {
-        mode = rad_voxel ? RAD_FILL_VOXEL : RAD_FILL_BILINEAR;
+        // Voxel fill is designed for MST_TRIANGLE_SOUP (no direct UV→world mapping).
+        // Patches and planar surfaces have a proper subdivided mesh / lightmapVecs,
+        // so they use the faster irradiance-vector bilinear path.
+        if (ds->surfaceType == MST_TRIANGLE_SOUP && rad_voxel) {
+            mode = RAD_FILL_VOXEL;
+        } else {
+            mode = RAD_FILL_BILINEAR;
+        }
     }
 
     mesh_t *patchMesh = NULL;
@@ -636,9 +724,32 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
             if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
-            // If bilinear mode, preserve original precise irradiance at grid intersection points
-            if (mode == RAD_FILL_BILINEAR && (lx % rad_interval == 0 && ly % rad_interval == 0)) {
-                continue; 
+            // Resolve the per-texel normal for this pixel.
+            // For patches this varies per-texel (the key fix). For planar it is constant.
+            vec3_t texelNormal;
+            if (ds->surfaceType == MST_PATCH) {
+                if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
+                    VectorCopy(patchMesh->verts[ly * patchMesh->width + lx].normal, texelNormal);
+                } else {
+                    VectorCopy(surfNormal, texelNormal);
+                }
+            } else {
+                VectorCopy(surfNormal, texelNormal);
+            }
+
+            // If bilinear mode: for non-grid pixels fill with interpolated irradiance.
+            // For grid-aligned pixels on patches: still re-apply the per-texel normal
+            // (the stored radiosityFloats value used surfNormal at integration time).
+            if (mode == RAD_FILL_BILINEAR) {
+                if (ds->surfaceType == MST_PATCH) {
+                    // Always re-derive — the stored scalar may have used a different normal.
+                    RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
+                } else if (lx % rad_interval == 0 && ly % rad_interval == 0) {
+                    continue; // Planar: sparse-grid pixels are already exact, keep them.
+                } else {
+                    RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
+                }
+                continue;
             }
 
             if (mode == RAD_FILL_VOXEL) {
@@ -666,10 +777,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 }
 
                 if (!RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
-                    RadiosityBilinearSample(ds, lx, ly, tempBuffer[k_temp]);
+                    RadiosityBilinearSample(ds, lx, ly, normal, tempBuffer[k_temp]);
                 }
             } else {
-                RadiosityBilinearSample(ds, lx, ly, tempBuffer[k_temp]);
+                RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
             }
         }
     }
@@ -746,6 +857,7 @@ void LightRadiosity(int radiosityPasses) {
         RadiosityEmit(emitSource);
 
         memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+        memset(irradianceVecFloats, 0, (numLightBytes / 3) * 9 * sizeof(float));
         _printf("  [integrate]  %d emitters generated. Starting integration...\n", g_numEmitters);
         fflush(stdout);
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);

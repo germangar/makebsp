@@ -11,6 +11,7 @@ drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
+float *irradianceVecFloats = NULL;  // 9 floats per pixel (3 irradiance vec3s, one per RGB channel)
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -598,6 +599,14 @@ void AllocateRadiosityFloats(void) {
 	_printf("  accumRadiosityFloats: %p. Memsetting...\n", (void *)accumRadiosityFloats);
 	memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 	_printf("AllocateRadiosityFloats: Done.\n");
+
+	// Irradiance vector buffer — 9 floats per pixel (3 channels × 3 components).
+	// Only sparse grid pixels are written, but we index into it using the full
+	// lightmap pixel index for simplicity. Allocated and freed with the radiosity pass.
+	if (irradianceVecFloats) free(irradianceVecFloats);
+	irradianceVecFloats = calloc((numLightBytes / 3) * 9, sizeof(float));
+	if (!irradianceVecFloats)
+		Error("AllocateRadiosityFloats: calloc failed (irradianceVec). numLightBytes: %d", numLightBytes);
 }
 
 void FreeRadiosityFloats(void) {
@@ -608,5 +617,9 @@ void FreeRadiosityFloats(void) {
 	if (accumRadiosityFloats) {
 		free(accumRadiosityFloats);
 		accumRadiosityFloats = NULL;
+	}
+	if (irradianceVecFloats) {
+		free(irradianceVecFloats);
+		irradianceVecFloats = NULL;
 	}
 }
