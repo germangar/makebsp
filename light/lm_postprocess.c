@@ -722,13 +722,31 @@ void AntiAliasLightmaps(void) {
 
 	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
 
-    // AA for Triangle Soups
+    // AA for Triangle Soups (VPPS Spatial Hash)
+    _printf("  Volumetric AA (Trisoups): ");
+    int progress = 0;
     #pragma omp parallel for private(s)
     for (s = 0; s < numDrawSurfaces; s++) {
         ProcessTrisoupVolumetric(s, radius, tempFloats, qtrue);
-    }
+        
+        int currentProgress;
+        #pragma omp atomic capture
+        currentProgress = ++progress;
+
+        if (numDrawSurfaces >= 10) {
+            int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
+            int newPercent = (currentProgress * 10) / numDrawSurfaces;
+            if (newPercent > oldPercent) {
+                ThreadLock();
+                _printf("%d...", newPercent);
+                ThreadUnlock();
+            }
+        }    }
+    _printf("Done\n");
 
 	if (lightmapAA == 1) {
+        _printf("  Image-space AA (Mode 1): ");
+        progress = 0;
 		#pragma omp parallel for private(s, ds, x, y, p, k)
 		for (s = 0; s < numPlanarSurfaces; s++) {
 			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
@@ -757,8 +775,24 @@ void AntiAliasLightmaps(void) {
 					}
 				}
 			}
+            int currentProgress;
+            #pragma omp atomic capture
+            currentProgress = ++progress;
+
+            if (numPlanarSurfaces >= 10) {
+                int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+                int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+                if (newPercent > oldPercent) {
+                    ThreadLock();
+                    _printf("%d...", newPercent);
+                    ThreadUnlock();
+                }
+            }
 		}
+        _printf("Done\n");
 	} else if (lightmapAA == 2) {
+        _printf("  Image-space AA (Mode 2 - High Fidelity): ");
+        progress = 0;
 		#pragma omp parallel for private(s, ds, x, y, p, k)
 		for (s = 0; s < numPlanarSurfaces; s++) {
 			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
@@ -842,7 +876,22 @@ void AntiAliasLightmaps(void) {
 				}
 			}
 			free(temp2x); free(mask2x); free(blur2x); free(blurMask2x);
+
+            int currentProgress;
+            #pragma omp atomic capture
+            currentProgress = ++progress;
+
+            if (numPlanarSurfaces >= 10) {
+                int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+                int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+                if (newPercent > oldPercent) {
+                    ThreadLock();
+                    _printf("%d...", newPercent);
+                    ThreadUnlock();
+                }
+            }
 		}
+        _printf("Done\n");
 	}
 	free(tempFloats);
 }
@@ -883,6 +932,7 @@ void SmoothLightmaps(float radius) {
 	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
 	// --- Single Pass Blur (2D for Planar/Patch, 3D for Trisoups) ---
+    int progress = 0;
 	#pragma omp parallel for private(s, ds, y, x, i, j, p)
 	for (s = 0; s < numPlanarSurfaces; s++) {
 		ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
@@ -911,12 +961,40 @@ void SmoothLightmaps(float radius) {
 				}
 			}
 		}
+        int currentProgress;
+        #pragma omp atomic capture
+        currentProgress = ++progress;
+
+        if (numPlanarSurfaces >= 10) {
+            int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+            int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+            if (newPercent > oldPercent) {
+                ThreadLock();
+                _printf("%d...", newPercent);
+                ThreadUnlock();
+            }
+        }
 	}
 
 	// 3D VPPS Blur for Triangle Soups
+    progress = 0;
 	#pragma omp parallel for private(s)
     for (s = 0; s < numDrawSurfaces; s++) {
         ProcessTrisoupVolumetric(s, radius, tempFloats, qfalse);
+
+        int currentProgress;
+        #pragma omp atomic capture
+        currentProgress = ++progress;
+
+        if (numDrawSurfaces >= 10) {
+            int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
+            int newPercent = (currentProgress * 10) / numDrawSurfaces;
+            if (newPercent > oldPercent) {
+                ThreadLock();
+                _printf("%d...", newPercent);
+                ThreadUnlock();
+            }
+        }
     }
 
 	free(tempFloats);

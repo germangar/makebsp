@@ -47,10 +47,11 @@ The BSP compiler (`q3map.exe`) leverages modern libraries for texture and collis
 - **Architecture**: Global settings are derived from `game_t` templates in `shared/globals.c`, while runtime overrides are handled via CLI switches in `main.c`.
 
 ## 8. Lightmap Post-Processing
-The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-space filters to the high-precision `lightFloats` buffer to eliminate aliasing and seams.
+The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-space and world-space filters to the high-precision `lightFloats` buffer. The architecture provides three decoupled choices for the mapper: **Trace-time Supersampling**, **Post-process Anti-Aliasing**, and **Gaussian Smoothing**.
 
-- **Geometric Adjacency**: To allow filters to cross surface boundaries seamlessly, the system builds a world-space index of **Geometric Partners**. It identifies adjacent surfaces by hashing snapped world-space vertex coordinates (128-unit precision) to detect shared physical edges.
-- **Universal Lookup Helper**: Filters utilize a unified `GetFilteredTexel` helper. If a filter kernel extends beyond a surface's lightmap bounds, the helper automatically switches to world-space projection and samples from validated geometric neighbors.
-- **Normalized Convolution**: All filters are alpha-aware and use the `lightAlphaMask`. Sampling uses normalized convolution weights to ensure lighting data never bleeds into unmapped atlas space or pulls dark artifacts from empty pixels.
-- **Single-Pass 2D Gaussian Blur**: The smoothing filter (`-smooth`) utilizes a true 2D kernel in a single pass to ensure mathematical correctness and orientation-independence when crossing into rotated neighbor surfaces.
-- **Advanced Anti-Aliasing**: Implements 8-point Rotated Grid Super-Sampling (RGSS) in two modes: direct jittered sampling (Mode 1) and a high-fidelity 2x Upscale-Blur-Downscale pipeline (Mode 2).
+- **Geometric Adjacency**: For planar world surfaces, the system builds a world-space index of partners by hashing snapped vertex coordinates (128-unit precision) to detect shared physical edges. A universal `GetFilteredTexel` helper allows filters to cross these boundaries seamlessly.
+- **Volumetric Filtering (VPPS)**: For complex `misc_models` (`MST_TRIANGLE_SOUP`), the tool uses a per-surface **3D Spatial Hash**. This bypasses fragmented UV islands by performing a 3D neighborhood search in world-space.
+- **Dynamic Density Scaling**: The system automatically calculates the physical "World Units per Texel" ratio for every individual model. This ensures that the filter radius and 3D spatial hash scale physically correctly regardless of editor scaling or `_lightmapscale`.
+- **Volumetric RGSS**: Trisoup Anti-Aliasing utilizes an 8-point Volumetric Super-Sampling pattern, querying the 3D spatial hash multiple times per pixel to match the crispness of the world floor's RGSS.
+- **Mathematical Parity**: To unify the "feel" between surface types, Trisoup smoothing uses true 3D Gaussian weights and a radius "cheat factor" (1.25x) to compensate for the volume difference between spherical (3D) and square (2D) kernels.
+- **Multi-threaded Performance**: The per-surface spatial hashes are lock-free and allocated on-the-fly, allowing for perfect parallel scaling and minimal memory usage.
