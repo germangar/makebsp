@@ -41,6 +41,8 @@ extern RTCScene g_scene;
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
 #define MIN_LIGHT_ADD 0.1f
+#define MIN_RADIOSITY_EMITTER_ADD 0.01f
+#define MIN_RADIOSITY_EMITTER_GROUP_ADD 0.005f
 
 #define UPSCALE_FACTOR 2
 #define GUTTER 1
@@ -54,6 +56,51 @@ typedef struct {
 } contribution_t;
 
 #define MAX_LIGHT_EDGES 8
+
+/*
+================
+CalculateLightReach
+
+Calculates the distance at which a light's contribution falls below threshold.
+If area > 0, it uses the area-light formula (Lambertian).
+If area <= 0, it uses the point-light formula.
+================
+*/static inline float CalculateLightReach(float area, float intensity, float threshold, qboolean linearLight) {
+  if (intensity <= 0 || threshold <= 0) {
+    return 0.0f;
+  }
+  if (linearLight) {
+    // Linear light math: add = intensity * 0.000125f - dist
+    float reach = (intensity * 0.000125f) - threshold;
+    return (reach > 0.0f) ? reach : 0.0f;
+  }
+  if (area > 0) {
+    return (float)sqrt((area * intensity) / threshold);
+  } else {
+    return (float)sqrt(intensity / threshold);
+  }
+}
+
+/*
+================
+CalculateRadiosityLightReach
+
+Specialized version for Radiosity emitters that accounts for the 1/PI factor 
+in the physical form factor formula used in radiosity.c.
+================
+*/
+static inline float CalculateRadiosityLightReach(float area, float intensity, float threshold) {
+  if (intensity <= 0 || threshold <= 0) {
+    return 0.0f;
+  }
+  if (area > 0) {
+    return (float)sqrt((area * intensity) / (M_PI * threshold));
+  } else {
+    return (float)sqrt(intensity / (M_PI * threshold));
+  }
+}
+
+
 typedef struct light_s {
   struct light_s *next;
   emittype_t type;
@@ -73,6 +120,7 @@ typedef struct light_s {
 
   winding_t *w;
   vec3_t emitColor; // full out-of-gamut value
+  float reach;      // pre-calculated max distance
 } light_t;
 
 typedef struct {

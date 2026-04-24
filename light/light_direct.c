@@ -391,6 +391,12 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     float d;
     vec3_t n;
 
+    // instant reach check
+    VectorSubtract(light->origin, origin, n);
+    if (VectorLength(n) > light->reach) {
+        return qfalse;
+    }
+
     // see if the point is behind the light
     d = DotProduct(origin, light->normal) - light->dist;
     if (!light->twosided) {
@@ -435,6 +441,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   if (light->type == emit_point || light->type == emit_spotlight) {
     VectorSubtract(light->origin, origin, dir);
     dist = VectorNormalize(dir, out->dir);
+    if (dist > light->reach) {
+      return qfalse;
+    }
     if (dist < 16) {
       dist = 16;
     }
@@ -481,6 +490,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     // legacy/approximate area light logic
     VectorSubtract(light->origin, origin, dir);
     dist = VectorNormalize(dir, out->dir);
+    if (dist > light->reach) {
+      return qfalse;
+    }
     if (dist < 16) dist = 16;
     
     if (normal) {

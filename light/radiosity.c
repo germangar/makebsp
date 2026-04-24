@@ -226,12 +226,18 @@ static mesh_t *SubdividePatchToLightmap(dsurface_t *ds) {
 
 static emitter_t *g_emitters     = NULL;
 static int        g_numEmitters  = 0;
+
+static int        surfaceEmitterStart[MAX_MAP_DRAW_SURFS];
+static int        surfaceEmitterCount[MAX_MAP_DRAW_SURFS];
+static float      surfaceMaxReach[MAX_MAP_DRAW_SURFS];
+
 extern float      *accumRadiosityFloats;
 
 static void RadiosityEmit(const float *srcBuffer) {
     int             i, k, lx, ly;
     int             capacity = 4096;
 
+    memset(surfaceEmitterCount, 0, sizeof(surfaceEmitterCount));
     g_numEmitters = 0;
     g_emitters    = malloc(sizeof(emitter_t) * capacity);
 
@@ -245,6 +251,10 @@ static void RadiosityEmit(const float *srcBuffer) {
         if (ds->lightmapNum[0] < 0) continue;
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
 
+        surfaceEmitterStart[i] = g_numEmitters;
+        float maxIntensity = 0;
+        float totalArea = 0;
+
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
         if (ds->surfaceType == MST_PATCH) {
@@ -257,8 +267,9 @@ static void RadiosityEmit(const float *srcBuffer) {
             VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
         }
 
-        // ACCURATE LUXEL AREA
+        // ... [Area calculation logic remains the same] ...
         float luxelArea;
+        // ... (skipping for brevity but keeping logic) ...
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
             double total3DArea = 0;
             for (int t = 0; t < ds->numIndexes; t += 3) {
@@ -349,9 +360,20 @@ static void RadiosityEmit(const float *srcBuffer) {
                 em->area = luxelArea * (float)(rad_interval * rad_interval);
                 VectorScale(src, rad_bounce_scale, em->color);
                 for (k = 0; k < 3; k++) em->color[k] *= albedo[k];
+
+                totalArea += em->area;
+                float lum = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
+                if (lum > maxIntensity) maxIntensity = lum;
             }
         }
         if (patchMesh) FreeMesh(patchMesh);
+
+        surfaceEmitterCount[i] = g_numEmitters - surfaceEmitterStart[i];
+        if (surfaceEmitterCount[i] > 0 && maxIntensity > 0) {
+            surfaceMaxReach[i] = CalculateRadiosityLightReach(totalArea, maxIntensity, MIN_RADIOSITY_EMITTER_GROUP_ADD);
+        } else {
+            surfaceMaxReach[i] = 0;
+        }
     }
     _printf("    %d emitters generated from lit luxels\n", g_numEmitters);
     fflush(stdout);
@@ -411,28 +433,46 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             // ---------------------------------------------------------------
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                 float accum[3] = {0, 0, 0};
-                for (int e = 0; e < g_numEmitters; e++) {
-                    emitter_t *em = &g_emitters[e];
-                    vec3_t ray; VectorSubtract(em->center, dst, ray);
-                    float dist = VectorLength(ray);
-                    if (dist < 0.001f) continue;
-                    vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+                for (int s = 0; s < numDrawSurfaces; s++) {
+                    if (surfaceEmitterCount[s] == 0) continue;
+                    if (!surfaceTest[s]) continue;
 
-                    float cosEmit = -DotProduct(em->normal, rayDir);
-                    if (cosEmit <= 0.0f) continue;
-                    float cosDst = DotProduct(dstNormal, rayDir);
-                    if (cosDst <= 0.0f) continue;
+                    // Cull A: Distance
+                    vec3_t v_to_surf; VectorSubtract(surfaceTest[s]->origin, dst, v_to_surf);
+                    float dist_to_surf = VectorLength(v_to_surf);
+                    if (dist_to_surf > surfaceMaxReach[s] + surfaceTest[s]->radius) continue;
 
-                    float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
-                    float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
-                    if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
-                    else if (dist < rad_depth_max) {
-                        float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                        formFactor *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                    // Cull B: Receiver Plane (is surface entirely behind the destination?)
+                    if (DotProduct(v_to_surf, dstNormal) < -surfaceTest[s]->radius) continue;
+
+                    for (int e = surfaceEmitterStart[s]; e < surfaceEmitterStart[s] + surfaceEmitterCount[s]; e++) {
+                        emitter_t *em = &g_emitters[e];
+                        vec3_t ray; VectorSubtract(em->center, dst, ray);
+                        float dist = VectorLength(ray);
+                        if (dist < 0.001f) continue;
+                        vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+
+                        float cosEmit = -DotProduct(em->normal, rayDir);
+                        if (cosEmit <= 0.0f) continue;
+                        float cosDst = DotProduct(dstNormal, rayDir);
+                        if (cosDst <= 0.0f) continue;
+
+                        float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                        float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
+                        if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
+                        else if (dist < rad_depth_max) {
+                            float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                            formFactor *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                        }
+                        if (formFactor > 1.0f) formFactor = 1.0f;
+                        
+                        // Precise intensity cull: check if brightest color component * formFactor < threshold
+                        float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
+                        if (formFactor * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
+
+                        if (!RadVisCheck(dst, em->center)) continue;
+                        VectorMA(accum, formFactor, em->color, accum);
                     }
-                    if (formFactor > 1.0f) formFactor = 1.0f;
-                    if (!RadVisCheck(dst, em->center)) continue;
-                    VectorMA(accum, formFactor, em->color, accum);
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
@@ -442,44 +482,54 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             } else {
                 // ---------------------------------------------------------------
                 // Planar / Patch: irradiance vector path.
-                // Accumulate (formFactorBase * rayDir) per RGB channel.
-                // cosDst is NOT baked in — it will be applied at reconstruct time
-                // using each texel's own normal, fixing the faceting on curved patches.
-                // Layout: irradianceVecFloats[k*9 + c*3 + axis]
-                //   c=0 → R irradiance vec3, c=1 → G, c=2 → B
                 // ---------------------------------------------------------------
                 float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
 
-                for (int e = 0; e < g_numEmitters; e++) {
-                    emitter_t *em = &g_emitters[e];
-                    vec3_t ray; VectorSubtract(em->center, dst, ray);
-                    float dist = VectorLength(ray);
-                    if (dist < 0.001f) continue;
-                    vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+                for (int s = 0; s < numDrawSurfaces; s++) {
+                    if (surfaceEmitterCount[s] == 0) continue;
+                    if (!surfaceTest[s]) continue;
 
-                    float cosEmit = -DotProduct(em->normal, rayDir);
-                    if (cosEmit <= 0.0f) continue;
-                    // Cull emitters behind the sparse sample's own hemisphere,
-                    // but do NOT bake cosDst into the stored value.
-                    float cosDst = DotProduct(dstNormal, rayDir);
-                    if (cosDst <= 0.0f) continue;
+                    // Cull A: Distance (More sensitive for Radiosity)
+                    vec3_t v_to_surf; VectorSubtract(surfaceTest[s]->origin, dst, v_to_surf);
+                    float dist_to_surf = VectorLength(v_to_surf);
+                    if (dist_to_surf > surfaceMaxReach[s] + surfaceTest[s]->radius) continue;
 
-                    float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
-                    float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                    if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
-                    else if (dist < rad_depth_max) {
-                        float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                        formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
-                    }
-                    // Clamp: formFactorBase * cosDst must not exceed 1.0
-                    if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
-                    if (!RadVisCheck(dst, em->center)) continue;
+                    // Cull B: Receiver Plane
+                    if (DotProduct(v_to_surf, dstNormal) < -surfaceTest[s]->radius) continue;
 
-                    for (int c = 0; c < 3; c++) {
-                        float energy = formFactorBase * em->color[c];
-                        ivec[c][0] += energy * rayDir[0];
-                        ivec[c][1] += energy * rayDir[1];
-                        ivec[c][2] += energy * rayDir[2];
+                    for (int e = surfaceEmitterStart[s]; e < surfaceEmitterStart[s] + surfaceEmitterCount[s]; e++) {
+                        emitter_t *em = &g_emitters[e];
+                        vec3_t ray; VectorSubtract(em->center, dst, ray);
+                        float dist = VectorLength(ray);
+                        if (dist < 0.001f) continue;
+                        vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+
+                        float cosEmit = -DotProduct(em->normal, rayDir);
+                        if (cosEmit <= 0.0f) continue;
+                        float cosDst = DotProduct(dstNormal, rayDir);
+                        if (cosDst <= 0.0f) continue;
+
+                        float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                        float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
+                        if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
+                        else if (dist < rad_depth_max) {
+                            float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                            formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                        }
+                        if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
+                        
+                        // Precise intensity cull: use specialized radiosity threshold
+                        float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
+                        if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
+
+                        if (!RadVisCheck(dst, em->center)) continue;
+
+                        for (int c = 0; c < 3; c++) {
+                            float energy = formFactorBase * em->color[c];
+                            ivec[c][0] += energy * rayDir[0];
+                            ivec[c][1] += energy * rayDir[1];
+                            ivec[c][2] += energy * rayDir[2];
+                        }
                     }
                 }
 

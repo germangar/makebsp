@@ -263,7 +263,10 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
     dl2->photons = dl->photons * ls->backsplashFraction;
     dl2->si = ls;
+    dl2->reach = CalculateLightReach(0, dl2->photons, MIN_LIGHT_ADD, qfalse);
   }
+
+  dl->reach = CalculateLightReach(area, value * areaScale, MIN_LIGHT_ADD, qfalse);
 }
 
 /*
@@ -558,6 +561,7 @@ void CreateEntityLights(void) {
         dl->type = emit_spotlight;
       }
     }
+    dl->reach = CalculateLightReach(0, dl->photons, MIN_LIGHT_ADD, dl->linearLight);
   }
 }
 
