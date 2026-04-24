@@ -291,32 +291,45 @@ void InitTracingGeometry(void) {
   drawVert_t *dvert;
   shaderInfo_t *si;
 
+  _printf("--- InitTracingGeometry: Global Metadata ---\n");
+  for (i = 0; i < numDrawSurfaces; i++) {
+    dsurf = &drawSurfaces[i];
+    if (!dsurf->numIndexes && !dsurf->patchWidth) {
+      continue;
+    }
+
+    // don't make surfaces for transparent objects
+    // because we want light to pass through them
+    si = ShaderInfoForShader(dshaders[dsurf->shaderNum].shader);
+    if ((si->contents & CONTENTS_TRANSLUCENT) &&
+        !(si->surfaceFlags & SURF_ALPHASHADOW)) {
+      continue;
+    }
+
+    test = malloc(sizeof(*test));
+    memset(test, 0, sizeof(*test));
+    surfaceTest[i] = test;
+    ClearBounds(test->mins, test->maxs);
+
+    dvert = &drawVerts[dsurf->firstVert];
+    for (j = 0; j < dsurf->numVerts; j++, dvert++) {
+      AddPointToBounds(dvert->xyz, test->mins, test->maxs);
+    }
+
+    SphereFromBounds(test->mins, test->maxs, test->origin, &test->radius);
+    test->surfaceNum = i;
+    test->patch = (dsurf->surfaceType == MST_PATCH) ? qtrue : qfalse;
+    test->shader = si;
+  }
+
   if (!embree) {
-    _printf("--- InitTracingGeometry: standard ---\n");
+    _printf("--- InitTracingGeometry: standard (Legacy Facets) ---\n");
     for (i = 0; i < numDrawSurfaces; i++) {
       dsurf = &drawSurfaces[i];
-      if (!dsurf->numIndexes && !dsurf->patchWidth) {
-        continue;
-      }
-
-      // don't make surfaces for transparent objects
-      // because we want light to pass through them
+      test = surfaceTest[i];
+      if (!test) continue;
+      
       si = ShaderInfoForShader(dshaders[dsurf->shaderNum].shader);
-      if ((si->contents & CONTENTS_TRANSLUCENT) &&
-          !(si->surfaceFlags & SURF_ALPHASHADOW)) {
-        continue;
-      }
-
-      test = malloc(sizeof(*test));
-      surfaceTest[i] = test;
-      ClearBounds(test->mins, test->maxs);
-
-      dvert = &drawVerts[dsurf->firstVert];
-      for (j = 0; j < dsurf->numVerts; j++, dvert++) {
-        AddPointToBounds(dvert->xyz, test->mins, test->maxs);
-      }
-
-      SphereFromBounds(test->mins, test->maxs, test->origin, &test->radius);
 
       if (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
           dsurf->surfaceType == MST_PLANAR) {
@@ -324,7 +337,6 @@ void InitTracingGeometry(void) {
       } else if (dsurf->surfaceType == MST_PATCH) {
         FacetsForPatch(dsurf, si, test, i);
       }
-      test->surfaceNum = i;
     }
     return;
   }
@@ -344,7 +356,7 @@ void InitTracingGeometry(void) {
 
   int count = 0;
   for (i = 0; i < numDrawSurfaces; i++) {
-    dsurface_t *dsurf = &drawSurfaces[i];
+    dsurf = &drawSurfaces[i];
     if (dsurf->numIndexes > 0 &&
         (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
          dsurf->surfaceType == MST_PLANAR)) {
