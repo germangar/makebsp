@@ -412,6 +412,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     }
 
     // calculate the contribution
+
+
     VectorSubtract(light->origin, origin, n);
     if (VectorNormalize(n, n) == 0) {
       return qfalse;

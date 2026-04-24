@@ -233,7 +233,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
   value = ls->value;
   intensity = value * area * areaScale;
-  VectorAdd(dl->origin, dl->normal, dl->origin);
+  VectorMA(dl->origin, 0.1f, dl->normal, dl->origin);
 
   VectorCopy(ls->color, dl->color);
 
@@ -245,7 +245,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
   dl->si = ls;
 
-  if (ls->contents & CONTENTS_FOG) {
+  if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME)) {
     dl->twosided = qtrue;
   }
 
