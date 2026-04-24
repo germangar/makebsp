@@ -867,6 +867,53 @@ PointInSolid
 */
 qboolean PointInSolid(vec3_t start) { return PointInSolid_r(start, 0); }
 
+/*
+===================
+PointInTrisoup
+===================
+*/
+qboolean PointInTrisoup(vec3_t origin, vec3_t normal) {
+  if (!embree) return qfalse;
+
+  struct RTCRayHit rayhit;
+  struct RTCIntersectArguments iargs;
+  struct MyRayQueryContext context;
+  rtcInitRayQueryContext(&context.context);
+  context.tw = NULL;
+  context.patchshadows = patchshadows;
+  
+  rayhit.ray.org_x = origin[0];
+  rayhit.ray.org_y = origin[1];
+  rayhit.ray.org_z = origin[2];
+  rayhit.ray.dir_x = normal[0];
+  rayhit.ray.dir_y = normal[1];
+  rayhit.ray.dir_z = normal[2];
+  rayhit.ray.tnear = 0.0001f;
+  rayhit.ray.tfar = 10000.0f; // Cast far enough to hit the enclosing hull
+  rayhit.ray.mask = 0xFFFFFFFF;
+  rayhit.ray.flags = 0;
+  rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
+  rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+
+  rtcInitIntersectArguments(&iargs);
+  iargs.context = &context.context;
+  rtcIntersect1(g_scene, &rayhit, &iargs);
+
+  if (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID && rayhit.hit.geomID < (unsigned int)numDrawSurfaces) {
+      dsurface_t *ds = &drawSurfaces[rayhit.hit.geomID];
+      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          // Check if we hit the backface (inside of the Trisoup looking out)
+          // ray direction and hit normal pointing in the same general direction -> positive dot product
+          float dot = rayhit.ray.dir_x * rayhit.hit.Ng_x + rayhit.ray.dir_y * rayhit.hit.Ng_y + rayhit.ray.dir_z * rayhit.hit.Ng_z;
+          if (dot > 0.0f) {
+              return qtrue; // We are inside a closed Trisoup
+          }
+      }
+  }
+
+  return qfalse;
+}
+
 //==========================================================================================
 
 /*

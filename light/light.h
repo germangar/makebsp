@@ -35,8 +35,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 extern RTCDevice g_device;
 extern RTCScene g_scene;
 
-#define ALPHA_SMOOTH 1
-#define ALPHA_NO_SMOOTH 2
+#define ALPHA_SURF_WORLD 1
+#define ALPHA_TRISOUP 2
 
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
@@ -159,6 +159,7 @@ qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t fi
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
+qboolean PointInTrisoup(vec3_t origin, vec3_t normal);
 struct MyRayQueryContext {
   struct RTCRayQueryContext context;
   traceWork_t *tw;

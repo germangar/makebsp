@@ -832,7 +832,7 @@ void AntiAliasLightmaps(void) {
 
 					float sampleColor[3];
 					if (GetFilteredTexel(s, px, py, sampleColor, tempFloats)) {
-						mask2x[Y * W2 + X] = ALPHA_SMOOTH;
+						mask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
 						VectorCopy(sampleColor, &temp2x[(Y * W2 + X) * 3]);
 					} else {
 						mask2x[Y * W2 + X] = 0;
@@ -869,7 +869,7 @@ void AntiAliasLightmaps(void) {
 						}
 					}
 					if (sumWeight > 0.0001f) {
-						blurMask2x[Y * W2 + X] = ALPHA_SMOOTH;
+						blurMask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
 						VectorScale(sumColor, 1.0f / sumWeight, &blur2x[(Y * W2 + X) * 3]);
 					} else blurMask2x[Y * W2 + X] = 0;
 				}

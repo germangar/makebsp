@@ -979,11 +979,7 @@ void TraceLtm(int num) {
           // We always use the nominal position (position 0) because our raytracer
           // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
           // geometry at junctions.
-          break; 
-
-          if (!PointInSolid(origin)) {
-            break;
-          }
+          break;
         }
 
         // if none of the nudges worked, this sub-sample is occluded
@@ -1154,10 +1150,10 @@ void TraceLtm(int num) {
         if (k >= 0 && k < numLightBytes / 3) {
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
               if (sampleHit[i][j]) {
-                lightAlphaMask[k] = ALPHA_NO_SMOOTH;
+                lightAlphaMask[k] = ALPHA_TRISOUP;
               }
             } else {
-              lightAlphaMask[k] = ALPHA_SMOOTH;
+              lightAlphaMask[k] = ALPHA_SURF_WORLD;
             }
         }
       }
