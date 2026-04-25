@@ -79,8 +79,6 @@ int CompareSurfaces(const void *a, const void *b) {
   return 0;
 }
 
-qboolean exactPointToPolygon = qtrue;
-
 float formFactorValueScale = 3;
 
 float linearScale = 1.0 / 8000;

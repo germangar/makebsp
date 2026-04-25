@@ -385,8 +385,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   float dist;
   float angle = 1.0f;
 
-  // area light with exact PTPFF
-  if (exactPointToPolygon && light->type == emit_area) {
+  // area light (Exact Point-To-Polygon Form Factor)
+  if (light->type == emit_area) {
     float factor;
     float d;
     vec3_t n;
@@ -510,31 +510,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         angle *= (radiusAtDist - sampleRadius) / 32.0;
       }
     }
-
-    if (light->linearLight) {
-      add = angle * light->photons * 0.000125f - dist;
-      if (add < 0) return qfalse;
-    } else {
-      add = (light->photons / (dist * dist)) * angle;
-    }
-  } else if (light->type == emit_area) {
-    // legacy/approximate area light logic
-    VectorSubtract(light->origin, origin, dir);
-    dist = VectorNormalize(dir, out->dir);
-    if (dist > light->reach) {
-      return qfalse;
-    }
-    if (dist < 16) dist = 16;
-    
-    if (normal) {
-      angle = CalculateFalloff(DotProduct(normal, out->dir));
-      if (angle <= 0) return qfalse;
-    }
-    
-    // light surface orientation check
-    float emitAngle = -DotProduct(light->normal, out->dir);
-    if (emitAngle <= 0) return qfalse;
-    angle *= emitAngle;
 
     if (light->linearLight) {
       add = angle * light->photons * 0.000125f - dist;

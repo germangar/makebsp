@@ -263,7 +263,6 @@ void PostProcessLightmaps(void);
 void LightMain(int radiosityPasses);
 extern light_t *lights;
 extern qboolean patchshadows;
-extern qboolean exactPointToPolygon;
 extern int *surfaceWorkOrder;
 extern int c_visible, c_occluded;
 
