@@ -240,6 +240,7 @@ static shaderInfo_t *AllocShaderInfo(void) {
 
   si->backsplashFraction = DEFAULT_BACKSPLASH_FRACTION;
   si->backsplashDistance = DEFAULT_BACKSPLASH_DISTANCE;
+  si->surfaceLightGlow = -1.0f;
 
   si->lightmapSampleSize = 0;
   si->forceTraceLight = qfalse;
@@ -378,6 +379,13 @@ static void ParseShaderFile(const char *filename) {
       if (!Q_stricmp(token, "q3map_surfacelight")) {
         GetToken(qfalse);
         si->value = atoi(token);
+        continue;
+      }
+
+      // q3map_surfacelight_glow <value>
+      if (!Q_stricmp(token, "q3map_surfacelight_glow")) {
+        GetToken(qfalse);
+        si->surfaceLightGlow = atof(token);
         continue;
       }
 

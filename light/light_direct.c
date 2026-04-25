@@ -433,6 +433,35 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
       return qfalse;
     }
 
+    if (normal) {
+      float receiveAngle = CalculateFalloff(DotProduct(normal, out->dir));
+      if (receiveAngle <= 0) {
+        // NOTICE: If we allow this light to go through it must not contribute to light direction (deluxemaps). It's a "glow"
+        
+        // for some light sources allow a small fraction of contribution on backfaces creating a "glow effect"
+        float glowFactor = 0.0f;
+        if (light->si) {
+            if (light->si->surfaceLightGlow >= 0.0f) {
+                glowFactor = light->si->surfaceLightGlow;
+            } else {
+                // defaults if not explicitly configured
+                if (light->si->contents & CONTENTS_LAVA) {
+                    glowFactor = 0.25f;
+                } else if (light->si->contents & CONTENTS_SLIME) {
+                    glowFactor = 0.10f;
+                }
+            }
+        }
+        
+        if (glowFactor > 0.0f) {
+            angle *= glowFactor;
+        } else {
+          return qfalse;
+        }
+      }
+      //angle *= receiveAngle;
+    }
+
     out->color[0] = light->emitColor[0] * angle * trace.filter[0];
     out->color[1] = light->emitColor[1] * angle * trace.filter[1];
     out->color[2] = light->emitColor[2] * angle * trace.filter[2];
