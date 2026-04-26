@@ -26,6 +26,8 @@ libs/MeshLib/cmake_trace.txt
 libs/MeshLib/thirdparty/
 q3map2_reference
 
+libs/opencl/loader/build
+
 # Debug OBJ exports
 *_meshlib.obj
 *_simplified.obj
@@ -39,15 +41,6 @@ libMRMeshC.dll
 *.a
 *.dll
 libMRMesh.dll
-Debugging HACD Hull Generation chat.md
-iqm2glb/tris.cfg
-iqm2glb/main.cpp
-iqm2glb/tris.fbx
-iqm2glb/THoughts.txt
-iqm2glb/tris1.iqm
-iqm2glb/2026-03-13 00-53-09.mkv
-iqm2glb/tris.skm
-iqm2glb/tris.skp
 
 light.exe
 q3light.exe

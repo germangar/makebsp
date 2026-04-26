@@ -31,6 +31,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
 #include <embree4/rtcore.h>
+#include <CL/cl.h>
 
 extern RTCDevice g_device;
 extern RTCScene g_scene;
