@@ -8,6 +8,7 @@ cl_context g_clContext;
 cl_command_queue g_clQueue;
 
 qboolean useOpenCL = qfalse;
+qboolean openclEnabled = qtrue;
 
 /*
 ================

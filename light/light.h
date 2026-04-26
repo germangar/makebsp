@@ -42,6 +42,7 @@ extern cl_context g_clContext;
 extern cl_command_queue g_clQueue;
 
 extern qboolean useOpenCL;
+extern qboolean openclEnabled;
 
 void InitOpenCL(void);
 void ShutdownOpenCL(void);

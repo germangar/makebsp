@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
     lightmapSmoothRadius = -1.0f;
     superSampleMode = SUPERSAMPLE_NONE;
     embree = qtrue;
+    openclEnabled = qtrue;
 
     JSON_ExportStandardPackages("games");
     JSON_LoadPackages("games");
@@ -60,6 +61,9 @@ int main(int argc, char **argv) {
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-tempname")) {
             i++;
+        } else if (!strcmp(argv[i], "-opencl")) {
+            openclEnabled = atoi(argv[++i]) ? qtrue : qfalse;
+            _printf("OpenCL %s\n", openclEnabled ? "enabled" : "disabled");
         } else if (!strcmp(argv[i], "-v")) {
             verbose = qtrue;
         } else if (!strcmp(argv[i], "-threads")) {
@@ -239,7 +243,9 @@ int main(int argc, char **argv) {
     }
 
     ThreadSetDefault();
-    InitOpenCL();
+    if (openclEnabled) {
+        InitOpenCL();
+    }
 
     if (i != argc - 1) {
         if (i < argc) {
@@ -249,6 +255,7 @@ int main(int argc, char **argv) {
                 "\n"
                 "Switches:\n"
                 "   v              = verbose output\n"
+                "   opencl <0|1>   = enable (1, default) or disable (0) GPU acceleration\n"
                 "   threads <X>    = set number of threads to X\n"
                 "   area <V>       = set the area light scale to V\n"
                 "   point <W>      = set the point light scale to W\n"

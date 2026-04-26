@@ -725,11 +725,200 @@ static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloat
     free(pixCache);
 }
 
+/*
+================
+SampleResolutionTable
+
+Generic pre-pass that resolves every (texel, sample) position for a given
+pattern into a flat color table using the full GetFilteredTexel logic
+(including cross-surface seam lookups and masking).
+
+The GPU then just averages these already-resolved colors — no adjacency
+graph or world-space math needed in the kernel.
+
+validList  [numValid]                 : GPU thread id -> flat atlas index
+srtColors  [numValid * numSamples * 3]: pre-evaluated RGB per (texel, sample)
+srtValid   [numValid * numSamples]    : 1 = valid sample, 0 = miss
+================
+*/
+
+typedef struct {
+    int   *validList;
+    float *srtColors;
+    byte  *srtValid;
+    int    numValid;
+    int    numSamples;
+} sampleResTable_t;
+
+static void BuildSampleResolutionTable(
+    const float pattern[][2],
+    int         numSamples,
+    float       radius,
+    const float *inputBuffer,
+    sampleResTable_t *out)
+{
+    int s, x, y, k;
+    int totalPixels = numLightBytes / 3;
+
+    /* ------------------------------------------------------------------
+     * Pass 1 (single-threaded): collect valid texel atlas indices and
+     * record which planarSurface + local (x,y) each one belongs to.
+     * ------------------------------------------------------------------ */
+    int *validList      = malloc(totalPixels * sizeof(int));
+    int *pixelToSurface = malloc(totalPixels * sizeof(int));
+    int *pixelToX       = malloc(totalPixels * sizeof(int));
+    int *pixelToY       = malloc(totalPixels * sizeof(int));
+
+    memset(pixelToSurface, -1, totalPixels * sizeof(int));
+
+    int numValid = 0;
+
+    for (s = 0; s < numPlanarSurfaces; s++) {
+        dsurface_t *ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
+        for (y = 0; y < ds->lightmapHeight; y++) {
+            for (x = 0; x < ds->lightmapWidth; x++) {
+                int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT
+                        + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH
+                        + ds->lightmapOffset[0][0] + x;
+
+                if (lightAlphaMask[p] == 0) continue;
+
+                pixelToSurface[p] = s;
+                pixelToX[p]       = x;
+                pixelToY[p]       = y;
+                validList[numValid++] = p;
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------------
+     * Pass 2 (omp parallel): evaluate GetFilteredTexel for every
+     * (texel, sample) pair and store the result in the SRT.
+     * ------------------------------------------------------------------ */
+    float *srtColors = malloc(numValid * numSamples * 3 * sizeof(float));
+    byte  *srtValid  = malloc(numValid * numSamples * sizeof(byte));
+    memset(srtValid, 0, numValid * numSamples * sizeof(byte));
+
+    #pragma omp parallel for schedule(dynamic, 64) private(k)
+    for (int tid = 0; tid < numValid; tid++) {
+        int p  = validList[tid];
+        int si = pixelToSurface[p];
+        int lx = pixelToX[p];
+        int ly = pixelToY[p];
+
+        for (k = 0; k < numSamples; k++) {
+            float px = (float)lx + pattern[k][0] * radius;
+            float py = (float)ly + pattern[k][1] * radius;
+
+            float col[3];
+            int   base = tid * numSamples + k;
+            if (GetFilteredTexel(si, px, py, col, inputBuffer)) {
+                srtColors[base * 3 + 0] = col[0];
+                srtColors[base * 3 + 1] = col[1];
+                srtColors[base * 3 + 2] = col[2];
+                srtValid[base] = 1;
+            }
+        }
+    }
+
+    free(pixelToSurface);
+    free(pixelToX);
+    free(pixelToY);
+
+    out->validList  = validList;
+    out->srtColors  = srtColors;
+    out->srtValid   = srtValid;
+    out->numValid   = numValid;
+    out->numSamples = numSamples;
+}
+
+static void FreeSampleResolutionTable(sampleResTable_t *srt) {
+    free(srt->validList);
+    free(srt->srtColors);
+    free(srt->srtValid);
+    memset(srt, 0, sizeof(*srt));
+}
+
+/*
+================
+RunGpuAAFilter
+
+Uploads the SRT to the GPU, runs the aa_filter kernel, and downloads
+the result back into lightFloats.
+
+The output buffer covers the full atlas (same dimensions as lightFloats)
+so the kernel can scatter-write each texel's result directly to its
+atlas position without any CPU post-pass remapping.
+================
+*/
+static void RunGpuAAFilter(sampleResTable_t *srt) {
+    cl_int   err;
+    cl_program prog;
+    cl_kernel  kernel;
+    int totalPixels = numLightBytes / 3;
+    size_t floatAtlasBytes = totalPixels * 3 * sizeof(float);
+
+    /* Load and compile kernel */
+    prog = BuildOpenCLProgram("aa_filter.cl", "");
+    if (!prog) {
+        _printf("RunGpuAAFilter: kernel build failed, falling back to CPU.\n");
+        return;
+    }
+
+    kernel = clCreateKernel(prog, "aa_filter", &err);
+    if (err != CL_SUCCESS) {
+        _printf("RunGpuAAFilter: clCreateKernel failed (%d).\n", err);
+        clReleaseProgram(prog);
+        return;
+    }
+
+    /* Create GPU buffers */
+    size_t srtColorBytes = (size_t)srt->numValid * srt->numSamples * 3 * sizeof(float);
+    size_t srtValidBytes = (size_t)srt->numValid * srt->numSamples * sizeof(byte);
+    size_t validListBytes= (size_t)srt->numValid * sizeof(int);
+
+    cl_mem bufSrtColors = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         srtColorBytes, srt->srtColors, &err);
+    cl_mem bufSrtValid  = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         srtValidBytes, srt->srtValid, &err);
+    cl_mem bufOutput    = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                         floatAtlasBytes, lightFloats, &err);
+    cl_mem bufValidList = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         validListBytes, srt->validList, &err);
+
+    /* Set kernel arguments */
+    clSetKernelArg(kernel, 0, sizeof(cl_mem), &bufSrtColors);
+    clSetKernelArg(kernel, 1, sizeof(cl_mem), &bufSrtValid);
+    clSetKernelArg(kernel, 2, sizeof(cl_mem), &bufOutput);
+    clSetKernelArg(kernel, 3, sizeof(cl_mem), &bufValidList);
+    clSetKernelArg(kernel, 4, sizeof(int),    &srt->numSamples);
+
+    /* Launch: one thread per valid texel */
+    size_t globalSize = (size_t)srt->numValid;
+    err = clEnqueueNDRangeKernel(g_clQueue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL);
+    if (err != CL_SUCCESS) {
+        _printf("RunGpuAAFilter: clEnqueueNDRangeKernel failed (%d).\n", err);
+    } else {
+        /* Wait and read back only the texels that were written */
+        clFinish(g_clQueue);
+        clEnqueueReadBuffer(g_clQueue, bufOutput, CL_TRUE, 0, floatAtlasBytes, lightFloats, 0, NULL, NULL);
+    }
+
+    clReleaseMemObject(bufSrtColors);
+    clReleaseMemObject(bufSrtValid);
+    clReleaseMemObject(bufOutput);
+    clReleaseMemObject(bufValidList);
+    clReleaseKernel(kernel);
+    clReleaseProgram(prog);
+}
+
 void AntiAliasLightmaps(void) {
+
 	int x, y, p, s, k;
 	int numPixels;
 	float *tempFloats;
 	dsurface_t *ds;
+    double startAA = I_FloatTime();
 
 	if (!lightFloats || !lightAlphaMask) return;
 
@@ -763,6 +952,15 @@ void AntiAliasLightmaps(void) {
     _printf("Done\n");
 
 	if (lightmapAA == 1) {
+        if (useOpenCL) {
+            _printf("  Image-space AA (Mode 1 - GPU): building SRT...\n");
+            sampleResTable_t srt;
+            BuildSampleResolutionTable(ssPattern8, SS_PATTERN8_COUNT, radius, tempFloats, &srt);
+            _printf("  Image-space AA (Mode 1 - GPU): running kernel (%d texels)...\n", srt.numValid);
+            RunGpuAAFilter(&srt);
+            FreeSampleResolutionTable(&srt);
+            _printf("  Image-space AA (Mode 1 - GPU): Done\n");
+        } else {
         _printf("  Image-space AA (Mode 1): ");
         progress = 0;
 		#pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
@@ -808,7 +1006,29 @@ void AntiAliasLightmaps(void) {
             }
 		}
         _printf("Done\n");
+        } // end CPU fallback
 	} else if (lightmapAA == 2) {
+        if (useOpenCL) {
+            _printf("  Image-space AA (Mode 2 - GPU): building 32-sample SRT...\n");
+            // Pattern for Mode 2: 4 sub-texels, each with 8 jitter samples
+            int numSamples = 32;
+            float pattern32[32][2];
+            for (int sub = 0; sub < 4; sub++) {
+                float dx = (sub % 2) ? 0.25f : -0.25f;
+                float dy = (sub / 2) ? 0.25f : -0.25f;
+                for (k = 0; k < (numSamples / 4); k++) {
+                    pattern32[sub * 8 + k][0] = dx + ssPattern8[k][0] * radius;
+                    pattern32[sub * 8 + k][1] = dy + ssPattern8[k][1] * radius;
+                }
+            }
+
+            sampleResTable_t srt;
+            BuildSampleResolutionTable(pattern32, 32, 1.0f, tempFloats, &srt);
+            _printf("  Image-space AA (Mode 2 - GPU): running kernel (%d texels)...\n", srt.numValid);
+            RunGpuAAFilter(&srt);
+            FreeSampleResolutionTable(&srt);
+            _printf("  Image-space AA (Mode 2 - GPU): Done\n");
+        } else {
         _printf("  Image-space AA (Mode 2 - High Fidelity): ");
         progress = 0;
 		#pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
@@ -910,8 +1130,10 @@ void AntiAliasLightmaps(void) {
             }
 		}
         _printf("Done\n");
+        } // end CPU fallback
 	}
 	free(tempFloats);
+    _printf("  Total Anti-Aliasing time: %.2f seconds\n", I_FloatTime() - startAA);
 }
 
 void SmoothLightmaps(float radius) {
