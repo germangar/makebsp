@@ -445,6 +445,16 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                     // Cull B: Receiver Plane (is surface entirely behind the destination?)
                     if (DotProduct(v_to_surf, dstNormal) < -surfaceTest[s]->radius) continue;
 
+                    // Cull C: Emitter Plane (is destination entirely behind the emitter?)
+                    if (drawSurfaces[s].surfaceType == MST_PLANAR) {
+                        vec3_t emitNormal;
+                        CrossProduct(drawSurfaces[s].lightmapVecs[0], drawSurfaces[s].lightmapVecs[1], emitNormal);
+                        if (VectorNormalize(emitNormal, emitNormal) > 0) {
+                            vec3_t v_to_dst; VectorSubtract(dst, surfaceTest[s]->origin, v_to_dst);
+                            if (DotProduct(v_to_dst, emitNormal) < -surfaceTest[s]->radius) continue;
+                        }
+                    }
+
                     for (int e = surfaceEmitterStart[s]; e < surfaceEmitterStart[s] + surfaceEmitterCount[s]; e++) {
                         emitter_t *em = &g_emitters[e];
                         vec3_t ray; VectorSubtract(em->center, dst, ray);
@@ -496,6 +506,16 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     // Cull B: Receiver Plane
                     if (DotProduct(v_to_surf, dstNormal) < -surfaceTest[s]->radius) continue;
+
+                    // Cull C: Emitter Plane
+                    if (drawSurfaces[s].surfaceType == MST_PLANAR) {
+                        vec3_t emitNormal;
+                        CrossProduct(drawSurfaces[s].lightmapVecs[0], drawSurfaces[s].lightmapVecs[1], emitNormal);
+                        if (VectorNormalize(emitNormal, emitNormal) > 0) {
+                            vec3_t v_to_dst; VectorSubtract(dst, surfaceTest[s]->origin, v_to_dst);
+                            if (DotProduct(v_to_dst, emitNormal) < -surfaceTest[s]->radius) continue;
+                        }
+                    }
 
                     for (int e = surfaceEmitterStart[s]; e < surfaceEmitterStart[s] + surfaceEmitterCount[s]; e++) {
                         emitter_t *em = &g_emitters[e];

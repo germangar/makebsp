@@ -397,6 +397,16 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qfalse;
     }
 
+    // see if the light is behind the receiver's normal
+    if (normal && DotProduct(n, normal) < 0) {
+        if (!light->twosided) {
+            // only cull if the shader doesn't explicitly allow back-glow
+            if (!light->si || light->si->surfaceLightGlow <= 0.0f) {
+                return qfalse;
+            }
+        }
+    }
+
     // see if the point is behind the light
     d = DotProduct(origin, light->normal) - light->dist;
     if (!light->twosided) {
