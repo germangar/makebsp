@@ -420,14 +420,26 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     }
     VectorCopy(n, out->dir);
 
-    factor = PointToPolygonFormFactor(origin, n, light->w);
-    if (factor <= 0) {
-      if (light->twosided) {
-        factor = -factor;
-      } else {
-        return qfalse;
-      }
+    // Liquid surfaces act as omnidirectional glowing volumes, not flat Lambertian emitters.
+    // They emit "plain light" in all directions without cosine falloff.
+    if (light->si && (light->si->contents & (CONTENTS_LAVA | CONTENTS_SLIME | 
+                                             CONTENTS_WATER | CONTENTS_FOG))) {
+        vec3_t toLight;
+        VectorSubtract(light->origin, origin, toLight);
+        float distToLightSq = DotProduct(toLight, toLight);
+        factor = light->area / (distToLightSq + light->area);
+    } else {
+        // Standard Lambertian area light
+        factor = PointToPolygonFormFactor(origin, n, light->w);
+        if (factor <= 0) {
+            if (light->twosided) {
+                factor = -factor;
+            } else {
+                return qfalse;
+            }
+        }
     }
+
     angle = CalculateFalloff(factor);
     if (angle <= 0) {
       return qfalse;

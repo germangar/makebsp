@@ -40,9 +40,12 @@ extern RTCScene g_scene;
 
 #define SAMPLE_NUDGE 1.0f
 #define SELF_SHADOW_EPSILON 1.25f
+
+/* These values have been manually calibrated. 
+If the distance falloff calculation changes they would need to be recalibrated */
 #define MIN_LIGHT_ADD 0.1f
-#define MIN_RADIOSITY_EMITTER_ADD 0.01f
-#define MIN_RADIOSITY_EMITTER_GROUP_ADD 0.005f
+#define MIN_RADIOSITY_EMITTER_ADD 0.0002f
+#define MIN_RADIOSITY_EMITTER_GROUP_ADD MIN_RADIOSITY_EMITTER_ADD
 
 #define UPSCALE_FACTOR 2
 #define GUTTER 1
@@ -119,6 +122,7 @@ typedef struct light_s {
   qboolean twosided; // fog lights both sides
 
   winding_t *w;
+  float area;       // pre-calculated winding area (for seam fix)
   vec3_t emitColor; // full out-of-gamut value
   float reach;      // pre-calculated max distance
 } light_t;

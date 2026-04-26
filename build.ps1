@@ -12,7 +12,8 @@ Write-Host ""
 Get-Process q3map -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process light -ErrorAction SilentlyContinue | Stop-Process -Force
 
-Write-Host "[1/2] Running make..." -ForegroundColor Yellow
+Write-Host "[1/2] Running make clean && make..." -ForegroundColor Yellow
+& make clean
 & make
 
 Write-Host ""

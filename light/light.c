@@ -226,6 +226,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
   WindingCenter(w, dl->origin);
   dl->w = w;
+  dl->area = area;
   VectorCopy(normal, dl->normal);
   dl->dist = DotProduct(dl->origin, normal);
 
@@ -238,7 +239,12 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
   dl->photons = intensity;
 
   // emitColor is irrespective of the area
-  VectorScale(ls->color, value * formFactorValueScale * areaScale,
+  float volumetricScale = 1.0f;
+  if (ls->contents & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER | CONTENTS_FOG)) {
+    volumetricScale = 0.25f;
+  }
+
+  VectorScale(ls->color, value * formFactorValueScale * areaScale * volumetricScale,
               dl->emitColor);
 
   dl->si = ls;
@@ -355,7 +361,13 @@ void CreateSurfaceLights(void) {
     }
 
     // possibly create for both sides of the polygon
-    for (side = 0; side <= ls->twoSided; side++) {
+    int maxSide = ls->twoSided;
+    // Liquids are volumetric and emit omnidirectionally from a single plane
+    if (ls->contents & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER | CONTENTS_FOG)) {
+        maxSide = 0;
+    }
+
+    for (side = 0; side <= maxSide; side++) {
       // create area lights
       if (surfaceTest[i]) {
         // curve or misc_model
