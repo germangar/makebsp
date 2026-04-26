@@ -5,7 +5,7 @@ CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshL
 BASE_LDFLAGS = -mconsole -lwsock32 -lws2_32 -lopengl32 -lglu32 -lm -lstdc++ -fopenmp -Wl,--stack,16777216
 Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lz
 Q3LIGHT_LDFLAGS = $(BASE_LDFLAGS)
-LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12 -Llibs/opencl/lib -lOpenCL -lcfgmgr32 -lruntimeobject
+LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12 -Llibs/opencl/lib -lOpenCL -lcfgmgr32 -lruntimeobject -lole32 -lsetupapi
 
 # Directories
 COMMON_DIR = common

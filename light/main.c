@@ -239,6 +239,7 @@ int main(int argc, char **argv) {
     }
 
     ThreadSetDefault();
+    InitOpenCL();
 
     if (i != argc - 1) {
         if (i < argc) {
@@ -385,5 +386,6 @@ int main(int argc, char **argv) {
         _printf("Total time elapsed: %02d:%02d:%02d\n", hours, minutes, seconds);
     }
 
+    ShutdownOpenCL();
     return 0;
 }

@@ -36,6 +36,17 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 extern RTCDevice g_device;
 extern RTCScene g_scene;
 
+extern cl_platform_id g_clPlatform;
+extern cl_device_id g_clDevice;
+extern cl_context g_clContext;
+extern cl_command_queue g_clQueue;
+
+extern qboolean useOpenCL;
+
+void InitOpenCL(void);
+void ShutdownOpenCL(void);
+cl_program BuildOpenCLProgram(const char *filename, const char *options);
+
 #define ALPHA_SURF_WORLD 1
 #define ALPHA_TRISOUP 2
 
