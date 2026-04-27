@@ -784,17 +784,20 @@ cleanup:
     free(jitterPos);   free(jitterNormal);free(jitterValid);
 }
 
-static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloats, qboolean isAA) {
+static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses) {
 
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return;
 
-    int x, y, p, i, k;
+    if (aaPasses <= 0 && smoothPasses <= 0) return;
+
+    int x, y, p, i;
     const int W = ds->lightmapWidth, H = ds->lightmapHeight;
 
     // 1. Calculate true density and set up local bounds
     float texelSize = GetSurfaceTexelSize(ds);
-    float effectiveRadius = isAA ? radius : (radius * TRISOUP_SMOOTH_CHEAT);
+    // Use the larger effective radius to ensure the grid is big enough for both pass types
+    float effectiveRadius = (smoothPasses > 0) ? (radius * TRISOUP_SMOOTH_CHEAT) : radius;
     float searchRadius = effectiveRadius * texelSize;
     if (searchRadius < 0.1f) return;
 
@@ -857,14 +860,96 @@ static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloat
     if (sigma < 0.1f) sigma = 0.1f;
     float twoSigmaSq = 2.0f * sigma * sigma;
 
-    /* --- GPU path --- */
-    if (useOpenCL) {
-        RunGpuTrisoupFilter(ds, W, H, pixCache, mappedPixels, radius, isAA,
-                            gridMins, voxelSize, gridDims, maxDistSq, twoSigmaSq,
-                            tempFloats);
-        free(pixCache);
-        return;
+    if (aaPasses > 0) {
+        for (int pnum = 0; pnum < aaPasses; pnum++) {
+            RunGpuTrisoupFilter(ds, W, H, pixCache, mappedPixels, radius, qtrue,
+                                gridMins, voxelSize, gridDims, maxDistSq, twoSigmaSq, tempFloats);
+        }
     }
+    if (smoothPasses > 0) {
+        for (int pnum = 0; pnum < smoothPasses; pnum++) {
+            RunGpuTrisoupFilter(ds, W, H, pixCache, mappedPixels, radius, qfalse,
+                                gridMins, voxelSize, gridDims, maxDistSq, twoSigmaSq, tempFloats);
+        }
+    }
+    free(pixCache);
+}
+
+static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses) {
+
+    dsurface_t *ds = &drawSurfaces[surfIdx];
+    if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return;
+
+    if (aaPasses <= 0 && smoothPasses <= 0) return;
+
+    int x, y, p, i, k;
+    const int W = ds->lightmapWidth, H = ds->lightmapHeight;
+
+    // 1. Calculate true density and set up local bounds
+    float texelSize = GetSurfaceTexelSize(ds);
+    // Use the larger effective radius to ensure the grid is big enough for both pass types
+    float effectiveRadius = (smoothPasses > 0) ? (radius * TRISOUP_SMOOTH_CHEAT) : radius;
+    float searchRadius = effectiveRadius * texelSize;
+    if (searchRadius < 0.1f) return;
+
+    // The grid cells must be large enough that a 3x3x3 search guarantees we reach 'searchRadius'.
+    // A cell size equal to the search radius means a 3x3x3 covers at minimum a sphere of radius R.
+    float voxelSize = searchRadius;
+
+    // OPT: Pre-cache the world-space position and normal for every pixel center.
+    // This single flat array lets us skip redundant TriSoupSamplePoint calls in
+    // the voxelization and (k==0) sampling passes below.
+    pixelCache_t *pixCache = malloc(W * H * sizeof(pixelCache_t));
+    if (!pixCache) return;
+
+    // OPT: Merged Pass 1+2 (bounds + cache population).
+    // Previously two separate W*H loops both calling TriSoupSamplePoint.
+    // Now a single loop fills the cache, tracks bounds, and counts mapped pixels.
+    vec3_t gridMins = {99999.0f, 99999.0f, 99999.0f};
+    vec3_t gridMaxs = {-99999.0f, -99999.0f, -99999.0f};
+    int mappedPixels = 0;
+
+    for (y = 0; y < H; y++) {
+        for (x = 0; x < W; x++) {
+            pixelCache_t *pc = &pixCache[y * W + x];
+            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+            if (lightAlphaMask[p] == 0) { pc->valid = qfalse; continue; }
+
+            float st[2];
+            st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+            st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+            if (TriSoupSamplePoint(ds, st, pc->pos, pc->normal)) {
+                pc->valid = qtrue;
+                mappedPixels++;
+                for (i = 0; i < 3; i++) {
+                    if (pc->pos[i] < gridMins[i]) gridMins[i] = pc->pos[i];
+                    if (pc->pos[i] > gridMaxs[i]) gridMaxs[i] = pc->pos[i];
+                }
+            } else {
+                pc->valid = qfalse;
+            }
+        }
+    }
+
+    if (mappedPixels == 0) { free(pixCache); return; }
+
+    // Expand bounds slightly to ensure edge cases fall neatly into buckets
+    for (i = 0; i < 3; i++) {
+        gridMins[i] -= voxelSize;
+        gridMaxs[i] += voxelSize;
+    }
+
+    int gridDims[3];
+    for (i = 0; i < 3; i++) {
+        gridDims[i] = (int)ceilf((gridMaxs[i] - gridMins[i]) / voxelSize);
+        if (gridDims[i] < 1) gridDims[i] = 1;
+    }
+
+    float maxDistSq  = searchRadius * searchRadius;
+    float sigma      = searchRadius / 3.0f;
+    if (sigma < 0.1f) sigma = 0.1f;
+    float twoSigmaSq = 2.0f * sigma * sigma;
 
     const int gStride1 = gridDims[1] * gridDims[2];
     const int gStride2 = gridDims[2];
@@ -879,112 +964,134 @@ static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloat
     // is friendlier to the CPU cache.
     aaTexel_t *pool = (aaTexel_t *)malloc(mappedPixels * sizeof(aaTexel_t));
     if (!pool) { free(flatGrid); free(pixCache); return; }
-    int poolIdx = 0;
+    
+    int totalPasses = aaPasses + smoothPasses;
 
-    // Pass 2 (Voxelize): reuse pixCache — no TriSoupSamplePoint calls needed.
-    for (y = 0; y < H; y++) {
-        for (x = 0; x < W; x++) {
-            const pixelCache_t *pc = &pixCache[y * W + x];
-            if (!pc->valid) continue;
+    for (int currentPass = 0; currentPass < totalPasses; currentPass++) {
+        qboolean isAA = (currentPass < aaPasses);
 
-            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+        // Clear the grid for re-voxelization
+        memset(flatGrid, 0, gridDims[0] * gridDims[1] * gridDims[2] * sizeof(aaTexel_t *));
+        int poolIdx = 0;
 
-            int v[3];
-            qboolean valid = qtrue;
-            for (i = 0; i < 3; i++) {
-                v[i] = (int)((pc->pos[i] - gridMins[i]) / voxelSize);
-                if (v[i] < 0 || v[i] >= gridDims[i]) { valid = qfalse; break; }
-            }
+        // Pass 2 (Voxelize): reuse pixCache — no TriSoupSamplePoint calls needed.
+        for (y = 0; y < H; y++) {
+            for (x = 0; x < W; x++) {
+                const pixelCache_t *pc = &pixCache[y * W + x];
+                if (!pc->valid) continue;
 
-            if (valid) {
-                aaTexel_t *newT = &pool[poolIdx++];
-                VectorCopy(pc->pos,    newT->pos);
-                VectorCopy(pc->normal, newT->normal);
-                // Read from tempFloats to allow multi-pass iteration
-                newT->color[0] = tempFloats[p * 3 + 0];
-                newT->color[1] = tempFloats[p * 3 + 1];
-                newT->color[2] = tempFloats[p * 3 + 2];
-
-                int cell = v[0] * gStride1 + v[1] * gStride2 + v[2];
-                newT->next   = flatGrid[cell];
-                flatGrid[cell] = newT;
-            }
-        }
-    }
-
-    // Pass 3 (Sample and Blur — 3D Gaussian)
-
-    for (y = 0; y < H; y++) {
-        for (x = 0; x < W; x++) {
-            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-            if (lightAlphaMask[p] == 0) continue;
-
-            const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
-            vec3_t finalColor = {0.0f, 0.0f, 0.0f};
-            float  finalWeight = 0.0f;
-
-            for (k = 0; k < numSamples; k++) {
-                vec3_t origin, normal;
-
-                if (isAA && k > 0) {
-                    // Jittered AA samples still require a full UV->world lookup.
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f + ssPattern8[k][0] * radius;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f + ssPattern8[k][1] * radius;
-                    if (!TriSoupSamplePoint(ds, st, origin, normal)) continue;
-                } else {
-                    // OPT: k==0 (center sample, both AA and Smooth modes) reuses the
-                    // already-computed cache entry — no TriSoupSamplePoint call needed.
-                    const pixelCache_t *pc = &pixCache[y * W + x];
-                    if (!pc->valid) continue;
-                    VectorCopy(pc->pos,    origin);
-                    VectorCopy(pc->normal, normal);
-                }
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
 
                 int v[3];
+                qboolean valid = qtrue;
                 for (i = 0; i < 3; i++) {
-                    v[i] = (int)((origin[i] - gridMins[i]) / voxelSize);
+                    v[i] = (int)((pc->pos[i] - gridMins[i]) / voxelSize);
+                    if (v[i] < 0 || v[i] >= gridDims[i]) { valid = qfalse; break; }
                 }
 
-                vec3_t totalColor  = {0.0f, 0.0f, 0.0f};
-                float  totalWeight = 0.0f;
+                if (valid) {
+                    aaTexel_t *newT = &pool[poolIdx++];
+                    VectorCopy(pc->pos,    newT->pos);
+                    VectorCopy(pc->normal, newT->normal);
+                    // Read from tempFloats to allow multi-pass iteration
+                    newT->color[0] = tempFloats[p * 3 + 0];
+                    newT->color[1] = tempFloats[p * 3 + 1];
+                    newT->color[2] = tempFloats[p * 3 + 2];
 
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dz = -1; dz <= 1; dz++) {
-                            int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
-                            if (nx < 0 || nx >= gridDims[0] ||
-                                ny < 0 || ny >= gridDims[1] ||
-                                nz < 0 || nz >= gridDims[2]) continue;
+                    int cell = v[0] * gStride1 + v[1] * gStride2 + v[2];
+                    newT->next   = flatGrid[cell];
+                    flatGrid[cell] = newT;
+                }
+            }
+        }
 
-                            aaTexel_t *curr = flatGrid[nx * gStride1 + ny * gStride2 + nz];
-                            while (curr) {
-                                float dot = DotProduct(curr->normal, normal);
-                                if (dot > aa_angle_match_cos) {
-                                    vec3_t delta;
-                                    VectorSubtract(origin, curr->pos, delta);
-                                    float distSq = DotProduct(delta, delta);
-                                    if (distSq <= maxDistSq) {
-                                        // True 3D Gaussian Weight
-                                        float w = expf(-distSq / twoSigmaSq) * dot;
-                                        VectorMA(totalColor, w, curr->color, totalColor);
-                                        totalWeight += w;
+        // Pass 3 (Sample and Blur — 3D Gaussian)
+        for (y = 0; y < H; y++) {
+            for (x = 0; x < W; x++) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                if (lightAlphaMask[p] == 0) continue;
+
+                const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
+                vec3_t finalColor = {0.0f, 0.0f, 0.0f};
+                float  finalWeight = 0.0f;
+
+                for (k = 0; k < numSamples; k++) {
+                    vec3_t origin, normal;
+
+                    if (isAA && k > 0) {
+                        // Jittered AA samples still require a full UV->world lookup.
+                        float st[2];
+                        st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f + ssPattern8[k][0] * radius;
+                        st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f + ssPattern8[k][1] * radius;
+                        if (!TriSoupSamplePoint(ds, st, origin, normal)) continue;
+                    } else {
+                        // OPT: k==0 (center sample, both AA and Smooth modes) reuses the
+                        // already-computed cache entry — no TriSoupSamplePoint call needed.
+                        const pixelCache_t *pc = &pixCache[y * W + x];
+                        if (!pc->valid) continue;
+                        VectorCopy(pc->pos,    origin);
+                        VectorCopy(pc->normal, normal);
+                    }
+
+                    int v[3];
+                    for (i = 0; i < 3; i++) {
+                        v[i] = (int)((origin[i] - gridMins[i]) / voxelSize);
+                    }
+
+                    vec3_t totalColor  = {0.0f, 0.0f, 0.0f};
+                    float  totalWeight = 0.0f;
+
+                    for (int dx = -1; dx <= 1; dx++) {
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dz = -1; dz <= 1; dz++) {
+                                int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
+                                if (nx < 0 || nx >= gridDims[0] ||
+                                    ny < 0 || ny >= gridDims[1] ||
+                                    nz < 0 || nz >= gridDims[2]) continue;
+
+                                aaTexel_t *curr = flatGrid[nx * gStride1 + ny * gStride2 + nz];
+                                while (curr) {
+                                    float dot = DotProduct(curr->normal, normal);
+                                    if (dot > aa_angle_match_cos) {
+                                        vec3_t delta;
+                                        VectorSubtract(origin, curr->pos, delta);
+                                        float distSq = DotProduct(delta, delta);
+                                        if (distSq <= maxDistSq) {
+                                            // True 3D Gaussian Weight
+                                            float w = expf(-distSq / twoSigmaSq) * dot;
+                                            VectorMA(totalColor, w, curr->color, totalColor);
+                                            totalWeight += w;
+                                        }
                                     }
+                                    curr = curr->next;
                                 }
-                                curr = curr->next;
                             }
                         }
                     }
+
+                    if (totalWeight > 0.0001f) {
+                        VectorMA(finalColor, 1.0f / totalWeight, totalColor, finalColor);
+                        finalWeight += 1.0f;
+                    }
                 }
 
-                if (totalWeight > 0.0001f) {
-                    VectorMA(finalColor, 1.0f / totalWeight, totalColor, finalColor);
-                    finalWeight += 1.0f;
+                if (finalWeight > 0.0001f) {
+                    VectorScale(finalColor, 1.0f / finalWeight, &lightFloats[p * 3]);
                 }
             }
-
-            if (finalWeight > 0.0001f) {
-                VectorScale(finalColor, 1.0f / finalWeight, &lightFloats[p * 3]);
+        }
+        
+        // Copy results back to tempFloats for the next pass
+        if (currentPass < totalPasses - 1) {
+            for (y = 0; y < H; y++) {
+                for (x = 0; x < W; x++) {
+                    p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                    if (lightAlphaMask[p] != 0) {
+                        tempFloats[p * 3 + 0] = lightFloats[p * 3 + 0];
+                        tempFloats[p * 3 + 1] = lightFloats[p * 3 + 1];
+                        tempFloats[p * 3 + 2] = lightFloats[p * 3 + 2];
+                    }
+                }
             }
         }
     }
@@ -1057,11 +1164,12 @@ void GpuLightmapState_Upload(void) {
                     float tx = fx - (float)ix0, ty = fy - (float)iy0;
                     
                     int ix1 = ix0 + 1, iy1 = iy0 + 1;
-                    if (ix0 < 0) ix0 = 0; if (ix1 >= W) ix1 = W - 1;
-                    if (iy0 < 0) iy0 = 0; if (iy1 >= H) iy1 = H - 1;
+                    if (ix0 < 0) ix0 = 0;
+                    if (ix1 >= W) ix1 = W - 1;
+                    if (iy0 < 0) iy0 = 0;
+                    if (iy1 >= H) iy1 = H - 1;
 
-                    int i00 = (m * H + iy0) * W + ix0, i10 = (m * H + iy0) * W + ix1;
-                    int i01 = (m * H + iy1) * W + ix0, i11 = (m * H + iy1) * W + ix1;
+                    int i00 = (m * H + iy0) * W + ix0, i10 = (m * H + iy0) * W + ix1;                    int i01 = (m * H + iy1) * W + ix0, i11 = (m * H + iy1) * W + ix1;
 
                     float w00 = (1.0f - tx) * (1.0f - ty);
                     float w10 = tx * (1.0f - ty);
@@ -1194,20 +1302,7 @@ void GpuLightmapState_Upload(void) {
 
     int numValid = 0;
     int W = LIGHTMAP_WIDTH * scale, H = LIGHTMAP_HEIGHT * scale;
-    for (s = 0; s < numPlanarSurfaces; s++) {
-        dsurface_t *ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
-        int sW = ds->lightmapWidth * scale, sH = ds->lightmapHeight * scale;
-        int offX = ds->lightmapOffset[0][0] * scale, offY = ds->lightmapOffset[0][1] * scale;
-        int lm = ds->lightmapNum[0];
-        
-        for (y = 0; y < sH; y++) {
-            for (x = 0; x < sW; x++) {
-                int p = (lm * H + offY + y) * W + offX + x;
-                /* Note: mask check works on upscaled buffer we built above */
-                /* But wait, we need to check the upscaled mask. We'll just build it on the fly or use a local ptr. */
-            }
-        }
-    }
+    
     /* Rewriting the pixel mapping loop for clarity with scale */
     memset(pixelToSurface, -1, totalPixels * sizeof(int));
     numValid = 0;
@@ -1375,10 +1470,35 @@ static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
 
 /*
 ================
-AntiAliasLightmaps
+AntiAliasLightmapsGPU
 ================
 */
-void AntiAliasLightmaps(int passes) {
+void AntiAliasLightmapsGPU(int passes) {
+	if (passes <= 0 || !lightFloats || !lightAlphaMask) return;
+
+	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
+    int scale = g_gpuLM.upscale;
+    _printf("  Image-space AA (%d passes, GPU planar %dx): dispatching kernel...\n", passes, scale);
+    
+    /* Flatten ssPattern8 to a float[] for the kernel */
+    float pat[SS_PATTERN8_COUNT * 2];
+    for (int ki = 0; ki < SS_PATTERN8_COUNT; ki++) {
+        /* Radius is scaled to the high-res grid */
+        pat[ki*2+0] = ssPattern8[ki][0] * (radius * scale);
+        pat[ki*2+1] = ssPattern8[ki][1] * (radius * scale);
+    }
+    
+    for (int pnum = 0; pnum < passes; pnum++) {
+        RunGpuAAKernel(pat, SS_PATTERN8_COUNT, 1.0f); // Radius already baked into pattern
+    }
+}
+
+/*
+================
+AntiAliasLightmapsCPU
+================
+*/
+void AntiAliasLightmapsCPU(int passes) {
 	int x, y, p, s, k;
 	int numPixels;
 	float *tempFloats;
@@ -1394,153 +1514,34 @@ void AntiAliasLightmaps(int passes) {
 
 	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
 
-    // AA for Triangle Soups (VPPS Spatial Hash — always CPU, 3D world-space)
-    if (!useOpenCL) {
-        _printf("  Volumetric AA (Trisoups): ");
+    _printf("  Image-space AA (CPU): ");
+    for (int pnum = 0; pnum < passes; pnum++) {
+        if (passes > 1) _printf("%d ", pnum + 1);
         progress = 0;
-        #pragma omp parallel for schedule(dynamic, 1) private(s)
-        for (s = 0; s < numDrawSurfaces; s++) {
-            ProcessTrisoupVolumetric(s, radius, tempFloats, qtrue);
-            int currentProgress;
-            #pragma omp atomic capture
-            currentProgress = ++progress;
-            if (numDrawSurfaces >= 10) {
-                int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
-                int newPercent = (currentProgress * 10) / numDrawSurfaces;
-                if (newPercent > oldPercent) { ThreadLock(); _printf("%d...", newPercent); ThreadUnlock(); }
-            }
-        }
-        _printf("Done\n");
-    }
-
-	if (useOpenCL) {
-        int scale = g_gpuLM.upscale;
-        _printf("  Image-space AA (%d passes, GPU planar %dx): dispatching kernel...\n", passes, scale);
-        
-        /* Flatten ssPattern8 to a float[] for the kernel */
-        float pat[SS_PATTERN8_COUNT * 2];
-        for (int ki = 0; ki < SS_PATTERN8_COUNT; ki++) {
-            /* Radius is scaled to the high-res grid */
-            pat[ki*2+0] = ssPattern8[ki][0] * (radius * scale);
-            pat[ki*2+1] = ssPattern8[ki][1] * (radius * scale);
-        }
-        
-        for (int pnum = 0; pnum < passes; pnum++) {
-            RunGpuAAKernel(pat, SS_PATTERN8_COUNT, 1.0f); // Radius already baked into pattern
-        }
-    } else {
-        _printf("  Image-space AA (CPU): ");
-        for (int pnum = 0; pnum < passes; pnum++) {
-            if (passes > 1) _printf("%d ", pnum + 1);
-            progress = 0;
-            #pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
-            for (s = 0; s < numPlanarSurfaces; s++) {
-                ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
-                for (y = 0; y < ds->lightmapHeight; y++) {
-                    for (x = 0; x < ds->lightmapWidth; x++) {
-                        p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                        if (lightAlphaMask[p] == 0) continue;
-
-                        float r = 0, g = 0, b = 0;
-                        int cnt = 0;
-                        for (k = 0; k < SS_PATTERN8_COUNT; k++) {
-                            float col[3];
-                            float px = (float)x + ssPattern8[k][0] * radius;
-                            float py = (float)y + ssPattern8[k][1] * radius;
-                            if (GetFilteredTexel(s, px, py, col, tempFloats)) {
-                                r += col[0]; g += col[1]; b += col[2];
-                                cnt++;
-                            }
-                        }
-                        if (cnt > 0) {
-                            lightFloats[p * 3 + 0] = r / cnt;
-                            lightFloats[p * 3 + 1] = g / cnt;
-                            lightFloats[p * 3 + 2] = b / cnt;
-                        }
-                    }
-                }
-                int currentProgress;
-                #pragma omp atomic capture
-                currentProgress = ++progress;
-                if (numPlanarSurfaces >= 10) {
-                    int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
-                    int newPercent = (currentProgress * 10) / numPlanarSurfaces;
-                    if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
-                }
-            }
-            if (pnum < passes - 1) memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
-        }
-        _printf("Done\n");
-    }
-	free(tempFloats);
-}
-
-/*
-================
-SmoothLightmaps
-
-Applies one Gaussian smoothing pass to planar surfaces (GPU or CPU)
-and the 3D VPPS blur to triangle soups (CPU, always).
-
-On the GPU path the planar pass dispatches RunGpuSmoothKernel which
-ping-pongs entirely within VRAM — no readback until PostProcessLightmaps
-calls GpuLightmapState_Download() after all passes are done.
-================
-*/
-void SmoothLightmaps(float radius) {
-	int i, j, x, y, p, s;
-	dsurface_t *ds;
-	int progress = 0;
-
-	if (radius <= 0.0f || !lightFloats || !lightAlphaMask) return;
-
-	float sigma = radius / 3.0f;
-	if (sigma < 0.5f) sigma = 0.5f;
-	int kernelRadius = (int)ceil(radius);
-	if (kernelRadius > MAX_KERNEL_RADIUS) kernelRadius = MAX_KERNEL_RADIUS;
-
-    /* --- Planar surfaces: GPU or CPU --- */
-    if (useOpenCL) {
-        RunGpuSmoothKernel(kernelRadius, sigma);
-    } else {
-        /* CPU: build normalized 2D Gaussian kernel */
-        float kernel[MAX_KERNEL_RADIUS * 2 + 1][MAX_KERNEL_RADIUS * 2 + 1];
-        float kernelSum = 0.0f;
-        for (j = -kernelRadius; j <= kernelRadius; j++)
-            for (i = -kernelRadius; i <= kernelRadius; i++) {
-                kernel[j+kernelRadius][i+kernelRadius] = expf(-(float)(i*i+j*j) / (2.0f*sigma*sigma));
-                kernelSum += kernel[j+kernelRadius][i+kernelRadius];
-            }
-        for (j = 0; j <= kernelRadius*2; j++)
-            for (i = 0; i <= kernelRadius*2; i++)
-                kernel[j][i] /= kernelSum;
-
-        int numPixels = numLightBytes / 3;
-        float *tempFloats = malloc(numPixels * sizeof(float) * 3);
-        if (!tempFloats) return;
-        memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
-
-        progress = 0;
-        #pragma omp parallel for schedule(dynamic, 1) private(s, ds, y, x, i, j, p)
+        #pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
         for (s = 0; s < numPlanarSurfaces; s++) {
             ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
             for (y = 0; y < ds->lightmapHeight; y++) {
                 for (x = 0; x < ds->lightmapWidth; x++) {
                     p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
                     if (lightAlphaMask[p] == 0) continue;
-                    float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
-                    for (j = -kernelRadius; j <= kernelRadius; j++) {
-                        for (i = -kernelRadius; i <= kernelRadius; i++) {
-                            float weight = kernel[j+kernelRadius][i+kernelRadius];
-                            float sampleColor[3];
-                            if (GetFilteredTexel(s, (float)(x+i), (float)(y+j), sampleColor, tempFloats)) {
-                                VectorMA(sumColor, weight, sampleColor, sumColor);
-                                sumWeight += weight;
-                            }
+
+                    float r = 0, g = 0, b = 0;
+                    int cnt = 0;
+                    for (k = 0; k < SS_PATTERN8_COUNT; k++) {
+                        float col[3];
+                        float px = (float)x + ssPattern8[k][0] * radius;
+                        float py = (float)y + ssPattern8[k][1] * radius;
+                        if (GetFilteredTexel(s, px, py, col, tempFloats)) {
+                            r += col[0]; g += col[1]; b += col[2];
+                            cnt++;
                         }
                     }
-                    if (sumWeight > 0.0001f)
-                        VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
+                    if (cnt > 0) {
+                        lightFloats[p * 3 + 0] = r / cnt;
+                        lightFloats[p * 3 + 1] = g / cnt;
+                        lightFloats[p * 3 + 2] = b / cnt;
+                    }
                 }
             }
             int currentProgress;
@@ -1552,32 +1553,96 @@ void SmoothLightmaps(float radius) {
                 if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
         }
-        free(tempFloats);
+        if (pnum < passes - 1) memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
     }
+    _printf("Done\n");
+	free(tempFloats);
+}
 
-	/* --- Triangle Soups: CPU only, and only when not on GPU path.
-	   In GPU mode, PostProcessLightmaps runs this after GpuLightmapState_Download()
-	   so the results land on top of the downloaded planar data, not under it. --- */
-	if (!useOpenCL) {
-        int numPixels = numLightBytes / 3;
-        float *tempFloats = malloc(numPixels * sizeof(float) * 3);
-        if (!tempFloats) return;
-        memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
-        progress = 0;
-        #pragma omp parallel for schedule(dynamic, 1) private(s)
-        for (s = 0; s < numDrawSurfaces; s++) {
-            ProcessTrisoupVolumetric(s, radius, tempFloats, qfalse);
-            int currentProgress;
-            #pragma omp atomic capture
-            currentProgress = ++progress;
-            if (numDrawSurfaces >= 10) {
-                int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
-                int newPercent = (currentProgress * 10) / numDrawSurfaces;
-                if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
+/*
+================
+SmoothLightmapsGPU
+================
+*/
+void SmoothLightmapsGPU(float radius) {
+	if (radius <= 0.0f || !lightFloats || !lightAlphaMask) return;
+
+    int scale = g_gpuLM.upscale;
+	float sigma = (radius * scale) / 3.0f;
+	if (sigma < 0.5f * scale) sigma = 0.5f * scale;
+	int kernelRadius = (int)ceil(radius * scale);
+	if (kernelRadius > MAX_KERNEL_RADIUS * scale) kernelRadius = MAX_KERNEL_RADIUS * scale;
+
+    RunGpuSmoothKernel(kernelRadius, sigma);
+}
+
+/*
+================
+SmoothLightmapsCPU
+================
+*/
+void SmoothLightmapsCPU(float radius) {
+	int i, j, x, y, p, s;
+	dsurface_t *ds;
+	int progress = 0;
+
+	if (radius <= 0.0f || !lightFloats || !lightAlphaMask) return;
+
+	float sigma = radius / 3.0f;
+	if (sigma < 0.5f) sigma = 0.5f;
+	int kernelRadius = (int)ceil(radius);
+	if (kernelRadius > MAX_KERNEL_RADIUS) kernelRadius = MAX_KERNEL_RADIUS;
+
+    /* CPU: build normalized 2D Gaussian kernel */
+    float kernel[MAX_KERNEL_RADIUS * 2 + 1][MAX_KERNEL_RADIUS * 2 + 1];
+    float kernelSum = 0.0f;
+    for (j = -kernelRadius; j <= kernelRadius; j++)
+        for (i = -kernelRadius; i <= kernelRadius; i++) {
+            kernel[j+kernelRadius][i+kernelRadius] = expf(-(float)(i*i+j*j) / (2.0f*sigma*sigma));
+            kernelSum += kernel[j+kernelRadius][i+kernelRadius];
+        }
+    for (j = 0; j <= kernelRadius*2; j++)
+        for (i = 0; i <= kernelRadius*2; i++)
+            kernel[j][i] /= kernelSum;
+
+    int numPixels = numLightBytes / 3;
+    float *tempFloats = malloc(numPixels * sizeof(float) * 3);
+    if (!tempFloats) return;
+    memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
+
+    progress = 0;
+    #pragma omp parallel for schedule(dynamic, 1) private(s, ds, y, x, i, j, p)
+    for (s = 0; s < numPlanarSurfaces; s++) {
+        ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
+        for (y = 0; y < ds->lightmapHeight; y++) {
+            for (x = 0; x < ds->lightmapWidth; x++) {
+                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                if (lightAlphaMask[p] == 0) continue;
+                float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
+                for (j = -kernelRadius; j <= kernelRadius; j++) {
+                    for (i = -kernelRadius; i <= kernelRadius; i++) {
+                        float weight = kernel[j+kernelRadius][i+kernelRadius];
+                        float sampleColor[3];
+                        if (GetFilteredTexel(s, (float)(x+i), (float)(y+j), sampleColor, tempFloats)) {
+                            VectorMA(sumColor, weight, sampleColor, sumColor);
+                            sumWeight += weight;
+                        }
+                    }
+                }
+                if (sumWeight > 0.0001f)
+                    VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
             }
         }
-        free(tempFloats);
-	}
+        int currentProgress;
+        #pragma omp atomic capture
+        currentProgress = ++progress;
+        if (numPlanarSurfaces >= 10) {
+            int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+            int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+            if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
+        }
+    }
+    free(tempFloats);
 }
 
 void PostProcessLightmaps(void) {
@@ -1587,15 +1652,6 @@ void PostProcessLightmaps(void) {
     double startFiltering = I_FloatTime();
 
     int scale = FILTER_UPSCALE ? 2 : 1;
-    int totalPixels = numLightBytes / 3;
-    size_t bytes1x = (size_t)totalPixels * 3 * sizeof(float);
-    float *preFilterCopy = NULL;
-
-    /* Step 1 — save pre-filter state for trisoup AA */
-    if (lightmapAA) {
-        preFilterCopy = malloc(bytes1x);
-        if (preFilterCopy) memcpy(preFilterCopy, lightFloats, bytes1x);
-    }
 
     /* Step 2 — Prepare atlas (Upscale 1x -> 2x if needed) */
     if (useOpenCL) {
@@ -1613,16 +1669,12 @@ void PostProcessLightmaps(void) {
     /* Step 3 — Planar Filtering (AA and Smoothing) */
     if (useOpenCL) {
         /* ==== GPU PATH ==== */
-        if (lightmapAA) AntiAliasLightmaps(lightmapAA);
+        if (lightmapAA) AntiAliasLightmapsGPU(lightmapAA);
         if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
-            float sigma = (lightmapSmoothRadius * scale) / 3.0f;
-            if (sigma < 0.5f * scale) sigma = 0.5f * scale;
-            int kr = (int)ceil(lightmapSmoothRadius * scale);
-            if (kr > MAX_KERNEL_RADIUS * scale) kr = MAX_KERNEL_RADIUS * scale;
             _printf("Smoothing (%d passes, radius %.2f) GPU planar (%dx): ", lightmapSmoothPasses, lightmapSmoothRadius, scale);
             for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
                 _printf("%d ", pnum);
-                RunGpuSmoothKernel(kr, sigma);
+                SmoothLightmapsGPU(lightmapSmoothRadius);
             }
             _printf("Done\n");
         }
@@ -1632,50 +1684,40 @@ void PostProcessLightmaps(void) {
     } else {
         /* ==== CPU PATH ==== */
         /* Note: AntiAliasLightmaps(passes) already loops internally on CPU. */
-        if (lightmapAA) AntiAliasLightmaps(lightmapAA);
+        if (lightmapAA) AntiAliasLightmapsCPU(lightmapAA);
         if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
             _printf("Smoothing (%d passes, radius %.2f) CPU planar: ", lightmapSmoothPasses, lightmapSmoothRadius);
             for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
                 _printf("%d ", pnum);
-                SmoothLightmaps(lightmapSmoothRadius);
+                SmoothLightmapsCPU(lightmapSmoothRadius);
             }
             _printf("Done\n");
         }
     }
 
-    /* Step 4 — Volumetric (Trisoup) Filtering (Always CPU) */
-    if (lightmapAA && preFilterCopy) {
+    /* Step 4 — Volumetric (Trisoup) Filtering */
+    int aaPasses = lightmapAA;
+    int smoothPasses = (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) ? lightmapSmoothPasses : 0;
+    
+    if (aaPasses > 0 || smoothPasses > 0) {
         float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
-        _printf("  Volumetric AA (Trisoups - CPU): ");
-        int progress = 0;
-        #pragma omp parallel for schedule(dynamic, 1)
-        for (int s = 0; s < numDrawSurfaces; s++) {
-            ProcessTrisoupVolumetric(s, radius, preFilterCopy, qtrue);
-            int cur;
-            #pragma omp atomic capture
-            cur = ++progress;
-            if (numDrawSurfaces >= 10) {
-                int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
-                if (np > op) { ThreadLock(); _printf("%d...", np); ThreadUnlock(); }
-            }
-        }
-        _printf("Done\n");
-        free(preFilterCopy);
-    }
-
-    if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
-        float radius = lightmapSmoothRadius;
-        _printf("  Volumetric Smoothing (Trisoups - CPU): ");
-        for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
-            if (lightmapSmoothPasses > 1) _printf("%d ", pnum);
-            int numPx = numLightBytes / 3;
-            float *tmpF = malloc((size_t)numPx * 3 * sizeof(float));
-            if (!tmpF) break;
-            memcpy(tmpF, lightFloats, (size_t)numPx * 3 * sizeof(float));
+        _printf("  Volumetric Filtering (Trisoups): ");
+        
+        int numPx = numLightBytes / 3;
+        size_t bufferSize = (size_t)numPx * 3 * sizeof(float);
+        float *tempFloats = malloc(bufferSize);
+        if (tempFloats) {
+            memcpy(tempFloats, lightFloats, bufferSize);
+            
             int progress = 0;
             #pragma omp parallel for schedule(dynamic, 1)
             for (int s = 0; s < numDrawSurfaces; s++) {
-                ProcessTrisoupVolumetric(s, radius, tmpF, qfalse);
+                if (useOpenCL) {
+                    ProcessTrisoupVolumetricGPU(s, radius, tempFloats, aaPasses, smoothPasses);
+                } else {
+                    ProcessTrisoupVolumetricCPU(s, radius, tempFloats, aaPasses, smoothPasses);
+                }
+                
                 int cur;
                 #pragma omp atomic capture
                 cur = ++progress;
@@ -1684,9 +1726,9 @@ void PostProcessLightmaps(void) {
                     if (np > op) { ThreadLock(); _printf("."); ThreadUnlock(); }
                 }
             }
-            free(tmpF);
+            free(tempFloats);
+            _printf("Done\n");
         }
-        _printf("Done\n");
     }
 
     double endFiltering = I_FloatTime();
