@@ -91,6 +91,7 @@ typedef struct {
     int  numValid;
     int  totalAtlasPixels;
     int  pingIsA;           /* 1 = atlasA is current output       */
+    int  upscale;           /* 1 = native, 2 = 2x resolution, etc. */
 } GpuLightmapState;
 
 extern GpuLightmapState g_gpuLM;

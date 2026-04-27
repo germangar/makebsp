@@ -180,9 +180,10 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
 
     /* Inject atlas dimensions as compile-time constants so lm_common.cl can use them */
     char fullOpts[256];
+    int scale = g_gpuLM.upscale > 0 ? g_gpuLM.upscale : 1;
     snprintf(fullOpts, sizeof(fullOpts),
              "-DLIGHTMAP_WIDTH=%d -DLIGHTMAP_HEIGHT=%d %s",
-             LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT,
+             LIGHTMAP_WIDTH * scale, LIGHTMAP_HEIGHT * scale,
              options ? options : "");
 
     err = clBuildProgram(prog, 1, &g_clDevice, fullOpts, NULL, NULL);
@@ -239,6 +240,59 @@ Reads back the current output atlas buffer into lightFloats.
 void GpuLightmapState_Download(void) {
     GpuLightmapState *s = &g_gpuLM;
     cl_mem src = s->pingIsA ? s->atlasA : s->atlasB;
-    size_t bytes = (size_t)s->totalAtlasPixels * 3 * sizeof(float);
-    clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, bytes, lightFloats, 0, NULL, NULL);
+    size_t atlasBytes = (size_t)s->totalAtlasPixels * 3 * sizeof(float);
+    size_t maskBytes  = (size_t)s->totalAtlasPixels * sizeof(byte);
+
+    if (s->upscale <= 1) {
+        clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
+    } else {
+        /* Downscale 2x2 -> 1x with mask weights */
+        float *temp2x = malloc(atlasBytes);
+        byte  *mask2x = malloc(maskBytes);
+        if (!temp2x || !mask2x) {
+            if (temp2x) free(temp2x);
+            if (mask2x) free(mask2x);
+            return;
+        }
+
+        clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, atlasBytes, temp2x, 0, NULL, NULL);
+        clEnqueueReadBuffer(g_clQueue, s->maskBuf, CL_TRUE, 0, maskBytes, mask2x, 0, NULL, NULL);
+
+        int scale = s->upscale;
+        int numLms = s->totalAtlasPixels / (LIGHTMAP_WIDTH * scale * LIGHTMAP_HEIGHT * scale);
+        int W = LIGHTMAP_WIDTH, H = LIGHTMAP_HEIGHT;
+        int W2 = W * scale, H2 = H * scale;
+
+        #pragma omp parallel for schedule(static)
+        for (int m = 0; m < numLms; m++) {
+            for (int y = 0; y < H; y++) {
+                for (int x = 0; x < W; x++) {
+                    int p1 = (m * H + y) * W + x;
+                    if (lightAlphaMask[p1] == 0) continue;
+
+                    int p2 = (m * H2 + y * scale) * W2 + x * scale;
+                    float sum[3] = {0,0,0}, sumW = 0.0f;
+                    
+                    for (int dy = 0; dy < scale; dy++) {
+                        for (int dx = 0; dx < scale; dx++) {
+                            int pa = p2 + dy * W2 + dx;
+                            if (mask2x[pa] != 0) {
+                                float *smp = &temp2x[pa * 3];
+                                sum[0] += smp[0]; sum[1] += smp[1]; sum[2] += smp[2];
+                                sumW += 1.0f;
+                            }
+                        }
+                    }
+                    
+                    if (sumW > 0.01f) {
+                        lightFloats[p1 * 3 + 0] = sum[0] / sumW;
+                        lightFloats[p1 * 3 + 1] = sum[1] / sumW;
+                        lightFloats[p1 * 3 + 2] = sum[2] / sumW;
+                    }
+                }
+            }
+        }
+        free(temp2x);
+        free(mask2x);
+    }
 }

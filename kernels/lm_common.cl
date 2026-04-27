@@ -137,7 +137,7 @@ Full port of GetFilteredTexel() from lm_postprocess.c.
 Samples at (px, py) in local surface coords of surface sIdx:
   1. Fast path  — strictly inside local bounds → local bilinear
   2. Slow path  — out of bounds → world-space seam lookup via partners
-  3. Fallback   — no neighbour found → clamp to own surface edge
+  3. Fallback   — no neighbour found → strictly fail (matches CPU)
 ================
 */
 static bool gpu_get_filtered_texel(
@@ -165,7 +165,6 @@ static bool gpu_get_filtered_texel(
     }
 
     /* --- Slow path: world-space seam lookup --- */
-    /* origin already includes surfaceOrigin, so worldPos = origin + px*vecs0 + py*vecs1 */
     float wx = s->originX + px*s->vecs0X + py*s->vecs1X;
     float wy = s->originY + px*s->vecs0Y + py*s->vecs1Y;
     float wz = s->originZ + px*s->vecs0Z + py*s->vecs1Z;
@@ -175,15 +174,7 @@ static bool gpu_get_filtered_texel(
                                    atlas, mask, outR, outG, outB))
         return true;
 
-    /* --- Fallback: clamp to own surface edge --- */
-    int cx = x0 < 0 ? 0 : (x0 >= s->width  ? s->width  - 1 : x0);
-    int cy = y0 < 0 ? 0 : (y0 >= s->height ? s->height - 1 : y0);
-    int p  = (s->lmNum * LIGHTMAP_HEIGHT + s->lmOffY + cy) * LIGHTMAP_WIDTH + s->lmOffX + cx;
-    if (!mask[p]) return false;
-    *outR = atlas[p*3+0];
-    *outG = atlas[p*3+1];
-    *outB = atlas[p*3+2];
-    return true;
+    return false;
 }
 
 #endif /* LM_COMMON_CL */

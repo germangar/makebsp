@@ -44,6 +44,12 @@ __kernel void smooth_filter(
 
     int   atlasIdx = validList[tid];
     int   sIdx     = pixelToSurface[atlasIdx];
+    if (sIdx < 0) {
+        atlasOut[atlasIdx*3+0] = atlasIn[atlasIdx*3+0];
+        atlasOut[atlasIdx*3+1] = atlasIn[atlasIdx*3+1];
+        atlasOut[atlasIdx*3+2] = atlasIn[atlasIdx*3+2];
+        return;
+    }
     int   lx       = pixelToX[atlasIdx];
     int   ly       = pixelToY[atlasIdx];
 
