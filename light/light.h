@@ -44,9 +44,64 @@ extern cl_command_queue g_clQueue;
 extern qboolean useOpenCL;
 extern qboolean openclEnabled;
 
+/*
+ * GpuPlanarSurface — CPU-side mirror of the struct in lm_common.cl.
+ * Must stay layout-identical (64 bytes, all float/int).
+ */
+typedef struct {
+    float originX,   originY,   originZ;
+    float vecs0X,    vecs0Y,    vecs0Z;
+    float vecs1X,    vecs1Y,    vecs1Z;
+    float invMagSq0, invMagSq1;
+    int   width,     height;
+    int   lmNum;
+    int   lmOffX,    lmOffY;
+} GpuPlanarSurface_t;
+
+/*
+ * GpuLightmapState — persistent GPU buffers shared by all post-processing
+ * filter kernels (AA, Smooth, and any future filters).
+ * Lifetime: BuildPlanarSurfaceIndex() → GpuLightmapState_Upload() →
+ *           [kernel dispatches] → GpuLightmapState_Download() →
+ *           GpuLightmapState_Free() → FreePlanarSurfaceIndex()
+ */
+typedef struct {
+    /* Ping-pong atlas buffers (float RGB).                        */
+    /* Input for each pass is atlasA when pingIsA==1, atlasB when 0 */
+    cl_mem atlasA;
+    cl_mem atlasB;
+
+    /* Alpha validity mask (uchar, 0 = invalid texel)              */
+    cl_mem maskBuf;
+
+    /* Planar surface metadata (GpuPlanarSurface[])                */
+    cl_mem surfacesBuf;
+
+    /* Partner adjacency in CSR layout                             */
+    cl_mem partnerData;     /* int[] flat partner indices          */
+    cl_mem partnerOffsets;  /* int[numPlanarSurfaces+1]            */
+
+    /* Per-texel lookup tables (all indexed by flat atlas pixel)   */
+    cl_mem validList;       /* int[numValid] — valid texel indices */
+    cl_mem pixelToSurface;  /* int[totalPixels] -> surface index  */
+    cl_mem pixelToX;        /* int[totalPixels] -> local x        */
+    cl_mem pixelToY;        /* int[totalPixels] -> local y        */
+
+    int  numPlanarSurfaces;
+    int  numValid;
+    int  totalAtlasPixels;
+    int  pingIsA;           /* 1 = atlasA is current output       */
+} GpuLightmapState;
+
+extern GpuLightmapState g_gpuLM;
+
 void InitOpenCL(void);
 void ShutdownOpenCL(void);
 cl_program BuildOpenCLProgram(const char *filename, const char *options);
+cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *options);
+void GpuLightmapState_Upload(void);
+void GpuLightmapState_Download(void);
+void GpuLightmapState_Free(void);
 
 #define ALPHA_SURF_WORLD 1
 #define ALPHA_TRISOUP 2

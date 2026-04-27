@@ -986,62 +986,91 @@ static void ProcessTrisoupVolumetric(int surfIdx, float radius, float *tempFloat
 
 /*
 ================
-SampleResolutionTable
+GpuLightmapState_Upload
 
-Generic pre-pass that resolves every (texel, sample) position for a given
-pattern into a flat color table using the full GetFilteredTexel logic
-(including cross-surface seam lookups and masking).
+Builds and uploads all persistent GPU metadata needed by every
+post-processing filter kernel:
+  - Ping-pong atlas buffers (atlasA and atlasB both seeded with lightFloats)
+  - Alpha mask
+  - GpuPlanarSurface array (flattened from planarSurfaces[])
+  - Partner adjacency in CSR layout (partnerData + partnerOffsets)
+  - Per-pixel lookup tables: validList, pixelToSurface, pixelToX, pixelToY
 
-The GPU then just averages these already-resolved colors — no adjacency
-graph or world-space math needed in the kernel.
-
-validList  [numValid]                 : GPU thread id -> flat atlas index
-srtColors  [numValid * numSamples * 3]: pre-evaluated RGB per (texel, sample)
-srtValid   [numValid * numSamples]    : 1 = valid sample, 0 = miss
+Called once from PostProcessLightmaps, before any kernel dispatch.
 ================
 */
+void GpuLightmapState_Upload(void) {
+    int s, x, y;
+    GpuLightmapState *st = &g_gpuLM;
+    cl_int err;
 
-typedef struct {
-    int   *validList;
-    float *srtColors;
-    byte  *srtValid;
-    int    numValid;
-    int    numSamples;
-} sampleResTable_t;
-
-static void BuildSampleResolutionTable(
-    const float pattern[][2],
-    int         numSamples,
-    float       radius,
-    const float *inputBuffer,
-    sampleResTable_t *out)
-{
-    int s, x, y, k;
     int totalPixels = numLightBytes / 3;
+    st->totalAtlasPixels  = totalPixels;
+    st->numPlanarSurfaces = numPlanarSurfaces;
+    st->pingIsA           = 1;
 
-    /* ------------------------------------------------------------------
-     * Pass 1 (single-threaded): collect valid texel atlas indices and
-     * record which planarSurface + local (x,y) each one belongs to.
-     * ------------------------------------------------------------------ */
-    int *validList      = malloc(totalPixels * sizeof(int));
+    size_t atlasBytes = (size_t)totalPixels * 3 * sizeof(float);
+    size_t maskBytes  = (size_t)totalPixels * sizeof(byte);
+
+    st->atlasA  = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                  atlasBytes, lightFloats, &err);
+    st->atlasB  = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                  atlasBytes, lightFloats, &err);
+    st->maskBuf = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                  maskBytes, lightAlphaMask, &err);
+
+    /* --- Flatten GpuPlanarSurface[] --- */
+    GpuPlanarSurface_t *cpuSurfaces = malloc(numPlanarSurfaces * sizeof(GpuPlanarSurface_t));
+    int totalLinks = 0;
+    for (s = 0; s < numPlanarSurfaces; s++) {
+        planarInfo_t      *p = &planarSurfaces[s];
+        GpuPlanarSurface_t *g = &cpuSurfaces[s];
+        g->originX   = p->origin[0]; g->originY = p->origin[1]; g->originZ = p->origin[2];
+        g->vecs0X    = p->vecs[0][0]; g->vecs0Y  = p->vecs[0][1]; g->vecs0Z  = p->vecs[0][2];
+        g->vecs1X    = p->vecs[1][0]; g->vecs1Y  = p->vecs[1][1]; g->vecs1Z  = p->vecs[1][2];
+        g->invMagSq0 = p->invMagSq[0];
+        g->invMagSq1 = p->invMagSq[1];
+        g->width     = p->width;   g->height  = p->height;
+        g->lmNum     = p->lmNum;
+        g->lmOffX    = p->lmOffset[0]; g->lmOffY = p->lmOffset[1];
+        totalLinks  += p->numPartners;
+    }
+    st->surfacesBuf = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                      numPlanarSurfaces * sizeof(GpuPlanarSurface_t),
+                                      cpuSurfaces, &err);
+    free(cpuSurfaces);
+
+    /* --- Flatten partner CSR --- */
+    int *offsets = malloc((numPlanarSurfaces + 1) * sizeof(int));
+    int *data    = totalLinks > 0 ? malloc(totalLinks * sizeof(int)) : malloc(sizeof(int));
+    offsets[0] = 0;
+    for (s = 0; s < numPlanarSurfaces; s++) {
+        int base = offsets[s];
+        for (int pi = 0; pi < planarSurfaces[s].numPartners; pi++)
+            data[base + pi] = planarSurfaces[s].partners[pi];
+        offsets[s + 1] = base + planarSurfaces[s].numPartners;
+    }
+    st->partnerOffsets = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         (numPlanarSurfaces + 1) * sizeof(int), offsets, &err);
+    st->partnerData    = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         (totalLinks > 0 ? totalLinks : 1) * sizeof(int), data, &err);
+    free(offsets); free(data);
+
+    /* --- Per-pixel lookup tables --- */
     int *pixelToSurface = malloc(totalPixels * sizeof(int));
     int *pixelToX       = malloc(totalPixels * sizeof(int));
     int *pixelToY       = malloc(totalPixels * sizeof(int));
-
+    int *validList      = malloc(totalPixels * sizeof(int));
     memset(pixelToSurface, -1, totalPixels * sizeof(int));
 
     int numValid = 0;
-
     for (s = 0; s < numPlanarSurfaces; s++) {
         dsurface_t *ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
         for (y = 0; y < ds->lightmapHeight; y++) {
             for (x = 0; x < ds->lightmapWidth; x++) {
-                int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT
-                        + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH
-                        + ds->lightmapOffset[0][0] + x;
-
+                int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y)
+                        * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
                 if (lightAlphaMask[p] == 0) continue;
-
                 pixelToSurface[p] = s;
                 pixelToX[p]       = x;
                 pixelToY[p]       = y;
@@ -1049,130 +1078,147 @@ static void BuildSampleResolutionTable(
             }
         }
     }
+    st->numValid = numValid;
 
-    /* ------------------------------------------------------------------
-     * Pass 2 (omp parallel): evaluate GetFilteredTexel for every
-     * (texel, sample) pair and store the result in the SRT.
-     * ------------------------------------------------------------------ */
-    float *srtColors = malloc(numValid * numSamples * 3 * sizeof(float));
-    byte  *srtValid  = malloc(numValid * numSamples * sizeof(byte));
-    memset(srtValid, 0, numValid * numSamples * sizeof(byte));
+    st->validList      = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         numValid * sizeof(int), validList, &err);
+    st->pixelToSurface = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         totalPixels * sizeof(int), pixelToSurface, &err);
+    st->pixelToX       = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         totalPixels * sizeof(int), pixelToX, &err);
+    st->pixelToY       = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         totalPixels * sizeof(int), pixelToY, &err);
+    free(pixelToSurface); free(pixelToX); free(pixelToY); free(validList);
 
-    #pragma omp parallel for schedule(dynamic, 64) private(k)
-    for (int tid = 0; tid < numValid; tid++) {
-        int p  = validList[tid];
-        int si = pixelToSurface[p];
-        int lx = pixelToX[p];
-        int ly = pixelToY[p];
-
-        for (k = 0; k < numSamples; k++) {
-            float px = (float)lx + pattern[k][0] * radius;
-            float py = (float)ly + pattern[k][1] * radius;
-
-            float col[3];
-            int   base = tid * numSamples + k;
-            if (GetFilteredTexel(si, px, py, col, inputBuffer)) {
-                srtColors[base * 3 + 0] = col[0];
-                srtColors[base * 3 + 1] = col[1];
-                srtColors[base * 3 + 2] = col[2];
-                srtValid[base] = 1;
-            }
-        }
-    }
-
-    free(pixelToSurface);
-    free(pixelToX);
-    free(pixelToY);
-
-    out->validList  = validList;
-    out->srtColors  = srtColors;
-    out->srtValid   = srtValid;
-    out->numValid   = numValid;
-    out->numSamples = numSamples;
-}
-
-static void FreeSampleResolutionTable(sampleResTable_t *srt) {
-    free(srt->validList);
-    free(srt->srtColors);
-    free(srt->srtValid);
-    memset(srt, 0, sizeof(*srt));
+    _printf("  GPU state uploaded: %d planar surfaces, %d valid texels, %d partner links\n",
+            numPlanarSurfaces, numValid, totalLinks);
 }
 
 /*
 ================
-RunGpuAAFilter
+RunGpuAAKernel
 
-Uploads the SRT to the GPU, runs the aa_filter kernel, and downloads
-the result back into lightFloats.
-
-The output buffer covers the full atlas (same dimensions as lightFloats)
-so the kernel can scatter-write each texel's result directly to its
-atlas position without any CPU post-pass remapping.
+Dispatches the aa_filter kernel for one AA pass.
+Reads from current ping buffer, writes to pong, then swaps.
+pattern is a flat float[numSamples*2] array of (x,y) jitter offsets.
 ================
 */
-static void RunGpuAAFilter(sampleResTable_t *srt) {
-    cl_int   err;
-    cl_program prog;
-    cl_kernel  kernel;
-    int totalPixels = numLightBytes / 3;
-    size_t floatAtlasBytes = totalPixels * 3 * sizeof(float);
+static void RunGpuAAKernel(float *pattern, int numSamples, float radius) {
+    GpuLightmapState *st = &g_gpuLM;
+    cl_int err;
 
-    /* Load and compile kernel */
-    prog = BuildOpenCLProgram("aa_filter.cl", "");
-    if (!prog) {
-        _printf("RunGpuAAFilter: kernel build failed, falling back to CPU.\n");
-        return;
-    }
+    cl_program prog = BuildOpenCLProgramWithCommon("aa_filter.cl", "");
+    if (!prog) return;
 
-    kernel = clCreateKernel(prog, "aa_filter", &err);
-    if (err != CL_SUCCESS) {
-        _printf("RunGpuAAFilter: clCreateKernel failed (%d).\n", err);
-        clReleaseProgram(prog);
-        return;
-    }
+    cl_kernel kernel = clCreateKernel(prog, "aa_filter", &err);
+    if (err != CL_SUCCESS) { clReleaseProgram(prog); return; }
 
-    /* Create GPU buffers */
-    size_t srtColorBytes = (size_t)srt->numValid * srt->numSamples * 3 * sizeof(float);
-    size_t srtValidBytes = (size_t)srt->numValid * srt->numSamples * sizeof(byte);
-    size_t validListBytes= (size_t)srt->numValid * sizeof(int);
+    cl_mem src = st->pingIsA ? st->atlasA : st->atlasB;
+    cl_mem dst = st->pingIsA ? st->atlasB : st->atlasA;
 
-    cl_mem bufSrtColors = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                         srtColorBytes, srt->srtColors, &err);
-    cl_mem bufSrtValid  = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                         srtValidBytes, srt->srtValid, &err);
-    cl_mem bufOutput    = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                         floatAtlasBytes, lightFloats, &err);
-    cl_mem bufValidList = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                         validListBytes, srt->validList, &err);
+    size_t patBytes = (size_t)numSamples * 2 * sizeof(float);
+    cl_mem patBuf   = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                      patBytes, pattern, &err);
 
-    /* Set kernel arguments */
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &bufSrtColors);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &bufSrtValid);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &bufOutput);
-    clSetKernelArg(kernel, 3, sizeof(cl_mem), &bufValidList);
-    clSetKernelArg(kernel, 4, sizeof(int),    &srt->numSamples);
+    int arg = 0;
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &src);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &dst);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->maskBuf);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->surfacesBuf);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->partnerData);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->partnerOffsets);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->validList);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToSurface);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToX);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToY);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &patBuf);
+    clSetKernelArg(kernel, arg++, sizeof(int),    &numSamples);
+    clSetKernelArg(kernel, arg++, sizeof(float),  &radius);
 
-    /* Launch: one thread per valid texel */
-    size_t globalSize = (size_t)srt->numValid;
+    size_t globalSize = (size_t)st->numValid;
     err = clEnqueueNDRangeKernel(g_clQueue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) {
-        _printf("RunGpuAAFilter: clEnqueueNDRangeKernel failed (%d).\n", err);
-    } else {
-        /* Wait and read back only the texels that were written */
+    if (err == CL_SUCCESS) {
         clFinish(g_clQueue);
-        clEnqueueReadBuffer(g_clQueue, bufOutput, CL_TRUE, 0, floatAtlasBytes, lightFloats, 0, NULL, NULL);
+        st->pingIsA ^= 1; /* swap ping-pong */
+    } else {
+        _printf("RunGpuAAKernel: dispatch failed (%d)\n", err);
     }
 
-    clReleaseMemObject(bufSrtColors);
-    clReleaseMemObject(bufSrtValid);
-    clReleaseMemObject(bufOutput);
-    clReleaseMemObject(bufValidList);
+    clReleaseMemObject(patBuf);
     clReleaseKernel(kernel);
     clReleaseProgram(prog);
 }
 
-void AntiAliasLightmaps(void) {
+/*
+================
+RunGpuSmoothKernel
 
+Dispatches the smooth_filter kernel for one smoothing pass.
+Reads from current ping buffer, writes to pong, then swaps.
+All N passes share the same persistent GPU metadata — no re-upload.
+================
+*/
+static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
+    GpuLightmapState *st = &g_gpuLM;
+    cl_int err;
+
+    /* Build Gaussian weights on CPU (tiny: (2R+1)^2 floats) */
+    int   diam    = 2 * kernelRadius + 1;
+    int   wCount  = diam * diam;
+    float *weights = malloc(wCount * sizeof(float));
+    float  twoSigSq = 2.0f * sigma * sigma;
+    float  wSum = 0.0f;
+    for (int j = -kernelRadius; j <= kernelRadius; j++) {
+        for (int i = -kernelRadius; i <= kernelRadius; i++) {
+            float w = expf(-(float)(i*i + j*j) / twoSigSq);
+            weights[(j + kernelRadius) * diam + (i + kernelRadius)] = w;
+            wSum += w;
+        }
+    }
+    for (int wi = 0; wi < wCount; wi++) weights[wi] /= wSum;
+
+    cl_program prog = BuildOpenCLProgramWithCommon("smooth_filter.cl", "");
+    if (!prog) { free(weights); return; }
+
+    cl_kernel kernel = clCreateKernel(prog, "smooth_filter", &err);
+    if (err != CL_SUCCESS) { free(weights); clReleaseProgram(prog); return; }
+
+    cl_mem src     = st->pingIsA ? st->atlasA : st->atlasB;
+    cl_mem dst     = st->pingIsA ? st->atlasB : st->atlasA;
+    cl_mem wBuf    = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                     wCount * sizeof(float), weights, &err);
+    free(weights);
+
+    int arg = 0;
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &src);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &dst);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->maskBuf);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->surfacesBuf);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->partnerData);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->partnerOffsets);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->validList);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToSurface);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToX);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &st->pixelToY);
+    clSetKernelArg(kernel, arg++, sizeof(cl_mem), &wBuf);
+    clSetKernelArg(kernel, arg++, sizeof(int),    &kernelRadius);
+
+    size_t globalSize = (size_t)st->numValid;
+    err = clEnqueueNDRangeKernel(g_clQueue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL);
+    if (err == CL_SUCCESS) {
+        clFinish(g_clQueue);
+        st->pingIsA ^= 1; /* swap ping-pong */
+    } else {
+        _printf("RunGpuSmoothKernel: dispatch failed (%d)\n", err);
+    }
+
+    clReleaseMemObject(wBuf);
+    clReleaseKernel(kernel);
+    clReleaseProgram(prog);
+}
+
+
+void AntiAliasLightmaps(void) {
 	int x, y, p, s, k;
 	int numPixels;
 	float *tempFloats;
@@ -1188,36 +1234,38 @@ void AntiAliasLightmaps(void) {
 
 	float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
 
-    // AA for Triangle Soups (VPPS Spatial Hash)
-    _printf("  Volumetric AA (Trisoups): ");
     int progress = 0;
-    #pragma omp parallel for schedule(dynamic, 1) private(s)
-    for (s = 0; s < numDrawSurfaces; s++) {
-        ProcessTrisoupVolumetric(s, radius, tempFloats, qtrue);
-        
-        int currentProgress;
-        #pragma omp atomic capture
-        currentProgress = ++progress;
-
-        if (numDrawSurfaces >= 10) {
-            int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
-            int newPercent = (currentProgress * 10) / numDrawSurfaces;
-            if (newPercent > oldPercent) {
-                ThreadLock();
-                _printf("%d...", newPercent);
-                ThreadUnlock();
+    // AA for Triangle Soups (VPPS Spatial Hash — always CPU, 3D world-space)
+    if (!useOpenCL) {
+        _printf("  Volumetric AA (Trisoups): ");
+        progress = 0;
+        #pragma omp parallel for schedule(dynamic, 1) private(s)
+        for (s = 0; s < numDrawSurfaces; s++) {
+            ProcessTrisoupVolumetric(s, radius, tempFloats, qtrue);
+            int currentProgress;
+            #pragma omp atomic capture
+            currentProgress = ++progress;
+            if (numDrawSurfaces >= 10) {
+                int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
+                int newPercent = (currentProgress * 10) / numDrawSurfaces;
+                if (newPercent > oldPercent) {
+                    ThreadLock(); _printf("%d...", newPercent); ThreadUnlock();
+                }
             }
-        }    }
-    _printf("Done\n");
+        }
+        _printf("Done\n");
+    }
 
 	if (lightmapAA == 1) {
         if (useOpenCL) {
-            _printf("  Image-space AA (Mode 1 - GPU): building SRT...\n");
-            sampleResTable_t srt;
-            BuildSampleResolutionTable(ssPattern8, SS_PATTERN8_COUNT, radius, tempFloats, &srt);
-            _printf("  Image-space AA (Mode 1 - GPU): running kernel (%d texels)...\n", srt.numValid);
-            RunGpuAAFilter(&srt);
-            FreeSampleResolutionTable(&srt);
+            _printf("  Image-space AA (Mode 1 - GPU): dispatching kernel (%d texels)...\n", g_gpuLM.numValid);
+            /* Flatten ssPattern8 to a float[] for the kernel */
+            float pat[SS_PATTERN8_COUNT * 2];
+            for (int ki = 0; ki < SS_PATTERN8_COUNT; ki++) {
+                pat[ki*2+0] = ssPattern8[ki][0];
+                pat[ki*2+1] = ssPattern8[ki][1];
+            }
+            RunGpuAAKernel(pat, SS_PATTERN8_COUNT, radius);
             _printf("  Image-space AA (Mode 1 - GPU): Done\n");
         } else {
         _printf("  Image-space AA (Mode 1): ");
@@ -1225,67 +1273,50 @@ void AntiAliasLightmaps(void) {
 		#pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
 		for (s = 0; s < numPlanarSurfaces; s++) {
 			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
-			
 			for (y = 0; y < ds->lightmapHeight; y++) {
 				for (x = 0; x < ds->lightmapWidth; x++) {
 					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
 					if (lightAlphaMask[p] == 0) continue;
-
 					float sumColor[3] = {0, 0, 0};
 					float sumWeight = 0.0f;
-
 					for (k = 0; k < SS_PATTERN8_COUNT; k++) {
 						float px = (float)x + ssPattern8[k][0] * radius;
 						float py = (float)y + ssPattern8[k][1] * radius;
-
 						float sampleColor[3];
 						if (GetFilteredTexel(s, px, py, sampleColor, tempFloats)) {
 							VectorAdd(sumColor, sampleColor, sumColor);
 							sumWeight += 1.0f;
 						}
 					}
-
-					if (sumWeight > 0.0001f) {
+					if (sumWeight > 0.0001f)
 						VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
-					}
 				}
 			}
             int currentProgress;
             #pragma omp atomic capture
             currentProgress = ++progress;
-
             if (numPlanarSurfaces >= 10) {
                 int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
                 int newPercent = (currentProgress * 10) / numPlanarSurfaces;
-                if (newPercent > oldPercent) {
-                    ThreadLock();
-                    _printf("%d...", newPercent);
-                    ThreadUnlock();
-                }
+                if (newPercent > oldPercent) { ThreadLock(); _printf("%d...", newPercent); ThreadUnlock(); }
             }
 		}
         _printf("Done\n");
         } // end CPU fallback
 	} else if (lightmapAA == 2) {
         if (useOpenCL) {
-            _printf("  Image-space AA (Mode 2 - GPU): building 32-sample SRT...\n");
-            // Pattern for Mode 2: 4 sub-texels, each with 8 jitter samples
+            _printf("  Image-space AA (Mode 2 - GPU): dispatching 32-sample kernel (%d texels)...\n", g_gpuLM.numValid);
             int numSamples = 32;
-            float pattern32[32][2];
+            float pat32[32 * 2];
             for (int sub = 0; sub < 4; sub++) {
                 float dx = (sub % 2) ? 0.25f : -0.25f;
                 float dy = (sub / 2) ? 0.25f : -0.25f;
-                for (k = 0; k < (numSamples / 4); k++) {
-                    pattern32[sub * 8 + k][0] = dx + ssPattern8[k][0] * radius;
-                    pattern32[sub * 8 + k][1] = dy + ssPattern8[k][1] * radius;
+                for (k = 0; k < SS_PATTERN8_COUNT; k++) {
+                    pat32[(sub * 8 + k)*2+0] = dx + ssPattern8[k][0] * radius;
+                    pat32[(sub * 8 + k)*2+1] = dy + ssPattern8[k][1] * radius;
                 }
             }
-
-            sampleResTable_t srt;
-            BuildSampleResolutionTable(pattern32, 32, 1.0f, tempFloats, &srt);
-            _printf("  Image-space AA (Mode 2 - GPU): running kernel (%d texels)...\n", srt.numValid);
-            RunGpuAAFilter(&srt);
-            FreeSampleResolutionTable(&srt);
+            RunGpuAAKernel(pat32, numSamples, 1.0f);
             _printf("  Image-space AA (Mode 2 - GPU): Done\n");
         } else {
         _printf("  Image-space AA (Mode 2 - High Fidelity): ");
@@ -1293,22 +1324,17 @@ void AntiAliasLightmaps(void) {
 		#pragma omp parallel for schedule(dynamic, 1) private(s, ds, x, y, p, k)
 		for (s = 0; s < numPlanarSurfaces; s++) {
 			ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
-
 			int W = ds->lightmapWidth, H = ds->lightmapHeight;
 			if (W <= 0 || H <= 0) continue;
-
 			int W2 = W * 2, H2 = H * 2;
-			float *temp2x = malloc(W2 * H2 * 3 * sizeof(float));
-			byte *mask2x = malloc(W2 * H2 * sizeof(byte));
-			float *blur2x = malloc(W2 * H2 * 3 * sizeof(float));
-			byte *blurMask2x = malloc(W2 * H2 * sizeof(byte));
+			float *temp2x    = malloc(W2 * H2 * 3 * sizeof(float));
+			byte  *mask2x    = malloc(W2 * H2 * sizeof(byte));
+			float *blur2x    = malloc(W2 * H2 * 3 * sizeof(float));
+			byte  *blurMask2x = malloc(W2 * H2 * sizeof(byte));
 
-			// 1. Upscale
 			for (int Y = 0; Y < H2; Y++) {
 				for (int X = 0; X < W2; X++) {
-					float px = (float)X * 0.5f - 0.25f;
-					float py = (float)Y * 0.5f - 0.25f;
-
+					float px = (float)X * 0.5f - 0.25f, py = (float)Y * 0.5f - 0.25f;
 					float sampleColor[3];
 					if (GetFilteredTexel(s, px, py, sampleColor, tempFloats)) {
 						mask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
@@ -1319,205 +1345,274 @@ void AntiAliasLightmaps(void) {
 					}
 				}
 			}
-
-			// 2. Blur (Pattern)
 			for (int Y = 0; Y < H2; Y++) {
 				for (int X = 0; X < W2; X++) {
 					if (mask2x[Y * W2 + X] == 0) { blurMask2x[Y * W2 + X] = 0; continue; }
-					
 					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 					for (k = 0; k < SS_PATTERN8_COUNT; k++) {
 						float px = (float)X + ssPattern8[k][0] * radius * 2.0f;
 						float py = (float)Y + ssPattern8[k][1] * radius * 2.0f;
 						int ix = (int)roundf(px), iy = (int)roundf(py);
-						
-						float sampleColor[3];
+						float sc[3];
 						if (ix >= 0 && ix < W2 && iy >= 0 && iy < H2) {
-							if (mask2x[iy * W2 + ix] != 0) {
-								VectorAdd(sumColor, &temp2x[(iy * W2 + ix) * 3], sumColor);
-								sumWeight += 1.0f;
-							}
+							if (mask2x[iy * W2 + ix] != 0) { VectorAdd(sumColor, &temp2x[(iy*W2+ix)*3], sumColor); sumWeight += 1.0f; }
 						} else {
-							// Kernel reached beyond the upscaled grid, reach out to world space
-							float srcX = px * 0.5f - 0.25f;
-							float srcY = py * 0.5f - 0.25f;
-							if (GetFilteredTexel(s, srcX, srcY, sampleColor, tempFloats)) {
-								VectorAdd(sumColor, sampleColor, sumColor);
-								sumWeight += 1.0f;
-							}
+							if (GetFilteredTexel(s, px*0.5f-0.25f, py*0.5f-0.25f, sc, tempFloats)) { VectorAdd(sumColor, sc, sumColor); sumWeight += 1.0f; }
 						}
 					}
-					if (sumWeight > 0.0001f) {
-						blurMask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
-						VectorScale(sumColor, 1.0f / sumWeight, &blur2x[(Y * W2 + X) * 3]);
-					} else blurMask2x[Y * W2 + X] = 0;
+					if (sumWeight > 0.0001f) { blurMask2x[Y*W2+X] = ALPHA_SURF_WORLD; VectorScale(sumColor, 1.0f/sumWeight, &blur2x[(Y*W2+X)*3]); }
+					else blurMask2x[Y * W2 + X] = 0;
 				}
 			}
-
-			// 3. Reduce back
 			for (y = 0; y < H; y++) {
 				for (x = 0; x < W; x++) {
 					p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
 					if (lightAlphaMask[p] == 0) continue;
 					float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
-					for (int dy = 0; dy < 2; dy++) {
-						for (int dx = 0; dx < 2; dx++) {
-							int X = x * 2 + dx, Y = y * 2 + dy;
-							if (blurMask2x[Y * W2 + X] != 0) {
-								VectorAdd(sumColor, &blur2x[(Y * W2 + X) * 3], sumColor);
-								sumWeight += 1.0f;
-							}
-						}
+					for (int dy = 0; dy < 2; dy++) for (int dx = 0; dx < 2; dx++) {
+						int X = x*2+dx, Y = y*2+dy;
+						if (blurMask2x[Y*W2+X]) { VectorAdd(sumColor, &blur2x[(Y*W2+X)*3], sumColor); sumWeight += 1.0f; }
 					}
-					if (sumWeight > 0.0001f) VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
+					if (sumWeight > 0.0001f) VectorScale(sumColor, 1.0f/sumWeight, &lightFloats[p * 3]);
 				}
 			}
 			free(temp2x); free(mask2x); free(blur2x); free(blurMask2x);
-
             int currentProgress;
             #pragma omp atomic capture
             currentProgress = ++progress;
-
             if (numPlanarSurfaces >= 10) {
                 int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
                 int newPercent = (currentProgress * 10) / numPlanarSurfaces;
-                if (newPercent > oldPercent) {
-                    ThreadLock();
-                    _printf("%d...", newPercent);
-                    ThreadUnlock();
-                }
+                if (newPercent > oldPercent) { ThreadLock(); _printf("%d...", newPercent); ThreadUnlock(); }
             }
 		}
         _printf("Done\n");
         } // end CPU fallback
 	}
 	free(tempFloats);
-    _printf("  Total Anti-Aliasing time: %.2f seconds\n", I_FloatTime() - startAA);
 }
 
+/*
+================
+SmoothLightmaps
+
+Applies one Gaussian smoothing pass to planar surfaces (GPU or CPU)
+and the 3D VPPS blur to triangle soups (CPU, always).
+
+On the GPU path the planar pass dispatches RunGpuSmoothKernel which
+ping-pongs entirely within VRAM — no readback until PostProcessLightmaps
+calls GpuLightmapState_Download() after all passes are done.
+================
+*/
 void SmoothLightmaps(float radius) {
 	int i, j, x, y, p, s;
-	float *tempFloats;
-	float kernel[MAX_KERNEL_RADIUS * 2 + 1][MAX_KERNEL_RADIUS * 2 + 1];
-	int kernelRadius;
-	float sigma;
 	dsurface_t *ds;
+	int progress = 0;
 
 	if (radius <= 0.0f || !lightFloats || !lightAlphaMask) return;
 
-	sigma = radius / 3.0f;
+	float sigma = radius / 3.0f;
 	if (sigma < 0.5f) sigma = 0.5f;
-	kernelRadius = (int)ceil(radius);
+	int kernelRadius = (int)ceil(radius);
 	if (kernelRadius > MAX_KERNEL_RADIUS) kernelRadius = MAX_KERNEL_RADIUS;
 
-	// Prepare 2D Gaussian Kernel
-	float kernelSum = 0.0f;
-	for (j = -kernelRadius; j <= kernelRadius; j++) {
-		for (i = -kernelRadius; i <= kernelRadius; i++) {
-			float distSq = (float)(i * i + j * j);
-			kernel[j + kernelRadius][i + kernelRadius] = expf(-distSq / (2.0f * sigma * sigma));
-			kernelSum += kernel[j + kernelRadius][i + kernelRadius];
-		}
-	}
-	for (j = 0; j <= kernelRadius * 2; j++) {
-		for (i = 0; i <= kernelRadius * 2; i++) {
-			kernel[j][i] /= kernelSum;
-		}
-	}
+    /* --- Planar surfaces: GPU or CPU --- */
+    if (useOpenCL) {
+        RunGpuSmoothKernel(kernelRadius, sigma);
+    } else {
+        /* CPU: build normalized 2D Gaussian kernel */
+        float kernel[MAX_KERNEL_RADIUS * 2 + 1][MAX_KERNEL_RADIUS * 2 + 1];
+        float kernelSum = 0.0f;
+        for (j = -kernelRadius; j <= kernelRadius; j++)
+            for (i = -kernelRadius; i <= kernelRadius; i++) {
+                kernel[j+kernelRadius][i+kernelRadius] = expf(-(float)(i*i+j*j) / (2.0f*sigma*sigma));
+                kernelSum += kernel[j+kernelRadius][i+kernelRadius];
+            }
+        for (j = 0; j <= kernelRadius*2; j++)
+            for (i = 0; i <= kernelRadius*2; i++)
+                kernel[j][i] /= kernelSum;
 
-	int numPixels = numLightBytes / 3;
-	tempFloats = malloc(numPixels * sizeof(float) * 3);
-	if (!tempFloats) return;
-	memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
+        int numPixels = numLightBytes / 3;
+        float *tempFloats = malloc(numPixels * sizeof(float) * 3);
+        if (!tempFloats) return;
+        memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
 
-	// --- Single Pass Blur (2D for Planar/Patch, 3D for Trisoups) ---
-    int progress = 0;
-	#pragma omp parallel for schedule(dynamic, 1) private(s, ds, y, x, i, j, p)
-	for (s = 0; s < numPlanarSurfaces; s++) {
-		ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
-
-		for (y = 0; y < ds->lightmapHeight; y++) {
-			for (x = 0; x < ds->lightmapWidth; x++) {
-				p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-				if (lightAlphaMask[p] == 0) continue;
-				
-				float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
-
-				for (j = -kernelRadius; j <= kernelRadius; j++) {
-					for (i = -kernelRadius; i <= kernelRadius; i++) {
-						float weight = kernel[j + kernelRadius][i + kernelRadius];
-						float sampleColor[3];
-						
-						if (GetFilteredTexel(s, (float)(x + i), (float)(y + j), sampleColor, tempFloats)) {
-							VectorMA(sumColor, weight, sampleColor, sumColor);
-							sumWeight += weight;
-						}
-					}
-				}
-				
-				if (sumWeight > 0.0001f) {
-					VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
-				}
-			}
-		}
-        int currentProgress;
-        #pragma omp atomic capture
-        currentProgress = ++progress;
-
-        if (numPlanarSurfaces >= 10) {
-            int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
-            int newPercent = (currentProgress * 10) / numPlanarSurfaces;
-            if (newPercent > oldPercent) {
-                ThreadLock();
-                _printf(".");
-                ThreadUnlock();
+        progress = 0;
+        #pragma omp parallel for schedule(dynamic, 1) private(s, ds, y, x, i, j, p)
+        for (s = 0; s < numPlanarSurfaces; s++) {
+            ds = &drawSurfaces[planarSurfaces[s].surfaceNum];
+            for (y = 0; y < ds->lightmapHeight; y++) {
+                for (x = 0; x < ds->lightmapWidth; x++) {
+                    p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                    if (lightAlphaMask[p] == 0) continue;
+                    float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
+                    for (j = -kernelRadius; j <= kernelRadius; j++) {
+                        for (i = -kernelRadius; i <= kernelRadius; i++) {
+                            float weight = kernel[j+kernelRadius][i+kernelRadius];
+                            float sampleColor[3];
+                            if (GetFilteredTexel(s, (float)(x+i), (float)(y+j), sampleColor, tempFloats)) {
+                                VectorMA(sumColor, weight, sampleColor, sumColor);
+                                sumWeight += weight;
+                            }
+                        }
+                    }
+                    if (sumWeight > 0.0001f)
+                        VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
+                }
+            }
+            int currentProgress;
+            #pragma omp atomic capture
+            currentProgress = ++progress;
+            if (numPlanarSurfaces >= 10) {
+                int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+                int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+                if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
         }
-	}
-
-	// 3D VPPS Blur for Triangle Soups
-    progress = 0;
-	#pragma omp parallel for schedule(dynamic, 1) private(s)
-    for (s = 0; s < numDrawSurfaces; s++) {
-        ProcessTrisoupVolumetric(s, radius, tempFloats, qfalse);
-
-        int currentProgress;
-        #pragma omp atomic capture
-        currentProgress = ++progress;
-
-        if (numDrawSurfaces >= 10) {
-            int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
-            int newPercent = (currentProgress * 10) / numDrawSurfaces;
-            if (newPercent > oldPercent) {
-                ThreadLock();
-                _printf(".");
-                ThreadUnlock();
-            }
-        }
+        free(tempFloats);
     }
 
-	free(tempFloats);
+	/* --- Triangle Soups: CPU only, and only when not on GPU path.
+	   In GPU mode, PostProcessLightmaps runs this after GpuLightmapState_Download()
+	   so the results land on top of the downloaded planar data, not under it. --- */
+	if (!useOpenCL) {
+        int numPixels = numLightBytes / 3;
+        float *tempFloats = malloc(numPixels * sizeof(float) * 3);
+        if (!tempFloats) return;
+        memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
+        progress = 0;
+        #pragma omp parallel for schedule(dynamic, 1) private(s)
+        for (s = 0; s < numDrawSurfaces; s++) {
+            ProcessTrisoupVolumetric(s, radius, tempFloats, qfalse);
+            int currentProgress;
+            #pragma omp atomic capture
+            currentProgress = ++progress;
+            if (numDrawSurfaces >= 10) {
+                int oldPercent = ((currentProgress - 1) * 10) / numDrawSurfaces;
+                int newPercent = (currentProgress * 10) / numDrawSurfaces;
+                if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
+            }
+        }
+        free(tempFloats);
+	}
 }
 
 void PostProcessLightmaps(void) {
 	_printf("--- Post Processing ---\n");
 	ScanLightmapIntensity();
-
 	BuildPlanarSurfaceIndex();
 
-	if (lightmapAA) {
-		_printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
-		AntiAliasLightmaps();
-	}
+    if (useOpenCL) {
+        /* ==== GPU PATH ==== */
+        int totalPixels  = numLightBytes / 3;
+        size_t atlasBytes = (size_t)totalPixels * 3 * sizeof(float);
 
-	if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
-		_printf("Smoothing (%d passes, radius %.2f):", lightmapSmoothPasses, lightmapSmoothRadius);
-		for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
-			_printf(" %d", pnum);
-			SmoothLightmaps(lightmapSmoothRadius);
-		}
-		_printf(" Done\n");
-	}
+        /* Step 1 — save pre-filter state for trisoup AA */
+        float *preFilterCopy = NULL;
+        if (lightmapAA) {
+            preFilterCopy = malloc(atlasBytes);
+            if (preFilterCopy) memcpy(preFilterCopy, lightFloats, atlasBytes);
+        }
+
+        /* Step 2 — upload */
+        _printf("  Uploading GPU lightmap state...\n");
+        GpuLightmapState_Upload();
+
+        /* Step 3a — GPU planar AA */
+        double startAA = I_FloatTime();
+        if (lightmapAA) {
+            _printf("Applying Anti-Aliasing pass (Mode %d) - GPU planar...\n", lightmapAA);
+            AntiAliasLightmaps();
+        }
+
+        /* Step 3b — GPU planar smooth (all passes in VRAM) */
+        double startSmooth = I_FloatTime();
+        if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+            float sigma = lightmapSmoothRadius / 3.0f;
+            if (sigma < 0.5f) sigma = 0.5f;
+            int kr = (int)ceil(lightmapSmoothRadius);
+            if (kr > MAX_KERNEL_RADIUS) kr = MAX_KERNEL_RADIUS;
+            _printf("Smoothing (%d passes, radius %.2f) GPU planar: ", lightmapSmoothPasses, lightmapSmoothRadius);
+            for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+                _printf("%d ", pnum);
+                RunGpuSmoothKernel(kr, sigma);
+            }
+            _printf("Done\n");
+        }
+
+        /* Step 4 — single readback */
+        _printf("  Downloading GPU lightmap result...\n");
+        GpuLightmapState_Download();
+        GpuLightmapState_Free();
+
+        /* Step 5 — CPU trisoup AA (reads preFilterCopy, writes into lightFloats) */
+        if (lightmapAA && preFilterCopy) {
+            float radius = lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f;
+            _printf("  Volumetric AA (Trisoups - CPU): ");
+            int progress = 0;
+            #pragma omp parallel for schedule(dynamic, 1)
+            for (int s = 0; s < numDrawSurfaces; s++) {
+                ProcessTrisoupVolumetric(s, radius, preFilterCopy, qtrue);
+                int cur; #pragma omp atomic capture
+                cur = ++progress;
+                if (numDrawSurfaces >= 10) {
+                    int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
+                    if (np > op) { ThreadLock(); _printf("%d...", np); ThreadUnlock(); }
+                }
+            }
+            _printf("Done\n");
+            free(preFilterCopy);
+        }
+        if (lightmapAA) {
+            _printf("  Total Anti-Aliasing time: %.2f seconds\n", I_FloatTime() - startAA);
+        }
+
+        /* Step 6 — CPU trisoup smooth (runs on already-downloaded lightFloats) */
+        if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+            float radius = lightmapSmoothRadius;
+            _printf("Smoothing (%d passes, radius %.2f) Trisoup CPU: ", lightmapSmoothPasses, radius);
+            for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+                _printf("%d ", pnum);
+                int numPx = numLightBytes / 3;
+                float *tmpF = malloc((size_t)numPx * 3 * sizeof(float));
+                if (!tmpF) break;
+                memcpy(tmpF, lightFloats, (size_t)numPx * 3 * sizeof(float));
+                int progress = 0;
+                #pragma omp parallel for schedule(dynamic, 1)
+                for (int s = 0; s < numDrawSurfaces; s++) {
+                    ProcessTrisoupVolumetric(s, radius, tmpF, qfalse);
+                    int cur; #pragma omp atomic capture
+                    cur = ++progress;
+                    if (numDrawSurfaces >= 10) {
+                        int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
+                        if (np > op) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    }
+                }
+                free(tmpF);
+            }
+            _printf("Done\n");
+            _printf("  Total Smoothing time: %.2f seconds\n", I_FloatTime() - startSmooth);
+        }
+
+    } else {
+        /* ==== CPU PATH (unchanged) ==== */
+        if (lightmapAA) {
+            double startAA = I_FloatTime();
+            _printf("Applying Anti-Aliasing pass (Mode %d)...\n", lightmapAA);
+            AntiAliasLightmaps();
+            _printf("  Total Anti-Aliasing time: %.2f seconds\n", I_FloatTime() - startAA);
+        }
+        if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+            double startSmooth = I_FloatTime();
+            _printf("Smoothing (%d passes, radius %.2f):", lightmapSmoothPasses, lightmapSmoothRadius);
+            for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+                _printf(" %d", pnum);
+                SmoothLightmaps(lightmapSmoothRadius);
+            }
+            _printf(" Done\n");
+            _printf("  Total Smoothing time: %.2f seconds\n", I_FloatTime() - startSmooth);
+        }
+    }
 
 	FreePlanarSurfaceIndex();
 }

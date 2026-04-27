@@ -1,14 +1,18 @@
 #include "light.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 cl_platform_id g_clPlatform;
-cl_device_id g_clDevice;
-cl_context g_clContext;
+cl_device_id   g_clDevice;
+cl_context     g_clContext;
 cl_command_queue g_clQueue;
 
-qboolean useOpenCL = qfalse;
+qboolean useOpenCL    = qfalse;
 qboolean openclEnabled = qtrue;
+
+/* Persistent GPU state shared by all post-processing filters */
+GpuLightmapState g_gpuLM;
 
 /*
 ================
@@ -17,14 +21,14 @@ InitOpenCL
 */
 void InitOpenCL(void) {
     cl_uint numPlatforms;
-    cl_int err;
+    cl_int  err;
     char platformName[128];
     char deviceName[128];
 
     _printf("--- InitOpenCL ---\n");
     useOpenCL = qfalse;
+    memset(&g_gpuLM, 0, sizeof(g_gpuLM));
 
-    // Get first platform
     err = clGetPlatformIDs(1, &g_clPlatform, &numPlatforms);
     if (err != CL_SUCCESS || numPlatforms == 0) {
         _printf("No OpenCL platforms found.\n");
@@ -34,12 +38,9 @@ void InitOpenCL(void) {
     clGetPlatformInfo(g_clPlatform, CL_PLATFORM_NAME, sizeof(platformName), platformName, NULL);
     _printf("Platform: %s\n", platformName);
 
-    // Get first GPU device
     err = clGetDeviceIDs(g_clPlatform, CL_DEVICE_TYPE_GPU, 1, &g_clDevice, NULL);
-    if (err != CL_SUCCESS) {
-        // Fallback to any device if no GPU
+    if (err != CL_SUCCESS)
         err = clGetDeviceIDs(g_clPlatform, CL_DEVICE_TYPE_ALL, 1, &g_clDevice, NULL);
-    }
 
     if (err != CL_SUCCESS) {
         _printf("No OpenCL devices found.\n");
@@ -49,14 +50,12 @@ void InitOpenCL(void) {
     clGetDeviceInfo(g_clDevice, CL_DEVICE_NAME, sizeof(deviceName), deviceName, NULL);
     _printf("Device:   %s\n", deviceName);
 
-    // Create context
     g_clContext = clCreateContext(NULL, 1, &g_clDevice, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
         _printf("Failed to create OpenCL context.\n");
         return;
     }
 
-    // Create command queue
 #if CL_TARGET_OPENCL_VERSION >= 200
     g_clQueue = clCreateCommandQueueWithProperties(g_clContext, g_clDevice, NULL, &err);
 #else
@@ -80,14 +79,8 @@ ShutdownOpenCL
 void ShutdownOpenCL(void) {
     if (!useOpenCL) return;
 
-    if (g_clQueue) {
-        clReleaseCommandQueue(g_clQueue);
-        g_clQueue = NULL;
-    }
-    if (g_clContext) {
-        clReleaseContext(g_clContext);
-        g_clContext = NULL;
-    }
+    if (g_clQueue)   { clReleaseCommandQueue(g_clQueue);  g_clQueue   = NULL; }
+    if (g_clContext) { clReleaseContext(g_clContext);      g_clContext = NULL; }
 
     useOpenCL = qfalse;
 }
@@ -95,55 +88,157 @@ void ShutdownOpenCL(void) {
 /*
 ================
 BuildOpenCLProgram
+
+Loads and compiles a single .cl file from the kernels/ directory.
 ================
 */
 cl_program BuildOpenCLProgram(const char *filename, const char *options) {
-    cl_program program;
-    cl_int err;
-    char *source;
-    int fileSize;
-    size_t size;
-    char fullPath[MAX_OS_PATH];
+    cl_program prog;
+    cl_int     err;
+    char      *src;
+    int        fileSize;
+    size_t     size;
+    char       fullPath[MAX_OS_PATH];
 
     if (!useOpenCL) return NULL;
 
     sprintf(fullPath, "kernels/%s", filename);
-    fileSize = LoadFile(fullPath, (void **)&source);
+    fileSize = LoadFile(fullPath, (void **)&src);
     if (fileSize <= 0) {
         _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
         return NULL;
     }
 
     size = (size_t)fileSize;
-
-    // Create program from source
-    program = clCreateProgramWithSource(g_clContext, 1, (const char **)&source, &size, &err);
-    free(source);
+    prog = clCreateProgramWithSource(g_clContext, 1, (const char **)&src, &size, &err);
+    free(src);
 
     if (err != CL_SUCCESS) {
         _printf("BuildOpenCLProgram: Failed to create program from %s\n", filename);
         return NULL;
     }
 
-    // Build program
-    err = clBuildProgram(program, 1, &g_clDevice, options, NULL, NULL);
+    err = clBuildProgram(prog, 1, &g_clDevice, options, NULL, NULL);
     if (err != CL_SUCCESS) {
-        char *log;
         size_t logSize;
-
-        _printf("BuildOpenCLProgram: Failed to build %s\n", filename);
-
-        // Get build log
-        clGetProgramBuildInfo(program, g_clDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
-        log = malloc(logSize);
-        clGetProgramBuildInfo(program, g_clDevice, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
-        _printf("Build Log:\n%s\n", log);
+        clGetProgramBuildInfo(prog, g_clDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
+        char *log = malloc(logSize);
+        clGetProgramBuildInfo(prog, g_clDevice, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
+        _printf("BuildOpenCLProgram: Build failed for %s\nLog:\n%s\n", filename, log);
         free(log);
-
-        clReleaseProgram(program);
+        clReleaseProgram(prog);
         return NULL;
     }
 
-    return program;
+    return prog;
 }
 
+/*
+================
+BuildOpenCLProgramWithCommon
+
+Compiles lm_common.cl prepended to <filename>.
+This is the standard builder for all lightmap post-processing filters.
+================
+*/
+cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *options) {
+    if (!useOpenCL) return NULL;
+
+    char   commonPath[MAX_OS_PATH], filterPath[MAX_OS_PATH];
+    char  *commonSrc = NULL, *filterSrc = NULL;
+    int    commonSize, filterSize;
+    cl_program prog = NULL;
+    cl_int  err;
+
+    sprintf(commonPath, "kernels/lm_common.cl");
+    sprintf(filterPath,  "kernels/%s", filename);
+
+    commonSize = LoadFile(commonPath, (void **)&commonSrc);
+    if (commonSize <= 0) {
+        _printf("BuildOpenCLProgramWithCommon: Could not load lm_common.cl\n");
+        return NULL;
+    }
+
+    filterSize = LoadFile(filterPath, (void **)&filterSrc);
+    if (filterSize <= 0) {
+        _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", filterPath);
+        free(commonSrc);
+        return NULL;
+    }
+
+    const char *sources[2] = { commonSrc, filterSrc };
+    size_t      sizes[2]   = { (size_t)commonSize, (size_t)filterSize };
+
+    prog = clCreateProgramWithSource(g_clContext, 2, sources, sizes, &err);
+    free(commonSrc);
+    free(filterSrc);
+
+    if (err != CL_SUCCESS) {
+        _printf("BuildOpenCLProgramWithCommon: clCreateProgramWithSource failed (%d)\n", err);
+        return NULL;
+    }
+
+    /* Inject atlas dimensions as compile-time constants so lm_common.cl can use them */
+    char fullOpts[256];
+    snprintf(fullOpts, sizeof(fullOpts),
+             "-DLIGHTMAP_WIDTH=%d -DLIGHTMAP_HEIGHT=%d %s",
+             LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT,
+             options ? options : "");
+
+    err = clBuildProgram(prog, 1, &g_clDevice, fullOpts, NULL, NULL);
+    if (err != CL_SUCCESS) {
+        size_t logSize;
+        clGetProgramBuildInfo(prog, g_clDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
+        char *log = malloc(logSize);
+        clGetProgramBuildInfo(prog, g_clDevice, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
+        _printf("BuildOpenCLProgramWithCommon: Build failed for %s\nLog:\n%s\n", filename, log);
+        free(log);
+        clReleaseProgram(prog);
+        return NULL;
+    }
+
+    return prog;
+}
+
+/*
+================
+GpuLightmapState_Free
+
+Releases all persistent GPU buffers.
+================
+*/
+void GpuLightmapState_Free(void) {
+    GpuLightmapState *s = &g_gpuLM;
+
+#define REL(b) if (b) { clReleaseMemObject(b); b = NULL; }
+    REL(s->atlasA);
+    REL(s->atlasB);
+    REL(s->maskBuf);
+    REL(s->surfacesBuf);
+    REL(s->partnerData);
+    REL(s->partnerOffsets);
+    REL(s->validList);
+    REL(s->pixelToSurface);
+    REL(s->pixelToX);
+    REL(s->pixelToY);
+#undef REL
+
+    s->numPlanarSurfaces = 0;
+    s->numValid          = 0;
+    s->totalAtlasPixels  = 0;
+    s->pingIsA           = 1;
+}
+
+/*
+================
+GpuLightmapState_Download
+
+Reads back the current output atlas buffer into lightFloats.
+================
+*/
+void GpuLightmapState_Download(void) {
+    GpuLightmapState *s = &g_gpuLM;
+    cl_mem src = s->pingIsA ? s->atlasA : s->atlasB;
+    size_t bytes = (size_t)s->totalAtlasPixels * 3 * sizeof(float);
+    clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, bytes, lightFloats, 0, NULL, NULL);
+}

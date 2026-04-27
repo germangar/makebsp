@@ -10,6 +10,10 @@ Each thread processes one valid texel and iterates over 1 (smooth) or
 8 (AA) jitter sample positions.
 
 All math is identical to ProcessTrisoupVolumetric in lm_postprocess.c.
+
+lm_common.cl is prepended by BuildOpenCLProgramWithCommon() — GpuPlanarSurface
+and gpu_sample_masked_bilinear are available but not used by this kernel
+(it operates in 3D world space, not 2D image space).
 ================
 */
 

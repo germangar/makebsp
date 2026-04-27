@@ -1,34 +1,32 @@
 /*
 ================
-aa_filter.cl
+smooth_filter.cl
 
-Image-space Anti-Aliasing filter kernel.
+2D Gaussian smoothing filter for planar lightmap surfaces.
 
-Previously relied on a CPU-built Sample Resolution Table (SRT).
-Now uses gpu_get_filtered_texel() from lm_common.cl directly, which
-enables in-GPU ping-pong across passes and eliminates intermediate
-CPU-GPU transfers.
+Performs one pass of Gaussian blur using gpu_get_filtered_texel()
+for cross-surface seam correctness. Run multiple times for multi-pass
+smoothing by the CPU ping-pong loop — no readback between passes.
 
-Kernel args:
+Kernel args (same metadata signature as aa_filter for reuse):
   atlasIn       [totalPixels*3]        -- input RGB (ping buffer)
   atlasOut      [totalPixels*3]        -- output RGB (pong buffer)
-  mask          [totalPixels]          -- alpha mask (0 = invalid texel)
+  mask          [totalPixels]          -- alpha mask
   surfaces      [numPlanarSurfaces]    -- GpuPlanarSurface metadata
   partnerData   [totalPartnerLinks]    -- CSR partner indices
   partnerOffsets[numPlanarSurfaces+1]  -- CSR offsets
   validList     [numValid]             -- atlas indices of valid planar texels
-  pixelToSurface[totalPixels]          -- atlas index -> planarSurfaces index (-1 if N/A)
+  pixelToSurface[totalPixels]          -- atlas index -> planarSurfaces index
   pixelToX      [totalPixels]          -- atlas index -> local surface x
   pixelToY      [totalPixels]          -- atlas index -> local surface y
-  pattern       [numSamples*2]         -- jitter offsets (x,y per sample)
-  numSamples
-  radius
+  gaussWeights  [(2*kernelRadius+1)^2] -- pre-computed Gaussian weights (row-major)
+  kernelRadius
 ================
 */
 
 /* lm_common.cl is prepended by BuildOpenCLProgramWithCommon() */
 
-__kernel void aa_filter(
+__kernel void smooth_filter(
     __global const float            *atlasIn,
     __global       float            *atlasOut,
     __global const uchar            *mask,
@@ -39,9 +37,8 @@ __kernel void aa_filter(
     __global const int              *pixelToSurface,
     __global const int              *pixelToX,
     __global const int              *pixelToY,
-    __global const float            *pattern,
-    int   numSamples,
-    float radius)
+    __global const float            *gaussWeights,
+    int kernelRadius)
 {
     int tid = get_global_id(0);
 
@@ -50,30 +47,35 @@ __kernel void aa_filter(
     int   lx       = pixelToX[atlasIdx];
     int   ly       = pixelToY[atlasIdx];
 
-    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
-    int   cnt  = 0;
+    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumW = 0.0f;
+    int   diam = 2 * kernelRadius + 1;
 
-    for (int k = 0; k < numSamples; k++) {
-        float px = (float)lx + pattern[k*2+0] * radius;
-        float py = (float)ly + pattern[k*2+1] * radius;
+    for (int dj = -kernelRadius; dj <= kernelRadius; dj++) {
+        for (int di = -kernelRadius; di <= kernelRadius; di++) {
+            float px = (float)(lx + di);
+            float py = (float)(ly + dj);
 
-        float r, g, b;
-        if (gpu_get_filtered_texel(sIdx, px, py,
-                                    surfaces, partnerData, partnerOffsets,
-                                    atlasIn, mask,
-                                    &r, &g, &b)) {
-            sumR += r; sumG += g; sumB += b;
-            cnt++;
+            float r, g, b;
+            if (gpu_get_filtered_texel(sIdx, px, py,
+                                        surfaces, partnerData, partnerOffsets,
+                                        atlasIn, mask,
+                                        &r, &g, &b)) {
+                int   wi = (dj + kernelRadius) * diam + (di + kernelRadius);
+                float w  = gaussWeights[wi];
+                sumR += w * r;
+                sumG += w * g;
+                sumB += w * b;
+                sumW += w;
+            }
         }
     }
 
-    if (cnt > 0) {
-        float inv = 1.0f / (float)cnt;
+    if (sumW > 0.0001f) {
+        float inv = 1.0f / sumW;
         atlasOut[atlasIdx*3+0] = sumR * inv;
         atlasOut[atlasIdx*3+1] = sumG * inv;
         atlasOut[atlasIdx*3+2] = sumB * inv;
     } else {
-        /* preserve original if no valid samples found */
         atlasOut[atlasIdx*3+0] = atlasIn[atlasIdx*3+0];
         atlasOut[atlasIdx*3+1] = atlasIn[atlasIdx*3+1];
         atlasOut[atlasIdx*3+2] = atlasIn[atlasIdx*3+2];
