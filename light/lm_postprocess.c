@@ -20,6 +20,8 @@ int lightmapAA = 0;
 float lightmapSmoothRadius = 0.0f;
 int lightmapSmoothPasses = 0;
 
+#define TRISOUP_SMOOTH_CHEAT 1.25f // scale smoothing radius up for trisoups to get a closer result to world surfaces.
+
 /*
  * FILTER_UPSCALE: 1 = perform all GPU filtering at 2x resolution (higher quality).
  * If enabled, the atlas is upscaled during upload and box-filtered down during download.
@@ -523,7 +525,7 @@ static float GetSurfaceTexelSize(dsurface_t *ds) {
     return (float)samplesize;
 }
 
-#define TRISOUP_SMOOTH_CHEAT 1.25f
+
 
 /*
 ================
