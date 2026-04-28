@@ -204,6 +204,7 @@ typedef struct {
 
 extern vec3_t sunDirection, sunLight, ambientColor;
 extern int numSkyBrushes;
+extern int numLights;
 extern skyBrush_t skyBrushes[];
 extern vec3_t gridMins, gridSize;
 extern int gridBounds[3], numGridPoints;
@@ -328,8 +329,10 @@ void TraceLtm(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                       qboolean testOcclusion, qboolean forceSunLight,
-                      qboolean applyColorFilter, traceWork_t *tw);
+                      qboolean applyColorFilter, light_t **lightList,
+                      int numLights, traceWork_t *tw);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
-                    qboolean forceSunLight, float scale, traceWork_t *tw);
+                    qboolean forceSunLight, float scale, light_t **lightList,
+                    int numLights, traceWork_t *tw);
 void CountLightmaps(void);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);

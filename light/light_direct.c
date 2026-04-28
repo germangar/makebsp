@@ -565,18 +565,28 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 LightingAtSample
 ========================
 */
-void LightingAtSample(const vec3_t origin, const vec3_t normal,
-                      vec3_t color, qboolean testOcclusion,
-                      qboolean forceSunLight, qboolean applyColorFilter,
-                      traceWork_t *tw) {
+void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
+                      qboolean testOcclusion, qboolean forceSunLight,
+                      qboolean applyColorFilter, light_t **lightList,
+                      int numLights, traceWork_t *tw) {
   light_t *light;
   contribution_t cont;
+  int i;
 
   VectorCopy(ambientColor, color);
 
-  for (light = lights; light; light = light->next) {
-    if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
-      VectorAdd(color, cont.color, color);
+  if (lightList) {
+    for (i = 0; i < numLights; i++) {
+      light = lightList[i];
+      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
+        VectorAdd(color, cont.color, color);
+      }
+    }
+  } else {
+    for (light = lights; light; light = light->next) {
+      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
+        VectorAdd(color, cont.color, color);
+      }
     }
   }
 
@@ -598,7 +608,8 @@ shadows would not be resolvable anyway.
 =============
 */
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
-                    qboolean forceSunLight, float scale, traceWork_t *tw) {
+                    qboolean forceSunLight, float scale, light_t **lightList,
+                    int numLights, traceWork_t *tw) {
   int i;
   drawVert_t *dv;
   vec3_t sample, normal;
@@ -608,17 +619,17 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 
   // generate vertex lighting
   for (i = 0; i < ds->numVerts; i++) {
+    vec3_t v_origin;
     dv = &drawVerts[ds->firstVert + i];
 
-    vec3_t v_origin;
     if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP) {
       VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
       LightingAtSample(v_origin, dv->normal, sample, testOcclusion,
-                       forceSunLight, qfalse, tw);
+                       forceSunLight, qfalse, lightList, numLights, tw);
     } else {
       VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
       LightingAtSample(v_origin, normal, sample, testOcclusion, forceSunLight,
-                       qfalse, tw);
+                       qfalse, lightList, numLights, tw);
     }
 
     if (scale >= 0)
@@ -710,20 +721,16 @@ TraceLtm
 =============
 */
 void TraceLtm(int num) {
-  dsurface_t *ds;
-  int realSurfIndex;
-  int i, j, k;
-  int x, y;
+  int i, j, k, x, y;
   int position, numPositions;
+  int realSurfIndex;
+  dsurface_t *ds;
+  light_t *light;
+  float d;
+  vec3_t v;
   double base[3], origin_d[3];
   vec3_t origin, normal;
   traceWork_t *tw;
-  tw = malloc(sizeof(traceWork_t));
-  if (!tw)
-    Error("Failed to allocate TraceLtm memory (traceWork_t)");
-  memset(tw, 0, sizeof(traceWork_t));
-  tw->ignoreSurface = -1;
-
   byte **occluded = NULL;
   byte *occluded_data = NULL;
   vec3_t **color = NULL;
@@ -738,24 +745,80 @@ void TraceLtm(int num) {
   int extW, extH;
   vec3_t lightmapOrigin, lightmapVecs[2];
   int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
+  int surfWeight;
+  light_t **localLights;
+  int numLocalLights = 0;
+  float wrapThreshold = 0.0f;
+
+  tw = malloc(sizeof(traceWork_t));
+  if (!tw)
+    Error("Failed to allocate TraceLtm memory (traceWork_t)");
+  memset(tw, 0, sizeof(traceWork_t));
+  tw->ignoreSurface = -1;
 
   realSurfIndex = surfaceWorkOrder[num];
   ds = &drawSurfaces[realSurfIndex];
   si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
-  int surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+  surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+
+  // Build local light list for this surface
+  localLights = malloc(numLights * sizeof(light_t *));
+  numLocalLights = 0;
+  
+  if (g_game->falloff == FALLOFF_SOFTLAMBERT) {
+      wrapThreshold = -g_game->softLambertBias / (1.0f - g_game->softLambertBias);
+  } else if (g_game->falloff == FALLOFF_HALFLAMBERT) {
+      wrapThreshold = -1.0f; // Everything hits
+  }
+
+  for (light = lights; light; light = light->next) {
+      // 1. Distance check
+      VectorSubtract(light->origin, localSurfaces[num].origin, v);
+      d = VectorLength(v);
+      if (d > light->reach + localSurfaces[num].radius) {
+          continue;
+      }
+
+      // 2. Normal check (terminator)
+      if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_TRIANGLE_SOUP || ds->surfaceType == MST_PATCH) {
+          // If we have a constant or average normal, we can cull
+          // For now, let's use the surface normal for MST_PLANAR
+          if (ds->surfaceType == MST_PLANAR) {
+              if (light->type == emit_area) {
+                  // Area lights always use standard lambertian falloff.
+                  // However, checking the angle against the light's center is mathematically
+                  // unsafe because the emitter's polygon might extend in front of the receiver
+                  // plane even if its center is behind it. Thus, we skip angle culling for them.
+              } else if (d > 0.001f) {
+                  VectorSubtract(light->origin, localSurfaces[num].origin, v);
+                  VectorScale(v, 1.0f / d, v); // Safely normalize using precomputed distance
+
+                  // Unified culling: use CalculateFalloff on the "best possible" dot product for this surface
+                  float bestDot = DotProduct(v, ds->lightmapVecs[2]) + (localSurfaces[num].radius / d);
+                  if (CalculateFalloff(bestDot) <= 0) {
+                      continue;
+                  }
+              }
+          }
+      }
+
+      localLights[numLocalLights++] = light;
+  }
 
 
   // vertex-lit triangle model if no lightmap allocated
   if (ds->surfaceType == MST_TRIANGLE_SOUP && ds->lightmapNum[0] == -1) {
     tw->ignoreSurface = realSurfIndex;
-    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, tw);
+    VertexLighting(ds, !si->noVertexShadows, si->forceSunLight, 1.0, localLights, numLocalLights, tw);
+    free(localLights);
     free(tw);
     ThreadCompletedWeighted(surfWeight);
     return;
   }
 
   if (ds->lightmapNum[0] == -1) {
+    free(localLights);
     free(tw);
     ThreadCompletedWeighted(surfWeight);
     return; // doesn't need lighting at all
@@ -765,10 +828,11 @@ void TraceLtm(int num) {
     // calculate the vertex lighting for gouraud shade mode
     tw->ignoreSurface = realSurfIndex;
     VertexLighting(ds, si->vertexShadows, si->forceSunLight, si->vertexScale,
-                   tw);
+                   localLights, numLocalLights, tw);
   }
 
   if (ds->lightmapNum[0] < 0) {
+    free(localLights);
     free(tw);
     ThreadCompletedWeighted(surfWeight);
     return; // doesn't need lightmap lighting
@@ -880,6 +944,7 @@ void TraceLtm(int num) {
     if (color_data) free(color_data);
     if (sampleHit) free(sampleHit);
     if (sampleHit_data) free(sampleHit_data);
+    free(localLights);
     free(tw);
     return;
   }
@@ -1030,7 +1095,7 @@ void TraceLtm(int num) {
         // Trace this sub-sample
         vec3_t subColor = {0, 0, 0};
         tw->ignoreSurface = realSurfIndex;
-        LightingAtSample(origin, normal, subColor, qtrue, qfalse, qtrue, tw);
+        LightingAtSample(origin, normal, subColor, qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
         VectorAdd(accumColor, subColor, accumColor);
         hitCount++;
       } // end super-sample loop
@@ -1211,6 +1276,7 @@ void TraceLtm(int num) {
   free(color);
   free(color_data);
 
+  free(localLights);
   ThreadCompletedWeighted(surfWeight);
 }
 

@@ -84,6 +84,7 @@ float linearScale = 1.0 / 8000;
 light_t *lights;
 int numPointLights;
 int numAreaLights;
+int numLights;
  
 vec3_t gridMins;
 vec3_t gridSize = {64, 64, 128};
@@ -915,6 +916,12 @@ void LightMain(int radiosityPasses) {
   _printf("--- CreateLights ---\n");
   CreateEntityLights();
   CreateSurfaceLights();
+
+  // count total lights
+  numLights = 0;
+  for (light_t *l = lights; l; l = l->next) {
+    numLights++;
+  }
   _printf("%i point lights\n", numPointLights);
   _printf("%i area lights\n", numAreaLights);
 
