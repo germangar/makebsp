@@ -348,16 +348,13 @@ int main(int argc, char **argv) {
     }
 
     _printf("reading %s\n", source);
-    {
-        char mapName[1024];
-        strcpy(mapName, source);
-        StripExtension(mapName);
-        LoadSurfaceExtraFile(mapName);
-    }
     LoadBSPFile(source);
 
     // Parse entity strings into structs
     ParseEntities();
+
+    // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)
+    BuildLocalSurfaces();
 
     // Determine samplesize from worldspawn or game default
     if (num_entities > 0) {

@@ -100,8 +100,8 @@ int defaultLightSubdivide = 999; // vary by surface size?
 
 vec3_t ambientColor;
 
-vec3_t surfaceOrigin[MAX_MAP_DRAW_SURFS];
-int entitySurface[MAX_MAP_DRAW_SURFS];
+localSurface_t *localSurfaces;
+
 
 // 7,9,11 normalized to avoid being nearly coplanar with common faces
 // vec3_t		sunDirection = { 0.441835, 0.56807, 0.694313 };
@@ -559,6 +559,7 @@ void CreateEntityLights(void) {
       _printf("Sun entity found: Direction (%f %f %f), Intensity (%f %f %f)\n",
               sunDirection[0], sunDirection[1], sunDirection[2],
               sunLight[0], sunLight[1], sunLight[2]);
+      _printf("  (Sun has infinite reach by design)\n");
       continue;
     }
 
@@ -653,7 +654,7 @@ void SetEntityOrigins(void) {
 
     // set entity surface to true for all surfaces for this model
     for (j = 0; j < dm->numSurfaces; j++) {
-      entitySurface[dm->firstSurface + j] = qtrue;
+      localSurfaces[dm->firstSurface + j].isEntity = qtrue;
     }
 
     key = ValueForKey(e, "origin");
@@ -664,9 +665,54 @@ void SetEntityOrigins(void) {
 
     // set origin for all surfaces for this model
     for (j = 0; j < dm->numSurfaces; j++) {
-      VectorCopy(origin, surfaceOrigin[dm->firstSurface + j]);
+      int surfIdx = dm->firstSurface + j;
+      VectorCopy(origin, localSurfaces[surfIdx].entityOrigin);
+      localSurfaces[surfIdx].isEntity = qtrue;
     }
   }
+}
+
+/*
+================
+BuildLocalSurfaces
+
+Consolidates geometric bounds, entity offsets, and sidecar data
+================
+*/
+void BuildLocalSurfaces(void) {
+  int i, j;
+  vec3_t mins, maxs;
+  char mapName[1024];
+
+  _printf("--- BuildLocalSurfaces ---\n");
+
+  localSurfaces = calloc(numDrawSurfaces, sizeof(localSurface_t));
+
+  for (i = 0; i < numDrawSurfaces; i++) {
+    dsurface_t *ds = &drawSurfaces[i];
+    
+    // 1. Compute geometric bounds
+    ClearBounds(mins, maxs);
+    if (ds->numVerts > 0) {
+      for (j = 0; j < ds->numVerts; j++) {
+        AddPointToBounds(drawVerts[ds->firstVert + j].xyz, mins, maxs);
+      }
+      SphereFromBounds(mins, maxs, localSurfaces[i].origin, &localSurfaces[i].radius);
+    } else {
+      VectorClear(localSurfaces[i].origin);
+      localSurfaces[i].radius = 0;
+    }
+  }
+
+  // 2. Process entity origins (writes to localSurfaces[i].entityOrigin / isEntity)
+  SetEntityOrigins();
+
+  // 3. Load sidecar metadata (writes to localSurfaces[i].radFillMode)
+  // mapName logic from main.c
+  extern char source[];
+  strcpy(mapName, source);
+  StripExtension(mapName);
+  LoadSurfaceExtraFile(mapName);
 }
 
 /*

@@ -94,13 +94,13 @@ ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
 
 # Object files for Q3MAP (BSP/VIS)
-Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) $(XATLAS_SRC:$(XATLAS_DIR)/%.cpp=$(OBJ_DIR)/xatlas/%.o)
+Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/q3map_%.o) $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) $(XATLAS_SRC:$(XATLAS_DIR)/%.cpp=$(OBJ_DIR)/xatlas/%.o)
 
 # Object files for Q3LIGHT
-Q3LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3LIGHT_SRC:$(Q3LIGHT_DIR)/%.c=$(OBJ_DIR)/q3light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
+Q3LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/light_%.o) $(Q3LIGHT_SRC:$(Q3LIGHT_DIR)/%.c=$(OBJ_DIR)/q3light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for LIGHT
-LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/%.o) $(Q3LIGHT_SRC:light/%.c=$(OBJ_DIR)/light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
+LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/light_%.o) $(Q3LIGHT_SRC:light/%.c=$(OBJ_DIR)/light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for MeshLib-Lite (persistent)
 ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
@@ -132,11 +132,19 @@ $(OBJ_DIR)/shared/%.o: $(SHARED_DIR)/%.c
 
 $(OBJ_DIR)/q3map/%.o: $(Q3MAP_DIR)/%.c
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -DQ3MAP_TOOL -c $< -o $@
 
 $(OBJ_DIR)/light/%.o: $(Q3LIGHT_DIR)/%.c
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -DLIGHT_TOOL -c $< -o $@
+
+$(OBJ_DIR)/shared/q3map_%.o: $(SHARED_DIR)/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DQ3MAP_TOOL -c $< -o $@
+
+$(OBJ_DIR)/shared/light_%.o: $(SHARED_DIR)/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DLIGHT_TOOL -c $< -o $@
 
 $(OBJ_DIR)/pak/%.o: libs/pak/%.cpp
 	mkdir -p $(dir $@)

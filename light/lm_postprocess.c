@@ -138,7 +138,7 @@ void BuildPlanarSurfaceIndex(void) {
 
 		p->surfaceNum = i;
 		VectorCopy(ds->lightmapOrigin, p->origin);
-		VectorAdd(p->origin, surfaceOrigin[i], p->origin);
+		VectorAdd(p->origin, localSurfaces[i].entityOrigin, p->origin);
 		VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
 		VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
 		p->invMagSq[0] = 1.0f / DotProduct(p->vecs[0], p->vecs[0]);
@@ -418,7 +418,7 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, 
 	vec3_t worldPos;
 	VectorMA(ds->lightmapOrigin, px, ds->lightmapVecs[0], worldPos);
 	VectorMA(worldPos, py, ds->lightmapVecs[1], worldPos);
-	VectorAdd(worldPos, surfaceOrigin[pInfo->surfaceNum], worldPos);
+	VectorAdd(worldPos, localSurfaces[pInfo->surfaceNum].entityOrigin, worldPos);
 	
 	if (SampleLightmapWorldBilinear(sIdx, worldPos, ds->lightmapVecs[2], outColor, buffer)) {
 		return qtrue;

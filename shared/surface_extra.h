@@ -9,13 +9,6 @@ typedef enum {
     RAD_FILL_BILINEAR
 } radFillMode_t;
 
-typedef struct {
-    radFillMode_t radFillMode;
-} surfaceExtra_t;
-
-void SetSurfaceExtraRadFillMode(int surfaceNum, radFillMode_t mode);
-radFillMode_t GetSurfaceExtraRadFillMode(int surfaceNum);
-
 void WriteSurfaceExtraFile(const char *path);
 void LoadSurfaceExtraFile(const char *path);
 void ClearCacheDirectory(void);

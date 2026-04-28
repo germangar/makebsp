@@ -30,6 +30,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/globals.h"
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
+#include "../shared/surface_extra.h"
 #include <embree4/rtcore.h>
 #include <CL/cl.h>
 
@@ -221,13 +222,20 @@ extern qboolean rad_voxel;
 
 //===============================================================
 
-// light_trace.c
+// light.c
 typedef struct {
-  vec3_t origin;
-  float radius;
-} surfaceTest_t;
+  vec3_t origin;          // Bounding sphere center
+  float radius;           // Bounding sphere radius
+  vec3_t entityOrigin;    // Offset for inline models
+  qboolean isEntity;      // Entity membership flag
+  radFillMode_t radFillMode; // Sidecar flag
+  float maxReach;         // Radiosity culling reach
+  int emitterStart;       // Radiosity emitter indexing
+  int emitterCount;
+} localSurface_t;
 
-extern surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
+extern localSurface_t *localSurfaces;
+void BuildLocalSurfaces(void);
 
 typedef struct {
   qboolean passSolid;
@@ -263,8 +271,8 @@ struct MyRayQueryContext {
 };
 
 //===============================================================
-extern vec3_t surfaceOrigin[MAX_MAP_DRAW_SURFS];
-extern int entitySurface[MAX_MAP_DRAW_SURFS];
+
+
 //===============================================================
 
 typedef struct {

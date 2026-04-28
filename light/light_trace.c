@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 RTCDevice g_device = NULL;
 RTCScene g_scene = NULL;
 
-surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
+
 
 static void AddBrushesToEmbree(RTCScene scene);
 void AlphaFilter(const struct RTCFilterFunctionNArguments *args);
@@ -71,13 +71,7 @@ void InitTracingGeometry(void) {
       continue;
     }
 
-    // Compute surface bounds and store in surfaceTest
-    surfaceTest[i] = malloc(sizeof(surfaceTest_t));
-    ClearBounds(mins, maxs);
-    for (j = 0; j < dsurf->numVerts; j++) {
-      AddPointToBounds(drawVerts[dsurf->firstVert + j].xyz, mins, maxs);
-    }
-    SphereFromBounds(mins, maxs, surfaceTest[i]->origin, &surfaceTest[i]->radius);
+
 
     if (dsurf->numIndexes > 0 &&
         (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
@@ -540,6 +534,7 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     // If occluded, tfar becomes -infinity in Embree 4
     if (rayhit.ray.tfar < 0) {
       rayhit.hit.geomID = 0; // Mark as hit
+      rayhit.ray.tfar = 0.0f;
     }
   }
 
@@ -547,7 +542,7 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
   trace->filter[1] = 1.0;
   trace->filter[2] = 1.0;
   trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
-  trace->hitFraction = (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? (rayhit.ray.tfar / length) : 1.0f;
+  trace->hitFraction = rayhit.ray.tfar / length;
 
   for (i = 0; i < 3; i++) {
     trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;

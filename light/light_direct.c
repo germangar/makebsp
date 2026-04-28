@@ -997,7 +997,7 @@ void TraceLtm(int num) {
           }
         }
         for (k = 0; k < 3; k++) {
-          base[k] += surfaceOrigin[num][k];
+          base[k] += localSurfaces[num].entityOrigin[k];
         }
 
         // we may need to slightly nudge the sample point
