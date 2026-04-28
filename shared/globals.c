@@ -27,6 +27,9 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // colorsRGB
 		FALLOFF_LAMBERT,
 		qfalse,     // deluxeMap
+		qtrue,      // forceUVGen
+		qtrue,      // snapUVs
+		0,          // antialiasingPasses
 		6,          // defaultSmoothPasses
 		1.0f,       // defaultSmoothRadius
         TONEMAP_LINEAR // exposureFilter
@@ -50,8 +53,11 @@ game_t games[MAX_GAMES] = {
 		qtrue,      // colorsRGB
 		FALLOFF_LAMBERT,
 		qtrue,       // deluxeMap
-		6,           // defaultSmoothPasses
-		1.0f,        // defaultSmoothRadius
+		qtrue,       // forceUVGen
+		qtrue,       // snapUVs
+		2,           // antialiasingPasses
+		0,           // defaultSmoothPasses
+		0.5f,        // defaultSmoothRadius
         TONEMAP_REINHARD // exposureFilter
 	}
 };

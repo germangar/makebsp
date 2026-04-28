@@ -120,6 +120,14 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "smoothRadius") && val->type == json_type_number) {
       game->defaultSmoothRadius = (float)atof(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "antialiasingPasses") && val->type == json_type_number) {
+      game->antialiasingPasses = atoi(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "forceUVGen")) {
+      if (val->type == json_type_true) game->forceUVGen = qtrue;
+      else if (val->type == json_type_false) game->forceUVGen = qfalse;
+    } else if (!strcmp(key, "snapUVs")) {
+      if (val->type == json_type_true) game->snapUVs = qtrue;
+      else if (val->type == json_type_false) game->snapUVs = qfalse;
     } else if (!strcmp(key, "falloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
       if (!strcmp(f, "halflambert"))
@@ -265,6 +273,9 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"colorsRGB\": %s,\n"
           "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */\n"
           "  \"deluxeMap\": %s,\n"
+          "  \"forceUVGen\": %s,\n"
+          "  \"snapUVs\": %s,\n"
+          "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
           "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
           "  \"smoothRadius\": %.2f, /* affects both blurring and supersampling */\n"
           "  \"exposurefilter\": \"%s\" /* [ off, softknee, reinhard, filmic ] */\n"
@@ -277,6 +288,9 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false", falloffStr,
           game->deluxeMap ? "true" : "false",
+          game->forceUVGen ? "true" : "false",
+          game->snapUVs ? "true" : "false",
+          game->antialiasingPasses,
           game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr);
   SaveFile(filename, buffer, strlen(buffer));
 }

@@ -40,6 +40,9 @@ typedef struct {
 	qboolean	colorsRGB;
 	falloff_t   falloff;
 	qboolean    deluxeMap;
+	qboolean    forceUVGen;
+	qboolean    snapUVs;
+	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;

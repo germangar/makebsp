@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
     pointScale = 7500;
     lightmapSmoothPasses = -1;
     lightmapSmoothRadius = -1.0f;
+    lightmapAA = -1;
     superSampleMode = SUPERSAMPLE_NONE;
     embree = qtrue;
     openclEnabled = qtrue;
@@ -100,6 +101,7 @@ int main(int argc, char **argv) {
             debugLightmapsAlpha = qtrue;
             _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
         } else if (!strcmp(argv[i], "-game")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
             char *arg = argv[++i];
             int j;
             qboolean found = qfalse;
@@ -117,6 +119,7 @@ int main(int argc, char **argv) {
             g_game->lightmapsRGB = qtrue;
             lightmapsRGBOverridden = qtrue;
         } else if (!strcmp(argv[i], "-falloff")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
                 g_game->falloff = FALLOFF_HALFLAMBERT;
@@ -147,6 +150,7 @@ int main(int argc, char **argv) {
             bruteTrace = qtrue;
             _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
         } else if (!strcmp(argv[i], "-supersampling")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
             if (mode == 1) {
                 superSampleMode = SUPERSAMPLE_ALL;
@@ -159,49 +163,61 @@ int main(int argc, char **argv) {
             }
             i++;
         } else if (!strcmp(argv[i], "-smooth")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smooth requires a number of passes");
             lightmapSmoothPasses = atoi(argv[i + 1]);
             if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
             _printf("Smoothing passes set to %d\n", lightmapSmoothPasses);
             i++;
         } else if (!strcmp(argv[i], "-aa")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-aa requires a number of passes");
             lightmapAA = atoi(argv[i + 1]);
             _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", lightmapAA);
             i++;
         } else if (!strcmp(argv[i], "-smoothradius")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothradius requires a radius value");
             lightmapSmoothRadius = (float)atof(argv[i + 1]);
             if (lightmapSmoothRadius < 0)
                 lightmapSmoothRadius = 0;
             i++;
         } else if (!strcmp(argv[i], "-radiosity")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a number of passes");
             radiosityPasses = atoi(argv[i + 1]);
             if (radiosityPasses < 0)
                 radiosityPasses = 0;
             i++;
         } else if (!strcmp(argv[i], "-rad_depthmin")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmin requires a numeric value");
             rad_depth_min = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_depthmax")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmax requires a numeric value");
             rad_depth_max = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_min_energy")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_min_energy requires a numeric value");
             rad_min_energy = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_interval")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_interval requires a numeric value");
             rad_interval = atoi(argv[i + 1]);
             if (rad_interval < 1) rad_interval = 1;
             i++;
         } else if (!strcmp(argv[i], "-rad_color_ratio")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
             rad_color_ratio = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_bounce_scale")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_bounce_scale requires a numeric value");
             rad_bounce_scale = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_depthintensity")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthintensity requires a numeric value");
             rad_depth_intensity = (float)atof(argv[i + 1]);
             if (rad_depth_intensity < 0.0f) rad_depth_intensity = 0.0f;
             if (rad_depth_intensity > 1.0f) rad_depth_intensity = 1.0f;
             i++;
         } else if (!strcmp(argv[i], "-rad_fill")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_fill requires a mode (voxel or bilinear)");
             const char *mode = argv[++i];
             if (!strcmp(mode, "voxel")) {
                 rad_voxel = qtrue;
@@ -213,13 +229,16 @@ int main(int argc, char **argv) {
                 Error("Unknown rad_fill mode: %s (use 'voxel' or 'bilinear')", mode);
             }
         } else if (!strcmp(argv[i], "-rad_voxelsize")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_voxelsize requires a numeric value");
             rad_voxel_size = (float)atof(argv[i + 1]);
             if (rad_voxel_size < 0.1f) rad_voxel_size = 0.1f;
             i++;
         } else if (!strcmp(argv[i], "-rad_anglematch")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
             rad_angle_match = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
                 tonemapMode = TONEMAP_SOFTKNEE;
@@ -274,6 +293,7 @@ int main(int argc, char **argv) {
                 "   surface        = use legacy surface tracing path\n"
                 "   smooth <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
+                "   aa <passes>    = number of anti-aliasing post-process passes to run\n"
                 "   supersampling <mode> = trace-time super-sampling mode:\n"
                 "                     0 = OFF\n"
                 "                     1 = super-sampling EVERYTHING\n"
@@ -312,17 +332,6 @@ int main(int argc, char **argv) {
 
     LoadShaderInfo();
 
-    _printf("reading %s\n", source);
-
-    LoadBSPFile(source);
-
-    {
-        char mapName[1024];
-        strcpy(mapName, ExpandArg(argv[i]));
-        StripExtension(mapName);
-        LoadSurfaceExtraFile(mapName);
-    }
-
     // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
     if (falloffOverridden) g_game->falloff = overrideFalloff;
     if (lightmapsRGBOverridden) g_game->lightmapsRGB = qtrue;
@@ -347,14 +356,27 @@ int main(int argc, char **argv) {
             g_game->deluxeMap ? "Deluxe" : "Standard",
             (g_game->hdr == HDR_8BIT) ? "range" : "clamped",
             tLog);
+
     if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
     if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
+    if (lightmapAA < 0) lightmapAA = g_game->antialiasingPasses;
+
+    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", lightmapSmoothPasses, lightmapSmoothRadius, lightmapAA);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
         int ssCnt = (lightmapSmoothRadius >= 2.0f) ? 16 : 8;
         _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, lightmapSmoothRadius);
     }
+
+    _printf("reading %s\n", source);
+    {
+        char mapName[1024];
+        strcpy(mapName, source);
+        StripExtension(mapName);
+        LoadSurfaceExtraFile(mapName);
+    }
+    LoadBSPFile(source);
 
     // Parse entity strings into structs
     ParseEntities();

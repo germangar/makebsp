@@ -16,7 +16,10 @@
   "colorsRGB": true,
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
   "deluxeMap": true,
-  "smoothPasses": 1, /* passes of blurring lightmaps */
-  "smoothRadius": 1.00, /* affects both blurring and supersampling */
+  "forceUVGen": true,
+  "snapUVs": true,
+  "antialiasingPasses": 2, /* post-process AA passes */
+  "smoothPasses": 0, /* passes of blurring lightmaps */
+  "smoothRadius": 0.50, /* affects both blurring and supersampling */
   "exposurefilter": "reinhard" /* [ off, softknee, reinhard, filmic ] */
 }

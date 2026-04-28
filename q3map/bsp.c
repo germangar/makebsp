@@ -48,8 +48,8 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
-qboolean forceUVGen;
-qboolean snapUVs;
+int forceUVGen = -1;
+int snapUVs = -1;
 
 char outbase[32];
 
@@ -458,8 +458,10 @@ int main(int argc, char **argv) {
 
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "-tempname")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-tempname requires a string argument");
       strcpy(tempsource, argv[++i]);
     } else if (!strcmp(argv[i], "-threads")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-threads requires a numeric argument");
       numthreads = atoi(argv[i + 1]);
       i++;
     } else if (!strcmp(argv[i], "-glview")) {
@@ -492,6 +494,7 @@ int main(int argc, char **argv) {
       _printf("onlytextures = true\n"); // FIXME: make work again!
       onlytextures = qtrue;
     } else if (!strcmp(argv[i], "-micro")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-micro requires a numeric argument");
       microvolume = atof(argv[i + 1]);
       _printf("microvolume = %f\n", microvolume);
       i++;
@@ -522,8 +525,10 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-tmpout")) {
       strcpy(outbase, "/tmp");
     } else if (!strcmp(argv[i], "-basepath")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-basepath requires a directory path");
       strcpy(qdir, argv[++i]);
     } else if (!strcmp(argv[i], "-game")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
       char *arg = argv[++i];
       int j;
       qboolean found = qfalse;
@@ -541,17 +546,18 @@ int main(int argc, char **argv) {
       fakemap = qtrue;
       _printf("will generate fakemap.map\n");
     } else if (!strcmp(argv[i], "-samplesize")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-samplesize requires a numeric argument");
       samplesize = atoi(argv[i + 1]);
       if (samplesize < 1)
         samplesize = 1;
       i++;
       _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
     } else if (!strcmp(argv[i], "-forceuvgen")) {
-      forceUVGen = qtrue;
-      _printf("forceUVGen = qtrue\n");
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-forceuvgen requires a 0|1 argument");
+      forceUVGen = atoi(argv[++i]);
     } else if (!strcmp(argv[i], "-snapuvs")) {
-      snapUVs = qtrue;
-      _printf("snapUVs = qtrue\n");
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-snapuvs requires a 0|1 argument");
+      snapUVs = atoi(argv[++i]);
     } else if (!strcmp(argv[i], "-bsp")) {
         // Redundant, just to satisfy usage
     } else {
@@ -589,8 +595,8 @@ int main(int argc, char **argv) {
             "   game <G>       = set the active game profile to G\n"
             "   fakemap        = generate a fakemap.map after processing\n"
             "   samplesize <N> = set the default lightmap sample size to NxN\n"
-            "   forceuvgen     = force UV reconstruction for all misc_models\n"
-            "   snapuvs        = align misc_model UVs to lightmap grid\n");
+            "   forceuvgen <0|1> = force UV reconstruction for all misc_models\n"
+            "   snapuvs <0|1>    = align misc_model UVs to lightmap grid\n");
     exit(0);
   }
 
@@ -603,6 +609,11 @@ int main(int argc, char **argv) {
     _printf("Defaulting lightmap sample size to %dx%d units\n", samplesize,
             samplesize);
   }
+
+  if (forceUVGen == -1) forceUVGen = g_game->forceUVGen;
+  if (snapUVs == -1) snapUVs = g_game->snapUVs;
+
+  _printf("forceUVGen: %s, snapUVs: %s\n", forceUVGen ? "true" : "false", snapUVs ? "true" : "false");
 
   ThreadSetDefault();
   // numthreads = 1;		// multiple threads aren't helping because of
