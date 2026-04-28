@@ -20,14 +20,13 @@ int lightmapAA = 0;
 float lightmapSmoothRadius = 0.0f;
 int lightmapSmoothPasses = 0;
 
-#define TRISOUP_SMOOTH_CHEAT 1.25f // scale smoothing radius up for trisoups to get a closer result to world surfaces.
-
 /*
  * FILTER_UPSCALE: 1 = perform all GPU filtering at 2x resolution (higher quality).
  * If enabled, the atlas is upscaled during upload and box-filtered down during download.
  */
 #define FILTER_UPSCALE 1
 
+#define TRISOUP_SMOOTH_CHEAT(A) ((A) + (useOpenCL ? 1.0f : 1.25f)) // offset smoothing radius for trisoups to get a closer result to world surfaces.
 
 #define AA_ANGLE_MATCH_DEGREES 30.0f
 static float aa_angle_match_cos = 0.85f;
@@ -798,7 +797,7 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     // 1. Calculate true density and set up local bounds
     float texelSize = GetSurfaceTexelSize(ds);
     // Use the larger effective radius to ensure the grid is big enough for both pass types
-    float effectiveRadius = (smoothPasses > 0) ? (radius * TRISOUP_SMOOTH_CHEAT) : radius;
+    float effectiveRadius = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius;
     float searchRadius = effectiveRadius * texelSize;
     if (searchRadius < 0.1f) return;
 
@@ -889,7 +888,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
 
     // 1. Calculate true density and set up local bounds
     float texelSize = GetSurfaceTexelSize(ds);
-    float effectiveRadius = (smoothPasses > 0) ? (radius * TRISOUP_SMOOTH_CHEAT) : radius;
+    float effectiveRadius = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius;
     float searchRadius = effectiveRadius * texelSize;
     if (searchRadius < 0.1f) return;
 

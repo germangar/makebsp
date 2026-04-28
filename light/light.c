@@ -515,9 +515,6 @@ void CreateEntityLights(void) {
       const char *t;
       entity_t *tEnt;
 
-      _printf("Processing sun entity: origin %s, target %s\n", 
-              ValueForKey(e, "origin"), ValueForKey(e, "target"));
-
       // 1. Direction Calculation (Targeting > Vector Fallback)
       t = ValueForKey(e, "target");
       if (t && t[0] && (tEnt = FindTargetEntity(t))) {
@@ -556,10 +553,6 @@ void CreateEntityLights(void) {
         VectorSet(sunLight, intensity, intensity, intensity);
       }
 
-      _printf("Sun entity found: Direction (%f %f %f), Intensity (%f %f %f)\n",
-              sunDirection[0], sunDirection[1], sunDirection[2],
-              sunLight[0], sunLight[1], sunLight[2]);
-      _printf("  (Sun has infinite reach by design)\n");
       continue;
     }
 

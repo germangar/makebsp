@@ -201,8 +201,8 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
             rad_color_ratio = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_bounce_scale")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_bounce_scale requires a numeric value");
+        } else if (!strcmp(argv[i], "-rad_intensity")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_intensity requires a numeric value");
             rad_bounce_scale = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_depthintensity")) {
