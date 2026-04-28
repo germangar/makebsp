@@ -515,9 +515,10 @@ void DownConvertLightingData(void) {
 	if (lightmapRange) {
 		ScanLightmapIntensity();
 		if (maxLightIntensity > 255.0f) {
+			maxLightIntensity *= 1.05f; // Artificial 5% nudge to tame hotspots
 			scale = 255.0f / maxLightIntensity;
 			float engineIntensity = maxLightIntensity / 255.0f;
-			_printf("Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
+			_printf("LightingIntensity Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
 			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
 		} else {
 			_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
