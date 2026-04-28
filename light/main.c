@@ -378,7 +378,6 @@ int main(int argc, char **argv) {
     // Call core lighting process
     LightMain(radiosityPasses);
 
-    _printf("writing %s\n", source);
     DownConvertLightingData();
     WriteBSPFile(source);
 
