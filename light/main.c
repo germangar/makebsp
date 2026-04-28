@@ -53,6 +53,9 @@ int main(int argc, char **argv) {
     lightmapSmoothRadius = -1.0f;
     lightmapAA = -1;
     superSampleMode = SUPERSAMPLE_NONE;
+    radiosityPasses = -1;
+    rad_bounce_scale = -1.0f;
+    rad_color_ratio = -1.0f;
     embree = qtrue;
     openclEnabled = qtrue;
 
@@ -168,16 +171,16 @@ int main(int argc, char **argv) {
             if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
             _printf("Smoothing passes set to %d\n", lightmapSmoothPasses);
             i++;
-        } else if (!strcmp(argv[i], "-aa")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-aa requires a number of passes");
+        } else if (!strcmp(argv[i], "-antialiasing")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-antialiasing requires a number of passes");
             lightmapAA = atoi(argv[i + 1]);
             _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", lightmapAA);
             i++;
         } else if (!strcmp(argv[i], "-smoothradius")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothradius requires a radius value");
             lightmapSmoothRadius = (float)atof(argv[i + 1]);
-            if (lightmapSmoothRadius < 0)
-                lightmapSmoothRadius = 0;
+            if (lightmapSmoothRadius < 0.1f)
+                lightmapSmoothRadius = 0.1f;
             i++;
         } else if (!strcmp(argv[i], "-radiosity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a number of passes");
@@ -216,18 +219,6 @@ int main(int argc, char **argv) {
             if (rad_depth_intensity < 0.0f) rad_depth_intensity = 0.0f;
             if (rad_depth_intensity > 1.0f) rad_depth_intensity = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-rad_fill")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_fill requires a mode (voxel or bilinear)");
-            const char *mode = argv[++i];
-            if (!strcmp(mode, "voxel")) {
-                rad_voxel = qtrue;
-                _printf("Voxel reconstruction fill enabled\n");
-            } else if (!strcmp(mode, "bilinear")) {
-                rad_voxel = qfalse;
-                _printf("Bilinear interpolation fill enabled\n");
-            } else {
-                Error("Unknown rad_fill mode: %s (use 'voxel' or 'bilinear')", mode);
-            }
         } else if (!strcmp(argv[i], "-rad_voxelsize")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_voxelsize requires a numeric value");
             rad_voxel_size = (float)atof(argv[i + 1]);
@@ -293,18 +284,17 @@ int main(int argc, char **argv) {
                 "   surface        = use legacy surface tracing path\n"
                 "   smooth <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
-                "   aa <passes>    = number of anti-aliasing post-process passes to run\n"
+                "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
                 "   supersampling <mode> = trace-time super-sampling mode:\n"
                 "                     0 = OFF\n"
                 "                     1 = super-sampling EVERYTHING\n"
-                "                     2 = (DEFAULT) super-sampling models only\n"
+                "                     2 = super-sampling models only\n"
                 "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_depthmin <F> = set inner distance limit for radiosity plateau\n"
                 "   rad_depthmax <F> = set outer distance limit for radiosity gradient\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
-                "   -rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
+                "   rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
-                "   rad_fill <mode>   = GI reconstruction mode ('voxel' or 'bilinear')\n"
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
                 "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
@@ -360,8 +350,12 @@ int main(int argc, char **argv) {
     if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
     if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
     if (lightmapAA < 0) lightmapAA = g_game->antialiasingPasses;
+    if (radiosityPasses < 0) radiosityPasses = g_game->radiosityPasses;
+    if (rad_bounce_scale < 0.0f) rad_bounce_scale = g_game->radiosityIntensity;
+    if (rad_color_ratio < 0.0f) rad_color_ratio = g_game->radiosityColorRatio;
 
     _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", lightmapSmoothPasses, lightmapSmoothRadius, lightmapAA);
+    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", radiosityPasses, rad_bounce_scale, rad_color_ratio);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";

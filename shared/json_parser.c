@@ -113,6 +113,12 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     } else if (!strcmp(key, "colorsRGB")) {
       if (val->type == json_type_true) game->colorsRGB = qtrue;
       else if (val->type == json_type_false) game->colorsRGB = qfalse;
+    } else if (!strcmp(key, "radiosityPasses") && val->type == json_type_number) {
+      game->radiosityPasses = atoi(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "radiosityIntensity") && val->type == json_type_number) {
+      game->radiosityIntensity = (float)atof(json_value_as_number(val)->number);
+    } else if (!strcmp(key, "radiosityColorRatio") && val->type == json_type_number) {
+      game->radiosityColorRatio = (float)atof(json_value_as_number(val)->number);
     } else if (!strcmp(key, "deluxeMap")) {
       if (val->type == json_type_true) game->deluxeMap = qtrue;
       else if (val->type == json_type_false) game->deluxeMap = qfalse;
@@ -120,6 +126,7 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "smoothRadius") && val->type == json_type_number) {
       game->defaultSmoothRadius = (float)atof(json_value_as_number(val)->number);
+      if (game->defaultSmoothRadius < 0.1f) game->defaultSmoothRadius = 0.1f;
     } else if (!strcmp(key, "antialiasingPasses") && val->type == json_type_number) {
       game->antialiasingPasses = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "forceUVGen")) {
@@ -271,13 +278,16 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"lightgridRGB\": %s,\n"
           "  \"texturesRGB\": %s,\n"
           "  \"colorsRGB\": %s,\n"
+          "  \"radiosityPasses\": %d,\n"
+          "  \"radiosityIntensity\": %.2f,\n"
+          "  \"radiosityColorRatio\": %.2f,\n"
           "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */\n"
           "  \"deluxeMap\": %s,\n"
           "  \"forceUVGen\": %s,\n"
           "  \"snapUVs\": %s,\n"
           "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
           "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
-          "  \"smoothRadius\": %.2f, /* affects both blurring and supersampling */\n"
+          "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
           "  \"exposurefilter\": \"%s\" /* [ off, softknee, reinhard, filmic ] */\n"
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
@@ -286,7 +296,11 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->defaultSampleSize, hdrStr, game->lightmapsRGB ? "true" : "false",
           game->lightgridRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",
-          game->colorsRGB ? "true" : "false", falloffStr,
+          game->colorsRGB ? "true" : "false",
+          game->radiosityPasses,
+          game->radiosityIntensity,
+          game->radiosityColorRatio,
+          falloffStr,
           game->deluxeMap ? "true" : "false",
           game->forceUVGen ? "true" : "false",
           game->snapUVs ? "true" : "false",

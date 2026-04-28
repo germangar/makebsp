@@ -14,6 +14,9 @@
   "lightgridRGB": false,
   "texturesRGB": true,
   "colorsRGB": true,
+  "radiosityPasses": 4,
+  "radiosityIntensity": 1.00,
+  "radiosityColorRatio": 1.00,
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */
   "deluxeMap": true,
   "forceUVGen": true,

@@ -38,6 +38,9 @@ typedef struct {
 	qboolean	lightgridRGB;
 	qboolean	texturesRGB;
 	qboolean	colorsRGB;
+	int         radiosityPasses;
+	float       radiosityIntensity;
+	float       radiosityColorRatio;
 	falloff_t   falloff;
 	qboolean    deluxeMap;
 	qboolean    forceUVGen;

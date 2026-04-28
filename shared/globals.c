@@ -25,13 +25,16 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
+		4,          // radiosityPasses
+		1.0f,       // radiosityIntensity
+		0.75f,      // radiosityColorRatio
 		FALLOFF_LAMBERT,
 		qfalse,     // deluxeMap
 		qtrue,      // forceUVGen
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses
-		6,          // defaultSmoothPasses
-		1.0f,       // defaultSmoothRadius
+		4,          // defaultSmoothPasses
+		0.35f,      // defaultSmoothRadius
         TONEMAP_LINEAR // exposureFilter
 	},
 	{
@@ -51,6 +54,9 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
+		4,          // radiosityPasses
+		1.0f,       // radiosityIntensity
+		1.0f,       // radiosityColorRatio
 		FALLOFF_LAMBERT,
 		qtrue,       // deluxeMap
 		qtrue,       // forceUVGen
