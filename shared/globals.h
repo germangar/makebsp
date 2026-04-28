@@ -3,7 +3,7 @@
 
 #include "../common/qtypes.h"
 
-typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL, FALLOFF_WRAPPED } falloff_t;
+typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL, FALLOFF_SOFTLAMBERT } falloff_t;
 
 typedef enum {
     HDR_OFF = 0,
@@ -49,6 +49,7 @@ typedef struct {
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;
+	float       softLambertBias;
 } game_t;
 
 #define MAX_GAMES 128

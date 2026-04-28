@@ -145,8 +145,8 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->falloff = FALLOFF_DOUBLEQUADRATIC;
       else if (!strcmp(f, "unreal"))
         game->falloff = FALLOFF_UNREAL;
-      else if (!strcmp(f, "wrapped"))
-        game->falloff = FALLOFF_WRAPPED;
+      else if (!strcmp(f, "softlambert"))
+        game->falloff = FALLOFF_SOFTLAMBERT;
       else
         game->falloff = FALLOFF_LAMBERT;
     } else if (!strcmp(key, "exposurefilter") && val->type == json_type_string) {
@@ -159,6 +159,8 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->exposureFilter = TONEMAP_FILMIC;
       else
         game->exposureFilter = TONEMAP_LINEAR;
+    } else if (!strcmp(key, "softLambertBias") && val->type == json_type_number) {
+      game->softLambertBias = (float)atof(json_value_as_number(val)->number);
     }
 
     el = el->next;
@@ -221,8 +223,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
   case FALLOFF_UNREAL:
     falloffStr = "unreal";
     break;
-  case FALLOFF_WRAPPED:
-    falloffStr = "wrapped";
+  case FALLOFF_SOFTLAMBERT:
+    falloffStr = "softlambert";
     break;
   default:
     falloffStr = "unknown";
@@ -281,7 +283,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"radiosityPasses\": %d,\n"
           "  \"radiosityIntensity\": %.2f,\n"
           "  \"radiosityColorRatio\": %.2f,\n"
-          "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, wrapped ] */\n"
+          "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */\n"
+          "  \"softLambertBias\": %.2f,\n"
           "  \"deluxeMap\": %s,\n"
           "  \"forceUVGen\": %s,\n"
           "  \"snapUVs\": %s,\n"
@@ -301,6 +304,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->radiosityIntensity,
           game->radiosityColorRatio,
           falloffStr,
+          game->softLambertBias,
           game->deluxeMap ? "true" : "false",
           game->forceUVGen ? "true" : "false",
           game->snapUVs ? "true" : "false",

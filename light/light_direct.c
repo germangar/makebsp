@@ -53,9 +53,8 @@ float CalculateFalloff(float dot) {
   if (g_game->falloff == FALLOFF_HALFLAMBERT) {
     val = val * 0.5f + 0.5f;
     return val * val;
-  } else if (g_game->falloff == FALLOFF_WRAPPED) {
-    // 0.5 wrap rescaled to 0-1
-    val = (val + 0.5f) / 1.5f;
+  } else if (g_game->falloff == FALLOFF_SOFTLAMBERT) {
+    val = val * (1.0f - g_game->softLambertBias) + g_game->softLambertBias;
     return (val < 0.0f) ? 0.0f : val;
   } else if (g_game->falloff == FALLOFF_UNREAL) {
     // Unreal angular part is standard Lambert
@@ -347,7 +346,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
       return qfalse; // facing away
     }
   } else if (g_game->falloff != FALLOFF_HALFLAMBERT &&
-             g_game->falloff != FALLOFF_WRAPPED) {
+             g_game->falloff != FALLOFF_SOFTLAMBERT) {
     if (DotProduct(normal, sunDirection) <= 0) {
       return qfalse; // facing away
     }

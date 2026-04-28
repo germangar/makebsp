@@ -35,7 +35,8 @@ game_t games[MAX_GAMES] = {
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
-        TONEMAP_LINEAR // exposureFilter
+        TONEMAP_LINEAR, // exposureFilter
+		0.15f       // softLambertBias
 	},
 	{
 		"qfusion",
@@ -64,7 +65,8 @@ game_t games[MAX_GAMES] = {
 		2,           // antialiasingPasses
 		0,           // defaultSmoothPasses
 		0.5f,        // defaultSmoothRadius
-        TONEMAP_REINHARD // exposureFilter
+        TONEMAP_REINHARD, // exposureFilter
+		0.15f        // softLambertBias
 	}
 };
 

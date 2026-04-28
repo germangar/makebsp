@@ -133,8 +133,8 @@ int main(int argc, char **argv) {
                 g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
             } else if (!strcmp(arg, "unreal")) {
                 g_game->falloff = FALLOFF_UNREAL;
-            } else if (!strcmp(arg, "wrapped")) {
-                g_game->falloff = FALLOFF_WRAPPED;
+            } else if (!strcmp(arg, "softlambert")) {
+                g_game->falloff = FALLOFF_SOFTLAMBERT;
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
@@ -220,6 +220,12 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
             rad_angle_match = (float)atof(argv[i + 1]);
             i++;
+        } else if (!strcmp(argv[i], "-rad_softbias")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_softbias requires a numeric value");
+            g_game->softLambertBias = (float)atof(argv[i + 1]);
+            if (g_game->softLambertBias < 0.0f) g_game->softLambertBias = 0.0f;
+            if (g_game->softLambertBias > 1.0f) g_game->softLambertBias = 1.0f;
+            i++;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
@@ -263,11 +269,7 @@ int main(int argc, char **argv) {
                 "   point <W>      = set the point light scale to W\n"
                 "   notrace        = don't cast any shadows\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
-                "   nogrid         = don't calculate light grid for dynamic model "
-                "lighting\n"
-                "   novertex       = don't calculate vertex lighting\n"
-                "   falloff <type>  = set the falloff model (lambert, halflambert,\n"
-                "                     quadratic, doublequadratic, unreal, wrapped)\n"
+                "   falloff <type>  = set the falloff model (lambert, halflambert, softlambert, quadratic, doublequadratic, unreal)\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
@@ -322,7 +324,7 @@ int main(int argc, char **argv) {
     else if (g_game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
     else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
     else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
-    else if (g_game->falloff == FALLOFF_WRAPPED) fLog = "wrapped";
+    else if (g_game->falloff == FALLOFF_SOFTLAMBERT) fLog = "softlambert";
 
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
     _printf("Falloff mode: %s\n", fLog);
