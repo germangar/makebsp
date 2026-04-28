@@ -1488,16 +1488,15 @@ void AntiAliasLightmapsGPU(int passes) {
     int scale = g_gpuLM.upscale;
     _printf("  Image-space AA (%d passes, GPU planar %dx): dispatching kernel...\n", passes, scale);
     
-    /* Flatten ssPattern8 to a float[] for the kernel */
+    /* Use the unscaled pattern; RunGpuAAKernel scales the radius param by st->upscale */
     float pat[SS_PATTERN8_COUNT * 2];
     for (int ki = 0; ki < SS_PATTERN8_COUNT; ki++) {
-        /* Radius is scaled to the high-res grid */
-        pat[ki*2+0] = ssPattern8[ki][0] * (radius * scale);
-        pat[ki*2+1] = ssPattern8[ki][1] * (radius * scale);
+        pat[ki*2+0] = ssPattern8[ki][0];
+        pat[ki*2+1] = ssPattern8[ki][1];
     }
     
     for (int pnum = 0; pnum < passes; pnum++) {
-        RunGpuAAKernel(pat, SS_PATTERN8_COUNT, 1.0f); // Radius already baked into pattern
+        RunGpuAAKernel(pat, SS_PATTERN8_COUNT, radius); 
     }
 }
 
@@ -1565,6 +1564,162 @@ void AntiAliasLightmapsCPU(int passes) {
     }
     _printf("Done\n");
 	free(tempFloats);
+}
+
+/*
+================
+FilterPlanarSurfaceHighFidelityCPU
+
+Unified high-fidelity filtering for a single planar surface.
+Upscales to 2x, runs all AA and Smooth passes, then downscales.
+================
+*/
+static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const float *tempFloats, int aaPasses, int smoothPasses) {
+	int x, y, k, p;
+	dsurface_t *ds = &drawSurfaces[planarSurfaces[sIdx].surfaceNum];
+
+	int W = ds->lightmapWidth, H = ds->lightmapHeight;
+	if (W <= 0 || H <= 0) return;
+
+	int W2 = W * 2, H2 = H * 2;
+	float *grid2x = malloc(W2 * H2 * 3 * sizeof(float));
+	byte *mask2x = malloc(W2 * H2 * sizeof(byte));
+	float *blur2x = malloc(W2 * H2 * 3 * sizeof(float));
+	byte *blurMask2x = malloc(W2 * H2 * sizeof(byte));
+
+	if (!grid2x || !mask2x || !blur2x || !blurMask2x) {
+		if (grid2x) free(grid2x);
+		if (mask2x) free(mask2x);
+		if (blur2x) free(blur2x);
+		if (blurMask2x) free(blurMask2x);
+		return;
+	}
+
+	// 1. Upscale to 2x
+	for (int Y = 0; Y < H2; Y++) {
+		for (int X = 0; X < W2; X++) {
+			float px = ((float)X + 0.5f) * 0.5f - 0.5f;
+			float py = ((float)Y + 0.5f) * 0.5f - 0.5f;
+			float col[3];
+			if (GetFilteredTexel(sIdx, px, py, col, tempFloats)) {
+				mask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
+				VectorCopy(col, &grid2x[(Y * W2 + X) * 3]);
+			} else {
+				mask2x[Y * W2 + X] = 0;
+				VectorClear(&grid2x[(Y * W2 + X) * 3]);
+			}
+		}
+	}
+
+	int totalPasses = aaPasses + smoothPasses;
+	float sigma = (radius * 2.0f) / 3.0f;
+	if (sigma < 1.0f) sigma = 1.0f;
+	int kernelRadius = (int)ceil(radius * 2.0f);
+	if (kernelRadius > MAX_KERNEL_RADIUS * 2) kernelRadius = MAX_KERNEL_RADIUS * 2;
+
+	// Build Smoothing kernel (scale-aware for 2x grid)
+	float gKernel[MAX_KERNEL_RADIUS * 4 + 1][MAX_KERNEL_RADIUS * 4 + 1];
+	float gKernelSum = 0.0f;
+	for (int j = -kernelRadius; j <= kernelRadius; j++)
+		for (int i = -kernelRadius; i <= kernelRadius; i++) {
+			gKernel[j+kernelRadius][i+kernelRadius] = expf(-(float)(i*i+j*j) / (2.0f*sigma*sigma));
+			gKernelSum += gKernel[j+kernelRadius][i+kernelRadius];
+		}
+	for (int j = 0; j <= kernelRadius*2; j++)
+		for (int i = 0; i <= kernelRadius*2; i++)
+			gKernel[j][i] /= gKernelSum;
+
+	for (int currentPass = 0; currentPass < totalPasses; currentPass++) {
+		qboolean isAA = (currentPass < aaPasses);
+
+		for (int Y = 0; Y < H2; Y++) {
+			for (int X = 0; X < W2; X++) {
+				if (mask2x[Y * W2 + X] == 0) { blurMask2x[Y * W2 + X] = 0; continue; }
+
+				float sumColor[3] = {0, 0, 0}, sumWeight = 0.0f;
+
+				if (isAA) {
+					// AA Pass (8-tap grid)
+					for (k = 0; k < SS_PATTERN8_COUNT; k++) {
+						float px = (float)X + ssPattern8[k][0] * radius * 2.0f;
+						float py = (float)Y + ssPattern8[k][1] * radius * 2.0f;
+						int ix = (int)roundf(px), iy = (int)roundf(py);
+
+						if (ix >= 0 && ix < W2 && iy >= 0 && iy < H2) {
+							if (mask2x[iy * W2 + ix] != 0) {
+								VectorAdd(sumColor, &grid2x[(iy * W2 + ix) * 3], sumColor);
+								sumWeight += 1.0f;
+							}
+						} else {
+							float srcX = ((float)px + 0.5f) * 0.5f - 0.5f;
+							float srcY = ((float)py + 0.5f) * 0.5f - 0.5f;
+							float col[3];
+							if (GetFilteredTexel(sIdx, srcX, srcY, col, tempFloats)) {
+								VectorAdd(sumColor, col, sumColor);
+								sumWeight += 1.0f;
+							}
+						}
+					}
+				} else {
+					// Smoothing Pass (Gaussian)
+					for (int j = -kernelRadius; j <= kernelRadius; j++) {
+						for (int i = -kernelRadius; i <= kernelRadius; i++) {
+							float weight = gKernel[j+kernelRadius][i+kernelRadius];
+							int ix = X + i, iy = Y + j;
+							if (ix >= 0 && ix < W2 && iy >= 0 && iy < H2) {
+								if (mask2x[iy * W2 + ix] != 0) {
+									VectorMA(sumColor, weight, &grid2x[(iy * W2 + ix) * 3], sumColor);
+									sumWeight += weight;
+								}
+							} else {
+								float srcX = ((float)ix + 0.5f) * 0.5f - 0.5f;
+								float srcY = ((float)iy + 0.5f) * 0.5f - 0.5f;
+								float col[3];
+								if (GetFilteredTexel(sIdx, srcX, srcY, col, tempFloats)) {
+									VectorMA(sumColor, weight, col, sumColor);
+									sumWeight += weight;
+								}
+							}
+						}
+					}
+				}
+
+				if (sumWeight > 0.0001f) {
+					blurMask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
+					VectorScale(sumColor, 1.0f / sumWeight, &blur2x[(Y * W2 + X) * 3]);
+				} else {
+					blurMask2x[Y * W2 + X] = 0;
+				}
+			}
+		}
+		// Update grid for next pass
+		memcpy(grid2x, blur2x, W2 * H2 * 3 * sizeof(float));
+		memcpy(mask2x, blurMask2x, W2 * H2 * sizeof(byte));
+	}
+
+	// 3. Downscale back to 1x
+	for (y = 0; y < H; y++) {
+		for (x = 0; x < W; x++) {
+			p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+			if (lightAlphaMask[p] == 0) continue;
+
+			float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
+			for (int dy = 0; dy < 2; dy++) {
+				for (int dx = 0; dx < 2; dx++) {
+					int X = x * 2 + dx, Y = y * 2 + dy;
+					if (mask2x[Y * W2 + X] != 0) {
+						VectorAdd(sumColor, &grid2x[(Y * W2 + X) * 3], sumColor);
+						sumWeight += 1.0f;
+					}
+				}
+			}
+			if (sumWeight > 0.01f) {
+				VectorScale(sumColor, 1.0f / sumWeight, &lightFloats[p * 3]);
+			}
+		}
+	}
+
+	free(grid2x); free(mask2x); free(blur2x); free(blurMask2x);
 }
 
 /*
@@ -1658,8 +1813,6 @@ void PostProcessLightmaps(void) {
 	BuildPlanarSurfaceIndex();
     double startFiltering = I_FloatTime();
 
-    int scale = FILTER_UPSCALE ? 2 : 1;
-
     /* Step 3 — Planar Filtering (AA and Smoothing) */
     if (useOpenCL) {
         /* ==== GPU PATH ==== */
@@ -1679,15 +1832,44 @@ void PostProcessLightmaps(void) {
         GpuLightmapState_Free();
     } else {
         /* ==== CPU PATH ==== */
-        /* Note: AntiAliasLightmaps(passes) already loops internally on CPU. */
-        if (lightmapAA) AntiAliasLightmapsCPU(lightmapAA);
-        if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
-            _printf("  Smoothing surfaces (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
-            for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
-                _printf("%d ", pnum);
-                SmoothLightmapsCPU(lightmapSmoothRadius);
+        if (FILTER_UPSCALE) {
+            _printf("  High-Fidelity Filtering (Planar - 2x): ");
+            int progress = 0;
+            int s;
+            int numPixels = numLightBytes / 3;
+            float *tempFloats = malloc(numPixels * sizeof(float) * 3);
+            if (tempFloats) {
+                memcpy(tempFloats, lightFloats, numPixels * sizeof(float) * 3);
+                int aaPasses = lightmapAA;
+                int smoothPasses = (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) ? lightmapSmoothPasses : 0;
+
+                #pragma omp parallel for schedule(dynamic, 1) private(s)
+                for (s = 0; s < numPlanarSurfaces; s++) {
+                    FilterPlanarSurfaceHighFidelityCPU(s, lightmapSmoothRadius > 0.0f ? lightmapSmoothRadius : 1.0f, tempFloats, aaPasses, smoothPasses);
+                    
+                    int currentProgress;
+                    #pragma omp atomic capture
+                    currentProgress = ++progress;
+                    if (numPlanarSurfaces >= 10) {
+                        int oldPercent = ((currentProgress - 1) * 10) / numPlanarSurfaces;
+                        int newPercent = (currentProgress * 10) / numPlanarSurfaces;
+                        if (newPercent > oldPercent) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    }
+                }
+                free(tempFloats);
+                _printf("Done\n");
             }
-            _printf("Done\n");
+        } else {
+            /* Note: AntiAliasLightmaps(passes) already loops internally on CPU. */
+            if (lightmapAA) AntiAliasLightmapsCPU(lightmapAA);
+            if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
+                _printf("  Smoothing surfaces (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
+                for (int pnum = 1; pnum <= lightmapSmoothPasses; pnum++) {
+                    _printf("%d ", pnum);
+                    SmoothLightmapsCPU(lightmapSmoothRadius);
+                }
+                _printf("Done\n");
+            }
         }
     }
 
