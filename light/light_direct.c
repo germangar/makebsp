@@ -48,29 +48,33 @@ LIGHT TRACING EXECUTION
 ===============================================================
 */
 
-float CalculateFalloff(float dot) {
+float CalculateSpecificFalloff(float dot, falloff_t falloff) {
   float val = (dot > 1.0f) ? 1.0f : dot;
-  if (g_game->falloff == FALLOFF_HALFLAMBERT) {
+  if (falloff == FALLOFF_HALFLAMBERT) {
     val = val * 0.5f + 0.5f;
     return val * val;
-  } else if (g_game->falloff == FALLOFF_SOFTLAMBERT) {
+  } else if (falloff == FALLOFF_SOFTLAMBERT) {
     val = val * (1.0f - g_game->softLambertBias) + g_game->softLambertBias;
     return (val < 0.0f) ? 0.0f : val;
-  } else if (g_game->falloff == FALLOFF_UNREAL) {
+  } else if (falloff == FALLOFF_UNREAL) {
     // Unreal angular part is standard Lambert
     return (val < 0.0f) ? 0.0f : val;
-  } else if (g_game->falloff == FALLOFF_QUADRATIC) {
+  } else if (falloff == FALLOFF_QUADRATIC) {
     if (val < 0.0f)
       return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val);
-  } else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) {
+  } else if (falloff == FALLOFF_DOUBLEQUADRATIC) {
     if (val < 0.0f)
       return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val * val);
   }
   return (val < 0.0f) ? 0.0f : val;
+}
+
+float CalculateFalloff(float dot) {
+  return CalculateSpecificFalloff(dot, g_game->falloff);
 }
 
 
@@ -345,14 +349,14 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
     if (DotProduct(normal, sunDirection) < -0.125f) {
       return qfalse; // facing away
     }
-  } else if (g_game->falloff != FALLOFF_HALFLAMBERT &&
-             g_game->falloff != FALLOFF_SOFTLAMBERT) {
+  } else if (g_game->sunFalloff != FALLOFF_HALFLAMBERT &&
+             g_game->sunFalloff != FALLOFF_SOFTLAMBERT) {
     if (DotProduct(normal, sunDirection) <= 0) {
       return qfalse; // facing away
     }
   }
 
-  angle = CalculateFalloff(DotProduct(normal, sunDirection));
+  angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff);
   if (angle <= 0) {
     return qfalse; // facing away
   }

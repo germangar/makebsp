@@ -42,6 +42,7 @@ typedef struct {
 	float       radiosityIntensity;
 	float       radiosityColorRatio;
 	falloff_t   falloff;
+	falloff_t   sunFalloff;
 	qboolean    deluxeMap;
 	qboolean    forceUVGen;
 	qboolean    snapUVs;

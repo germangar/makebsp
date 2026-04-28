@@ -149,6 +149,20 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->falloff = FALLOFF_SOFTLAMBERT;
       else
         game->falloff = FALLOFF_LAMBERT;
+    } else if (!strcmp(key, "sunFalloff") && val->type == json_type_string) {
+      const char *f = json_value_as_string(val)->string;
+      if (!strcmp(f, "halflambert"))
+        game->sunFalloff = FALLOFF_HALFLAMBERT;
+      else if (!strcmp(f, "quadratic"))
+        game->sunFalloff = FALLOFF_QUADRATIC;
+      else if (!strcmp(f, "doublequadratic"))
+        game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
+      else if (!strcmp(f, "unreal"))
+        game->sunFalloff = FALLOFF_UNREAL;
+      else if (!strcmp(f, "softlambert"))
+        game->sunFalloff = FALLOFF_SOFTLAMBERT;
+      else
+        game->sunFalloff = FALLOFF_LAMBERT;
     } else if (!strcmp(key, "exposurefilter") && val->type == json_type_string) {
       const char *ef = json_value_as_string(val)->string;
       if (!strcmp(ef, "softknee"))
@@ -231,6 +245,31 @@ void JSON_ExportGame(const char *filename, game_t *game) {
     break;
   }
 
+  const char *sunFalloffStr;
+  switch (game->sunFalloff) {
+  case FALLOFF_LAMBERT:
+    sunFalloffStr = "lambert";
+    break;
+  case FALLOFF_HALFLAMBERT:
+    sunFalloffStr = "halflambert";
+    break;
+  case FALLOFF_QUADRATIC:
+    sunFalloffStr = "quadratic";
+    break;
+  case FALLOFF_DOUBLEQUADRATIC:
+    sunFalloffStr = "doublequadratic";
+    break;
+  case FALLOFF_UNREAL:
+    sunFalloffStr = "unreal";
+    break;
+  case FALLOFF_SOFTLAMBERT:
+    sunFalloffStr = "softlambert";
+    break;
+  default:
+    sunFalloffStr = "unknown";
+    break;
+  }
+
   const char *hdrStr;
   switch (game->hdr) {
   case HDR_8BIT:
@@ -284,6 +323,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"radiosityIntensity\": %.2f,\n"
           "  \"radiosityColorRatio\": %.2f,\n"
           "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */\n"
+          "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */\n"
           "  \"softLambertBias\": %.2f,\n"
           "  \"deluxeMap\": %s,\n"
           "  \"forceUVGen\": %s,\n"
@@ -304,6 +344,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->radiosityIntensity,
           game->radiosityColorRatio,
           falloffStr,
+          sunFalloffStr,
           game->softLambertBias,
           game->deluxeMap ? "true" : "false",
           game->forceUVGen ? "true" : "false",

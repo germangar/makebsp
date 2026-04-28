@@ -28,7 +28,8 @@ game_t games[MAX_GAMES] = {
 		4,          // radiosityPasses
 		1.0f,       // radiosityIntensity
 		0.75f,      // radiosityColorRatio
-		FALLOFF_LAMBERT,
+		FALLOFF_LAMBERT, // falloff
+		FALLOFF_SOFTLAMBERT, // sunFalloff
 		qfalse,     // deluxeMap
 		qtrue,      // forceUVGen
 		qtrue,      // snapUVs
@@ -58,7 +59,8 @@ game_t games[MAX_GAMES] = {
 		4,          // radiosityPasses
 		1.0f,       // radiosityIntensity
 		1.0f,       // radiosityColorRatio
-		FALLOFF_LAMBERT,
+		FALLOFF_LAMBERT, // falloff
+		FALLOFF_SOFTLAMBERT, // sunFalloff
 		qtrue,       // deluxeMap
 		qtrue,       // forceUVGen
 		qtrue,       // snapUVs
