@@ -1393,11 +1393,7 @@ void LightWorld(void) {
   qsort(surfaceWorkOrder, numDrawSurfaces, sizeof(int), CompareSurfaces);
 
   if (!nogridlighting) {
-    if (embree) {
-      _printf("--- TraceGrid (embree) ---\n");
-    } else {
-      _printf("--- TraceGrid (surface) ---\n");
-    }
+    _printf("--- TraceGrid ---\n");
     start = I_FloatTime();
     RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
     end = I_FloatTime();
@@ -1406,11 +1402,7 @@ void LightWorld(void) {
     _printf("%5.0f seconds elapsed in TraceGrid\n", end - start);
   }
 
-  if (embree) {
-    _printf("--- TraceLtm (embree) ---\n");
-  } else {
-    _printf("--- TraceLtm (surface) ---\n");
-  }
+  _printf("--- TraceLtm ---\n");
   start = I_FloatTime();
   RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceLtm);
   end = I_FloatTime();

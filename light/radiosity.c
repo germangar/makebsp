@@ -892,11 +892,6 @@ void LightRadiosity(int radiosityPasses) {
     if (radiosityPasses <= 0) return;
     _printf("--- Radiosity ---\n");
 
-    if (!embree) {
-        _printf("WARNING: Radiosity is only supported with the Embree backend. Skipping.\n");
-        return;
-    }
-
     qboolean anyVoxel = rad_voxel;
     for (int i = 0; i < numDrawSurfaces; i++) {
         if (GetSurfaceExtraRadFillMode(i) == RAD_FILL_VOXEL) {

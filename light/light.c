@@ -37,8 +37,6 @@ qboolean lightmapBorder;
 
 qboolean debugLightmaps;
 qboolean debugLightmapsAlpha;
-qboolean bruteTrace = qfalse;
-qboolean embree = qfalse;
 
 // CLI Overrides
 qboolean falloffOverridden = qfalse;
@@ -285,7 +283,6 @@ void CreateSurfaceLights(void) {
   dsurface_t *ds;
   shaderInfo_t *ls;
   winding_t *w;
-  cFacet_t *f;
   light_t *dl;
   vec3_t origin;
   drawVert_t *dv;
@@ -317,34 +314,20 @@ void CreateSurfaceLights(void) {
     // an autosprite shader will become
     // a point light instead of an area light
     if (ls->autosprite) {
-      // autosprite geometry should only have four vertexes
-      if (surfaceTest[i]) {
-        // curve or misc_model
-        f = surfaceTest[i]->facets;
-        if (surfaceTest[i]->numFacets != 1 || f->numBoundaries != 4) {
-          _printf("WARNING: surface at (%i %i %i) has autosprite shader but "
-                  "isn't a quad\n",
-                  (int)f->points[0][0], (int)f->points[0][1],
-                  (int)f->points[0][2]);
-        }
-        VectorAdd(f->points[0], f->points[1], origin);
-        VectorAdd(f->points[2], origin, origin);
-        VectorAdd(f->points[3], origin, origin);
-        VectorScale(origin, 0.25, origin);
-      } else {
-        // normal polygon
+      if (ds->numVerts == 4) {
         dv = &drawVerts[ds->firstVert];
-        if (ds->numVerts != 4) {
-          _printf("WARNING: surface at (%i %i %i) has autosprite shader but %i "
-                  "verts\n",
-                  (int)dv->xyz[0], (int)dv->xyz[1], (int)dv->xyz[2]);
-          continue;
-        }
-
         VectorAdd(dv[0].xyz, dv[1].xyz, origin);
         VectorAdd(dv[2].xyz, origin, origin);
         VectorAdd(dv[3].xyz, origin, origin);
         VectorScale(origin, 0.25, origin);
+      } else {
+        _printf("WARNING: surface at (%i %i %i) has autosprite shader but %i "
+                "verts\n",
+                (int)drawVerts[ds->firstVert].xyz[0], 
+                (int)drawVerts[ds->firstVert].xyz[1], 
+                (int)drawVerts[ds->firstVert].xyz[2],
+                ds->numVerts);
+        continue;
       }
 
       numPointLights++;
@@ -368,44 +351,113 @@ void CreateSurfaceLights(void) {
     }
 
     for (side = 0; side <= maxSide; side++) {
-      // create area lights
-      if (surfaceTest[i]) {
-        // curve or misc_model
-        for (j = 0; j < surfaceTest[i]->numFacets; j++) {
-          f = surfaceTest[i]->facets + j;
-          w = AllocWinding(f->numBoundaries);
-          w->numpoints = f->numBoundaries;
-          memcpy(w->points, f->points, f->numBoundaries * 12);
+      if (ds->surfaceType == MST_PATCH) {
+        // curves
+        mesh_t srcMesh, *mesh, *subdivided;
+        srcMesh.width = ds->patchWidth;
+        srcMesh.height = ds->patchHeight;
+        srcMesh.verts = &drawVerts[ds->firstVert];
 
-          VectorCopy(f->surface, normal);
+        mesh = SubdivideMesh(srcMesh, 8, 999);
+        PutMeshOnCurve(*mesh);
+        MakeMeshNormals(*mesh);
+        subdivided = RemoveLinearMeshColumnsRows(mesh);
+        FreeMesh(mesh);
+
+        for (int x = 0; x < subdivided->width - 1; x++) {
+          for (int y = 0; y < subdivided->height - 1; y++) {
+            drawVert_t *v[4];
+            v[0] = subdivided->verts + y * subdivided->width + x;
+            v[1] = v[0] + 1;
+            v[2] = v[0] + subdivided->width + 1;
+            v[3] = v[0] + subdivided->width;
+
+            // try to make a quad, otherwise two triangles
+            vec4_t plane;
+            PlaneFromPoints(plane, v[0]->xyz, v[3]->xyz, v[2]->xyz);
+            float dist = DotProduct(v[1]->xyz, plane) - plane[3];
+            
+            if (fabs(dist) < 0.1f) {
+              // quad
+              w = AllocWinding(4);
+              w->numpoints = 4;
+              VectorCopy(v[0]->xyz, w->points[0]);
+              VectorCopy(v[3]->xyz, w->points[1]);
+              VectorCopy(v[2]->xyz, w->points[2]);
+              VectorCopy(v[1]->xyz, w->points[3]);
+              VectorCopy(plane, normal);
+              if (side) {
+                winding_t *t = w;
+                w = ReverseWinding(t);
+                FreeWinding(t);
+                VectorSubtract(vec3_origin, normal, normal);
+              }
+              SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+            } else {
+              // two triangles
+              // tri 1
+              w = AllocWinding(3);
+              w->numpoints = 3;
+              VectorCopy(v[0]->xyz, w->points[0]);
+              VectorCopy(v[3]->xyz, w->points[1]);
+              VectorCopy(v[2]->xyz, w->points[2]);
+              VectorCopy(plane, normal);
+              if (side) {
+                winding_t *t = w;
+                w = ReverseWinding(t);
+                FreeWinding(t);
+                VectorSubtract(vec3_origin, normal, normal);
+              }
+              SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+
+              // tri 2
+              w = AllocWinding(3);
+              w->numpoints = 3;
+              VectorCopy(v[0]->xyz, w->points[0]);
+              VectorCopy(v[2]->xyz, w->points[1]);
+              VectorCopy(v[1]->xyz, w->points[2]);
+              PlaneFromPoints(plane, v[0]->xyz, v[2]->xyz, v[1]->xyz);
+              VectorCopy(plane, normal);
+              if (side) {
+                winding_t *t = w;
+                w = ReverseWinding(t);
+                FreeWinding(t);
+                VectorSubtract(vec3_origin, normal, normal);
+              }
+              SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+            }
+          }
+        }
+        FreeMesh(subdivided);
+      } else if (ds->surfaceType == MST_TRIANGLE_SOUP || ds->surfaceType == MST_PLANAR) {
+        // polygons or misc_models
+        for (j = 0; j < ds->numIndexes; j += 3) {
+          int i0 = drawIndexes[ds->firstIndex + j];
+          int i1 = drawIndexes[ds->firstIndex + j + 1];
+          int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+          w = AllocWinding(3);
+          w->numpoints = 3;
+          VectorCopy(drawVerts[ds->firstVert + i0].xyz, w->points[0]);
+          VectorCopy(drawVerts[ds->firstVert + i1].xyz, w->points[1]);
+          VectorCopy(drawVerts[ds->firstVert + i2].xyz, w->points[2]);
+
+          if (ds->surfaceType == MST_PLANAR) {
+            VectorCopy(ds->lightmapVecs[2], normal);
+          } else {
+            vec4_t plane;
+            PlaneFromPoints(plane, w->points[0], w->points[1], w->points[2]);
+            VectorCopy(plane, normal);
+          }
+
           if (side) {
-            winding_t *t;
-
-            t = w;
+            winding_t *t = w;
             w = ReverseWinding(t);
             FreeWinding(t);
             VectorSubtract(vec3_origin, normal, normal);
           }
           SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
         }
-      } else {
-        // normal polygon
-
-        w = AllocWinding(ds->numVerts);
-        w->numpoints = ds->numVerts;
-        for (j = 0; j < ds->numVerts; j++) {
-          VectorCopy(drawVerts[ds->firstVert + j].xyz, w->points[j]);
-        }
-        VectorCopy(ds->lightmapVecs[2], normal);
-        if (side) {
-          winding_t *t;
-
-          t = w;
-          w = ReverseWinding(t);
-          FreeWinding(t);
-          VectorSubtract(vec3_origin, normal, normal);
-        }
-        SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
       }
     }
   }

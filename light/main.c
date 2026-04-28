@@ -56,7 +56,6 @@ int main(int argc, char **argv) {
     radiosityPasses = -1;
     rad_bounce_scale = -1.0f;
     rad_color_ratio = -1.0f;
-    embree = qtrue;
     openclEnabled = qtrue;
 
     JSON_ExportStandardPackages("games");
@@ -145,13 +144,6 @@ int main(int argc, char **argv) {
             g_game->deluxeMap = qtrue;
             deluxeMapOverridden = qtrue;
             _printf("Deluxemaps enabled\n");
-        } else if (!strcmp(argv[i], "-embree")) {
-            embree = qtrue;
-        } else if (!strcmp(argv[i], "-surface")) {
-            embree = qfalse;
-        } else if (!strcmp(argv[i], "-bruteforce")) {
-            bruteTrace = qtrue;
-            _printf("BRUTE FORCE tracing enabled (all culling disabled)\n");
         } else if (!strcmp(argv[i], "-supersampling")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
@@ -279,9 +271,6 @@ int main(int argc, char **argv) {
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
-                "   bruteforce     = skip all culling and use legacy trace\n"
-                "   embree         = use high-performance Embree tracing path (DEFAULT)\n"
-                "   surface        = use legacy surface tracing path\n"
                 "   smooth <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
                 "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
@@ -335,17 +324,12 @@ int main(int argc, char **argv) {
     else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
     else if (g_game->falloff == FALLOFF_WRAPPED) fLog = "wrapped";
 
-    const char *tLog = "Surface";
-    if (bruteTrace) tLog = "Legacy";
-    else if (embree) tLog = "Embree";
-
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
     _printf("Falloff mode: %s\n", fLog);
-    _printf("Lighting flags: %s %s %s %s\n", 
+    _printf("Lighting flags: %s %s %s\n", 
             g_game->lightmapsRGB ? "sRGB" : "Linear",
             g_game->deluxeMap ? "Deluxe" : "Standard",
-            (g_game->hdr == HDR_8BIT) ? "range" : "clamped",
-            tLog);
+            (g_game->hdr == HDR_8BIT) ? "range" : "clamped");
 
     if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
     if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;

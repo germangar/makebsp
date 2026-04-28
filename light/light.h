@@ -217,39 +217,14 @@ extern float entity_scale;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
-extern qboolean bruteTrace;
-extern qboolean embree;
 extern qboolean rad_voxel;
 
 //===============================================================
 
 // light_trace.c
-
-// a facet is a subdivided element of a patch aproximation or model
-typedef struct cFacet_s {
-  float surface[4];
-  int numBoundaries;      // either 3 or 4, anything less is degenerate
-  float boundaries[4][4]; // positive is outside the bounds
-
-  vec3_t points[4]; // needed for area light subdivision
-
-  float textureMatrix[2][4]; // compute texture coordinates at point of impact
-                             // for translucency
-  int surfaceNum;
-} cFacet_t;
-
 typedef struct {
-  vec3_t mins, maxs;
   vec3_t origin;
   float radius;
-
-  qboolean patch;
-
-  int numFacets;
-  cFacet_t *facets;
-
-  shaderInfo_t *shader; // for translucency
-  int surfaceNum;
 } surfaceTest_t;
 
 extern surfaceTest_t *surfaceTest[MAX_MAP_DRAW_SURFS];
