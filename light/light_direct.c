@@ -449,13 +449,14 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         }
     }
 
-    angle = CalculateFalloff(factor);
+    angle = (factor < 0.0f) ? 0.0f : factor;
     if (angle <= 0) {
       return qfalse;
     }
 
     if (normal) {
-      float receiveAngle = CalculateFalloff(DotProduct(normal, out->dir));
+      float dot = DotProduct(normal, out->dir);
+      float receiveAngle = (dot < 0.0f) ? 0.0f : dot;
       if (receiveAngle <= 0) {
         // NOTICE: If we allow this light to go through it must not contribute to light direction (deluxemaps). It's a "glow"
         
