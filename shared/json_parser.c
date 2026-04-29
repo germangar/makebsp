@@ -149,9 +149,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       } else if (!strcmp(f, "unreal")) {
         game->falloff = FALLOFF_UNREAL;
         game->falloffBias = FALLOFF_UNREAL_SOFTBIAS;
-      } else if (!strcmp(f, "softlambert")) {
-        game->falloff = FALLOFF_SOFTLAMBERT;
-        game->falloffBias = FALLOFF_SOFTLAMBERT_SOFTBIAS;
       } else {
         game->falloff = FALLOFF_LAMBERT;
         game->falloffBias = FALLOFF_LAMBERT_SOFTBIAS;
@@ -166,8 +163,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
       else if (!strcmp(f, "unreal"))
         game->sunFalloff = FALLOFF_UNREAL;
-      else if (!strcmp(f, "softlambert"))
-        game->sunFalloff = FALLOFF_SOFTLAMBERT;
       else
         game->sunFalloff = FALLOFF_LAMBERT;
     } else if (!strcmp(key, "exposurefilter") && val->type == json_type_string) {
@@ -244,9 +239,6 @@ void JSON_ExportGame(const char *filename, game_t *game) {
   case FALLOFF_UNREAL:
     falloffStr = "unreal";
     break;
-  case FALLOFF_SOFTLAMBERT:
-    falloffStr = "softlambert";
-    break;
   default:
     falloffStr = "unknown";
     break;
@@ -268,9 +260,6 @@ void JSON_ExportGame(const char *filename, game_t *game) {
     break;
   case FALLOFF_UNREAL:
     sunFalloffStr = "unreal";
-    break;
-  case FALLOFF_SOFTLAMBERT:
-    sunFalloffStr = "softlambert";
     break;
   default:
     sunFalloffStr = "unknown";
@@ -329,8 +318,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"radiosityPasses\": %d,\n"
           "  \"radiosityIntensity\": %.2f,\n"
           "  \"radiosityColorRatio\": %.2f,\n"
-          "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */\n"
-          "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */\n"
+          "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
+          "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
           "  \"falloffBias\": %.2f,\n"
           "  \"deluxeMap\": %s,\n"
           "  \"forceUVGen\": %s,\n"

@@ -138,9 +138,6 @@ int main(int argc, char **argv) {
             } else if (!strcmp(arg, "unreal")) {
                 g_game->falloff = FALLOFF_UNREAL;
                 g_game->falloffBias = FALLOFF_UNREAL_SOFTBIAS;
-            } else if (!strcmp(arg, "softlambert")) {
-                g_game->falloff = FALLOFF_SOFTLAMBERT;
-                g_game->falloffBias = FALLOFF_SOFTLAMBERT_SOFTBIAS;
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
@@ -275,7 +272,7 @@ int main(int argc, char **argv) {
                 "   point <W>      = set the point light scale to W\n"
                 "   notrace        = don't cast any shadows\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
-                "   falloff <type>  = set the falloff model (lambert, halflambert, softlambert, quadratic, doublequadratic, unreal)\n"
+                "   falloff <type>  = set the falloff model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
                 "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
@@ -331,7 +328,6 @@ int main(int argc, char **argv) {
     else if (g_game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
     else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
     else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
-    else if (g_game->falloff == FALLOFF_SOFTLAMBERT) fLog = "softlambert";
 
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
     _printf("Falloff mode: %s\n", fLog);
