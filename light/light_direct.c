@@ -778,9 +778,9 @@ void TraceLtm(int num) {
 
   for (light = lights; light; light = light->next) {
       // 1. Distance check
-      VectorSubtract(light->origin, localSurfaces[num].origin, v);
+      VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
       d = VectorLength(v);
-      if (d > light->reach + localSurfaces[num].radius) {
+      if (d > light->reach + localSurfaces[realSurfIndex].radius) {
           continue;
       }
 
@@ -795,11 +795,11 @@ void TraceLtm(int num) {
                   // unsafe because the emitter's polygon might extend in front of the receiver
                   // plane even if its center is behind it. Thus, we skip angle culling for them.
               } else if (d > 0.001f) {
-                  VectorSubtract(light->origin, localSurfaces[num].origin, v);
+                  VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
                   VectorScale(v, 1.0f / d, v); // Safely normalize using precomputed distance
 
                   // Unified culling: use CalculateFalloff on the "best possible" dot product for this surface
-                  float bestDot = DotProduct(v, ds->lightmapVecs[2]) + (localSurfaces[num].radius / d);
+                  float bestDot = DotProduct(v, ds->lightmapVecs[2]) + (localSurfaces[realSurfIndex].radius / d);
                   if (CalculateFalloff(bestDot) <= 0) {
                       continue;
                   }
@@ -1066,7 +1066,7 @@ void TraceLtm(int num) {
           }
         }
         for (k = 0; k < 3; k++) {
-          base[k] += localSurfaces[num].entityOrigin[k];
+          base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
         }
 
         // we may need to slightly nudge the sample point
