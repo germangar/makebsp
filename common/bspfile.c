@@ -29,11 +29,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 void GetLeafNums (void);
 
 typedef struct {
-	vec3_t		xyz;
-	float		st[2];
-	float		lightmap[2];
-	vec3_t		normal;
-	byte		color[4];
+  int planeNum;
+  int shaderNum;
+} ibspBrushSide_t;
+
+typedef struct {
+  vec3_t xyz;
+  float st[2];
+  float lightmap[2];
+  vec3_t normal;
+  byte color[4];
 } ibspDrawVert_t;
 
 typedef struct {
@@ -311,21 +316,24 @@ void	LoadBSPFile( const char *filename ) {
 	numbrushes = CopyLump( header, LUMP_BRUSHES, dbrushes, sizeof(dbrush_t) );
 
 	if ( ident == FBSP_IDENT ) {
-		numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, NULL, sizeof(rdbrushside_t) );
-		rdbrushside_t *rbs = malloc( numbrushsides * sizeof(rdbrushside_t) );
-		CopyLump( header, LUMP_BRUSHSIDES, rbs, sizeof(rdbrushside_t) );
-		for ( i = 0 ; i < numbrushsides ; i++ ) {
-			dbrushsides[i].planeNum = rbs[i].planeNum;
-			dbrushsides[i].shaderNum = rbs[i].shaderNum;
-		}
-		free( rbs );
+		numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, dbrushsides, sizeof(dbrushside_t) );
 
 		numDrawVerts = CopyLump( header, LUMP_DRAWVERTS, drawVerts, sizeof(drawVert_t) );
 		numDrawSurfaces = CopyLump( header, LUMP_SURFACES, drawSurfaces, sizeof(dsurface_t) );
 		numGridPoints = CopyLump( header, LUMP_LIGHTGRID, gridData, sizeof(bspGridPoint_t) );
 		numLightArray = CopyLump( header, LUMP_LIGHTARRAY, lightArray, 2 );
 	} else {
-		numbrushsides = CopyLump( header, LUMP_BRUSHSIDES, dbrushsides, sizeof(dbrushside_t) );
+		ibspBrushSide_t *isides;
+		int numisides = CopyLump( header, LUMP_BRUSHSIDES, NULL, sizeof(ibspBrushSide_t) );
+		isides = malloc( numisides * sizeof(ibspBrushSide_t) );
+		CopyLump( header, LUMP_BRUSHSIDES, isides, sizeof(ibspBrushSide_t) );
+		numbrushsides = numisides;
+		for ( i = 0 ; i < numisides ; i++ ) {
+			dbrushsides[i].planeNum = isides[i].planeNum;
+			dbrushsides[i].shaderNum = isides[i].shaderNum;
+			dbrushsides[i].surfaceNum = -1;
+		}
+		free( isides );
 
 		// up-convert IBSP
 		ibspDrawVert_t *iv;
@@ -533,18 +541,17 @@ void	WriteBSPFile( const char *filename ) {
 	AddLump( bspfile, header, LUMP_BRUSHES, dbrushes, numbrushes * sizeof(dbrush_t) );
 
 	if ( g_game->bspVersion == 1 ) {
-		// FBSP: engine expects rdbrushside_t (12 bytes: planeNum, shaderNum, surfaceNum)
-		rdbrushside_t *rbs = malloc( numbrushsides * sizeof(rdbrushside_t) );
-		for ( int k = 0; k < numbrushsides; k++ ) {
-			rbs[k].planeNum = dbrushsides[k].planeNum;
-			rbs[k].shaderNum = dbrushsides[k].shaderNum;
-			rbs[k].surfaceNum = 0;
-		}
-		AddLump( bspfile, header, LUMP_BRUSHSIDES, rbs, numbrushsides * sizeof(rdbrushside_t) );
-		free( rbs );
+		// FBSP: engine expects dbrushside_t (12 bytes: planeNum, shaderNum, surfaceNum)
+		AddLump( bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides * sizeof(dbrushside_t) );
 	} else {
 		// IBSP: standard 8-byte brushsides
-		AddLump( bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides * sizeof(dbrushside_t) );
+		ibspBrushSide_t *isides = malloc( numbrushsides * sizeof(ibspBrushSide_t) );
+		for ( int k = 0; k < numbrushsides; k++ ) {
+			isides[k].planeNum = dbrushsides[k].planeNum;
+			isides[k].shaderNum = dbrushsides[k].shaderNum;
+		}
+		AddLump( bspfile, header, LUMP_BRUSHSIDES, isides, numbrushsides * sizeof(ibspBrushSide_t) );
+		free( isides );
 	}
 	AddLump( bspfile, header, LUMP_LEAFSURFACES, dleafsurfaces, numleafsurfaces * sizeof(dleafsurfaces[0]) );
 	AddLump( bspfile, header, LUMP_LEAFBRUSHES, dleafbrushes, numleafbrushes * sizeof(dleafbrushes[0]) );

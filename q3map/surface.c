@@ -902,6 +902,9 @@ void EmitPlanarSurf(mapDrawSurface_t *ds) {
     Error("MAX_MAP_DRAW_SURFS_LIMIT");
   }
   out = &drawSurfaces[numDrawSurfaces];
+  if (ds->side) {
+    ds->side->surfaceNum = numDrawSurfaces;
+  }
   numDrawSurfaces++;
 
   out->surfaceType = MST_PLANAR;

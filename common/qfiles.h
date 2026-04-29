@@ -169,14 +169,11 @@ typedef struct {
 typedef struct {
 	int			planeNum;			// positive plane side faces out of the leaf
 	int			shaderNum;
+	int			surfaceNum;			// FBSP: includes surfacenum for QFusion
 } dbrushside_t;
 
-// FBSP/RBSP extended brushside (12 bytes) — includes surfacenum for QFusion
-typedef struct {
-	int			planeNum;
-	int			shaderNum;
-	int			surfaceNum;
-} rdbrushside_t;
+// FBSP/RBSP extended brushside (12 bytes) — same as dbrushside_t now
+typedef dbrushside_t rdbrushside_t;
 
 typedef struct {
 	int			firstSide;

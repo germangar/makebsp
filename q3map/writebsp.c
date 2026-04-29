@@ -294,12 +294,42 @@ void BeginBSPFile( void ) {
 
 /*
 ============
+FixBrushSides
+============
+*/
+void FixBrushSides(void) {
+	int i, j;
+	entity_t *e;
+	bspbrush_t *b;
+	side_t *s;
+
+	_printf("--- FixBrushSides ---\n");
+
+	for (i = 0; i < num_entities; i++) {
+		e = &entities[i];
+		for (b = e->brushes; b; b = b->next) {
+			for (j = 0; j < b->numsides; j++) {
+				s = &b->sides[j];
+				if (s->backSide) {
+					continue;
+				}
+				if (s->outputNum >= 0 && s->outputNum < numbrushsides) {
+					dbrushsides[s->outputNum].surfaceNum = s->surfaceNum;
+				}
+			}
+		}
+	}
+}
+
+/*
+============
 EndBSPFile
 ============
 */
 void EndBSPFile( void ) {
 	char	path[1024];
 
+	FixBrushSides ();
 	EmitPlanes ();
 	UnparseEntities ();
 
@@ -344,10 +374,13 @@ void EmitBrushes ( bspbrush_t *brushes ) {
 				Error( "MAX_MAP_BRUSHSIDES ");
 			}
 			cp = &dbrushsides[numbrushsides];
+			b->sides[j].outputNum = numbrushsides;
+			b->sides[j].surfaceNum = -1;
 			db->numSides++;
 			numbrushsides++;
 			cp->planeNum = b->sides[j].planenum;
 			cp->shaderNum = EmitShader( b->sides[j].shaderInfo->shader );
+			cp->surfaceNum = -1;
 		}
 	}
 

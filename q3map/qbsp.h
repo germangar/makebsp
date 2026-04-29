@@ -98,6 +98,9 @@ typedef struct side_s {
   qboolean bevel;    // don't ever use for bsp splitting, and don't bother
                      // making windings for it
   qboolean backSide; // generated side for a q3map_backShader
+
+  int surfaceNum; // the index of the dsurface_t this side generated
+  int outputNum;  // the index of the dbrushside_t this side generated
 } side_t;
 
 #define MAX_BRUSH_SIDES 1024
