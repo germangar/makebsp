@@ -50,27 +50,26 @@ LIGHT TRACING EXECUTION
 
 float CalculateSpecificFalloff(float dot, falloff_t falloff) {
   float val = (dot > 1.0f) ? 1.0f : dot;
+  
+  // Apply uniform soft bias to all falloff types
+  val = val * (1.0f - g_game->falloffBias) + g_game->falloffBias;
+  if (val < 0.0f) val = 0.0f;
+
   if (falloff == FALLOFF_HALFLAMBERT) {
-    val = val * 0.5f + 0.5f;
     return val * val;
   } else if (falloff == FALLOFF_SOFTLAMBERT) {
-    val = val * (1.0f - g_game->softLambertBias) + g_game->softLambertBias;
-    return (val < 0.0f) ? 0.0f : val;
+    return val;
   } else if (falloff == FALLOFF_UNREAL) {
     // Unreal angular part is standard Lambert
-    return (val < 0.0f) ? 0.0f : val;
+    return val;
   } else if (falloff == FALLOFF_QUADRATIC) {
-    if (val < 0.0f)
-      return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val);
   } else if (falloff == FALLOFF_DOUBLEQUADRATIC) {
-    if (val < 0.0f)
-      return 0.0f;
     val = 1.0f - val;
     return 1.0f - (val * val * val);
   }
-  return (val < 0.0f) ? 0.0f : val;
+  return val;
 }
 
 float CalculateFalloff(float dot) {
@@ -770,10 +769,13 @@ void TraceLtm(int num) {
   localLights = malloc(numLights * sizeof(light_t *));
   numLocalLights = 0;
   
-  if (g_game->falloff == FALLOFF_SOFTLAMBERT) {
-      wrapThreshold = -g_game->softLambertBias / (1.0f - g_game->softLambertBias);
-  } else if (g_game->falloff == FALLOFF_HALFLAMBERT) {
-      wrapThreshold = -1.0f; // Everything hits
+  if (g_game->falloffBias > 0.0f && g_game->falloffBias < 1.0f) {
+      wrapThreshold = -g_game->falloffBias / (1.0f - g_game->falloffBias);
+      if (wrapThreshold < -1.0f) wrapThreshold = -1.0f;
+  } else if (g_game->falloffBias >= 1.0f) {
+      wrapThreshold = -1.0f;
+  } else {
+      wrapThreshold = 0.0f;
   }
 
   for (light = lights; light; light = light->next) {

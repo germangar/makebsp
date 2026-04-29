@@ -125,21 +125,33 @@ int main(int argc, char **argv) {
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
                 g_game->falloff = FALLOFF_HALFLAMBERT;
+                g_game->falloffBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "lambert")) {
                 g_game->falloff = FALLOFF_LAMBERT;
+                g_game->falloffBias = FALLOFF_LAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "quadratic")) {
                 g_game->falloff = FALLOFF_QUADRATIC;
+                g_game->falloffBias = FALLOFF_QUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "doublequadratic")) {
                 g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
+                g_game->falloffBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "unreal")) {
                 g_game->falloff = FALLOFF_UNREAL;
+                g_game->falloffBias = FALLOFF_UNREAL_SOFTBIAS;
             } else if (!strcmp(arg, "softlambert")) {
                 g_game->falloff = FALLOFF_SOFTLAMBERT;
+                g_game->falloffBias = FALLOFF_SOFTLAMBERT_SOFTBIAS;
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
             falloffOverridden = qtrue;
             overrideFalloff = g_game->falloff;
+        } else if (!strcmp(argv[i], "-falloff_softbias")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_softbias requires a numeric value");
+            g_game->falloffBias = (float)atof(argv[i + 1]);
+            if (g_game->falloffBias < 0.0f) g_game->falloffBias = 0.0f;
+            if (g_game->falloffBias > 1.0f) g_game->falloffBias = 1.0f;
+            i++;
         } else if (!strcmp(argv[i], "-deluxe")) {
             g_game->deluxeMap = qtrue;
             deluxeMapOverridden = qtrue;
@@ -220,12 +232,6 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
             rad_angle_match = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_softbias")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_softbias requires a numeric value");
-            g_game->softLambertBias = (float)atof(argv[i + 1]);
-            if (g_game->softLambertBias < 0.0f) g_game->softLambertBias = 0.0f;
-            if (g_game->softLambertBias > 1.0f) g_game->softLambertBias = 1.0f;
-            i++;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
@@ -270,6 +276,7 @@ int main(int argc, char **argv) {
                 "   notrace        = don't cast any shadows\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   falloff <type>  = set the falloff model (lambert, halflambert, softlambert, quadratic, doublequadratic, unreal)\n"
+                "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"

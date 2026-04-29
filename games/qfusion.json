@@ -17,14 +17,14 @@
   "radiosityPasses": 4,
   "radiosityIntensity": 1.00,
   "radiosityColorRatio": 1.00,
-  "falloff": "softlambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */
+  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */
   "sunFalloff": "softlambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal, softlambert ] */
-  "softLambertBias": 0.15,
+  "falloffBias": 0.00,
   "deluxeMap": true,
   "forceUVGen": true,
   "snapUVs": true,
   "antialiasingPasses": 2, /* post-process AA passes */
   "smoothPasses": 0, /* passes of blurring lightmaps */
-  "smoothRadius": 0.50, /* affects both blurring and supersampling */
+  "smoothRadius": 0.50, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "reinhard" /* [ off, softknee, reinhard, filmic ] */
 }

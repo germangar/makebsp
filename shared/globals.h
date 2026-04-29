@@ -5,6 +5,13 @@
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL, FALLOFF_SOFTLAMBERT } falloff_t;
 
+#define FALLOFF_LAMBERT_SOFTBIAS 0.0f
+#define FALLOFF_HALFLAMBERT_SOFTBIAS 0.5f
+#define FALLOFF_SOFTLAMBERT_SOFTBIAS 0.15f
+#define FALLOFF_QUADRATIC_SOFTBIAS 0.15f
+#define FALLOFF_DOUBLEQUADRATIC_SOFTBIAS 0.15f
+#define FALLOFF_UNREAL_SOFTBIAS 0.15f
+
 typedef enum {
     HDR_OFF = 0,
     HDR_8BIT = 1,
@@ -50,7 +57,7 @@ typedef struct {
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;
-	float       softLambertBias;
+	float       falloffBias;
 } game_t;
 
 #define MAX_GAMES 128
