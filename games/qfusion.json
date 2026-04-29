@@ -23,8 +23,8 @@
   "deluxeMap": true,
   "forceUVGen": true,
   "snapUVs": true,
-  "antialiasingPasses": 2, /* post-process AA passes */
-  "smoothPasses": 0, /* passes of blurring lightmaps */
-  "smoothRadius": 0.50, /* fractional values accepted. Minimum 0.1 */
+  "antialiasingPasses": 0, /* post-process AA passes */
+  "smoothPasses": 4, /* passes of blurring lightmaps */
+  "smoothRadius": 0.25, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "reinhard" /* [ off, softknee, reinhard, filmic ] */
 }

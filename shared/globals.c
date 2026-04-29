@@ -64,9 +64,9 @@ game_t games[MAX_GAMES] = {
 		qtrue,       // deluxeMap
 		qtrue,       // forceUVGen
 		qtrue,       // snapUVs
-		2,           // antialiasingPasses
-		0,           // defaultSmoothPasses
-		0.5f,        // defaultSmoothRadius
+		0,           // antialiasingPasses
+		4,           // defaultSmoothPasses
+		0.25f,       // defaultSmoothRadius
 		TONEMAP_REINHARD, // exposureFilter
 		FALLOFF_LAMBERT_SOFTBIAS        // falloffBias
 	}
