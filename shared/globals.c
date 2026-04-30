@@ -6,6 +6,8 @@ char source[1024];
 char name[1024];
 
 int numGames = 2;
+float falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+float sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 
 game_t games[MAX_GAMES] = {
 	{
@@ -37,7 +39,6 @@ game_t games[MAX_GAMES] = {
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
 		TONEMAP_LINEAR, // exposureFilter
-		FALLOFF_LAMBERT_SOFTBIAS       // falloffBias
 	},
 	{
 		"qfusion",
@@ -68,7 +69,6 @@ game_t games[MAX_GAMES] = {
 		4,           // defaultSmoothPasses
 		0.25f,       // defaultSmoothRadius
 		TONEMAP_REINHARD, // exposureFilter
-		FALLOFF_LAMBERT_SOFTBIAS        // falloffBias
 	}
 };
 

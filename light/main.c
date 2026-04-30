@@ -125,19 +125,24 @@ int main(int argc, char **argv) {
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
                 g_game->falloff = FALLOFF_HALFLAMBERT;
-                g_game->falloffBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+                falloffSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+                sunSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "lambert")) {
                 g_game->falloff = FALLOFF_LAMBERT;
-                g_game->falloffBias = FALLOFF_LAMBERT_SOFTBIAS;
+                falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+                sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "quadratic")) {
                 g_game->falloff = FALLOFF_QUADRATIC;
-                g_game->falloffBias = FALLOFF_QUADRATIC_SOFTBIAS;
+                falloffSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
+                sunSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "doublequadratic")) {
                 g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
-                g_game->falloffBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+                falloffSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+                sunSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "unreal")) {
                 g_game->falloff = FALLOFF_UNREAL;
-                g_game->falloffBias = FALLOFF_UNREAL_SOFTBIAS;
+                falloffSoftBias = FALLOFF_UNREAL_SOFTBIAS;
+                sunSoftBias = FALLOFF_UNREAL_SOFTBIAS;
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
@@ -145,10 +150,32 @@ int main(int argc, char **argv) {
             overrideFalloff = g_game->falloff;
         } else if (!strcmp(argv[i], "-falloff_softbias")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_softbias requires a numeric value");
-            g_game->falloffBias = (float)atof(argv[i + 1]);
-            if (g_game->falloffBias < 0.0f) g_game->falloffBias = 0.0f;
-            if (g_game->falloffBias > 1.0f) g_game->falloffBias = 1.0f;
+            falloffSoftBias = (float)atof(argv[i + 1]);
+            if (falloffSoftBias < 0.0f) falloffSoftBias = 0.0f;
+            if (falloffSoftBias > 1.0f) falloffSoftBias = 1.0f;
             i++;
+        } else if (!strcmp(argv[i], "-falloff_sun_softbias")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun_softbias requires a numeric value");
+            sunSoftBias = (float)atof(argv[i + 1]);
+            if (sunSoftBias < 0.0f) sunSoftBias = 0.0f;
+            if (sunSoftBias > 1.0f) sunSoftBias = 1.0f;
+            i++;
+        } else if (!strcmp(argv[i], "-falloff_sun")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun requires a type (lambert, halflambert, etc.)");
+            char *arg = argv[++i];
+            if (!strcmp(arg, "halflambert")) {
+                g_game->sunFalloff = FALLOFF_HALFLAMBERT;
+            } else if (!strcmp(arg, "lambert")) {
+                g_game->sunFalloff = FALLOFF_LAMBERT;
+            } else if (!strcmp(arg, "quadratic")) {
+                g_game->sunFalloff = FALLOFF_QUADRATIC;
+            } else if (!strcmp(arg, "doublequadratic")) {
+                g_game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
+            } else if (!strcmp(arg, "unreal")) {
+                g_game->sunFalloff = FALLOFF_UNREAL;
+            } else {
+                Error("Unknown sun falloff type: %s", arg);
+            }
         } else if (!strcmp(argv[i], "-deluxe")) {
             g_game->deluxeMap = qtrue;
             deluxeMapOverridden = qtrue;
@@ -274,6 +301,8 @@ int main(int argc, char **argv) {
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   falloff <type>  = set the falloff model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
                 "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
+                "   falloff_sun <type> = override the sun falloff model\n"
+                "   falloff_sun_softbias <F> = override the sun soft bias\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
@@ -330,7 +359,15 @@ int main(int argc, char **argv) {
     else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
 
     _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
-    _printf("Falloff mode: %s\n", fLog);
+    _printf("Falloff mode: %s (Bias %.2f)\n", fLog, falloffSoftBias);
+    
+    const char *sfLog = "lambert";
+    if (g_game->sunFalloff == FALLOFF_HALFLAMBERT) sfLog = "halflambert";
+    else if (g_game->sunFalloff == FALLOFF_QUADRATIC) sfLog = "quadratic";
+    else if (g_game->sunFalloff == FALLOFF_DOUBLEQUADRATIC) sfLog = "doublequadratic";
+    else if (g_game->sunFalloff == FALLOFF_UNREAL) sfLog = "unreal";
+    
+    _printf("Sun Falloff mode: %s (Bias %.2f)\n", sfLog, sunSoftBias);
     _printf("Lighting flags: %s %s %s\n", 
             g_game->lightmapsRGB ? "sRGB" : "Linear",
             g_game->deluxeMap ? "Deluxe" : "Standard",

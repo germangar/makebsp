@@ -137,22 +137,16 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
       else if (val->type == json_type_false) game->snapUVs = qfalse;
     } else if (!strcmp(key, "falloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
-      if (!strcmp(f, "halflambert")) {
+      if (!strcmp(f, "halflambert"))
         game->falloff = FALLOFF_HALFLAMBERT;
-        game->falloffBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
-      } else if (!strcmp(f, "quadratic")) {
+      else if (!strcmp(f, "quadratic"))
         game->falloff = FALLOFF_QUADRATIC;
-        game->falloffBias = FALLOFF_QUADRATIC_SOFTBIAS;
-      } else if (!strcmp(f, "doublequadratic")) {
+      else if (!strcmp(f, "doublequadratic"))
         game->falloff = FALLOFF_DOUBLEQUADRATIC;
-        game->falloffBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
-      } else if (!strcmp(f, "unreal")) {
+      else if (!strcmp(f, "unreal"))
         game->falloff = FALLOFF_UNREAL;
-        game->falloffBias = FALLOFF_UNREAL_SOFTBIAS;
-      } else {
+      else
         game->falloff = FALLOFF_LAMBERT;
-        game->falloffBias = FALLOFF_LAMBERT_SOFTBIAS;
-      }
     } else if (!strcmp(key, "sunFalloff") && val->type == json_type_string) {
       const char *f = json_value_as_string(val)->string;
       if (!strcmp(f, "halflambert"))
@@ -175,8 +169,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->exposureFilter = TONEMAP_FILMIC;
       else
         game->exposureFilter = TONEMAP_LINEAR;
-    } else if (!strcmp(key, "falloffBias") && val->type == json_type_number) {
-      game->falloffBias = (float)atof(json_value_as_number(val)->number);
     }
 
     el = el->next;
@@ -320,7 +312,6 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"radiosityColorRatio\": %.2f,\n"
           "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
           "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
-          "  \"falloffBias\": %.2f,\n"
           "  \"deluxeMap\": %s,\n"
           "  \"forceUVGen\": %s,\n"
           "  \"snapUVs\": %s,\n"
@@ -341,7 +332,6 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->radiosityColorRatio,
           falloffStr,
           sunFalloffStr,
-          game->falloffBias,
           game->deluxeMap ? "true" : "false",
           game->forceUVGen ? "true" : "false",
           game->snapUVs ? "true" : "false",

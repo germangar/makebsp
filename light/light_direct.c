@@ -48,11 +48,11 @@ LIGHT TRACING EXECUTION
 ===============================================================
 */
 
-float CalculateSpecificFalloff(float dot, falloff_t falloff) {
+float CalculateSpecificFalloff(float dot, falloff_t falloff, float bias) {
   float val = (dot > 1.0f) ? 1.0f : dot;
   
   // Apply uniform soft bias to all falloff types
-  val = val * (1.0f - g_game->falloffBias) + g_game->falloffBias;
+  val = val * (1.0f - bias) + bias;
   if (val < 0.0f) val = 0.0f;
 
   if (falloff == FALLOFF_HALFLAMBERT) {
@@ -71,7 +71,7 @@ float CalculateSpecificFalloff(float dot, falloff_t falloff) {
 }
 
 float CalculateFalloff(float dot) {
-  return CalculateSpecificFalloff(dot, g_game->falloff);
+  return CalculateSpecificFalloff(dot, g_game->falloff, falloffSoftBias);
 }
 
 
@@ -353,7 +353,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
     }
   }
 
-  angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff);
+  angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff, sunSoftBias);
   if (angle <= 0) {
     return qfalse; // facing away
   }
@@ -767,10 +767,10 @@ void TraceLtm(int num) {
   localLights = malloc(numLights * sizeof(light_t *));
   numLocalLights = 0;
   
-  if (g_game->falloffBias > 0.0f && g_game->falloffBias < 1.0f) {
-      wrapThreshold = -g_game->falloffBias / (1.0f - g_game->falloffBias);
+  if (falloffSoftBias > 0.0f && falloffSoftBias < 1.0f) {
+      wrapThreshold = -falloffSoftBias / (1.0f - falloffSoftBias);
       if (wrapThreshold < -1.0f) wrapThreshold = -1.0f;
-  } else if (g_game->falloffBias >= 1.0f) {
+  } else if (falloffSoftBias >= 1.0f) {
       wrapThreshold = -1.0f;
   } else {
       wrapThreshold = 0.0f;

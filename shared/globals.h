@@ -56,8 +56,10 @@ typedef struct {
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;
-	float       falloffBias;
 } game_t;
+
+extern float falloffSoftBias;
+extern float sunSoftBias;
 
 #define MAX_GAMES 128
 extern int numGames;
