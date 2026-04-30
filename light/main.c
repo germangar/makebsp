@@ -372,6 +372,7 @@ int main(int argc, char **argv) {
             g_game->lightmapsRGB ? "sRGB" : "Linear",
             g_game->deluxeMap ? "Deluxe" : "Standard",
             (g_game->hdr == HDR_8BIT) ? "range" : "clamped");
+    _printf("Lightmap size: %d (Write: %d)\n", g_game->lightmapSize, g_game->writeLightmapSize);
 
     if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
     if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;

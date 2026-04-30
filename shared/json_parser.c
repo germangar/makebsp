@@ -15,6 +15,52 @@
     var = max_val;                         \
   }
 
+static void JSON_StripComments(char *buffer, int len) {
+  int i;
+  qboolean inString = qfalse;
+  qboolean inComment = qfalse;
+  qboolean inLineComment = qfalse;
+
+  for (i = 0; i < len; i++) {
+    if (!inComment && !inLineComment) {
+      if (buffer[i] == '\"' && (i == 0 || buffer[i - 1] != '\\')) {
+        inString = !inString;
+      }
+      if (!inString) {
+        if (buffer[i] == '/' && i + 1 < len) {
+          if (buffer[i + 1] == '*') {
+            inComment = qtrue;
+            buffer[i] = ' ';
+            buffer[i + 1] = ' ';
+            i++;
+          } else if (buffer[i + 1] == '/') {
+            inLineComment = qtrue;
+            buffer[i] = ' ';
+            buffer[i + 1] = ' ';
+            i++;
+          }
+        }
+      }
+    } else if (inComment) {
+      if (buffer[i] == '*' && i + 1 < len && buffer[i + 1] == '/') {
+        inComment = qfalse;
+        buffer[i] = ' ';
+        buffer[i + 1] = ' ';
+        i++;
+      } else {
+        if (buffer[i] != '\n' && buffer[i] != '\r')
+          buffer[i] = ' ';
+      }
+    } else if (inLineComment) {
+      if (buffer[i] == '\n' || buffer[i] == '\r') {
+        inLineComment = qfalse;
+      } else {
+        buffer[i] = ' ';
+      }
+    }
+  }
+}
+
 struct json_value_s *JSON_ReadFile(const char *filename) {
   void *buffer = NULL;
   int len;
@@ -24,6 +70,8 @@ struct json_value_s *JSON_ReadFile(const char *filename) {
   if (len <= 0) {
     return NULL;
   }
+
+  JSON_StripComments((char *)buffer, len);
 
   root = json_parse(buffer, (size_t)len);
   free(buffer);
@@ -88,7 +136,11 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     } else if (!strcmp(key, "maxSurfaceIndexes") && val->type == json_type_number) {
       game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapSize") && val->type == json_type_number) {
+      int oldSize = game->lightmapSize;
       game->lightmapSize = atoi(json_value_as_number(val)->number);
+      if (game->writeLightmapSize == oldSize) game->writeLightmapSize = game->lightmapSize;
+    } else if (!strcmp(key, "writeLightmapSize") && val->type == json_type_number) {
+      game->writeLightmapSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "sampleSize") && val->type == json_type_number) {
       game->defaultSampleSize = atoi(json_value_as_number(val)->number);
     } else if (!strcmp(key, "hdr") && val->type == json_type_string) {
@@ -183,6 +235,9 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
   if (game->lightmapSize < 1) {
     game->lightmapSize = 128;
   }
+  if (game->writeLightmapSize < 1) {
+    game->writeLightmapSize = game->lightmapSize;
+  }
 
   JSON_Free(root);
   return qtrue;
@@ -198,7 +253,6 @@ static void JSON_LoadGameCallback(const char *filename) {
   char fullpath[1024];
   sprintf(fullpath, "%s/%s", g_loadDir, filename);
 
-  // Template selection is now handled internally by JSON_LoadGame
   if (JSON_LoadGame(fullpath, &games[numGames])) {
     numGames++;
     g_loadCount++;
@@ -301,6 +355,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"maxSurfaceVerts\": %d,\n"
           "  \"maxSurfaceIndexes\": %d,\n"
           "  \"lightmapSize\": %d,\n"
+          "  \"writeLightmapSize\": %d,\n"
           "  \"sampleSize\": %d,\n"
           "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
           "  \"lightmapsRGB\": %s,\n"
@@ -322,7 +377,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
-          game->maxSurfaceIndexes, game->lightmapSize,
+          game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
           game->defaultSampleSize, hdrStr, game->lightmapsRGB ? "true" : "false",
           game->lightgridRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",

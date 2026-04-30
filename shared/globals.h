@@ -36,6 +36,7 @@ typedef struct {
 	int         maxSurfaceVerts;
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
+	int         writeLightmapSize;
 
 	// Lighting flags
 	int         defaultSampleSize;

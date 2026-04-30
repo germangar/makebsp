@@ -20,6 +20,7 @@ game_t games[MAX_GAMES] = {
 		999,
 		6000,
 		128,
+		128,        // writeLightmapSize
 		// Global Map Limits removed
 		8,          // defaultSampleSize
         HDR_OFF,    // hdr
@@ -50,6 +51,7 @@ game_t games[MAX_GAMES] = {
 		65535,
 		393210,
 		512,
+		512,        // writeLightmapSize
 		// Global Map Limits removed
 		4,          // defaultSampleSize
         HDR_8BIT,   // hdr

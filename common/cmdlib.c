@@ -1081,7 +1081,10 @@ void Sys_ListFiles(const char *directory, const char *extension,
   struct _finddata_t fileinfo;
   intptr_t handle;
 
-  sprintf(search, "%s%s", directory, extension);
+  if (directory[0] && directory[strlen(directory) - 1] != '/' && directory[strlen(directory) - 1] != '\\')
+    sprintf(search, "%s/%s", directory, extension);
+  else
+    sprintf(search, "%s%s", directory, extension);
   handle = _findfirst(search, &fileinfo);
   if (handle == -1)
     return;

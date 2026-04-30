@@ -8,6 +8,7 @@
   "maxSurfaceVerts": 999,
   "maxSurfaceIndexes": 6000,
   "lightmapSize": 128,
+  "writeLightmapSize": 128,
   "sampleSize": 8,
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "lightmapsRGB": false,
@@ -19,7 +20,6 @@
   "radiosityColorRatio": 0.75,
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "falloffBias": 0.15,
   "deluxeMap": false,
   "forceUVGen": true,
   "snapUVs": true,

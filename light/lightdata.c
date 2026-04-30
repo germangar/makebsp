@@ -20,6 +20,161 @@ tonemap_t tonemapMode = TONEMAP_LINEAR;
 
 #define HOTSPOT_TAME_FACTOR 1.05f
 
+
+/*
+===============================================================================
+DOWNSCALE LIGHTMAP IMAGES (Experimental).
+Generate the whole lightmaps at a higher resolution and scale them
+back down only for writting. It currently has a lot of edge bleeding. 
+Don't use.
+===============================================================================
+*/
+
+static void DilateLightmapAtlas(int width, int passes) {
+	int lm, x, y, i, j, p;
+	int numLMs = (numLightBytes / 3) / (width * width);
+	float *temp = malloc(numLightBytes * sizeof(float));
+	byte *tempMask = malloc(numLMs * width * width);
+
+	_printf("Dilating lightmaps (%d passes)...\n", passes);
+
+	for (p = 0; p < passes; p++) {
+		memcpy(temp, lightFloats, numLightBytes * sizeof(float));
+		memcpy(tempMask, lightAlphaMask, numLMs * width * width);
+
+		for (lm = 0; lm < numLMs; lm++) {
+			for (y = 0; y < width; y++) {
+				for (x = 0; x < width; x++) {
+					int idx = (lm * width * width) + y * width + x;
+					if (tempMask[idx]) continue;
+
+					float sum[3] = {0,0,0};
+					float weight = 0;
+					for (j = -1; j <= 1; j++) {
+						for (i = -1; i <= 1; i++) {
+							if (i == 0 && j == 0) continue;
+							int nx = x + i;
+							int ny = y + j;
+							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
+								int nidx = (lm * width * width) + ny * width + nx;
+								if (tempMask[nidx]) {
+									VectorAdd(sum, &temp[nidx * 3], sum);
+									weight += 1.0f;
+								}
+							}
+						}
+					}
+					if (weight > 0) {
+						VectorScale(sum, 1.0f / weight, &lightFloats[idx * 3]);
+						lightAlphaMask[idx] = 1; // Mark as "bled"
+					}
+				}
+			}
+		}
+	}
+	free(temp);
+	free(tempMask);
+}
+
+static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, int oldW, float *newFloats, byte *newMask, int newW) {
+	int x, y, dx, dy;
+	int sLM = ds->lightmapNum[0];
+	int sOldX = ds->lightmapOffset[0][0];
+	int sOldY = ds->lightmapOffset[0][1];
+	int sOldW = ds->lightmapWidth;
+	int sOldH = ds->lightmapHeight;
+
+	int sNewX = sOldX / ratio;
+	int sNewY = sOldY / ratio;
+	int sNewW = sOldW / ratio;
+	int sNewH = sOldH / ratio;
+
+	if (sNewW <= 0) sNewW = 1;
+	if (sNewH <= 0) sNewH = 1;
+
+	// This follows the logic in lm_postprocess.c:1700-1719
+	for (y = 0; y < sNewH; y++) {
+		for (x = 0; x < sNewW; x++) {
+			int nX = sNewX + x;
+			int nY = sNewY + y;
+			int newP = (sLM * newW * newW) + nY * newW + nX;
+
+			float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
+			for (dy = 0; dy < ratio; dy++) {
+				for (dx = 0; dx < ratio; dx++) {
+					int X = nX * ratio + dx;
+					int Y = nY * ratio + dy;
+					if (X >= oldW || Y >= oldW) continue;
+
+					int oldP = (sLM * oldW * oldW) + Y * oldW + X;
+					if (oldMask[oldP] != 0) {
+						VectorAdd(sumColor, &oldFloats[oldP * 3], sumColor);
+						sumWeight += 1.0f;
+					}
+				}
+			}
+
+			if (sumWeight > 0.01f) {
+				VectorScale(sumColor, 1.0f / sumWeight, &newFloats[newP * 3]);
+				newMask[newP] = 1;
+			}
+		}
+	}
+
+	// Update metadata
+	for (int j = 0; j < 4; j++) {
+		ds->lightmapOffset[j][0] = sNewX;
+		ds->lightmapOffset[j][1] = sNewY;
+	}
+	ds->lightmapWidth = sNewW;
+	ds->lightmapHeight = sNewH;
+}
+
+void DownscaleLightmaps(int oldW, int newW) {
+	int i, j;
+	int ratio = oldW / newW;
+	int numLMs = (numLightBytes / 3) / (oldW * oldW);
+	int newTotalPixels = numLMs * newW * newW;
+
+	_printf("--- DownscaleLightmaps (PER-SURFACE) (%dx%d -> %dx%d) ---\n", oldW, oldW, newW, newW);
+
+	float *newFloats = calloc(newTotalPixels * 3, sizeof(float));
+	byte *newMask = calloc(newTotalPixels, sizeof(byte));
+
+	for (i = 0; i < numDrawSurfaces; i++) {
+		if (drawSurfaces[i].lightmapNum[0] >= 0) {
+			DownscaleSurfaceLightmap(&drawSurfaces[i], ratio, lightFloats, lightAlphaMask, oldW, newFloats, newMask, newW);
+		}
+	}
+
+	// Update vertex UVs
+	for (i = 0; i < numDrawVerts; i++) {
+		drawVert_t *dv = &drawVerts[i];
+		for (j = 0; j < 4; j++) {
+			dv->lightmap[j][0] = ((dv->lightmap[j][0] * (float)oldW - 0.5f) / (float)ratio + 0.5f) / (float)newW;
+			dv->lightmap[j][1] = ((dv->lightmap[j][1] * (float)oldW - 0.5f) / (float)ratio + 0.5f) / (float)newW;
+		}
+	}
+
+	free(lightFloats);
+	free(lightAlphaMask);
+	lightFloats = newFloats;
+	lightAlphaMask = newMask;
+
+	// Update global state
+	g_game->lightmapSize = newW;
+	numLightBytes = newTotalPixels * 3;
+
+	// 4. Bleed the final low-resolution atlas to prevent bilinear bleeding in the engine
+	// Running 2 passes in the new resolution is equivalent to 2*ratio pixels in the old one.
+	DilateLightmapAtlas(newW, 2);
+
+	if (num_entities > 0) {
+		SetKeyValue(&entities[0], "__lightmapsize", va("%d", newW));
+	}
+}
+
+
 /*
 ===============================================================================
 COLOR CONVERSION HELPERS
@@ -257,9 +412,13 @@ static void DownConvertGrid(float scale, qboolean lightmapRange) {
 
 void DownConvertLightingData(void) {
 	float scale = 1.0f;
-    qboolean lightmapRange = (g_game->hdr == HDR_8BIT);
+	qboolean lightmapRange = (g_game->hdr == HDR_8BIT);
 
 	_printf("--- DownConvertLightingData ---\n");
+
+	if (g_game->writeLightmapSize > 0 && g_game->writeLightmapSize < g_game->lightmapSize) {
+		DownscaleLightmaps(g_game->lightmapSize, g_game->writeLightmapSize);
+	}
 
 	if (lightmapRange) {
 		ScanLightmapIntensity();
@@ -271,7 +430,7 @@ void DownConvertLightingData(void) {
 			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
 		} else {
 			_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
-			lightmapRange = qfalse; 
+			lightmapRange = qfalse;
 		}
 	}
 

@@ -7,7 +7,8 @@
   "maxLMSurfaceVerts": 65535,
   "maxSurfaceVerts": 65535,
   "maxSurfaceIndexes": 393210,
-  "lightmapSize": 128,
+  "lightmapSize": 256,
+  "writeLightmapSize": 128,
   "sampleSize": 8,
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "lightmapsRGB": false,
@@ -19,12 +20,11 @@
   "radiosityColorRatio": 0.75,
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "falloffBias": 0.15,
   "deluxeMap": false,
   "forceUVGen": true,
   "snapUVs": true,
   "antialiasingPasses": 0, /* post-process AA passes */
-  "smoothPasses": 4, /* passes of blurring lightmaps */
-  "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
+  "smoothPasses": 0, /* passes of blurring lightmaps */
+  "smoothRadius": 1.0, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "off" /* [ off, softknee, reinhard, filmic ] */
 }
