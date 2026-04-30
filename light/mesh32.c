@@ -1,4 +1,4 @@
-#include "../common/lightdata.h"
+#include "lightdata.h"
 #include "../common/mathlib.h"
 #include "../common/cmdlib.h"
 #include "../shared/mesh.h"

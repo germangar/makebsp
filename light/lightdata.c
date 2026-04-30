@@ -1,8 +1,8 @@
 #include "lightdata.h"
-#include "bspfile.h"
-#include "cmdlib.h"
-#include "globals.h"
-#include "mesh.h"
+#include "../common/bspfile.h"
+#include "../common/cmdlib.h"
+#include "../shared/globals.h"
+#include "../shared/mesh.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
