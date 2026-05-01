@@ -376,12 +376,6 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
   return qfalse;
 }
 
-
-/*
-========================
-LightContributionToPoint
-========================
-*/
 /*
 ========================
 AccumulateContribution
@@ -424,6 +418,11 @@ static void AccumulateContribution(vec3_t color, vec3_t colorVecs[3], contributi
     }
 }
 
+/*
+========================
+LightContributionToPoint
+========================
+*/
 qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                                   const vec3_t normal, contribution_t *out,
                                   traceWork_t *tw, qboolean isDeluxe) {

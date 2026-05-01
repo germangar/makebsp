@@ -573,17 +573,15 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
-                    for (int c = 0; c < 3; c++) {
-                        irradianceVecFloats[k_dst * 9 + c * 3 + 0] += ivec[c][0];
-                        irradianceVecFloats[k_dst * 9 + c * 3 + 1] += ivec[c][1];
-                        irradianceVecFloats[k_dst * 9 + c * 3 + 2] += ivec[c][2];
-                        // Do not add radiosity to deluxeFloats.
-                        // Ambient bounce light comes from all directions and averages out to the surface normal.
-                        // If we add this to the deluxemap, it completely overpowers the direct light direction,
-                        // forcing the normal map to become perfectly flat (washing out all bumpmapping).
-                        if (deluxeFloats && lightSurfaceIndex) {
-                            lightSurfaceIndex[k_dst] = surfIdx;
+                    if (irradianceVecFloats) {
+                        for (int c = 0; c < 3; c++) {
+                            irradianceVecFloats[k_dst * 9 + c * 3 + 0] += ivec[c][0];
+                            irradianceVecFloats[k_dst * 9 + c * 3 + 1] += ivec[c][1];
+                            irradianceVecFloats[k_dst * 9 + c * 3 + 2] += ivec[c][2];
                         }
+                    }
+                    if (deluxeFloats && lightSurfaceIndex) {
+                        lightSurfaceIndex[k_dst] = surfIdx;
                     }
                     ThreadUnlock();
                 }
@@ -695,6 +693,20 @@ static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, const vec3_t
     int k10 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
     int k01 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0);
     int k11 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y1) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
+
+    // Fallback if irradiance vectors are not available (non-deluxe mode)
+    if (!irradianceVecFloats) {
+        int idx00 = k00 * 3;
+        int idx10 = k10 * 3;
+        int idx01 = k01 * 3;
+        int idx11 = k11 * 3;
+        for (int c = 0; c < 3; c++) {
+            float row0 = radiosityFloats[idx00 + c] * (1.0f - fx) + radiosityFloats[idx10 + c] * fx;
+            float row1 = radiosityFloats[idx01 + c] * (1.0f - fx) + radiosityFloats[idx11 + c] * fx;
+            outColor[c] = row0 * (1.0f - fy) + row1 * fy;
+        }
+        return;
+    }
 
     // Bilinearly interpolate each of the 3 per-channel irradiance vec3s, then dot with normal.
     for (int c = 0; c < 3; c++) {
@@ -933,7 +945,7 @@ void LightRadiosity(int radiosityPasses) {
         RadiosityEmit(emitSource);
 
         memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
-        memset(irradianceVecFloats, 0, (numLightBytes / 3) * 9 * sizeof(float));
+        if (irradianceVecFloats) memset(irradianceVecFloats, 0, (numLightBytes / 3) * 9 * sizeof(float));
         _printf("  [integrate]  %d emitters generated. Starting integration...\n", g_numEmitters);
         fflush(stdout);
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);

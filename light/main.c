@@ -38,6 +38,7 @@ int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 
 qboolean rad_voxel = qtrue;
+qboolean overrideDeluxeMap = qfalse;
 
 int main(int argc, char **argv) {
     int i;
@@ -177,9 +178,10 @@ int main(int argc, char **argv) {
                 Error("Unknown sun falloff type: %s", arg);
             }
         } else if (!strcmp(argv[i], "-deluxe")) {
-            g_game->deluxeMap = qtrue;
+            if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe requires 1 or 0");
+            overrideDeluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
             deluxeMapOverridden = qtrue;
-            _printf("Deluxemaps enabled\n");
+            _printf("Deluxemaps %s via command line override\n", overrideDeluxeMap ? "enabled" : "disabled");
         } else if (!strcmp(argv[i], "-supersampling")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
@@ -303,6 +305,7 @@ int main(int argc, char **argv) {
                 "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
                 "   falloff_sun <type> = override the sun falloff model\n"
                 "   falloff_sun_softbias <F> = override the sun soft bias\n"
+                "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
@@ -349,7 +352,7 @@ int main(int argc, char **argv) {
     // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
     if (falloffOverridden) g_game->falloff = overrideFalloff;
     if (lightmapsRGBOverridden) g_game->lightmapsRGB = qtrue;
-    if (deluxeMapOverridden) g_game->deluxeMap = qtrue;
+    if (deluxeMapOverridden) g_game->deluxeMap = overrideDeluxeMap;
 
     // Print active configuration summary
     const char *fLog = "lambert";
