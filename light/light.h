@@ -211,9 +211,10 @@ extern int gridBounds[3], numGridPoints;
 
 float CalculateFalloff(float dot);
 
-extern float lightscale;
-extern float ambient;
-extern float maxlight;
+extern float *lightFloats;
+extern float *deluxeFloats;
+extern int *lightSurfaceIndex;
+extern byte *lightAlphaMask;
 extern float direct_scale;
 extern float entity_scale;
 
@@ -328,6 +329,7 @@ void LightWorld(void);
 void TraceLtm(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
+                      vec3_t *dirAccum, vec3_t *outColorVecs,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
                       int numLights, traceWork_t *tw);

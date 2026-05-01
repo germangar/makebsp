@@ -137,108 +137,7 @@ void SwapBlock( int *block, int sizeOfBlock ) {
 	}
 }
 
-/*
-=============
-SwapBSPFile
 
-Byte swaps all data in a bsp file.
-=============
-*/
-void SwapBSPFile( void ) {
-	int				i, j;
-	
-	// models	
-	SwapBlock( (int *)dmodels, nummodels * sizeof( dmodels[0] ) );
-
-	// shaders (don't swap the name)
-	for ( i = 0 ; i < numShaders ; i++ ) {
-		dshaders[i].contentFlags = LittleLong( dshaders[i].contentFlags );
-		dshaders[i].surfaceFlags = LittleLong( dshaders[i].surfaceFlags );
-	}
-
-	// planes
-	SwapBlock( (int *)dplanes, numplanes * sizeof( dplanes[0] ) );
-	
-	// nodes
-	SwapBlock( (int *)dnodes, numnodes * sizeof( dnodes[0] ) );
-
-	// leafs
-	SwapBlock( (int *)dleafs, numleafs * sizeof( dleafs[0] ) );
-
-	// leaffaces
-	SwapBlock( (int *)dleafsurfaces, numleafsurfaces * sizeof( dleafsurfaces[0] ) );
-
-	// leafbrushes
-	SwapBlock( (int *)dleafbrushes, numleafbrushes * sizeof( dleafbrushes[0] ) );
-
-	// brushes
-	SwapBlock( (int *)dbrushes, numbrushes * sizeof( dbrushes[0] ) );
-
-	// brushsides
-	SwapBlock( (int *)dbrushsides, numbrushsides * sizeof( dbrushsides[0] ) );
-
-	// vis
-	((int *)&visBytes)[0] = LittleLong( ((int *)&visBytes)[0] );
-	((int *)&visBytes)[1] = LittleLong( ((int *)&visBytes)[1] );
-
-	// drawverts (don't swap colors )
-	for ( i = 0 ; i < numDrawVerts ; i++ ) {
-		for ( j = 0 ; j < 4 ; j++ ) {
-			drawVerts[i].lightmap[j][0] = LittleFloat( drawVerts[i].lightmap[j][0] );
-			drawVerts[i].lightmap[j][1] = LittleFloat( drawVerts[i].lightmap[j][1] );
-		}
-		drawVerts[i].st[0] = LittleFloat( drawVerts[i].st[0] );
-		drawVerts[i].st[1] = LittleFloat( drawVerts[i].st[1] );
-		drawVerts[i].xyz[0] = LittleFloat( drawVerts[i].xyz[0] );
-		drawVerts[i].xyz[1] = LittleFloat( drawVerts[i].xyz[1] );
-		drawVerts[i].xyz[2] = LittleFloat( drawVerts[i].xyz[2] );
-		drawVerts[i].normal[0] = LittleFloat( drawVerts[i].normal[0] );
-		drawVerts[i].normal[1] = LittleFloat( drawVerts[i].normal[1] );
-		drawVerts[i].normal[2] = LittleFloat( drawVerts[i].normal[2] );
-	}
-
-	// drawindexes
-	SwapBlock( (int *)drawIndexes, numDrawIndexes * sizeof( drawIndexes[0] ) );
-
-	// drawsurfs
-	for ( i = 0 ; i < numDrawSurfaces ; i++ ) {
-		drawSurfaces[i].shaderNum = LittleLong( drawSurfaces[i].shaderNum );
-		drawSurfaces[i].fogNum = LittleLong( drawSurfaces[i].fogNum );
-		drawSurfaces[i].surfaceType = LittleLong( drawSurfaces[i].surfaceType );
-		drawSurfaces[i].firstVert = LittleLong( drawSurfaces[i].firstVert );
-		drawSurfaces[i].numVerts = LittleLong( drawSurfaces[i].numVerts );
-		drawSurfaces[i].firstIndex = LittleLong( drawSurfaces[i].firstIndex );
-		drawSurfaces[i].numIndexes = LittleLong( drawSurfaces[i].numIndexes );
-		for ( j = 0 ; j < 4 ; j++ ) {
-			drawSurfaces[i].lightmapNum[j] = LittleLong( drawSurfaces[i].lightmapNum[j] );
-			drawSurfaces[i].lightmapOffset[j][0] = LittleLong( drawSurfaces[i].lightmapOffset[j][0] );
-			drawSurfaces[i].lightmapOffset[j][1] = LittleLong( drawSurfaces[i].lightmapOffset[j][1] );
-		}
-		drawSurfaces[i].lightmapWidth = LittleLong( drawSurfaces[i].lightmapWidth );
-		drawSurfaces[i].lightmapHeight = LittleLong( drawSurfaces[i].lightmapHeight );
-		for ( j = 0 ; j < 3 ; j++ ) {
-			drawSurfaces[i].lightmapOrigin[j] = LittleFloat( drawSurfaces[i].lightmapOrigin[j] );
-			drawSurfaces[i].lightmapVecs[0][j] = LittleFloat( drawSurfaces[i].lightmapVecs[0][j] );
-			drawSurfaces[i].lightmapVecs[1][j] = LittleFloat( drawSurfaces[i].lightmapVecs[1][j] );
-			drawSurfaces[i].lightmapVecs[2][j] = LittleFloat( drawSurfaces[i].lightmapVecs[2][j] );
-		}
-		drawSurfaces[i].patchWidth = LittleLong( drawSurfaces[i].patchWidth );
-		drawSurfaces[i].patchHeight = LittleLong( drawSurfaces[i].patchHeight );
-	}
-
-	// fogs
-	for ( i = 0 ; i < numFogs ; i++ ) {
-		dfogs[i].brushNum = LittleLong( dfogs[i].brushNum );
-		dfogs[i].visibleSide = LittleLong( dfogs[i].visibleSide );
-	}
-
-	// lightgrid (no swap for bytes)
-
-	// lightarray
-	for ( i = 0 ; i < numLightArray ; i++ ) {
-		lightArray[i] = LittleShort( lightArray[i] );
-	}
-}
 
 
 
@@ -427,7 +326,6 @@ void	LoadBSPFile( const char *filename ) {
 	free( header );		// everything has been copied out
 		
 	// swap everything
-	SwapBSPFile();
 }
 
 
@@ -525,7 +423,6 @@ void	WriteBSPFile( const char *filename ) {
 	header->version = LittleLong( g_game->bspVersion );
 	
 	// swap everything in place (internal format)
-	SwapBSPFile();
 
 	bspfile = SafeOpenWrite( filename );
 	SafeWrite( bspfile, header, sizeof(dheader_t) );	// overwritten later
@@ -570,8 +467,7 @@ void	WriteBSPFile( const char *filename ) {
 		AddLump( bspfile, header, LUMP_LIGHTARRAY, lightArray, numLightArray * 2 );
 	} else {
 		// IBSP v46
-		// We need to down-convert. We already swapped in place, so swap back first.
-		SwapBSPFile();
+		// We need to down-convert.
 
 		ibspDrawVert_t *iv = malloc( numDrawVerts * sizeof(ibspDrawVert_t) );
 		for ( i = 0 ; i < numDrawVerts ; i++ ) {
@@ -627,7 +523,6 @@ void	WriteBSPFile( const char *filename ) {
 		AddLump( bspfile, header, LUMP_LIGHTGRID, ig, numGridPoints * 8 );
 		free( ig );
 		
-		SwapBSPFile(); // swap back to internal format
 	}
 
 	fseek (bspfile, 0, SEEK_SET);

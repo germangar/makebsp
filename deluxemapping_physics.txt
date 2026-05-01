@@ -1,0 +1,39 @@
+# Deluxemapping and Light Falloff Physics
+
+## The "Double-Dipping" Problem
+In traditional lightmapping, the baked luxels store the reflected light (Radiance), which includes the Lambertian cosine falloff:
+   Lightmap = Intensity * dot(SurfaceNormal, LightDirection)
+
+When deluxemapping is enabled, the engine's shader applies the normal map detail using:
+   Final = Lightmap * dot(TexelNormal, DeluxeDirection)
+
+On a flat surface where TexelNormal == SurfaceNormal, the result is:
+   Final = Intensity * (dot(SurfaceNormal, LightDirection))^2
+
+This "squared" falloff is physically incorrect and causes harsh, overly dramatic shadows and dark corners. To fix this, when deluxemapping is enabled, we must bake the **Irradiance** (total incoming light) into the lightmap, removing the receiver's cosine term.
+
+## Handling Back-Facing Light (Softbias/Half-Lambert)
+When using "softbias" (allowing light to illuminate the back side of a surface), we encounter a problem: the true light direction points "away" from the surface, which would result in a negative or zero dot product in the engine shader, even if the lightmap says the area is lit.
+
+We have identified 4 methods for "fixing" the deluxe direction in these cases:
+
+1. **Reflection/Flipping (Selected for General Softbias)**
+   - **Method:** If the light is behind the surface, reflect its direction across the tangent plane (flip the normal component).
+   - **Rationale:** Preserves the "lateral" orientation of the light. A normal map bump tilted toward the original light source will still be correctly highlighted. Perfect for maintaining directionality in corners.
+
+2. **Tangent Clamping**
+   - **Method:** Project the light vector onto the surface plane (90-degree grazing light).
+   - **Rationale:** Safe to prevent artifacts, but results in a dot product of 0 on flat surfaces, effectively killing the "wrap" effect on anything without normal map detail.
+
+3. **Normal Interpolation (Selected for Surface Light Glow)**
+   - **Method:** Smoothly blend the deluxe direction toward the Surface Normal as the light moves from 90° to 180° behind the surface.
+   - **Rationale:** For "glow hack" emitters (like lava), we want the light to feel non-directional and ambient. By aligning the direction with the normal, the lightmap's "glow" intensity is applied equally to the flat surface.
+
+4. **Basis/Ambient Cube (The Valve Method)**
+   - **Method:** Store 3 (Tangent-space basis) or 6 (Ambient Cube) intensity values instead of a single vector.
+   - **Rationale:** The gold standard for quality. Allows light to truly "wrap" and correctly illuminate all normal map orientations.
+   - **Constraint:** Requires major changes to the BSP format, the bake pipeline, and the engine shaders. Not feasible for the current iteration.
+
+## Implementation Notes
+- **Direct Light:** Disable receiver cosine term in `SunToPlane` and `LightContributionToPoint` when deluxemapping is active. Apply Method 1/3 as appropriate.
+- **Radiosity:** Disable the `cosDst` (receiver cosine) term during the integration phase if deluxemapping is active to ensure the bounced light is stored as Irradiance.

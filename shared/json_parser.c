@@ -247,15 +247,25 @@ static const char *g_loadDir;
 static int g_loadCount;
 
 static void JSON_LoadGameCallback(const char *filename) {
-  if (numGames >= MAX_GAMES)
-    return;
-
   char fullpath[1024];
   sprintf(fullpath, "%s/%s", g_loadDir, filename);
 
-  if (JSON_LoadGame(fullpath, &games[numGames])) {
-    numGames++;
-    g_loadCount++;
+  game_t temp;
+  if (JSON_LoadGame(fullpath, &temp)) {
+    // Check if we already have a game with this name (e.g. hardcoded)
+    for (int i = 0; i < numGames; i++) {
+      if (games[i].arg && !strcmp(games[i].arg, temp.arg)) {
+        memcpy(&games[i], &temp, sizeof(game_t));
+        return;
+      }
+    }
+
+    // Otherwise append
+    if (numGames < MAX_GAMES) {
+      memcpy(&games[numGames], &temp, sizeof(game_t));
+      numGames++;
+      g_loadCount++;
+    }
   }
 }
 

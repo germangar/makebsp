@@ -334,7 +334,7 @@ Returns an amount of light to add at the texel (surface)
 */
 qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
                       contribution_t *out, qboolean applyColorFilter,
-                      traceWork_t *tw) {
+                      traceWork_t *tw, qboolean isDeluxe) {
   float angle;
 
   if (!numSkyBrushes) {
@@ -359,26 +359,74 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
   }
 
   if (SunToPoint(origin, tw, out, applyColorFilter)) {
-    VectorScale(out->color, angle, out->color);
+    if (isDeluxe) {
+      // In deluxemapping mode, we store Irradiance (un-attenuated by receiver normal).
+      // The engine's shader will apply the dot(N, DeluxeDir) term dynamically.
+    } else {
+      VectorScale(out->color, angle, out->color);
+    }
+    return qtrue;
+  } else if (isDeluxe) {
+    // Return a zero-energy contribution with the sun direction for deluxemap consistency
+    VectorCopy(sunDirection, out->dir);
+    VectorClear(out->color);
     return qtrue;
   }
 
   return qfalse;
 }
 
-/*
-================
-LightingAtSample
-================
-*/
+
 /*
 ========================
 LightContributionToPoint
 ========================
 */
+/*
+========================
+AccumulateContribution
+========================
+*/
+static void AccumulateContribution(vec3_t color, vec3_t colorVecs[3], contribution_t *cont, qboolean isDeluxe) {
+    int c;
+
+    if (!isDeluxe) {
+        VectorAdd(color, cont->color, color);
+        return;
+    }
+
+    float currentEnergy = color[0] + color[1] + color[2];
+    float newEnergy = cont->color[0] + cont->color[1] + cont->color[2];
+
+    if (newEnergy > 0.001f) {
+        if (currentEnergy < 0.001f) {
+            // Replace placeholder direction with actual light
+            for (c = 0; c < 3; c++) {
+                VectorScale(cont->dir, cont->color[c], colorVecs[c]);
+                color[c] = cont->color[c];
+            }
+        } else {
+            // Standard weighted accumulation
+            for (c = 0; c < 3; c++) {
+                VectorMA(colorVecs[c], cont->color[c], cont->dir, colorVecs[c]);
+                color[c] += cont->color[c];
+            }
+        }
+    } else {
+        // Zero energy contribution (shadow direction placeholder)
+        if (currentEnergy < 0.001f) {
+            // Accept the direction if we have no light yet.
+            // We use a tiny weight so it acts as a dominant direction for dilation.
+            for (c = 0; c < 3; c++) {
+                VectorScale(cont->dir, 0.0001f, colorVecs[c]);
+            }
+        }
+    }
+}
+
 qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                                   const vec3_t normal, contribution_t *out,
-                                  traceWork_t *tw) {
+                                  traceWork_t *tw, qboolean isDeluxe) {
   trace_t trace;
   float add = 0;
   vec3_t dir;
@@ -415,20 +463,21 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
       }
     }
 
-    // test occlusion
-    TraceLine(origin, light->origin, &trace, qfalse, tw);
-    if (trace.passSolid) {
-      return qfalse;
-    }
-
-    // calculate the contribution
-
-
     VectorSubtract(light->origin, origin, n);
     if (VectorNormalize(n, n) == 0) {
       return qfalse;
     }
     VectorCopy(n, out->dir);
+
+    // test occlusion
+    TraceLine(origin, light->origin, &trace, qfalse, tw);
+    if (trace.passSolid) {
+        if (isDeluxe) {
+            VectorClear(out->color);
+            return qtrue;
+        }
+        return qfalse;
+    }
 
     // Liquid surfaces act as omnidirectional glowing volumes, not flat Lambertian emitters.
     // They emit "plain light" in all directions without cosine falloff.
@@ -506,6 +555,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     if (normal) {
       angle = CalculateFalloff(DotProduct(normal, out->dir));
       if (angle <= 0) {
+        // even in deluxe mode, we don't allow light from behind (Phase 1)
         return qfalse;
       }
     }
@@ -537,8 +587,18 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     if (light->linearLight) {
       add = angle * light->photons * 0.000125f - dist;
       if (add < 0) return qfalse;
+      
+      if (isDeluxe) {
+          // If we have an angle > 0, we want the full irradiance for deluxemaps
+          add = (light->photons * 0.000125f - dist);
+      }
     } else {
-      add = (light->photons / (dist * dist)) * angle;
+      if (isDeluxe) {
+          // Store Irradiance: remove the 'angle' (receiver cosine) multiplier
+          add = (light->photons / (dist * dist));
+      } else {
+          add = (light->photons / (dist * dist)) * angle;
+      }
     }
   } else {
     return qfalse;
@@ -551,6 +611,10 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   // occlusion check
   TraceLine(origin, light->origin, &trace, qfalse, tw);
   if (trace.passSolid) {
+    if (isDeluxe) {
+        VectorClear(out->color);
+        return qtrue;
+    }
     return qfalse;
   }
 
@@ -567,6 +631,7 @@ LightingAtSample
 ========================
 */
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
+                      vec3_t *dirAccum, vec3_t *outColorVecs,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
                       int numLights, traceWork_t *tw) {
@@ -574,28 +639,57 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
   contribution_t cont;
   int i;
 
-  VectorCopy(ambientColor, color);
+  VectorClear(color);
+
+  qboolean isDeluxe = (dirAccum != NULL);
+  vec3_t colorVecs[3];
+  int c;
+
+  for (c = 0; c < 3; c++) {
+      VectorClear(colorVecs[c]);
+  }
+
+  // Handle ambient as the first contribution
+  if (ambientColor[0] > 0 || ambientColor[1] > 0 || ambientColor[2] > 0) {
+      contribution_t amb;
+      VectorCopy(ambientColor, amb.color);
+      VectorCopy(normal, amb.dir);
+      AccumulateContribution(color, colorVecs, &amb, isDeluxe);
+  }
 
   if (lightList) {
     for (i = 0; i < numLights; i++) {
       light = lightList[i];
-      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
-        VectorAdd(color, cont.color, color);
+      if (LightContributionToPoint(light, origin, normal, &cont, tw, isDeluxe)) {
+          AccumulateContribution(color, colorVecs, &cont, isDeluxe);
       }
     }
   } else {
     for (light = lights; light; light = light->next) {
-      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
-        VectorAdd(color, cont.color, color);
+      if (LightContributionToPoint(light, origin, normal, &cont, tw, isDeluxe)) {
+          AccumulateContribution(color, colorVecs, &cont, isDeluxe);
       }
     }
   }
 
   // trace directly to the sun
   if (testOcclusion || forceSunLight) {
-    if (SunToPlane(origin, normal, &cont, applyColorFilter, tw)) {
-      VectorAdd(color, cont.color, color);
+    if (SunToPlane(origin, normal, &cont, applyColorFilter, tw, isDeluxe)) {
+        AccumulateContribution(color, colorVecs, &cont, isDeluxe);
     }
+  }
+
+  if (isDeluxe) {
+      // Resolve vector magnitude for the lightmap and store irradiance vectors
+      vec3_t netDir = {0,0,0};
+      for (c = 0; c < 3; c++) {
+          color[c] = VectorLength(colorVecs[c]);
+          VectorAdd(netDir, colorVecs[c], netDir);
+          if (outColorVecs) {
+              VectorCopy(colorVecs[c], outColorVecs[c]);
+          }
+      }
+      VectorAdd(*dirAccum, netDir, *dirAccum);
   }
 }
 
@@ -625,16 +719,17 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 
     if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP) {
       VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
-      LightingAtSample(v_origin, dv->normal, sample, testOcclusion,
+      LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, testOcclusion,
                        forceSunLight, qfalse, lightList, numLights, tw);
     } else {
       VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
-      LightingAtSample(v_origin, normal, sample, testOcclusion, forceSunLight,
-                       qfalse, lightList, numLights, tw);
+      LightingAtSample(v_origin, normal, sample, NULL, NULL, testOcclusion,
+                       forceSunLight, qfalse, lightList, numLights, tw);
     }
 
     if (scale >= 0)
       VectorScale(sample, scale, sample);
+
     // clamp with color normalization
     max = sample[0];
     if (sample[1] > max) {
@@ -653,10 +748,6 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
       internalDrawVerts[ds->firstVert + i].color[0][1] += sample[1];
       internalDrawVerts[ds->firstVert + i].color[0][2] += sample[2];
     }
-
-    // Don't bother writing alpha since it will already be set to 255,
-    // plus we don't want to write over alpha generated by SetTerrainTextures
-    // dv->color[3] = 255;
   }
 }
 
@@ -736,6 +827,8 @@ void TraceLtm(int num) {
   byte *occluded_data = NULL;
   vec3_t **color = NULL;
   vec3_t *color_data = NULL;
+  vec3_t **dir = NULL;
+  vec3_t *dir_data = NULL;
   vec3_t average;
   int count;
   mesh_t srcMesh, *mesh = NULL, *subdivided = NULL;
@@ -940,12 +1033,19 @@ void TraceLtm(int num) {
   byte *sampleHit_data = malloc(extW * extH * sizeof(byte));
   byte **sampleHit = malloc(extW * sizeof(byte *));
 
-  if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data) {
+  if (g_game->deluxeMap) {
+    dir = malloc(extW * sizeof(vec3_t *));
+    dir_data = malloc(extW * extH * sizeof(vec3_t));
+  }
+
+  if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data || (g_game->deluxeMap && (!dir || !dir_data))) {
     _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", num, extW, extH);
     if (occluded) free(occluded);
     if (occluded_data) free(occluded_data);
     if (color) free(color);
     if (color_data) free(color_data);
+    if (dir) free(dir);
+    if (dir_data) free(dir_data);
     if (sampleHit) free(sampleHit);
     if (sampleHit_data) free(sampleHit_data);
     free(localLights);
@@ -956,10 +1056,12 @@ void TraceLtm(int num) {
   for (i = 0; i < extW; i++) {
     occluded[i] = occluded_data + i * extH;
     color[i] = color_data + i * extH;
+    if (dir) dir[i] = dir_data + i * extH;
     sampleHit[i] = sampleHit_data + i * extH;
   }
 
   memset(color_data, 0, extW * extH * sizeof(vec3_t));
+  if (dir_data) memset(dir_data, 0, extW * extH * sizeof(vec3_t));
   memset(sampleHit_data, 0, extW * extH * sizeof(byte));
 
   // determine which samples are occluded
@@ -993,9 +1095,12 @@ void TraceLtm(int num) {
       
       float jitterRadius = doSS ? lightmapSmoothRadius : 0.0f;
       vec3_t accumColor = {0, 0, 0};
+      vec3_t accumDir = {0, 0, 0};
+      vec3_t accumColorVecs[3] = {{0,0,0},{0,0,0},{0,0,0}};
       int hitCount = 0;
+      int ss, k;
 
-      for (int ss = 0; ss < actualSamples; ss++) {
+      for (ss = 0; ss < actualSamples; ss++) {
         // Generate jitter offset using the selected pattern
         float jdx = 0.0f, jdy = 0.0f;
         if (jitterRadius > 0.0f && ss > 0) {
@@ -1097,10 +1202,16 @@ void TraceLtm(int num) {
         }
 
         // Trace this sub-sample
-        vec3_t subColor = {0, 0, 0};
+        vec3_t subColor;
+        vec3_t subDir = {0, 0, 0};
+        vec3_t subColorVecs[3];
         tw->ignoreSurface = realSurfIndex;
-        LightingAtSample(origin, normal, subColor, qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
+        LightingAtSample(origin, normal, subColor, (g_game->deluxeMap ? &subDir : NULL), (g_game->deluxeMap ? subColorVecs : NULL), qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
         VectorAdd(accumColor, subColor, accumColor);
+        if (g_game->deluxeMap) {
+            VectorAdd(accumDir, subDir, accumDir);
+            for (k = 0; k < 3; k++) VectorAdd(accumColorVecs[k], subColorVecs[k], accumColorVecs[k]);
+        }
         hitCount++;
       } // end super-sample loop
 
@@ -1114,9 +1225,43 @@ void TraceLtm(int num) {
           c_visible++;
         }
         float invHits = 1.0f / (float)hitCount;
-        color[i][j][0] = accumColor[0] * invHits;
-        color[i][j][1] = accumColor[1] * invHits;
-        color[i][j][2] = accumColor[2] * invHits;
+        if (g_game->deluxeMap) {
+            // UNIFIED IRRADIANCE RESOLUTION
+            // 1. Calculate the final dominant direction for the luxel
+            vec3_t finalDir;
+            VectorCopy(accumDir, finalDir);
+            if (VectorNormalize(finalDir, finalDir) > 0) {
+                // 2. Resolve the lightmap color by projecting each channel's average vector onto the final direction.
+                // This ensures the engine's dot(N, DeluxeDir) logic correctly reproduces the true Lambertian sum.
+                for (k = 0; k < 3; k++) {
+                    VectorScale(accumColorVecs[k], invHits, accumColorVecs[k]);
+                    // Add normal-aligned ambient to the vector before projection
+                    vec3_t v_amb;
+                    VectorScale(normal, ambientColor[k], v_amb);
+                    VectorAdd(accumColorVecs[k], v_amb, accumColorVecs[k]);
+                    
+                    color[i][j][k] = DotProduct(accumColorVecs[k], finalDir);
+                    if (color[i][j][k] < 0) color[i][j][k] = 0;
+                }
+                VectorCopy(accumDir, dir[i][j]);
+
+                // 3. Store raw average vectors for the global unified resolution pass (in lightdata.c)
+                int k_global = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + i;
+                if (k_global >= 0 && k_global < numLightBytes / 3) {
+                    for (k = 0; k < 3; k++) {
+                        irradianceVecFloats[k_global * 9 + k * 3 + 0] = accumColorVecs[k][0];
+                        irradianceVecFloats[k_global * 9 + k * 3 + 1] = accumColorVecs[k][1];
+                        irradianceVecFloats[k_global * 9 + k * 3 + 2] = accumColorVecs[k][2];
+                    }
+                }
+            } else {
+                // Fallback for no direction
+                for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
+                VectorClear(dir[i][j]);
+            }
+        } else {
+            for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
+        }
       } else {
         // No sub-samples hit — mark as occluded/miss
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
@@ -1195,9 +1340,11 @@ void TraceLtm(int num) {
 
         if (bestX >= 0) {
           VectorCopy(color[bestX][bestY], color[i][j]);
+          if (g_game->deluxeMap) VectorCopy(dir[bestX][bestY], dir[i][j]);
           sampleHit[i][j] = qtrue;
         } else {
           VectorClear(color[i][j]);
+          if (g_game->deluxeMap) VectorClear(dir[i][j]);
           sampleHit[i][j] = qfalse;
         }
       }
@@ -1207,6 +1354,7 @@ void TraceLtm(int num) {
     for (i = 0; i < ds->lightmapWidth; i++) {
       for (j = 0; j < ds->lightmapHeight; j++) {
         VectorCopy(color[i + currentGutter][j + currentGutter], color[i][j]);
+        if (g_game->deluxeMap) VectorCopy(dir[i + currentGutter][j + currentGutter], dir[i][j]);
       }
     }
   }
@@ -1245,6 +1393,15 @@ void TraceLtm(int num) {
             lightFloats[k * 3 + 0] += color[i][j][0];
             lightFloats[k * 3 + 1] += color[i][j][1];
             lightFloats[k * 3 + 2] += color[i][j][2];
+            
+            if (deluxeFloats) {
+                deluxeFloats[k * 3 + 0] += dir[i][j][0];
+                deluxeFloats[k * 3 + 1] += dir[i][j][1];
+                deluxeFloats[k * 3 + 2] += dir[i][j][2];
+                if (lightSurfaceIndex) {
+                    lightSurfaceIndex[k] = realSurfIndex;
+                }
+            }
         } else {
             // This should never happen if numLightBytes and lightmapNum are consistent
             static qboolean warned = qfalse;
@@ -1279,7 +1436,8 @@ void TraceLtm(int num) {
   free(occluded_data);
   free(color);
   free(color_data);
-
+  if (dir) free(dir);
+  if (dir_data) free(dir_data);
   free(localLights);
   ThreadCompletedWeighted(surfWeight);
 }
@@ -1378,7 +1536,7 @@ void TraceGrid(int num) {
   // trace all lights
   numCon = 0;
   for (light = lights; light; light = light->next) {
-    if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw)) {
+    if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw, qfalse)) {
       float addSize = VectorLength(contributions[numCon].color);
       VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
       numCon++;

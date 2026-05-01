@@ -1,0 +1,46 @@
+# High-Quality Ambient Lighting Research Summary
+
+Traditional "Quake-style" ambient lighting is a flat, constant color added to every texel. This lacks depth because it doesn't account for how surfaces are oriented or how occluded they are by nearby geometry.
+
+## 1. Hemispherical Ambient (Sky/Ground Gradient)
+Instead of a single color, we define a Sky Color (e.g., cool blue) and a Ground Color (e.g., warm brown/gray). The ambient term for a surface is calculated by interpolating between these two based on the surface normal.
+- Formula: Ambient = lerp(GroundColor, SkyColor, 0.5 * Normal.y + 0.5)
+- Benefit: It adds a natural "top-down" light feel, making surfaces facing up (like floors) look naturally cooler/brighter and surfaces facing down look slightly darker/warmer.
+
+## 2. Baked Ambient Occlusion (AO)
+This is the most critical feature for "natural" look. For every lightmap texel, we trace a set of rays into the hemisphere. The percentage of rays that hit geometry determines the "occlusion" factor (0.0 to 1.0).
+- Benefit: It creates soft shadows in corners, crevices, and under objects, grounding them in the world.
+- Integration: We multiply the Hemispherical Ambient term by the AO factor.
+
+## 3. Bent Normals
+During AO calculation, instead of just counting hits, we calculate the average unoccluded direction—the "Bent Normal."
+- Benefit: Using the Bent Normal to sample the Sky/Ground gradient (instead of the geometric normal) prevents light from "bleeding" through walls in corners. It makes the ambient light feel like it's actually coming from the openings in the geometry.
+
+## 4. Image-Based Lighting (IBL) / Sky Probes
+Instead of a simple Sky/Ground gradient, we can sample a low-resolution blurred cubemap or a set of Spherical Harmonics (SH) coefficients.
+- Benefit: This allows the ambient lighting to perfectly match the color tone of the specific skybox or environment being used.
+
+---
+
+# Proposed Implementation Plan
+
+To modernize the -ambient setting, the following phases are proposed:
+
+### Phase 1: Hemispherical Ambient
+Add two new worldspawn keys (or CLI switches): _ambient_sky and _ambient_ground.
+- Implementation: In light_direct.c, replace the flat VectorCopy(ambientColor, color) with a normal-weighted interpolation.
+
+### Phase 2: AO Baking
+Add a -ao <samples> switch to light.exe.
+- Logic: For each texel in LightingAtSample, generate a Poisson-disk or Cosine-weighted distribution of rays.
+- Occlusion: Trace these rays against the world geometry.
+- Result: Multiply the starting color (the ambient term) by (1.0 - occlusion).
+
+### Phase 3: Bent Normals (Optional/Advanced)
+- Store the unoccluded direction during the AO pass.
+- Use this direction for the Sky/Ground lookup.
+
+---
+
+# Status: ON HOLD
+Paused to investigate DeluxeMaps (Light Direction Maps) implementation first.

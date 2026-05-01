@@ -466,6 +466,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
                         float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
+                        if (g_game->deluxeMap) {
+                            // Store Irradiance: remove cosDst from the color contribution
+                            formFactor = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
+                        }
+                        
                         if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
                         else if (dist < rad_depth_max) {
                             float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
@@ -556,7 +561,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                     // Write scalar result (dot with sparse-point normal) for voxel path compat
                     float accum[3];
                     for (int c = 0; c < 3; c++) {
-                        accum[c] = DotProduct(dstNormal, ivec[c]);
+                        if (g_game->deluxeMap) {
+                            // For deluxemapping, the scalar lightmap should store the total irradiance (magnitude of the incoming light).
+                            // A simple approximation for order-1 irradiance is the magnitude of the irradiance vector.
+                            accum[c] = VectorLength(ivec[c]);
+                        } else {
+                            accum[c] = DotProduct(dstNormal, ivec[c]);
+                        }
                         if (accum[c] < 0.0f) accum[c] = 0.0f;
                     }
 
@@ -566,6 +577,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         irradianceVecFloats[k_dst * 9 + c * 3 + 0] += ivec[c][0];
                         irradianceVecFloats[k_dst * 9 + c * 3 + 1] += ivec[c][1];
                         irradianceVecFloats[k_dst * 9 + c * 3 + 2] += ivec[c][2];
+                        // Do not add radiosity to deluxeFloats.
+                        // Ambient bounce light comes from all directions and averages out to the surface normal.
+                        // If we add this to the deluxemap, it completely overpowers the direct light direction,
+                        // forcing the normal map to become perfectly flat (washing out all bumpmapping).
+                        if (deluxeFloats && lightSurfaceIndex) {
+                            lightSurfaceIndex[k_dst] = surfIdx;
+                        }
                     }
                     ThreadUnlock();
                 }
@@ -775,6 +793,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     }
 
     vec3_t *tempBuffer = malloc(numPixels * sizeof(vec3_t));
+    
     if (!tempBuffer) {
         if (patchMesh) FreeMesh(patchMesh);
         return;
@@ -803,12 +822,8 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 VectorCopy(surfNormal, texelNormal);
             }
 
-            // If bilinear mode: for non-grid pixels fill with interpolated irradiance.
-            // For grid-aligned pixels on patches: still re-apply the per-texel normal
-            // (the stored radiosityFloats value used surfNormal at integration time).
             if (mode == RAD_FILL_BILINEAR) {
                 if (ds->surfaceType == MST_PATCH) {
-                    // Always re-derive — the stored scalar may have used a different normal.
                     RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
                 } else if (lx % rad_interval == 0 && ly % rad_interval == 0) {
                     continue; // Planar: sparse-grid pixels are already exact, keep them.
@@ -937,7 +952,7 @@ void LightRadiosity(int radiosityPasses) {
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
 
-    _printf("  [merge]      Finalizing cumulative GI merging... ");
+    _printf("--- Radiosity Merge ---\n");
     RadiosityMerge(accumRadiosityFloats);
     _printf("done\n");
 
