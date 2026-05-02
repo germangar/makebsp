@@ -68,47 +68,38 @@ typedef struct radVoxel_s {
     struct radVoxel_s *next;
 } radVoxel_t;
 
-static radVoxel_t ***g_radVoxels = NULL;
+static radVoxel_t *g_radVoxels = NULL;
 static vec3_t g_radVoxelMins;
 static int g_radVoxelDims[3];
 
+#define RAD_VOXEL_INDEX(x, y, z) \
+    (((size_t)(x) * g_radVoxelDims[1] * g_radVoxelDims[2]) + \
+     ((size_t)(y) * g_radVoxelDims[2]) + (z))
+
 static void RadiosityVoxelReset(void) {
     if (g_radVoxels) {
-        for (int x = 0; x < g_radVoxelDims[0]; x++) {
-            for (int y = 0; y < g_radVoxelDims[1]; y++) {
-                for (int z = 0; z < g_radVoxelDims[2]; z++) {
-                    radVoxel_t *v = g_radVoxels[x][y][z].next;
-                    while(v) {
-                        radVoxel_t *next = v->next;
-                        free(v);
-                        v = next;
-                    }
-                }
-                free(g_radVoxels[x][y]);
+        size_t total = (size_t)g_radVoxelDims[0] * g_radVoxelDims[1] * g_radVoxelDims[2];
+        for (size_t i = 0; i < total; i++) {
+            radVoxel_t *curr = g_radVoxels[i].next;
+            while (curr) {
+                radVoxel_t *next = curr->next;
+                free(curr);
+                curr = next;
             }
-            free(g_radVoxels[x]);
         }
         free(g_radVoxels);
-        g_radVoxels = NULL;
     }
 
-    // Initialize dimensions based on map bounds
     for (int i = 0; i < 3; i++) {
-        g_radVoxelMins[i] = dmodels[0].mins[i] - rad_voxel_size;
-        float size = (dmodels[0].maxs[i] + rad_voxel_size) - g_radVoxelMins[i];
-        g_radVoxelDims[i] = (int)ceil(size / rad_voxel_size);
+        g_radVoxelMins[i] = floor(dmodels[0].mins[i] / rad_voxel_size) * rad_voxel_size - rad_voxel_size;
+        float maxVal = ceil(dmodels[0].maxs[i] / rad_voxel_size) * rad_voxel_size + rad_voxel_size;
+        g_radVoxelDims[i] = (int)((maxVal - g_radVoxelMins[i]) / rad_voxel_size) + 1;
     }
 
-    g_radVoxels = malloc(sizeof(radVoxel_t**) * g_radVoxelDims[0]);
-    for (int x = 0; x < g_radVoxelDims[0]; x++) {
-        g_radVoxels[x] = malloc(sizeof(radVoxel_t*) * g_radVoxelDims[1]);
-        for (int y = 0; y < g_radVoxelDims[1]; y++) {
-            g_radVoxels[x][y] = calloc(g_radVoxelDims[2], sizeof(radVoxel_t));
-        }
-    }
+    size_t numHeads = (size_t)g_radVoxelDims[0] * g_radVoxelDims[1] * g_radVoxelDims[2];
+    g_radVoxels = calloc(numHeads, sizeof(radVoxel_t));
 }
 
-// Helper: Add a sample to the voxel grid
 static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_t color) {
     int v[3];
     for (int i = 0; i < 3; i++) {
@@ -116,14 +107,28 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
         if (v[i] < 0 || v[i] >= g_radVoxelDims[i]) return;
     }
 
-    radVoxel_t *head = &g_radVoxels[v[0]][v[1]][v[2]];
+    // Safety: Ignore invalid normals or zero energy to prevent NaN propagation
+    if (normal[0] == 0 && normal[1] == 0 && normal[2] == 0) return;
+    if (color[0] <= 0 && color[1] <= 0 && color[2] <= 0) return;
+
+    size_t idx = RAD_VOXEL_INDEX(v[0], v[1], v[2]);
+    radVoxel_t *head = &g_radVoxels[idx];
     
-    // Find a voxel bucket with a similar normal to avoid bleeding through walls
+    // 1. If this is the very first sample in this voxel, use the head node itself
+    if (head->weight <= 0) {
+        VectorCopy(color, head->color);
+        VectorCopy(normal, head->normal);
+        head->weight = 1.0f;
+        head->next = NULL;
+        return;
+    }
+
+    // 2. Otherwise, find a voxel bucket with a similar normal
     radVoxel_t *curr = head;
     while (curr) {
-        if (curr->weight > 0 && DotProduct(curr->normal, normal) > rad_angle_match_cos) {
+        if (DotProduct(curr->normal, normal) > rad_angle_match_cos) {
             VectorAdd(curr->color, color, curr->color);
-            VectorAdd(curr->normal, normal, curr->normal); // Accumulate normal for averaging
+            VectorAdd(curr->normal, normal, curr->normal);
             curr->weight += 1.0f;
             return;
         }
@@ -131,7 +136,7 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
         curr = curr->next;
     }
 
-    // Create new normal-specific bucket in this voxel
+    // 3. Create new normal-specific bucket if no match found
     radVoxel_t *newV = malloc(sizeof(radVoxel_t));
     VectorCopy(color, newV->color);
     VectorCopy(normal, newV->normal);
@@ -139,6 +144,7 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
     newV->next = NULL;
     curr->next = newV;
 }
+
 
 // ---------------------------------------------------------------------------
 // Helper: test line-of-sight between two world points via Embree.
@@ -397,6 +403,12 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
     }
 
+    voxelPoint_t *points = NULL;
+    int numPoints = 0;
+    if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+        points = VoxelCache_Load(surfIdx, &numPoints);
+    }
+
     for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
         for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
@@ -404,13 +416,27 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
             vec3_t dst;
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
+                qboolean found = qfalse;
+                if (points) {
+                    for (int i = 0; i < numPoints; i++) {
+                        if (points[i].pixelIndex == k_dst) {
+                            VectorCopy(points[i].pos, dst);
+                            VectorCopy(points[i].normal, dstNormal);
+                            found = qtrue;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
+                }
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else if (ds->surfaceType == MST_PATCH) {
+
                 if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
                     drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
                     VectorCopy(dv->normal, dstNormal);
@@ -565,12 +591,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     // Write scalar result (dot with sparse-point normal) for voxel path compat
                     float accum[3];
-                    float maxAccum[3];
                     for (int c = 0; c < 3; c++) {
                         accum[c] = DotProduct(dstNormal, ivec[c]);
                         if (accum[c] < 0.0f) accum[c] = 0.0f;
-                        maxAccum[c] = VectorLength(ivec[c]);
                     }
+
 
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
@@ -596,16 +621,15 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         }
     }
     if (patchMesh) FreeMesh(patchMesh);
+    if (points) free(points);
 }
+
 
 static void RadiosityIntegrateThread(int surfIdx) {
     RadiosityIntegrateOneSurface(surfIdx);
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2.5 — Voxelize
-// ---------------------------------------------------------------------------
-
 static void RadiosityVoxelize(void) {
     _printf("  [voxelize]   Unified world-space splatting... ");
     RadiosityVoxelReset();
@@ -624,6 +648,32 @@ static void RadiosityVoxelize(void) {
             VectorSet(surfNormal, 0, 0, 1);
         }
 
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+            int numPoints = 0;
+            voxelPoint_t *points = VoxelCache_Load(s, &numPoints);
+            if (points) {
+                for (int i = 0; i < numPoints; i++) {
+                    int pIdx = points[i].pixelIndex;
+                    int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+                    int lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                    int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
+
+                    if (lx % rad_interval == 0 && ly % rad_interval == 0) {
+                        if (radiosityFloats[pIdx * 3] == 0 && radiosityFloats[pIdx * 3 + 1] == 0 && radiosityFloats[pIdx * 3 + 2] == 0) continue;
+                        
+                        vec3_t pos, normal;
+                        VectorCopy(points[i].pos, pos);
+                        VectorCopy(points[i].normal, normal);
+                        VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
+                        RadiosityVoxelAdd(pos, normal, &radiosityFloats[pIdx * 3]);
+                    }
+                }
+                free(points);
+                if (patchMesh) FreeMesh(patchMesh);
+                continue;
+            }
+        }
+
         for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
             for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
                 int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
@@ -632,13 +682,7 @@ static void RadiosityVoxelize(void) {
                 if (radiosityFloats[k_dst * 3] == 0 && radiosityFloats[k_dst * 3 + 1] == 0 && radiosityFloats[k_dst * 3 + 2] == 0) continue;
 
                 vec3_t pos, normal;
-                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                    if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
-                    VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
-                } else if (ds->surfaceType == MST_PATCH) {
+                if (ds->surfaceType == MST_PATCH) {
                     if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
                         drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
                         VectorCopy(dv->xyz, pos);
@@ -659,18 +703,20 @@ static void RadiosityVoxelize(void) {
         if (patchMesh) FreeMesh(patchMesh);
     }
 
-    for (int x = 0; x < g_radVoxelDims[0]; x++) {
-        for (int y = 0; y < g_radVoxelDims[1]; y++) {
-            for (int z = 0; z < g_radVoxelDims[2]; z++) {
-                radVoxel_t *v = g_radVoxels[x][y][z].next;
-                while (v) {
-                    if (v->weight > 0) {
-                        VectorScale(v->color, 1.0f / v->weight, v->color);
-                        VectorNormalize(v->normal, v->normal); // Normalize the averaged surface normal
-                    }
-                    v = v->next;
+    size_t total = (size_t)g_radVoxelDims[0] * g_radVoxelDims[1] * g_radVoxelDims[2];
+    for (size_t i = 0; i < total; i++) {
+        radVoxel_t *v = &g_radVoxels[i];
+        while (v) {
+            if (v->weight > 0) {
+                VectorScale(v->color, 1.0f / v->weight, v->color);
+                // Safety: only normalize if the summed normal is non-zero
+                if (VectorLength(v->normal) > 0.0001f) {
+                    VectorNormalize(v->normal, v->normal);
+                } else {
+                    VectorSet(v->normal, 0, 0, 1); // Fallback
                 }
             }
+            v = v->next;
         }
     }
     _printf("done\n");
@@ -745,13 +791,22 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
     float totalWeight = 0.0f;
 
     for (int dx = -1; dx <= 1; dx++) {
+        int nx = v[0] + dx;
+        if (nx < 0 || nx >= g_radVoxelDims[0]) continue;
         for (int dy = -1; dy <= 1; dy++) {
+            int ny = v[1] + dy;
+            if (ny < 0 || ny >= g_radVoxelDims[1]) continue;
             for (int dz = -1; dz <= 1; dz++) {
-                int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
-                if (nx < 0 || nx >= g_radVoxelDims[0] || ny < 0 || ny >= g_radVoxelDims[1] || nz < 0 || nz >= g_radVoxelDims[2]) continue;
+                int nz = v[2] + dz;
+                if (nz < 0 || nz >= g_radVoxelDims[2]) continue;
                 
-                radVoxel_t *curr = g_radVoxels[nx][ny][nz].next;
+                size_t idx = RAD_VOXEL_INDEX(nx, ny, nz);
+                radVoxel_t *curr = &g_radVoxels[idx];
                 while (curr) {
+                    if (curr->weight <= 0) {
+                        curr = curr->next;
+                        continue;
+                    }
                     float dot = DotProduct(curr->normal, normal);
                     if (dot > rad_angle_match_cos) {
                         vec3_t voxelCenter;
@@ -771,6 +826,7 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
             }
         }
     }
+
 
     if (totalWeight < 0.0001f) return qfalse;
 
@@ -818,18 +874,82 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
         return;
     }
 
+    // Initialize tempBuffer with existing values for all surfaces
+    for (int ly = 0; ly < ds->lightmapHeight; ly++) {
+        for (int lx = 0; lx < ds->lightmapWidth; lx++) {
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int k_temp = ly * ds->lightmapWidth + lx;
+            VectorCopy(&radiosityFloats[k_dst * 3], tempBuffer[k_temp]);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Optimized Triangle Soup Path: Cache-driven + Inclusive Dilation
+    // -----------------------------------------------------------------------
+    if (mode == RAD_FILL_VOXEL && ds->surfaceType == MST_TRIANGLE_SOUP) {
+        int numPoints = 0;
+        voxelPoint_t *points = VoxelCache_Load(surfIdx, &numPoints);
+        if (points) {
+            byte *filled = calloc(numPixels, 1);
+            vec3_t *pointPos = malloc(numPixels * sizeof(vec3_t));
+            vec3_t *pointNorm = malloc(numPixels * sizeof(vec3_t));
+
+            // Step 1: Exact hits via Voxel Cache
+            for (int i = 0; i < numPoints; i++) {
+                int pIdx = points[i].pixelIndex;
+                int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+                int lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
+                int k_temp = ly * ds->lightmapWidth + lx;
+
+                if (k_temp < 0 || k_temp >= numPixels) continue;
+
+                VectorCopy(points[i].pos, pointPos[k_temp]);
+                VectorCopy(points[i].normal, pointNorm[k_temp]);
+                VectorAdd(pointPos[k_temp], localSurfaces[surfIdx].entityOrigin, pointPos[k_temp]);
+
+                if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempBuffer[k_temp])) {
+                    filled[k_temp] = 1;
+                }
+            }
+
+            // Step 2: Inclusive Dilation (Near-miss pixels)
+            for (int ly = 0; ly < ds->lightmapHeight; ly++) {
+                for (int lx = 0; lx < ds->lightmapWidth; lx++) {
+                    int k_temp = ly * ds->lightmapWidth + lx;
+                    if (filled[k_temp]) continue;
+
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dx = -1; dx <= 1; dx++) {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = lx + dx, ny = ly + dy;
+                            if (nx < 0 || nx >= ds->lightmapWidth || ny < 0 || ny >= ds->lightmapHeight) continue;
+                            int kn = ny * ds->lightmapWidth + nx;
+                            if (filled[kn] == 1) { // Borrow from original geometric hits
+                                if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempBuffer[k_temp])) {
+                                    filled[k_temp] = 2; // Dilated
+                                    goto next_p;
+                                }
+                            }
+                        }
+                    }
+                    next_p:;
+                }
+            }
+
+            free(filled); free(pointPos); free(pointNorm); free(points);
+            goto flush; // Skip manual rasterization loop
+        }
+    }
+
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             int k_temp = ly * ds->lightmapWidth + lx;
             
-            // Default to the original Phase 2 integrated value
-            VectorCopy(&radiosityFloats[k_dst * 3], tempBuffer[k_temp]);
-
             if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
             // Resolve the per-texel normal for this pixel.
-            // For patches this varies per-texel (the key fix). For planar it is constant.
             vec3_t texelNormal;
             if (ds->surfaceType == MST_PATCH) {
                 if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
@@ -855,6 +975,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             if (mode == RAD_FILL_VOXEL) {
                 vec3_t pos, normal;
                 if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+                    // Fallback path if cache was missing
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
@@ -884,6 +1005,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             }
         }
     }
+
+flush:
+
 
     // Flush temp buffer back to radiosityFloats for this surface
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
