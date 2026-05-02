@@ -243,10 +243,10 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
       return;
     }
 
-    // Only skip ignoreSurface for planar surfaces (which can't shadow themselves).
-    // Non-planar surfaces like trisoups and patches MUST be allowed to self-shadow.
+    // Ignore hits on the starting surface within a small epsilon to prevent self-shadowing artifacts
     if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
-      if (ds->surfaceType == MST_PLANAR) {
+      struct RTCRay *ray = (struct RTCRay *)args->ray;
+      if (ray->tfar < SELF_SHADOW_EPSILON) {
         args->valid[0] = 0;
         return;
       }

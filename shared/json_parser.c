@@ -221,6 +221,8 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->exposureFilter = TONEMAP_FILMIC;
       else
         game->exposureFilter = TONEMAP_LINEAR;
+    } else if (!strcmp(key, "hdr8BitScale") && val->type == json_type_number) {
+      game->hdr8BitScale = (float)atof(json_value_as_number(val)->number);
     }
 
     el = el->next;
@@ -368,6 +370,7 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"writeLightmapSize\": %d,\n"
           "  \"sampleSize\": %d,\n"
           "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
+          "  \"hdr8BitScale\": %.2f,\n"
           "  \"lightmapsRGB\": %s,\n"
           "  \"lightgridRGB\": %s,\n"
           "  \"texturesRGB\": %s,\n"
@@ -388,7 +391,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
           game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
-          game->defaultSampleSize, hdrStr, game->lightmapsRGB ? "true" : "false",
+          game->defaultSampleSize, hdrStr, game->hdr8BitScale,
+          game->lightmapsRGB ? "true" : "false",
           game->lightgridRGB ? "true" : "false",
           game->texturesRGB ? "true" : "false",
           game->colorsRGB ? "true" : "false",

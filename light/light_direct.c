@@ -995,31 +995,9 @@ void TraceLtm(int num) {
             mesh->width, mesh->height, ds->lightmapWidth, ds->lightmapHeight);
     }
 
-    if (superSample) {
-      mesh_t *mp;
-      int steps = 0;
-      int tempScale = scale;
-
-      // chop it up for more light samples (leaking memory...)
-      mp = mesh;
-
-      // Calculate log2(scale) for subdivision steps
-      while (tempScale > 1) {
-        tempScale >>= 1;
-        steps++;
-      }
-
-      for (int s = 0; s < steps; s++) {
-        mp = LinearSubdivideMesh(mp);
-        mp = TransposeMesh(mp);
-        mp = LinearSubdivideMesh(mp);
-        mp = TransposeMesh(mp);
-      }
-
-      mesh = mp;
-    }
-    sampleWidth = mesh->width + currentGutter * 2;
-    sampleHeight = mesh->height + currentGutter * 2;
+      // We don't need to manually subdivide further; we will interpolate in the loop.
+    sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
+    sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
   } else {
     VectorCopy(ds->lightmapVecs[2], normal);
 
@@ -1168,20 +1146,48 @@ void TraceLtm(int num) {
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else if (ds->patchWidth) {
           numPositions = 9;
-          // Dilation: clamp to mesh bounds for the gutter
-          int mi = i - currentGutter;
-          int mj = j - currentGutter;
-          if (mi < 0) mi = 0; 
-          if (mi >= mesh->width) mi = mesh->width - 1;
-          if (mj < 0) mj = 0;
-          if (mj >= mesh->height) mj = mesh->height - 1;
+          // Bilinear interpolation across the patch mesh
+          float fi = (float)(i - currentGutter) / (float)scale;
+          float fj = (float)(j - currentGutter) / (float)scale;
+          
+          // Clamp to mesh bounds for dilation
+          if (fi < 0) fi = 0;
+          if (fi > mesh->width - 1.0001f) fi = mesh->width - 1.0001f;
+          if (fj < 0) fj = 0;
+          if (fj > mesh->height - 1.0001f) fj = mesh->height - 1.0001f;
 
-          VectorCopy(mesh->verts[mj * mesh->width + mi].normal, normal);
-          // push off of the curve a bit
+          int i0 = (int)fi;
+          int j0 = (int)fj;
+          int i1 = i0 + 1;
+          int j1 = j0 + 1;
+          if (i1 >= mesh->width) i1 = mesh->width - 1;
+          if (j1 >= mesh->height) j1 = mesh->height - 1;
+          float fracI = fi - (float)i0;
+          float fracJ = fj - (float)j0;
+
+          drawVert_t *v00 = &mesh->verts[j0 * mesh->width + i0];
+          drawVert_t *v10 = &mesh->verts[j0 * mesh->width + i1];
+          drawVert_t *v01 = &mesh->verts[j1 * mesh->width + i0];
+          drawVert_t *v11 = &mesh->verts[j1 * mesh->width + i1];
+
           for (k = 0; k < 3; k++) {
-            base[k] = (double)mesh->verts[mj * mesh->width + mi].xyz[k] +
-                      (double)normal[k] * SAMPLE_NUDGE;
+            float v_0 = v00->xyz[k] + fracI * (v10->xyz[k] - v00->xyz[k]);
+            float v_1 = v01->xyz[k] + fracI * (v11->xyz[k] - v01->xyz[k]);
+            float interpolated_xyz = v_0 + fracJ * (v_1 - v_0);
+            
+            float n_0 = v00->normal[k] + fracI * (v10->normal[k] - v00->normal[k]);
+            float n_1 = v01->normal[k] + fracI * (v11->normal[k] - v01->normal[k]);
+            normal[k] = n_0 + fracJ * (n_1 - n_0);
+            
+            base[k] = (double)interpolated_xyz;
           }
+          VectorNormalize(normal, normal);
+
+          // Apply nudge along the interpolated normal
+          for (k = 0; k < 3; k++) {
+            base[k] += (double)normal[k] * SAMPLE_NUDGE;
+          }
+
           // Apply jitter in world space along the surface tangent plane
           if (jitterRadius > 0.0f && ss > 0) {
             MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);

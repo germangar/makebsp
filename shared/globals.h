@@ -41,6 +41,7 @@ typedef struct {
 	// Lighting flags
 	int         defaultSampleSize;
     hdrFormat_t hdr;
+    float       hdr8BitScale;
 	qboolean	lightmapsRGB;
 	qboolean	lightgridRGB;
 	qboolean	texturesRGB;

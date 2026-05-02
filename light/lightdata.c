@@ -706,7 +706,6 @@ static void DownConvertGrid(float scale, qboolean lightmapRange) {
 
 void DownConvertLightingData(void) {
 	float scale = 1.0f;
-	qboolean lightmapRange = (g_game->hdr == HDR_8BIT);
 	int i;
 
 	_printf("--- DownConvertLightingData ---\n");
@@ -722,38 +721,29 @@ void DownConvertLightingData(void) {
 		DownscaleLightmaps(g_game->lightmapSize, g_game->writeLightmapSize);
 	}
 
-	if (lightmapRange) {
+	if (g_game->hdr == HDR_8BIT) {
 		const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
-		if (existingIntensity[0] && atof(existingIntensity) > 255.0f) {
-			_printf("Custom _lightingIntensity > 255 detected (%s), auto-normalization disabled.\n", existingIntensity);
-			lightmapRange = qfalse;
-		} else {
-			/*
-			// Reference: Old automatic normalization logic
-			ScanLightmapIntensity();
-			if (maxLightIntensity > 255.0f) {
-				maxLightIntensity *= HOTSPOT_TAME_FACTOR;
-				scale = 255.0f / maxLightIntensity;
-				float engineIntensity = maxLightIntensity / 255.0f;
-				_printf("LightingIntensity Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
-				SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
-			} else {
-				_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
-				lightmapRange = qfalse;
-			}
-			*/
+		float customIntensity = existingIntensity[0] ? atof(existingIntensity) : 0.0f;
 
-			scale = 0.25f;
-			float engineIntensity = 4.0f;
-			_printf("LightingIntensity Fixed 4x Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
+		if (customIntensity > 1.0f) {
+			// Respect custom intensity: Scale pixels by 1/Intensity to match engine boost
+			_printf("Custom _lightingIntensity detected (%f), using as fixed scale.\n", customIntensity);
+			scale = 1.0f / customIntensity;
+		} else {
+			// No custom intensity: Apply fixed normalization from game profile
+			maxLightIntensity = 255.0f * g_game->hdr8BitScale;
+			scale = 255.0f / maxLightIntensity;
+			float engineIntensity = maxLightIntensity / 255.0f;
+
+			_printf("LightingIntensity Fixed Normalization: Scale %f (_lightingIntensity %f)\n", scale, engineIntensity);
 			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
 		}
 	}
 
-	DownConvertDrawVerts(scale, lightmapRange);
-	DownConvertLightmaps(scale, lightmapRange);
+	DownConvertDrawVerts(scale, (g_game->hdr == HDR_8BIT));
+	DownConvertLightmaps(scale, (g_game->hdr == HDR_8BIT));
 	DownConvertDeluxeMaps();
-	DownConvertGrid(scale, lightmapRange);
+	DownConvertGrid(scale, (g_game->hdr == HDR_8BIT));
 
 /*
 	// Export debug lightmaps for inspection

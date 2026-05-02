@@ -11,6 +11,7 @@
   "writeLightmapSize": 128,
   "sampleSize": 8,
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
+  "hdr8BitScale": 1.00,
   "lightmapsRGB": false,
   "lightgridRGB": false,
   "texturesRGB": false,

@@ -24,6 +24,7 @@ game_t games[MAX_GAMES] = {
 		// Global Map Limits removed
 		8,          // defaultSampleSize
         HDR_OFF,    // hdr
+		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
 		qfalse,     // lightgridRGB
 		qfalse,     // texturesRGB
@@ -55,6 +56,7 @@ game_t games[MAX_GAMES] = {
 		// Global Map Limits removed
 		4,          // defaultSampleSize
         HDR_8BIT,   // hdr
+		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
 		qfalse,     // lightgridRGB
 		qtrue,      // texturesRGB
