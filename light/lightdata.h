@@ -44,8 +44,18 @@ extern float *pixelNormalFloats;    // 3 floats/pixel: surface normal for scalar
 extern float *irradianceScalarFloats; // 3 floats/pixel: raw un-attenuated energy sum for physical capping
 extern byte *lightAlphaMask;
 
+typedef struct {
+    vec3_t pos;
+    vec3_t normal;
+    int    pixelIndex;
+} voxelPoint_t;
+
 void LockDeluxeDirections(void);
 void ResolveLightmapScalars(void);
+
+// Voxel Cache Service
+void VoxelCache_BakeAll(void);
+voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints);
 void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3],
                             contribution_t *cont, qboolean isDeluxe,
                             vec3_t *lambertianAccum, const vec3_t normal);

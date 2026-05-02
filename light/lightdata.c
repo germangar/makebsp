@@ -820,3 +820,122 @@ void FreeRadiosityFloats(void) {
 		lightSurfaceIndex = NULL;
 	}
 }
+
+/*
+===============================================================================
+
+VOXEL CACHE SERVICE
+
+===============================================================================
+*/
+
+void VoxelCache_BakeAll(void) {
+    _printf("--- VoxelCache_BakeAll ---\n");
+    Q_mkdir("cache");
+
+    int numBaked = 0;
+    double start = I_FloatTime();
+
+#pragma omp parallel for reduction(+:numBaked) schedule(dynamic)
+    for (int i = 0; i < numDrawSurfaces; i++) {
+        dsurface_t *ds = &drawSurfaces[i];
+        if (ds->surfaceType != MST_TRIANGLE_SOUP || ds->lightmapNum[0] < 0) continue;
+
+        int W = ds->lightmapWidth;
+        int H = ds->lightmapHeight;
+        
+        // Count valid pixels first to allocate exactly what we need
+        int validCount = 0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                float st[2];
+                vec3_t dummyPos, dummyNormal;
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+                if (TriSoupSamplePoint(ds, st, dummyPos, dummyNormal)) {
+                    validCount++;
+                }
+            }
+        }
+
+        if (validCount == 0) continue;
+
+        voxelPoint_t *points = malloc(validCount * sizeof(voxelPoint_t));
+        if (!points) continue;
+
+        int pIdx = 0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                float st[2];
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+
+                if (TriSoupSamplePoint(ds, st, points[pIdx].pos, points[pIdx].normal)) {
+                    points[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+                    pIdx++;
+                    if (pIdx >= validCount) break;
+                }
+            }
+            if (pIdx >= validCount) break;
+        }
+
+        if (pIdx > 0) {
+            char path[256];
+            sprintf(path, "cache/surf_%d.vxl", i);
+            FILE *f = fopen(path, "wb");
+            if (f) {
+                int magic = 0x4C584F56; // "VOXL"
+                int version = 1;
+                fwrite(&magic, 4, 1, f);
+                fwrite(&version, 4, 1, f);
+                fwrite(&pIdx, 4, 1, f);
+                fwrite(points, sizeof(voxelPoint_t), pIdx, f);
+                fclose(f);
+                numBaked++;
+            }
+        }
+        free(points);
+    }
+
+    double end = I_FloatTime();
+    _printf("    %d Trisoup surfaces baked to cache in %.2f seconds\n", numBaked, end - start);
+}
+
+voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints) {
+    char path[256];
+    sprintf(path, "cache/surf_%d.vxl", surfIdx);
+    
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    int magic, version, numPoints;
+    if (fread(&magic, 4, 1, f) != 1 || magic != 0x4C584F56) {
+        fclose(f);
+        return NULL;
+    }
+    if (fread(&version, 4, 1, f) != 1 || version != 1) {
+        fclose(f);
+        return NULL;
+    }
+    if (fread(&numPoints, 4, 1, f) != 1) {
+        fclose(f);
+        return NULL;
+    }
+
+    voxelPoint_t *points = malloc(numPoints * sizeof(voxelPoint_t));
+    if (!points) {
+        fclose(f);
+        return NULL;
+    }
+
+    if (fread(points, sizeof(voxelPoint_t), numPoints, f) != numPoints) {
+        free(points);
+        fclose(f);
+        return NULL;
+    }
+
+    fclose(f);
+    *outNumPoints = numPoints;
+    return points;
+}

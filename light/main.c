@@ -417,6 +417,7 @@ int main(int argc, char **argv) {
     }
 
     UpConvertLightingData();
+    VoxelCache_BakeAll();
 
     // Call core lighting process
     LightMain(radiosityPasses);

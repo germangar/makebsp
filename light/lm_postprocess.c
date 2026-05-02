@@ -883,49 +883,36 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
 
     if (aaPasses <= 0 && smoothPasses <= 0) return;
 
-    int x, y, p, i, k;
-    const int W = ds->lightmapWidth, H = ds->lightmapHeight;
-
-    // 1. Calculate true density and set up local bounds
     float texelSize = GetSurfaceTexelSize(ds);
     float effectiveRadius = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius;
     float searchRadius = effectiveRadius * texelSize;
     if (searchRadius < 0.1f) return;
 
     float voxelSize = searchRadius;
+    float maxDistSq  = searchRadius * searchRadius;
+    float sigma      = searchRadius / 3.0f;
+    if (sigma < 0.1f) sigma = 0.1f;
+    float twoSigmaSq = 2.0f * sigma * sigma;
 
-    pixelCache_t *pixCache = malloc(W * H * sizeof(pixelCache_t));
-    if (!pixCache) return;
+    int i, k, p;
 
-    vec3_t gridMins = {99999.0f, 99999.0f, 99999.0f};
-    vec3_t gridMaxs = {-99999.0f, -99999.0f, -99999.0f};
-    int mappedPixels = 0;
-
-    for (y = 0; y < H; y++) {
-        for (x = 0; x < W; x++) {
-            pixelCache_t *pc = &pixCache[y * W + x];
-            pc->nodeIdx = -1;
-            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-            if (lightAlphaMask[p] == 0) { pc->valid = qfalse; continue; }
-
-            float st[2];
-            st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
-            st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
-
-            if (TriSoupSamplePoint(ds, st, pc->pos, pc->normal)) {
-                pc->valid = qtrue;
-                mappedPixels++;
-                for (i = 0; i < 3; i++) {
-                    if (pc->pos[i] < gridMins[i]) gridMins[i] = pc->pos[i];
-                    if (pc->pos[i] > gridMaxs[i]) gridMaxs[i] = pc->pos[i];
-                }
-            } else {
-                pc->valid = qfalse;
-            }
-        }
+    // 1. Load pre-calculated world-space points from cache
+    int numPoints = 0;
+    voxelPoint_t *cachedPoints = VoxelCache_Load(surfIdx, &numPoints);
+    if (!cachedPoints || numPoints == 0) {
+        if (cachedPoints) free(cachedPoints);
+        return; 
     }
 
-    if (mappedPixels == 0) { free(pixCache); return; }
+    // Determine grid bounds from cached points
+    vec3_t gridMins = {99999.0f, 99999.0f, 99999.0f};
+    vec3_t gridMaxs = {-99999.0f, -99999.0f, -99999.0f};
+    for (i = 0; i < numPoints; i++) {
+        for (k = 0; k < 3; k++) {
+            if (cachedPoints[i].pos[k] < gridMins[k]) gridMins[k] = cachedPoints[i].pos[k];
+            if (cachedPoints[i].pos[k] > gridMaxs[k]) gridMaxs[k] = cachedPoints[i].pos[k];
+        }
+    }
 
     for (i = 0; i < 3; i++) {
         gridMins[i] -= voxelSize;
@@ -938,49 +925,38 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
         if (gridDims[i] < 1) gridDims[i] = 1;
     }
 
-    float maxDistSq  = searchRadius * searchRadius;
-    float sigma      = searchRadius / 3.0f;
-    if (sigma < 0.1f) sigma = 0.1f;
-    float twoSigmaSq = 2.0f * sigma * sigma;
-
     const size_t gStride1 = (size_t)gridDims[1] * gridDims[2];
     const size_t gStride2 = (size_t)gridDims[2];
     const size_t numBuckets = (size_t)gridDims[0] * gridDims[1] * gridDims[2];
 
     aaTexel_t **flatGrid = (aaTexel_t **)calloc(numBuckets, sizeof(aaTexel_t *));
-    aaTexel_t *pool = (aaTexel_t *)malloc(mappedPixels * sizeof(aaTexel_t));
+    aaTexel_t *pool = (aaTexel_t *)malloc(numPoints * sizeof(aaTexel_t));
     if (!flatGrid || !pool) {
         if (flatGrid) free(flatGrid);
         if (pool) free(pool);
-        free(pixCache); return;
+        free(cachedPoints);
+        return;
     }
 
-    // Pass 2 (Voxelize): build grid linked-lists exactly once
-    int poolIdx = 0;
-    for (y = 0; y < H; y++) {
-        for (x = 0; x < W; x++) {
-            pixelCache_t *pc = &pixCache[y * W + x];
-            if (!pc->valid) continue;
+    // 2. Voxelize: build grid linked-lists from cached points
+    for (i = 0; i < numPoints; i++) {
+        int v[3];
+        qboolean gridInBounds = qtrue;
+        for (k = 0; k < 3; k++) {
+            v[k] = (int)((cachedPoints[i].pos[k] - gridMins[k]) / voxelSize);
+            if (v[k] < 0 || v[k] >= gridDims[k]) { gridInBounds = qfalse; break; }
+        }
 
-            int v[3];
-            qboolean gridInBounds = qtrue;
-            for (i = 0; i < 3; i++) {
-                v[i] = (int)((pc->pos[i] - gridMins[i]) / voxelSize);
-                if (v[i] < 0 || v[i] >= gridDims[i]) { gridInBounds = qfalse; break; }
-            }
+        if (gridInBounds) {
+            aaTexel_t *newT = &pool[i];
+            VectorCopy(cachedPoints[i].pos,    newT->pos);
+            VectorCopy(cachedPoints[i].normal, newT->normal);
+            p = cachedPoints[i].pixelIndex;
+            VectorCopy(&tempFloats[p * 3], newT->color);
 
-            if (gridInBounds) {
-                pc->nodeIdx = poolIdx++;
-                aaTexel_t *newT = &pool[pc->nodeIdx];
-                VectorCopy(pc->pos,    newT->pos);
-                VectorCopy(pc->normal, newT->normal);
-                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                VectorCopy(&tempFloats[p * 3], newT->color);
-
-                size_t cell = (size_t)v[0] * gStride1 + (size_t)v[1] * gStride2 + (size_t)v[2];
-                newT->next   = flatGrid[cell];
-                flatGrid[cell] = newT;
-            }
+            size_t cell = (size_t)v[0] * gStride1 + (size_t)v[1] * gStride2 + (size_t)v[2];
+            newT->next   = flatGrid[cell];
+            flatGrid[cell] = newT;
         }
     }
 
@@ -989,30 +965,32 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
     vec3_t *aaJittersNormal = NULL;
     byte   *aaJittersValid = NULL;
 
-    if (aaPasses > 0 && poolIdx > 0) {
-        aaJittersPos = malloc((size_t)poolIdx * SS_PATTERN8_COUNT * sizeof(vec3_t));
-        aaJittersNormal = malloc((size_t)poolIdx * SS_PATTERN8_COUNT * sizeof(vec3_t));
-        aaJittersValid = malloc((size_t)poolIdx * SS_PATTERN8_COUNT * sizeof(byte));
+    if (aaPasses > 0 && numPoints > 0) {
+        aaJittersPos = malloc((size_t)numPoints * SS_PATTERN8_COUNT * sizeof(vec3_t));
+        aaJittersNormal = malloc((size_t)numPoints * SS_PATTERN8_COUNT * sizeof(vec3_t));
+        aaJittersValid = malloc((size_t)numPoints * SS_PATTERN8_COUNT * sizeof(byte));
         
         if (aaJittersPos && aaJittersNormal && aaJittersValid) {
-            for (y = 0; y < H; y++) {
-                for (x = 0; x < W; x++) {
-                    const pixelCache_t *pc = &pixCache[y * W + x];
-                    if (pc->nodeIdx < 0) continue;
-                    
-                    for (k = 0; k < SS_PATTERN8_COUNT; k++) {
-                        size_t idx = (size_t)pc->nodeIdx * SS_PATTERN8_COUNT + k;
-                        if (k == 0) {
-                            VectorCopy(pc->pos, aaJittersPos[idx]);
-                            VectorCopy(pc->normal, aaJittersNormal[idx]);
-                            aaJittersValid[idx] = 1;
-                        } else {
-                            float st[2];
-                            st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f + ssPattern8[k][0] * radius;
-                            st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f + ssPattern8[k][1] * radius;
-                            if (TriSoupSamplePoint(ds, st, aaJittersPos[idx], aaJittersNormal[idx])) aaJittersValid[idx] = 1;
-                            else aaJittersValid[idx] = 0;
-                        }
+            for (i = 0; i < numPoints; i++) {
+                p = cachedPoints[i].pixelIndex;
+                int lmLocal = p % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+                int ly = lmLocal / LIGHTMAP_WIDTH;
+                int lx = lmLocal % LIGHTMAP_WIDTH;
+                int x = lx - ds->lightmapOffset[0][0];
+                int y = ly - ds->lightmapOffset[0][1];
+
+                for (k = 0; k < SS_PATTERN8_COUNT; k++) {
+                    size_t idx = (size_t)i * SS_PATTERN8_COUNT + k;
+                    if (k == 0) {
+                        VectorCopy(cachedPoints[i].pos, aaJittersPos[idx]);
+                        VectorCopy(cachedPoints[i].normal, aaJittersNormal[idx]);
+                        aaJittersValid[idx] = 1;
+                    } else {
+                        float st[2];
+                        st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f + ssPattern8[k][0] * radius;
+                        st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f + ssPattern8[k][1] * radius;
+                        if (TriSoupSamplePoint(ds, st, aaJittersPos[idx], aaJittersNormal[idx])) aaJittersValid[idx] = 1;
+                        else aaJittersValid[idx] = 0;
                     }
                 }
             }
@@ -1023,80 +1001,75 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
     for (int currentPass = 0; currentPass < totalPasses; currentPass++) {
         qboolean isAA = (currentPass < aaPasses);
 
-        for (y = 0; y < H; y++) {
-            for (x = 0; x < W; x++) {
-                const pixelCache_t *pc = &pixCache[y * W + x];
-                if (pc->nodeIdx < 0) continue;
+        for (int pIdx = 0; pIdx < numPoints; pIdx++) {
+            p = cachedPoints[pIdx].pixelIndex;
 
-                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
+            const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
+            vec3_t finalColor = {0.0f, 0.0f, 0.0f};
+            float  finalWeight = 0.0f;
 
-                const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
-                vec3_t finalColor = {0.0f, 0.0f, 0.0f};
-                float  finalWeight = 0.0f;
+            for (k = 0; k < numSamples; k++) {
+                vec3_t origin, normal;
+                if (isAA && aaJittersPos) {
+                    size_t idx = (size_t)pIdx * SS_PATTERN8_COUNT + k;
+                    if (!aaJittersValid[idx]) continue;
+                    VectorCopy(aaJittersPos[idx], origin);
+                    VectorCopy(aaJittersNormal[idx], normal);
+                } else {
+                    VectorCopy(cachedPoints[pIdx].pos,    origin);
+                    VectorCopy(cachedPoints[pIdx].normal, normal);
+                }
 
-                for (k = 0; k < numSamples; k++) {
-                    vec3_t origin, normal;
-                    if (isAA && aaJittersPos) {
-                        size_t idx = (size_t)pc->nodeIdx * SS_PATTERN8_COUNT + k;
-                        if (!aaJittersValid[idx]) continue;
-                        VectorCopy(aaJittersPos[idx], origin);
-                        VectorCopy(aaJittersNormal[idx], normal);
-                    } else {
-                        VectorCopy(pc->pos,    origin);
-                        VectorCopy(pc->normal, normal);
-                    }
+                int v[3];
+                for (int i0 = 0; i0 < 3; i0++) v[i0] = (int)((origin[i0] - gridMins[i0]) / voxelSize);
 
-                    int v[3];
-                    for (i = 0; i < 3; i++) v[i] = (int)((origin[i] - gridMins[i]) / voxelSize);
+                vec3_t totalColor  = {0.0f, 0.0f, 0.0f};
+                float  totalWeight = 0.0f;
 
-                    vec3_t totalColor  = {0.0f, 0.0f, 0.0f};
-                    float  totalWeight = 0.0f;
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = v[0] + dx;
+                    if (nx < 0 || nx >= gridDims[0]) continue;
+                    for (int dy = -1; dy <= 1; dy++) {
+                        int ny = v[1] + dy;
+                        if (ny < 0 || ny >= gridDims[1]) continue;
+                        for (int dz = -1; dz <= 1; dz++) {
+                            int nz = v[2] + dz;
+                            if (nz < 0 || nz >= gridDims[2]) continue;
 
-                    for (int dx = -1; dx <= 1; dx++) {
-                        for (int dy = -1; dy <= 1; dy++) {
-                            for (int dz = -1; dz <= 1; dz++) {
-                                int nx = v[0] + dx, ny = v[1] + dy, nz = v[2] + dz;
-                                if (nx < 0 || nx >= gridDims[0] || ny < 0 || ny >= gridDims[1] || nz < 0 || nz >= gridDims[2]) continue;
+                            size_t cell = (size_t)nx * gStride1 + (size_t)ny * gStride2 + (size_t)nz;
+                            aaTexel_t *curr = flatGrid[cell];
+                            while (curr) {
+                                vec3_t delta;
+                                VectorSubtract(origin, curr->pos, delta);
+                                float distSq = DotProduct(delta, delta);
+                                if (distSq >= maxDistSq) { curr = curr->next; continue; }
 
-                                size_t cell = (size_t)nx * gStride1 + (size_t)ny * gStride2 + (size_t)nz;
-                                aaTexel_t *curr = flatGrid[cell];
-                                while (curr) {
-                                    float dot = DotProduct(curr->normal, normal);
-                                    if (dot > aa_angle_match_cos) {
-                                        vec3_t delta;
-                                        VectorSubtract(origin, curr->pos, delta);
-                                        float distSq = DotProduct(delta, delta);
-                                        if (distSq <= maxDistSq) {
-                                            float w = expf(-distSq / twoSigmaSq) * dot;
-                                            VectorMA(totalColor, w, curr->color, totalColor);
-                                            totalWeight += w;
-                                        }
-                                    }
-                                    curr = curr->next;
+                                float dot = DotProduct(normal, curr->normal);
+                                if (dot > AA_ANGLE_MATCH_COS) {
+                                    float w = expf(-distSq / twoSigmaSq) * dot;
+                                    VectorMA(totalColor, w, curr->color, totalColor);
+                                    totalWeight += w;
                                 }
+                                curr = curr->next;
                             }
                         }
                     }
-
-                    if (totalWeight > 0.0001f) {
-                        VectorMA(finalColor, 1.0f / totalWeight, totalColor, finalColor);
-                        finalWeight += 1.0f;
-                    }
                 }
 
-                if (finalWeight > 0.0001f) VectorScale(finalColor, 1.0f / finalWeight, &lightFloats[p * 3]);
+                if (totalWeight > 0.0001f) {
+                    VectorMA(finalColor, 1.0f / totalWeight, totalColor, finalColor);
+                    finalWeight += 1.0f;
+                }
             }
+
+            if (finalWeight > 0.0001f) VectorScale(finalColor, 1.0f / finalWeight, &lightFloats[p * 3]);
         }
         
         // Update grid colors for the next pass
         if (currentPass < totalPasses - 1) {
-            for (y = 0; y < H; y++) {
-                for (x = 0; x < W; x++) {
-                    const pixelCache_t *pc = &pixCache[y * W + x];
-                    if (pc->nodeIdx < 0) continue;
-                    p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                    VectorCopy(&lightFloats[p * 3], pool[pc->nodeIdx].color);
-                }
+            for (i = 0; i < numPoints; i++) {
+                p = cachedPoints[i].pixelIndex;
+                VectorCopy(&lightFloats[p * 3], pool[i].color);
             }
         }
     }
@@ -1106,7 +1079,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
     if (aaJittersValid) free(aaJittersValid);
     free(pool);
     free(flatGrid);
-    free(pixCache);
+    free(cachedPoints);
 }
 
 /*
