@@ -841,61 +841,113 @@ void VoxelCache_BakeAll(void) {
         dsurface_t *ds = &drawSurfaces[i];
         if (ds->surfaceType != MST_TRIANGLE_SOUP || ds->lightmapNum[0] < 0) continue;
 
+        char path[256];
+        sprintf(path, "cache/surf_%d.vxl", i);
+        FILE *f_test = fopen(path, "rb");
+        if (f_test) {
+            fclose(f_test);
+            continue;
+        }
+
         int W = ds->lightmapWidth;
         int H = ds->lightmapHeight;
         
-        // Count valid pixels first to allocate exactly what we need
+        // Rasterization approach: iterate triangles once and splat into a grid
+        voxelPoint_t *grid = calloc(W * H, sizeof(voxelPoint_t));
+        byte *gridValid = calloc(W * H, sizeof(byte));
+
+        for (int j = 0; j < ds->numIndexes; j += 3) {
+            int i0 = drawIndexes[ds->firstIndex + j];
+            int i1 = drawIndexes[ds->firstIndex + j + 1];
+            int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+            drawVert_t *v[3] = {
+                &drawVerts[ds->firstVert + i0],
+                &drawVerts[ds->firstVert + i1],
+                &drawVerts[ds->firstVert + i2]
+            };
+
+            float st[3][2];
+            for (int k = 0; k < 3; k++) {
+                st[k][0] = v[k]->lightmap[0][0] * LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                st[k][1] = v[k]->lightmap[0][1] * LIGHTMAP_HEIGHT - ds->lightmapOffset[0][1];
+            }
+
+            // Find triangle bounds in local lightmap space
+            float mins[2], maxs[2];
+            mins[0] = st[0][0]; mins[1] = st[0][1];
+            maxs[0] = st[0][0]; maxs[1] = st[0][1];
+            for (int k = 1; k < 3; k++) {
+                if (st[k][0] < mins[0]) mins[0] = st[k][0];
+                if (st[k][1] < mins[1]) mins[1] = st[k][1];
+                if (st[k][0] > maxs[0]) maxs[0] = st[k][0];
+                if (st[k][1] > maxs[1]) maxs[1] = st[k][1];
+            }
+
+            int minX = (int)floorf(mins[0] - 0.5f);
+            int minY = (int)floorf(mins[1] - 0.5f);
+            int maxX = (int)ceilf(maxs[0] + 0.5f);
+            int maxY = (int)ceilf(maxs[1] + 0.5f);
+
+            if (minX < 0) minX = 0; if (minY < 0) minY = 0;
+            if (maxX >= W) maxX = W - 1; if (maxY >= H) maxY = H - 1;
+
+            for (int ty = minY; ty <= maxY; ty++) {
+                for (int tx = minX; tx <= maxX; tx++) {
+                    int pIdx = ty * W + tx;
+                    if (gridValid[pIdx]) continue; // Already sampled this pixel
+
+                    float pST[2] = { (float)tx + 0.5f, (float)ty + 0.5f };
+                    // We need global ST for TriSoupSamplePoint (or just do barycentric here)
+                    // For speed and consistency, let's just do barycentric here
+                    float area = (st[1][1] - st[2][1]) * (st[0][0] - st[2][0]) + (st[2][0] - st[1][0]) * (st[0][1] - st[2][1]);
+                    if (fabs(area) < 0.0001f) continue;
+
+                    float w0 = ((st[1][1] - st[2][1]) * (pST[0] - st[2][0]) + (st[2][0] - st[1][0]) * (pST[1] - st[2][1])) / area;
+                    float w1 = ((st[2][1] - st[0][1]) * (pST[0] - st[2][0]) + (st[0][0] - st[2][0]) * (pST[1] - st[2][1])) / area;
+                    float w2 = 1.0f - w0 - w1;
+
+                    if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f) {
+                        gridValid[pIdx] = 1;
+                        for (int k = 0; k < 3; k++) {
+                            grid[pIdx].pos[k]    = w0 * v[0]->xyz[k]    + w1 * v[1]->xyz[k]    + w2 * v[2]->xyz[k];
+                            grid[pIdx].normal[k] = w0 * v[0]->normal[k] + w1 * v[1]->normal[k] + w2 * v[2]->normal[k];
+                        }
+                        VectorNormalize(grid[pIdx].normal, grid[pIdx].normal);
+                        grid[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ty) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + tx;
+                    }
+                }
+            }
+        }
+
+        // Collect valid points
         int validCount = 0;
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                float st[2];
-                vec3_t dummyPos, dummyNormal;
-                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
-                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
+        for (int j = 0; j < W * H; j++) if (gridValid[j]) validCount++;
 
-                if (TriSoupSamplePoint(ds, st, dummyPos, dummyNormal)) {
-                    validCount++;
+        if (validCount > 0) {
+            voxelPoint_t *points = malloc(validCount * sizeof(voxelPoint_t));
+            int outIdx = 0;
+            for (int j = 0; j < W * H; j++) {
+                if (gridValid[j]) {
+                    points[outIdx++] = grid[j];
                 }
             }
-        }
 
-        if (validCount == 0) continue;
-
-        voxelPoint_t *points = malloc(validCount * sizeof(voxelPoint_t));
-        if (!points) continue;
-
-        int pIdx = 0;
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + (float)x + 0.5f;
-                st[1] = (float)ds->lightmapOffset[0][1] + (float)y + 0.5f;
-
-                if (TriSoupSamplePoint(ds, st, points[pIdx].pos, points[pIdx].normal)) {
-                    points[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                    pIdx++;
-                    if (pIdx >= validCount) break;
-                }
-            }
-            if (pIdx >= validCount) break;
-        }
-
-        if (pIdx > 0) {
-            char path[256];
-            sprintf(path, "cache/surf_%d.vxl", i);
             FILE *f = fopen(path, "wb");
             if (f) {
                 int magic = 0x4C584F56; // "VOXL"
                 int version = 1;
                 fwrite(&magic, 4, 1, f);
                 fwrite(&version, 4, 1, f);
-                fwrite(&pIdx, 4, 1, f);
-                fwrite(points, sizeof(voxelPoint_t), pIdx, f);
+                fwrite(&validCount, 4, 1, f);
+                fwrite(points, sizeof(voxelPoint_t), validCount, f);
                 fclose(f);
                 numBaked++;
             }
+            free(points);
         }
-        free(points);
+        free(grid);
+        free(gridValid);
     }
 
     double end = I_FloatTime();
