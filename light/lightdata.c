@@ -723,16 +723,30 @@ void DownConvertLightingData(void) {
 	}
 
 	if (lightmapRange) {
-		ScanLightmapIntensity();
-		if (maxLightIntensity > 255.0f) {
-			maxLightIntensity *= HOTSPOT_TAME_FACTOR;
-			scale = 255.0f / maxLightIntensity;
-			float engineIntensity = maxLightIntensity / 255.0f;
-			_printf("LightingIntensity Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
-			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
-		} else {
-			_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
+		const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
+		if (existingIntensity[0] && atof(existingIntensity) > 255.0f) {
+			_printf("Custom _lightingIntensity > 255 detected (%s), auto-normalization disabled.\n", existingIntensity);
 			lightmapRange = qfalse;
+		} else {
+			/*
+			// Reference: Old automatic normalization logic
+			ScanLightmapIntensity();
+			if (maxLightIntensity > 255.0f) {
+				maxLightIntensity *= HOTSPOT_TAME_FACTOR;
+				scale = 255.0f / maxLightIntensity;
+				float engineIntensity = maxLightIntensity / 255.0f;
+				_printf("LightingIntensity Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
+				SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
+			} else {
+				_printf("Normalization: Peak value %.3f <= 255.0, scaling skipped.\n", maxLightIntensity);
+				lightmapRange = qfalse;
+			}
+			*/
+
+			scale = 0.25f;
+			float engineIntensity = 4.0f;
+			_printf("LightingIntensity Fixed 4x Normalization active: Scale factor %f (_lightingIntensity %f)\n", scale, engineIntensity);
+			SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
 		}
 	}
 
