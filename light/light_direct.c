@@ -397,8 +397,8 @@ static void AccumulateContribution(vec3_t color, vec3_t colorVecs[3], contributi
     float currentEnergy = color[0] + color[1] + color[2];
     float newEnergy = cont->color[0] + cont->color[1] + cont->color[2];
 
-    if (newEnergy > 0.001f) {
-        if (currentEnergy < 0.001f) {
+    if (newEnergy > MIN_RADIOSITY_EMITTER_ADD) {
+        if (currentEnergy <= MIN_RADIOSITY_EMITTER_ADD) {
             // Replace placeholder direction with actual light
             for (c = 0; c < 3; c++) {
                 VectorScale(cont->dir, cont->color[c], colorVecs[c]);
@@ -413,7 +413,7 @@ static void AccumulateContribution(vec3_t color, vec3_t colorVecs[3], contributi
         }
     } else {
         // Zero energy contribution (shadow direction placeholder)
-        if (currentEnergy < 0.001f) {
+        if (currentEnergy <= MIN_RADIOSITY_EMITTER_ADD) {
             // Accept the direction if we have no light yet.
             // We use a tiny weight so it acts as a dominant direction for dilation.
             for (c = 0; c < 3; c++) {

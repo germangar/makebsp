@@ -51,11 +51,12 @@ static void DilateLightmapAtlas(int width, int passes) {
 			for (y = 0; y < width; y++) {
 				for (x = 0; x < width; x++) {
 					int idx = (lm * width * width) + y * width + x;
-					if (tempMask[idx]) continue;
+					float energy = temp[idx * 3] + temp[idx * 3 + 1] + temp[idx * 3 + 2];
+					if (tempMask[idx] && energy > 0.0002f) continue;
 
-					float sum[3] = {0,0,0};
-					float dsum[3] = {0,0,0};
-					float weight = 0;
+					float sum[3] = {0,0,0}, dsum[3] = {0,0,0}, weight = 0;
+					float litSum[3] = {0,0,0}, litDSum[3] = {0,0,0}, litWeight = 0;
+
 					for (j = -1; j <= 1; j++) {
 						for (i = -1; i <= 1; i++) {
 							if (i == 0 && j == 0) continue;
@@ -64,6 +65,12 @@ static void DilateLightmapAtlas(int width, int passes) {
 							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
 								int nidx = (lm * width * width) + ny * width + nx;
 								if (tempMask[nidx]) {
+									float nEnergy = temp[nidx * 3] + temp[nidx * 3 + 1] + temp[nidx * 3 + 2];
+									if (nEnergy > 0.0001f) {
+										VectorAdd(litSum, &temp[nidx * 3], litSum);
+										if (tempDeluxe) VectorAdd(litDSum, &tempDeluxe[nidx * 3], litDSum);
+										litWeight += 1.0f;
+									}
 									VectorAdd(sum, &temp[nidx * 3], sum);
 									if (tempDeluxe) VectorAdd(dsum, &tempDeluxe[nidx * 3], dsum);
 									weight += 1.0f;
@@ -71,10 +78,14 @@ static void DilateLightmapAtlas(int width, int passes) {
 							}
 						}
 					}
-					if (weight > 0) {
+					if (litWeight > 0) {
+						VectorScale(litSum, 1.0f / litWeight, &lightFloats[idx * 3]);
+						if (deluxeFloats) VectorScale(litDSum, 1.0f / litWeight, &deluxeFloats[idx * 3]);
+						lightAlphaMask[idx] = 1;
+					} else if (weight > 0) {
 						VectorScale(sum, 1.0f / weight, &lightFloats[idx * 3]);
 						if (deluxeFloats) VectorScale(dsum, 1.0f / weight, &deluxeFloats[idx * 3]);
-						lightAlphaMask[idx] = 1; // Mark as "bled" for next pass
+						lightAlphaMask[idx] = 1;
 					}
 				}
 			}
