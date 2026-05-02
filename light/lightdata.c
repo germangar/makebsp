@@ -16,6 +16,8 @@ float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
 float *irradianceVecFloats = NULL;  // 9 floats per pixel (3 irradiance vec3s, one per RGB channel)
 float *lambertianVecFloats = NULL;  // 3 floats per pixel (weighted direction sum)
+float *pixelNormalFloats = NULL;    // 3 floats per pixel (surface normal)
+float *irradianceScalarFloats = NULL; // 3 floats per pixel (raw un-attenuated energy sum)
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -393,6 +395,14 @@ static void UpConvertLightmaps(void) {
 		if (lambertianVecFloats) free(lambertianVecFloats);
 		lambertianVecFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
 		if (!lambertianVecFloats) Error("UpConvert: calloc lambertianVecFloats failed");
+
+		if (pixelNormalFloats) free(pixelNormalFloats);
+		pixelNormalFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
+		if (!pixelNormalFloats) Error("UpConvert: calloc pixelNormalFloats failed");
+
+		if (irradianceScalarFloats) free(irradianceScalarFloats);
+		irradianceScalarFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
+		if (!irradianceScalarFloats) Error("UpConvert: calloc irradianceScalarFloats failed");
 	}
 }
 
@@ -441,18 +451,22 @@ static void DownConvertLightmaps(float scale, qboolean lightmapRange) {
 }
 
 void ResolveIrradianceVectors(void) {
-	if (!irradianceVecFloats || !lightFloats || !deluxeFloats) return;
+	if (!lightFloats || !deluxeFloats) return;
 
-	_printf("ResolveIrradianceVectors: Unified resolution for %d pixels\n", numLightBytes / 3);
+	_printf("ResolveIrradianceVectors: Smoothing directions and resolving scalars for %d pixels\n", numLightBytes / 3);
+
+	// Pass 1: Resolve raw dominant directions
 	for (int i = 0; i < numLightBytes / 3; i++) {
 		vec3_t v[3];
 		vec3_t totalDir = {0,0,0};
 		
-		for (int c = 0; c < 3; c++) {
-			v[c][0] = irradianceVecFloats[i * 9 + c * 3 + 0];
-			v[c][1] = irradianceVecFloats[i * 9 + c * 3 + 1];
-			v[c][2] = irradianceVecFloats[i * 9 + c * 3 + 2];
-			VectorAdd(totalDir, v[c], totalDir);
+		if (irradianceVecFloats) {
+			for (int c = 0; c < 3; c++) {
+				v[c][0] = irradianceVecFloats[i * 9 + c * 3 + 0];
+				v[c][1] = irradianceVecFloats[i * 9 + c * 3 + 1];
+				v[c][2] = irradianceVecFloats[i * 9 + c * 3 + 2];
+				VectorAdd(totalDir, v[c], totalDir);
+			}
 		}
 
 		vec3_t finalDir;
@@ -463,17 +477,42 @@ void ResolveIrradianceVectors(void) {
 		}
 		
 		if (VectorNormalize(finalDir, finalDir) > 0) {
-			// Dominant direction found
 			VectorCopy(finalDir, &deluxeFloats[i * 3]);
+		} else {
+			VectorClear(&deluxeFloats[i * 3]);
+		}
+	}
+
+	// Pass 2: Smooth the direction vectors to prevent patchy noise and splotches
+	DilateDeluxeDirections(2);
+
+	// Pass 3: Resolve the final scalar lightmap using smoothed directions and the physical energy cap
+	for (int i = 0; i < numLightBytes / 3; i++) {
+		vec3_t finalDir;
+		VectorCopy(&deluxeFloats[i * 3], finalDir);
+
+		if (VectorLength(finalDir) > 0.03f) {
+			// Resolve the lightmap color by dividing the target Lambertian by the direction cosine.
+			// PHYSICAL CAP: Never exceed the raw un-attenuated energy sum (irradianceScalarFloats).
+			vec3_t normal;
+			VectorCopy(&pixelNormalFloats[i * 3], normal);
+			float dot = DotProduct(normal, finalDir);
+			
+			// Safety: Smoothly transition at grazing angles to prevent seams
+			float weight = (dot < 0.1f) ? 0.1f : dot;
+
 			for (int c = 0; c < 3; c++) {
-				lightFloats[i * 3 + c] = DotProduct(v[c], finalDir);
+				float resolved = lightFloats[i * 3 + c] / weight;
+				
+				if (irradianceScalarFloats) {
+					float maxEnergy = irradianceScalarFloats[i * 3 + c];
+					// Cap at raw physical energy to prevent rims/blooming
+					if (resolved > maxEnergy) resolved = maxEnergy;
+				}
+				
+				lightFloats[i * 3 + c] = resolved;
 				if (lightFloats[i * 3 + c] < 0) lightFloats[i * 3 + c] = 0;
 			}
-		} else {
-			// No direction (pure ambient or dark)
-			VectorClear(&deluxeFloats[i * 3]);
-			// (lightFloats already has the scalar sum from initial accumulation? No, 
-			// let's ensure it has the magnitude/sum here if we want consistency).
 		}
 	}
 }
@@ -628,7 +667,6 @@ void DownConvertLightingData(void) {
 	
 	if (g_game->deluxeMap) {
 		ResolveIrradianceVectors();
-		DilateDeluxeDirections(2); // Fix shadow-edge rims by extrapolating direction
 	}
 
 	// Always perform background dilation to prevent bilinear bleeding at shell edges
@@ -722,6 +760,14 @@ void FreeRadiosityFloats(void) {
 	if (lambertianVecFloats) {
 		free(lambertianVecFloats);
 		lambertianVecFloats = NULL;
+	}
+	if (pixelNormalFloats) {
+		free(pixelNormalFloats);
+		pixelNormalFloats = NULL;
+	}
+	if (irradianceScalarFloats) {
+		free(irradianceScalarFloats);
+		irradianceScalarFloats = NULL;
 	}
 	if (lightSurfaceIndex) {
 		free(lightSurfaceIndex);

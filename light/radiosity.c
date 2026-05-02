@@ -563,19 +563,18 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     // Write scalar result (dot with sparse-point normal) for voxel path compat
                     float accum[3];
+                    float maxAccum[3];
                     for (int c = 0; c < 3; c++) {
-                        if (g_game->deluxeMap) {
-                            // For deluxemapping, the scalar lightmap should store the total irradiance (magnitude of the incoming light).
-                            // A simple approximation for order-1 irradiance is the magnitude of the irradiance vector.
-                            accum[c] = VectorLength(ivec[c]);
-                        } else {
-                            accum[c] = DotProduct(dstNormal, ivec[c]);
-                        }
+                        accum[c] = DotProduct(dstNormal, ivec[c]);
                         if (accum[c] < 0.0f) accum[c] = 0.0f;
+                        maxAccum[c] = VectorLength(ivec[c]);
                     }
 
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
+                    if (irradianceScalarFloats) {
+                        VectorAdd(&irradianceScalarFloats[k_dst * 3], maxAccum, &irradianceScalarFloats[k_dst * 3]);
+                    }
                     if (irradianceVecFloats) {
                         for (int c = 0; c < 3; c++) {
                             irradianceVecFloats[k_dst * 9 + c * 3 + 0] += ivec[c][0];

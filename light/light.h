@@ -328,7 +328,7 @@ int CompareSurfaces(const void *a, const void *b);
 void LightWorld(void);
 void TraceLtm(int num);
 void TraceGrid(int num);
-void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
+void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color, vec3_t maxColor,
                       vec3_t *dirAccum, vec3_t *lambertianAccum, vec3_t *outColorVecs,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
