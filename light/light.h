@@ -123,10 +123,7 @@ typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 
 extern tonemap_t tonemapMode;
 
-typedef struct {
-  vec3_t dir;
-  vec3_t color;
-} contribution_t;
+
 
 #define MAX_LIGHT_EDGES 8
 

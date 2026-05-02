@@ -4,6 +4,11 @@
 #include "mathlib.h"
 #include "qfiles.h"
 
+typedef struct {
+  vec3_t dir;
+  vec3_t color;
+} contribution_t;
+
 // High-precision vertex for internal lighting
 typedef struct {
 	vec3_t		xyz;
@@ -38,6 +43,12 @@ extern float *lambertianVecFloats;  // 3 floats/pixel: Lambertian-weighted direc
 extern float *pixelNormalFloats;    // 3 floats/pixel: surface normal for scalar resolution
 extern float *irradianceScalarFloats; // 3 floats/pixel: raw un-attenuated energy sum for physical capping
 extern byte *lightAlphaMask;
+
+void LockDeluxeDirections(void);
+void ResolveLightmapScalars(void);
+void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3],
+                            contribution_t *cont, qboolean isDeluxe,
+                            vec3_t *lambertianAccum, const vec3_t normal);
 extern bspGridPoint32_t *gridData32;
 
 extern float maxLightIntensity;

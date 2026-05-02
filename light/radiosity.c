@@ -497,6 +497,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 // ---------------------------------------------------------------
                 float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
                 vec3_t lvec = {0,0,0};
+                vec3_t energySumVec = {0,0,0};
 
                 for (int s = 0; s < numDrawSurfaces; s++) {
                     if (localSurfaces[s].emitterCount == 0) continue;
@@ -550,6 +551,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         for (int c = 0; c < 3; c++) {
                             float energy = formFactorBase * em->color[c];
                             energySum += energy;
+                            energySumVec[c] += energy;
                             VectorMA(ivec[c], energy, rayDir, ivec[c]);
                         }
                         // Lambertian weighted vector (Irradiance * Cosine)
@@ -573,7 +575,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
                     if (irradianceScalarFloats) {
-                        VectorAdd(&irradianceScalarFloats[k_dst * 3], maxAccum, &irradianceScalarFloats[k_dst * 3]);
+                        VectorAdd(&irradianceScalarFloats[k_dst * 3], energySumVec, &irradianceScalarFloats[k_dst * 3]);
                     }
                     if (irradianceVecFloats) {
                         for (int c = 0; c < 3; c++) {

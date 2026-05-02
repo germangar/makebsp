@@ -450,27 +450,20 @@ static void DownConvertLightmaps(float scale, qboolean lightmapRange) {
 	_printf("DownConvert: %d pixels marked in alpha mask\n", processedCount);
 }
 
-void ResolveIrradianceVectors(void) {
-	if (!lightFloats || !deluxeFloats) return;
+void LockDeluxeDirections(void) {
+	if (!deluxeFloats || !irradianceVecFloats) return;
 
-	_printf("ResolveIrradianceVectors: Smoothing directions and resolving scalars for %d pixels\n", numLightBytes / 3);
+	_printf("LockDeluxeDirections: Flooding directions from lit texels to shadows for %d pixels\n", numLightBytes / 3);
 
-	// Pass 1: Resolve raw dominant directions
+	// Pass 1: Resolve the initial 'Seed' directions from direct lighting hits
 	for (int i = 0; i < numLightBytes / 3; i++) {
-		vec3_t v[3];
 		vec3_t totalDir = {0,0,0};
-		
-		if (irradianceVecFloats) {
-			for (int c = 0; c < 3; c++) {
-				v[c][0] = irradianceVecFloats[i * 9 + c * 3 + 0];
-				v[c][1] = irradianceVecFloats[i * 9 + c * 3 + 1];
-				v[c][2] = irradianceVecFloats[i * 9 + c * 3 + 2];
-				VectorAdd(totalDir, v[c], totalDir);
-			}
+		for (int c = 0; c < 3; c++) {
+			VectorAdd(totalDir, &irradianceVecFloats[i * 9 + c * 3], totalDir);
 		}
 
 		vec3_t finalDir;
-		if (lambertianVecFloats) {
+		if (lambertianVecFloats && DotProduct(&lambertianVecFloats[i * 3], &lambertianVecFloats[i * 3]) > 0.0001f) {
 			VectorCopy(&lambertianVecFloats[i * 3], finalDir);
 		} else {
 			VectorCopy(totalDir, finalDir);
@@ -483,10 +476,63 @@ void ResolveIrradianceVectors(void) {
 		}
 	}
 
-	// Pass 2: Smooth the direction vectors to prevent patchy noise and splotches
-	DilateDeluxeDirections(2);
+	// Pass 2: 2D Flooding (The user's idea)
+	// Run through unmasked texels. If a lit texel has shadowed neighbors, push the direction into them.
+	// We run multiple passes to ensure directions reach deep into large shadows.
+	int width = g_game->lightmapSize;
+	int numLMs = (numLightBytes / 3) / (width * width);
 
-	// Pass 3: Resolve the final scalar lightmap using smoothed directions and the physical energy cap
+	for (int pass = 0; pass < 8; pass++) {
+		int floodCount = 0;
+		for (int lm = 0; lm < numLMs; lm++) {
+			for (int y = 0; y < width; y++) {
+				for (int x = 0; x < width; x++) {
+					int i = (lm * width * width) + y * width + x;
+
+					// Skip masked pixels or pixels that haven't received light yet
+					if (DotProduct(&deluxeFloats[i * 3], &deluxeFloats[i * 3]) <= 0.0001f) continue;
+
+					// Check adjacent texels in the atlas
+					for (int dy = -1; dy <= 1; dy++) {
+						for (int dx = -1; dx <= 1; dx++) {
+							if (dx == 0 && dy == 0) continue;
+							int nx = x + dx;
+							int ny = y + dy;
+
+							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
+								int j = (lm * width * width) + ny * width + nx;
+
+								// If the neighbor is in shadow (no contribution yet), push our direction into it
+								if (DotProduct(&irradianceVecFloats[j * 9], &irradianceVecFloats[j * 9]) <= 0.0001f) {
+									contribution_t cont;
+									VectorCopy(&deluxeFloats[i * 3], cont.dir);
+									VectorSet(cont.color, 0.0001f, 0.0001f, 0.0001f);
+
+									// Use AccumulateContribution to write the contribution into the shadowed texel
+									AccumulateContribution(NULL, NULL, (vec3_t*)&irradianceVecFloats[j * 9], &cont, qtrue, NULL, &pixelNormalFloats[j * 3]);
+									
+									// Update deluxeFloats for the next step of the pass
+									vec3_t tempDir = {0,0,0};
+									for (int c = 0; c < 3; c++) VectorAdd(tempDir, &irradianceVecFloats[j * 9 + c * 3], tempDir);
+									VectorNormalize(tempDir, &deluxeFloats[j * 3]);
+									floodCount++;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		if (floodCount == 0) break;
+	}
+}
+
+void ResolveLightmapScalars(void) {
+	if (!lightFloats || !deluxeFloats) return;
+
+	_printf("ResolveLightmapScalars: Finalizing scalars with locked directions for %d pixels\n", numLightBytes / 3);
+
+	// Pass 3: Resolve the final scalar lightmap using the LOCKED and SMOOTHED directions
 	for (int i = 0; i < numLightBytes / 3; i++) {
 		vec3_t finalDir;
 		VectorCopy(&deluxeFloats[i * 3], finalDir);
@@ -498,8 +544,8 @@ void ResolveIrradianceVectors(void) {
 			VectorCopy(&pixelNormalFloats[i * 3], normal);
 			float dot = DotProduct(normal, finalDir);
 			
-			// Safety: Smoothly transition at grazing angles to prevent seams
-			float weight = (dot < 0.1f) ? 0.1f : dot;
+			// Soft-Weighting: Use a smooth hyperbolic curve instead of a hard clamp.
+			float weight = 0.5f * (dot + (float)sqrt(dot * dot + 0.01f));
 
 			for (int c = 0; c < 3; c++) {
 				float resolved = lightFloats[i * 3 + c] / weight;
@@ -666,7 +712,7 @@ void DownConvertLightingData(void) {
 	_printf("--- DownConvertLightingData ---\n");
 	
 	if (g_game->deluxeMap) {
-		ResolveIrradianceVectors();
+		ResolveLightmapScalars();
 	}
 
 	// Always perform background dilation to prevent bilinear bleeding at shell edges

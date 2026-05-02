@@ -355,11 +355,6 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
   angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff, sunSoftBias);
   if (angle <= 0) {
-    if (isDeluxe) {
-        VectorCopy(normal, out->dir);
-        VectorClear(out->color);
-        return qtrue;
-    }
     return qfalse; // facing away
   }
 
@@ -371,11 +366,6 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
       VectorScale(out->color, angle, out->color);
     }
     return qtrue;
-  } else if (isDeluxe) {
-    // Return a zero-energy contribution with the sun direction for deluxemap consistency
-    VectorCopy(sunDirection, out->dir);
-    VectorClear(out->color);
-    return qtrue;
   }
 
   return qfalse;
@@ -386,7 +376,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 AccumulateContribution
 ========================
 */
-static void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3], contribution_t *cont, qboolean isDeluxe, vec3_t *lambertianVec, const vec3_t normal) {
+void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3], contribution_t *cont, qboolean isDeluxe, vec3_t *lambertianVec, const vec3_t normal) {
     int c;
 
     if (maxColor) {
@@ -394,11 +384,11 @@ static void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVe
     }
 
     if (!isDeluxe) {
-        VectorAdd(color, cont->color, color);
+        if (color) VectorAdd(color, cont->color, color);
         return;
     }
 
-    float currentEnergy = color[0] + color[1] + color[2];
+    float currentEnergy = color ? (color[0] + color[1] + color[2]) : 0.0f;
     float newEnergy = cont->color[0] + cont->color[1] + cont->color[2];
 
     if (newEnergy > MIN_RADIOSITY_EMITTER_ADD) {
@@ -409,13 +399,13 @@ static void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVe
             // Replace placeholder direction with actual light
             for (c = 0; c < 3; c++) {
                 VectorScale(cont->dir, cont->color[c], colorVecs[c]);
-                color[c] = cont->color[c] * lambertian;
+                if (color) color[c] = cont->color[c] * lambertian;
             }
         } else {
             // Standard weighted accumulation
             for (c = 0; c < 3; c++) {
                 VectorMA(colorVecs[c], cont->color[c], cont->dir, colorVecs[c]);
-                color[c] += cont->color[c] * lambertian;
+                if (color) color[c] += cont->color[c] * lambertian;
             }
         }
     } else {
@@ -496,10 +486,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     // test occlusion
     TraceLine(origin, light->origin, &trace, qfalse, tw);
     if (trace.passSolid) {
-        if (isDeluxe) {
-            VectorClear(out->color);
-            return qtrue;
-        }
         return qfalse;
     }
 
@@ -518,11 +504,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             if (light->twosided) {
                 factor = -factor;
             } else {
-                if (isDeluxe) {
-                    VectorCopy(normal, out->dir);
-                    VectorClear(out->color);
-                    return qtrue;
-                }
                 return qfalse;
             }
         }
@@ -573,11 +554,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                 VectorCopy(normal, out->dir); // Neutralize direction for glow
             }
         } else {
-            if (isDeluxe) {
-                VectorCopy(normal, out->dir); // Neutralize placeholder
-                VectorClear(out->color);
-                return qtrue;
-            }
             return qfalse;
         }
       }
@@ -605,11 +581,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     if (normal) {
       angle = CalculateFalloff(DotProduct(normal, out->dir));
       if (angle <= 0) {
-        if (isDeluxe) {
-            VectorCopy(normal, out->dir);
-            VectorClear(out->color);
-            return qtrue;
-        }
         return qfalse;
       }
     }
@@ -665,10 +636,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
   // occlusion check
   TraceLine(origin, light->origin, &trace, qfalse, tw);
   if (trace.passSolid) {
-    if (isDeluxe) {
-        VectorClear(out->color);
-        return qtrue;
-    }
     return qfalse;
   }
 
@@ -704,7 +671,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color, ve
       VectorClear(colorVecs[c]);
   }
 
-  // Handle ambient as the first contribution
+      // Handle ambient as the first contribution
   if (ambientColor[0] > 0 || ambientColor[1] > 0 || ambientColor[2] > 0) {
       contribution_t amb;
       VectorClear(amb.color);
@@ -1365,36 +1332,7 @@ void TraceLtm(int num) {
   }
 
 
-  // calculate average values for occluded samples
-  for (i = 0; i < sampleWidth; i++) {
-    for (j = 0; j < sampleHeight; j++) {
-      if (!occluded[i][j]) {
-        continue;
-      }
-      // scan all surrounding samples
-      count = 0;
-      VectorClear(average);
-      for (x = -1; x <= 1; x++) {
-        for (y = -1; y <= 1; y++) {
-          if (i + x < 0 || i + x >= sampleWidth) {
-            continue;
-          }
-          if (j + y < 0 || j + y >= sampleHeight) {
-            continue;
-          }
-          if (occluded[i + x][j + y]) {
-            continue;
-          }
-          count++;
-          VectorAdd(color[i + x][j + y], average, average);
-        }
-      }
-      if (count) {
-        VectorScale(average, 1.0 / count, color[i][j]);
-        sampleHit[i][j] = qtrue;
-      }
-    }
-  }
+
 
   // downscale HD buffer to LR: pick the strongest (brightest) lit HD sample
   if (superSample && use_upscale) {
