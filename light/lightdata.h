@@ -34,6 +34,7 @@ extern float *deluxeFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
 extern float *irradianceVecFloats;  // 9 floats/pixel: irradiance vectors (R,G,B) × vec3 — sparse grid only, freed with FreeRadiosityFloats
+extern float *lambertianVecFloats;  // 3 floats/pixel: Lambertian-weighted direction vectors for deluxemap resolution
 extern byte *lightAlphaMask;
 extern bspGridPoint32_t *gridData32;
 

@@ -15,6 +15,7 @@ int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
 float *irradianceVecFloats = NULL;  // 9 floats per pixel (3 irradiance vec3s, one per RGB channel)
+float *lambertianVecFloats = NULL;  // 3 floats per pixel (weighted direction sum)
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -388,6 +389,10 @@ static void UpConvertLightmaps(void) {
 		if (irradianceVecFloats) free(irradianceVecFloats);
 		irradianceVecFloats = calloc((numLightBytes / 3) * 9, sizeof(float));
 		if (!irradianceVecFloats) Error("UpConvert: calloc irradianceVecFloats failed");
+
+		if (lambertianVecFloats) free(lambertianVecFloats);
+		lambertianVecFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
+		if (!lambertianVecFloats) Error("UpConvert: calloc lambertianVecFloats failed");
 	}
 }
 
@@ -451,7 +456,12 @@ void ResolveIrradianceVectors(void) {
 		}
 
 		vec3_t finalDir;
-		VectorCopy(totalDir, finalDir);
+		if (lambertianVecFloats) {
+			VectorCopy(&lambertianVecFloats[i * 3], finalDir);
+		} else {
+			VectorCopy(totalDir, finalDir);
+		}
+		
 		if (VectorNormalize(finalDir, finalDir) > 0) {
 			// Dominant direction found
 			VectorCopy(finalDir, &deluxeFloats[i * 3]);
@@ -708,6 +718,10 @@ void FreeRadiosityFloats(void) {
 	if (irradianceVecFloats) {
 		free(irradianceVecFloats);
 		irradianceVecFloats = NULL;
+	}
+	if (lambertianVecFloats) {
+		free(lambertianVecFloats);
+		lambertianVecFloats = NULL;
 	}
 	if (lightSurfaceIndex) {
 		free(lightSurfaceIndex);

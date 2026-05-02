@@ -496,6 +496,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 // Planar / Patch: irradiance vector path.
                 // ---------------------------------------------------------------
                 float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
+                vec3_t lvec = {0,0,0};
 
                 for (int s = 0; s < numDrawSurfaces; s++) {
                     if (localSurfaces[s].emitterCount == 0) continue;
@@ -545,12 +546,14 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         if (!RadVisCheck(dst, em->center)) continue;
 
+                        float energySum = 0;
                         for (int c = 0; c < 3; c++) {
                             float energy = formFactorBase * em->color[c];
-                            ivec[c][0] += energy * rayDir[0];
-                            ivec[c][1] += energy * rayDir[1];
-                            ivec[c][2] += energy * rayDir[2];
+                            energySum += energy;
+                            VectorMA(ivec[c], energy, rayDir, ivec[c]);
                         }
+                        // Lambertian weighted vector (Irradiance * Cosine)
+                        VectorMA(lvec, energySum * cosDst, rayDir, lvec);
                     }
                 }
 
@@ -579,6 +582,9 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                             irradianceVecFloats[k_dst * 9 + c * 3 + 1] += ivec[c][1];
                             irradianceVecFloats[k_dst * 9 + c * 3 + 2] += ivec[c][2];
                         }
+                    }
+                    if (lambertianVecFloats) {
+                        VectorAdd(&lambertianVecFloats[k_dst * 3], lvec, &lambertianVecFloats[k_dst * 3]);
                     }
                     if (deluxeFloats && lightSurfaceIndex) {
                         lightSurfaceIndex[k_dst] = surfIdx;
