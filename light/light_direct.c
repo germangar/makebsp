@@ -355,6 +355,11 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
   angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff, sunSoftBias);
   if (angle <= 0) {
+    if (isDeluxe) {
+        VectorCopy(normal, out->dir);
+        VectorClear(out->color);
+        return qtrue;
+    }
     return qfalse; // facing away
   }
 
@@ -493,6 +498,11 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             if (light->twosided) {
                 factor = -factor;
             } else {
+                if (isDeluxe) {
+                    VectorCopy(normal, out->dir);
+                    VectorClear(out->color);
+                    return qtrue;
+                }
                 return qfalse;
             }
         }
@@ -526,8 +536,16 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         
         if (glowFactor > 0.0f) {
             angle *= glowFactor;
+            if (isDeluxe) {
+                VectorCopy(normal, out->dir); // Neutralize direction for glow
+            }
         } else {
-          return qfalse;
+            if (isDeluxe) {
+                VectorCopy(normal, out->dir); // Neutralize placeholder
+                VectorClear(out->color);
+                return qtrue;
+            }
+            return qfalse;
         }
       }
       //angle *= receiveAngle;
@@ -554,7 +572,11 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     if (normal) {
       angle = CalculateFalloff(DotProduct(normal, out->dir));
       if (angle <= 0) {
-        // even in deluxe mode, we don't allow light from behind (Phase 1)
+        if (isDeluxe) {
+            VectorCopy(normal, out->dir);
+            VectorClear(out->color);
+            return qtrue;
+        }
         return qfalse;
       }
     }
