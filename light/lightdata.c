@@ -728,7 +728,7 @@ void DownConvertLightingData(void) {
 		if (customIntensity > 1.0f) {
 			// Respect custom intensity: Scale pixels by 1/Intensity to match engine boost
 			_printf("Custom _lightingIntensity detected (%f), using as fixed scale.\n", customIntensity);
-			scale = 1.0f / customIntensity;
+			scale = customIntensity;
 		} else {
 			// No custom intensity: Apply fixed normalization from game profile
 			maxLightIntensity = 255.0f * g_game->hdr8BitScale;

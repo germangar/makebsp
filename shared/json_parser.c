@@ -153,6 +153,8 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->hdr = HDR_32BIT;
       else
         game->hdr = HDR_OFF;
+    } else if (!strcmp(key, "hdr8BitScale") && val->type == json_type_number) {
+      game->hdr8BitScale = (float)atof(json_value_as_number(val)->number);
     } else if (!strcmp(key, "lightmapsRGB")) {
       if (val->type == json_type_true) game->lightmapsRGB = qtrue;
       else if (val->type == json_type_false) game->lightmapsRGB = qfalse;
@@ -221,8 +223,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->exposureFilter = TONEMAP_FILMIC;
       else
         game->exposureFilter = TONEMAP_LINEAR;
-    } else if (!strcmp(key, "hdr8BitScale") && val->type == json_type_number) {
-      game->hdr8BitScale = (float)atof(json_value_as_number(val)->number);
     }
 
     el = el->next;
