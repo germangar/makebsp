@@ -1130,53 +1130,96 @@ void TraceLtm(int num) {
             base[k] = origin_d[k] + (double)normal[k] * SAMPLE_NUDGE;
           }
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
-        } else if (ds->patchWidth) {
+        } else if (ds->surfaceType == MST_PATCH) {
           numPositions = 9;
-          // Triangle interpolation across the patch mesh to match Embree triangulation
-          // Dilation: offset the planar calculation
-          float fi = ((float)(i - currentGutter) + jdx) / (float)scale;
-          float fj = ((float)(j - currentGutter) + jdy) / (float)scale;
+          
+          // Calculate the target (s,t) coordinate in the lightmap
+          float step = 1.0f / (float)scale;
+          float offset = 0.5f * step;
+          float target_s = (float)ds->lightmapOffset[0][0] + ((float)(i - currentGutter) + jdx) * step + offset;
+          float target_t = (float)ds->lightmapOffset[0][1] + ((float)(j - currentGutter) + jdy) * step + offset;
 
-          // Clamp to mesh bounds for dilation
-          if (fi < 0) fi = 0;
-          if (fi > mesh->width - 1.0001f) fi = mesh->width - 1.0001f;
-          if (fj < 0) fj = 0;
-          if (fj > mesh->height - 1.0001f) fj = mesh->height - 1.0001f;
+          qboolean found = qfalse;
+          vec3_t bestExtrapOrigin, bestExtrapNormal;
+          float bestExtrapDistSq = 999999.0f;
 
-          int i0 = (int)fi;
-          int j0 = (int)fj;
-          int i1 = i0 + 1;
-          int j1 = j0 + 1;
-          if (i1 >= mesh->width) i1 = mesh->width - 1;
-          if (j1 >= mesh->height) j1 = mesh->height - 1;
-          float fracI = fi - (float)i0;
-          float fracJ = fj - (float)j0;
+          // Search the patch mesh grid for the triangle containing (s,t)
+          for (int my = 0; my < mesh->height - 1; my++) {
+            for (int mx = 0; mx < mesh->width - 1; mx++) {
+              drawVert_t *v00 = &mesh->verts[my * mesh->width + mx];
+              drawVert_t *v10 = &mesh->verts[my * mesh->width + mx + 1];
+              drawVert_t *v01 = &mesh->verts[(my + 1) * mesh->width + mx];
+              drawVert_t *v11 = &mesh->verts[(my + 1) * mesh->width + mx + 1];
 
-          drawVert_t *v00 = &mesh->verts[j0 * mesh->width + i0];
-          drawVert_t *v10 = &mesh->verts[j0 * mesh->width + i1];
-          drawVert_t *v01 = &mesh->verts[j1 * mesh->width + i0];
-          drawVert_t *v11 = &mesh->verts[j1 * mesh->width + i1];
+              float st00[2] = {v00->lightmap[0][0] * LIGHTMAP_WIDTH, v00->lightmap[0][1] * LIGHTMAP_HEIGHT};
+              float st10[2] = {v10->lightmap[0][0] * LIGHTMAP_WIDTH, v10->lightmap[0][1] * LIGHTMAP_HEIGHT};
+              float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
+              float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
 
-          float w0, w1, w2;
-          drawVert_t *va, *vb, *vc;
+              float st[2] = {target_s, target_t};
+              float area, w0, w1, w2;
+              
+              // Tri 1: v00, v10, v01
+              if (PointInTriangle(st[0], st[1], st00, st10, st01)) {
+                area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
+                if (fabs(area) > 0.0001f) {
+                  w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
+                  w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
+                  w2 = 1.0f - w0 - w1;
+                  for (k = 0; k < 3; k++) {
+                    base[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
+                    normal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
+                  }
+                  found = qtrue; break;
+                }
+              }
 
-          if (fracI < fracJ) {
-            va = v00; vb = v01; vc = v11;
-            w2 = fracI;
-            w1 = fracJ - fracI;
-            w0 = 1.0f - fracJ;
-          } else {
-            va = v00; vb = v11; vc = v10;
-            w1 = fracJ;
-            w2 = fracI - fracJ;
-            w0 = 1.0f - fracI;
+              // Tri 2: v10, v11, v01
+              if (PointInTriangle(st[0], st[1], st10, st11, st01)) {
+                area = (st11[1] - st01[1]) * (st10[0] - st01[0]) + (st01[0] - st11[0]) * (st10[1] - st01[1]);
+                if (fabs(area) > 0.0001f) {
+                  w0 = ((st11[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st11[0]) * (st[1] - st01[1])) / area;
+                  w1 = ((st01[1] - st10[1]) * (st[0] - st01[0]) + (st10[0] - st01[0]) * (st[1] - st01[1])) / area;
+                  w2 = 1.0f - w0 - w1;
+                  for (k = 0; k < 3; k++) {
+                    base[k] = w0 * v10->xyz[k] + w1 * v11->xyz[k] + w2 * v01->xyz[k];
+                    normal[k] = w0 * v10->normal[k] + w1 * v11->normal[k] + w2 * v01->normal[k];
+                  }
+                  found = qtrue; break;
+                }
+              }
+              
+              // Extrapolation / Dilation fallback
+              float t, dSq;
+              dSq = DistanceSqToSegment(st[0], st[1], st00, st10, &t);
+              if (dSq < bestExtrapDistSq) {
+                  bestExtrapDistSq = dSq;
+                  area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
+                  if (fabs(area) > 0.0001f) {
+                      w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
+                      w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
+                      w2 = 1.0f - w0 - w1;
+                      for (k = 0; k < 3; k++) {
+                          bestExtrapOrigin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
+                          bestExtrapNormal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
+                      }
+                  }
+              }
+            }
+            if (found) break;
           }
 
-          for (k = 0; k < 3; k++) {
-            float interpolated_xyz = w0 * va->xyz[k] + w1 * vb->xyz[k] + w2 * vc->xyz[k];
-            normal[k] = w0 * va->normal[k] + w1 * vb->normal[k] + w2 * vc->normal[k];
-            base[k] = (double)interpolated_xyz;
+          if (!found) {
+              if (bestExtrapDistSq < (float)GUTTER * GUTTER * 4.0f) {
+                  for (k = 0; k < 3; k++) {
+                      base[k] = bestExtrapOrigin[k];
+                      normal[k] = bestExtrapNormal[k];
+                  }
+              } else {
+                  continue; // completely missed
+              }
           }
+
           VectorNormalize(normal, normal);
 
           // Apply nudge along the interpolated normal
