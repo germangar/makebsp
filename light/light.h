@@ -263,6 +263,7 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
 qboolean PointInTrisoup(vec3_t origin, vec3_t normal);
+mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize);
 struct MyRayQueryContext {
   struct RTCRayQueryContext context;
   traceWork_t *tw;

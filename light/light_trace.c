@@ -98,16 +98,9 @@ void InitTracingGeometry(void) {
       rtcReleaseGeometry(geom);
       count++;
     } else if (dsurf->surfaceType == MST_PATCH) {
-      mesh_t srcMesh, *subdivided, *mesh;
-      srcMesh.width = dsurf->patchWidth;
-      srcMesh.height = dsurf->patchHeight;
-      srcMesh.verts = &drawVerts[dsurf->firstVert];
-
-      mesh = SubdivideMesh(srcMesh, 8, 999);
-      PutMeshOnCurve(*mesh);
-      MakeMeshNormals(*mesh);
-      subdivided = RemoveLinearMeshColumnsRows(mesh);
-      FreeMesh(mesh);
+      float ssize = samplesize;
+      if (si->lightmapSampleSize) ssize = si->lightmapSampleSize;
+      mesh_t *subdivided = SubdividePatchForLighting(dsurf, ssize);
 
       RTCGeometry geom = rtcNewGeometry(g_device, RTC_GEOMETRY_TYPE_TRIANGLE);
       rtcSetGeometryBuildQuality(geom, RTC_BUILD_QUALITY_HIGH);

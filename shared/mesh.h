@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
+#ifndef __MESH_H__
+#define __MESH_H__
+
 // mesh.h
 
 
@@ -46,3 +49,4 @@ void PutMeshOnCurve( mesh_t in );
 
 
 void MakeNormalVectors (vec3_t forward, vec3_t right, vec3_t up);
+#endif

@@ -745,24 +745,6 @@ void DownConvertLightingData(void) {
 	DownConvertDeluxeMaps();
 	DownConvertGrid(scale, (g_game->hdr == HDR_8BIT));
 
-/*
-	// Export debug lightmaps for inspection
-	if (g_game->deluxeMap) {
-		int lmSize = g_game->lightmapSize * g_game->lightmapSize * 3;
-		int totalLMs = numLightBytes / lmSize;
-		_printf("--- Exporting Debug Lightmaps (%d layers) ---\n", totalLMs);
-		for (i = 0; i < totalLMs; i++) {
-			char debugName[256];
-			if (i % 2 == 1) {
-				sprintf(debugName, "debug_lightmap_%d.png", i / 2);
-			} else {
-				sprintf(debugName, "debug_deluxemap_%d.png", i / 2);
-			}
-			SavePNG(debugName, &lightBytes[i * lmSize], g_game->lightmapSize, g_game->lightmapSize, 3);
-		}
-	}
-*/
-
 	_printf("DownConvert: Done\n");
 }
 

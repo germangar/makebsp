@@ -975,18 +975,7 @@ void TraceLtm(int num) {
   int currentGutter = superSample ? (GUTTER * scale) : 0;
 
   if (ds->surfaceType == MST_PATCH) {
-    srcMesh.width = ds->patchWidth;
-    srcMesh.height = ds->patchHeight;
-    srcMesh.verts = drawVerts + ds->firstVert;
-    mesh = SubdivideMesh(srcMesh, 8, 999);
-    PutMeshOnCurve(*mesh);
-    MakeMeshNormals(*mesh);
-
-    subdivided = RemoveLinearMeshColumnsRows(mesh);
-    FreeMesh(mesh);
-
-    mesh = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH, widthtable,
-                               heighttable);
+    mesh = SubdividePatchForLighting(ds, ssize);
     if (mesh->width != ds->lightmapWidth ||
         mesh->height != ds->lightmapHeight) {
       Error("Mesh lightmap miscount (%dx%d != %dx%d)\n"
@@ -1146,7 +1135,7 @@ void TraceLtm(int num) {
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else if (ds->patchWidth) {
           numPositions = 9;
-          // Bilinear interpolation across the patch mesh
+          // Triangle interpolation across the patch mesh to match Embree triangulation
           float fi = (float)(i - currentGutter) / (float)scale;
           float fj = (float)(j - currentGutter) / (float)scale;
           
@@ -1170,15 +1159,29 @@ void TraceLtm(int num) {
           drawVert_t *v01 = &mesh->verts[j1 * mesh->width + i0];
           drawVert_t *v11 = &mesh->verts[j1 * mesh->width + i1];
 
+          float w0, w1, w2;
+          drawVert_t *va, *vb, *vc;
+
+          // Align with InitTracingGeometry split:
+          // Tri A: v00, v01, v11 (v1, v4, v3) if fracI < fracJ
+          // Tri B: v00, v11, v10 (v1, v3, v2) if fracI >= fracJ
+          if (fracI < fracJ) {
+            // Upper-Left Triangle (v00-v01-v11)
+            va = v00; vb = v01; vc = v11;
+            w2 = fracI;
+            w1 = fracJ - fracI;
+            w0 = 1.0f - fracJ;
+          } else {
+            // Lower-Right Triangle (v00-v11-v10)
+            va = v00; vb = v11; vc = v10;
+            w1 = fracJ;
+            w2 = fracI - fracJ;
+            w0 = 1.0f - fracI;
+          }
+
           for (k = 0; k < 3; k++) {
-            float v_0 = v00->xyz[k] + fracI * (v10->xyz[k] - v00->xyz[k]);
-            float v_1 = v01->xyz[k] + fracI * (v11->xyz[k] - v01->xyz[k]);
-            float interpolated_xyz = v_0 + fracJ * (v_1 - v_0);
-            
-            float n_0 = v00->normal[k] + fracI * (v10->normal[k] - v00->normal[k]);
-            float n_1 = v01->normal[k] + fracI * (v11->normal[k] - v01->normal[k]);
-            normal[k] = n_0 + fracJ * (n_1 - n_0);
-            
+            float interpolated_xyz = w0 * va->xyz[k] + w1 * vb->xyz[k] + w2 * vc->xyz[k];
+            normal[k] = w0 * va->normal[k] + w1 * vb->normal[k] + w2 * vc->normal[k];
             base[k] = (double)interpolated_xyz;
           }
           VectorNormalize(normal, normal);
