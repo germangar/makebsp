@@ -901,7 +901,7 @@ void TraceLtm(int num) {
       }
 
       // 2. Normal check (terminator)
-      if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_TRIANGLE_SOUP || ds->surfaceType == MST_PATCH) {
+      if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_TRIANGLE_SOUP) {
           // If we have a constant or average normal, we can cull
           // For now, let's use the surface normal for MST_PLANAR
           if (ds->surfaceType == MST_PLANAR) {
