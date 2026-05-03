@@ -236,13 +236,10 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
       return;
     }
 
-    // Ignore hits on the starting surface within a small epsilon to prevent self-shadowing artifacts
+    // NUCLEAR TEST: Always ignore self-shadowing for patches
     if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
-      struct RTCRay *ray = (struct RTCRay *)args->ray;
-      if (ray->tfar < SELF_SHADOW_EPSILON) {
         args->valid[0] = 0;
         return;
-      }
     }
 
     shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);

@@ -262,27 +262,24 @@ PutMeshOnCurve
 Drops the aproximating points onto the curve
 =================
 */
-void PutMeshOnCurve( mesh_t in ) {
-	int		i, j, l;
-	float	prev, next;
-
-	// put all the aproximating points on the curve
-	for ( i = 0 ; i < in.width ; i++ ) {
-		for ( j = 1 ; j < in.height ; j += 2 ) {
-			for ( l = 0 ; l < 3 ; l++ ) {
-				prev = ( in.verts[j*in.width+i].xyz[l] + in.verts[(j+1)*in.width+i].xyz[l] ) * 0.5;
-				next = ( in.verts[j*in.width+i].xyz[l] + in.verts[(j-1)*in.width+i].xyz[l] ) * 0.5;
-				in.verts[j*in.width+i].xyz[l] = ( prev + next ) * 0.5;
+void PutMeshOnCurve(mesh_t in) {
+	int i, j, l;
+	float prev, next;
+	for (i = 0; i < in.width; i++) {
+		for (j = 1; j < in.height - 1; j += 2) {
+			for (l = 0; l < 3; l++) {
+				prev = (in.verts[j*in.width+i].xyz[l] + in.verts[(j+1)*in.width+i].xyz[l]) * 0.5f;
+				next = (in.verts[j*in.width+i].xyz[l] + in.verts[(j-1)*in.width+i].xyz[l]) * 0.5f;
+				in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
 			}
 		}
 	}
-
-	for ( j = 0 ; j < in.height ; j++ ) {
-		for ( i = 1 ; i < in.width ; i += 2 ) {
-			for ( l = 0 ; l < 3 ; l++ ) {
-				prev = ( in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i+1].xyz[l] ) * 0.5;
-				next = ( in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i-1].xyz[l] ) * 0.5;
-				in.verts[j*in.width+i].xyz[l] = ( prev + next ) * 0.5;
+	for (j = 0; j < in.height; j++) {
+		for (i = 1; i < in.width - 1; i += 2) {
+			for (l = 0; l < 3; l++) {
+				prev = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i+1].xyz[l]) * 0.5f;
+				next = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i-1].xyz[l]) * 0.5f;
+				in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
 			}
 		}
 	}

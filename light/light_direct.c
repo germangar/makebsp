@@ -1136,9 +1136,14 @@ void TraceLtm(int num) {
         } else if (ds->patchWidth) {
           numPositions = 9;
           // Triangle interpolation across the patch mesh to match Embree triangulation
-          float fi = (float)(i - currentGutter) / (float)scale;
-          float fj = (float)(j - currentGutter) / (float)scale;
-          
+          // NORMALIZED FLIP FIX: Map lightmap texels to mesh columns while inverting the S-axis.
+          // We use (ds->lightmapWidth - 1) as the denominator to ensure perfect edge-to-edge mapping.
+          // Standard mapping: align lightmap texels with mesh columns
+          int pi = i - currentGutter;
+          int pj = j - currentGutter;
+          float fi = (float)pi / (float)scale;
+          float fj = (float)pj / (float)scale;
+
           // Clamp to mesh bounds for dilation
           if (fi < 0) fi = 0;
           if (fi > mesh->width - 1.0001f) fi = mesh->width - 1.0001f;
@@ -1162,17 +1167,12 @@ void TraceLtm(int num) {
           float w0, w1, w2;
           drawVert_t *va, *vb, *vc;
 
-          // Align with InitTracingGeometry split:
-          // Tri A: v00, v01, v11 (v1, v4, v3) if fracI < fracJ
-          // Tri B: v00, v11, v10 (v1, v3, v2) if fracI >= fracJ
           if (fracI < fracJ) {
-            // Upper-Left Triangle (v00-v01-v11)
             va = v00; vb = v01; vc = v11;
             w2 = fracI;
             w1 = fracJ - fracI;
             w0 = 1.0f - fracJ;
           } else {
-            // Lower-Right Triangle (v00-v11-v10)
             va = v00; vb = v11; vc = v10;
             w1 = fracJ;
             w2 = fracI - fracJ;
@@ -1189,18 +1189,16 @@ void TraceLtm(int num) {
           // Apply nudge along the interpolated normal
           for (k = 0; k < 3; k++) {
             base[k] += (double)normal[k] * SAMPLE_NUDGE;
+            origin[k] = (float)base[k]; // Use the nudged point as the ray origin
           }
 
-          // Apply jitter in world space along the surface tangent plane
-          if (jitterRadius > 0.0f && ss > 0) {
-            MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
-            for (k = 0; k < 3; k++) {
-              base[k] += (double)jdx * ssize * lightmapVecs[0][k] +
-                         (double)jdy * ssize * lightmapVecs[1][k];
-            }
-          }
-
-          MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
+          // Real Lighting
+          LightingAtSample(origin, normal, accumColor, accumIrradianceScalar, 
+                          (g_game->deluxeMap ? &accumDir : NULL), 
+                          (g_game->deluxeMap ? &accumLambertDir : NULL),
+                          (g_game->deluxeMap ? accumColorVecs : NULL), 
+                          qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
+          hitCount = 1;
         } else {
           numPositions = 9;
           // Dilation: offset the planar calculation
