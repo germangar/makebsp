@@ -855,16 +855,13 @@ void TraceLtm(int num) {
   vec3_t *color_data = NULL;
   vec3_t **dir = NULL;
   vec3_t *dir_data = NULL;
-  vec3_t average;
-  int count;
-  mesh_t srcMesh, *mesh = NULL, *subdivided = NULL;
+  mesh_t *mesh = NULL;
   shaderInfo_t *si;
   static float nudge[2][9] = {{0, -1, 0, 1, -1, 1, -1, 0, 1},
                                {0, -1, -1, -1, 0, 0, 1, 1, 1}};
   int sampleWidth, sampleHeight, ssize;
   int extW, extH;
   vec3_t lightmapOrigin, lightmapVecs[2];
-  int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
   int surfWeight;
   light_t **localLights;
   int numLocalLights = 0;
@@ -1136,13 +1133,9 @@ void TraceLtm(int num) {
         } else if (ds->patchWidth) {
           numPositions = 9;
           // Triangle interpolation across the patch mesh to match Embree triangulation
-          // NORMALIZED FLIP FIX: Map lightmap texels to mesh columns while inverting the S-axis.
-          // We use (ds->lightmapWidth - 1) as the denominator to ensure perfect edge-to-edge mapping.
-          // Standard mapping: align lightmap texels with mesh columns
-          int pi = i - currentGutter;
-          int pj = j - currentGutter;
-          float fi = (float)pi / (float)scale;
-          float fj = (float)pj / (float)scale;
+          // Dilation: offset the planar calculation
+          float fi = ((float)(i - currentGutter) + jdx) / (float)scale;
+          float fj = ((float)(j - currentGutter) + jdy) / (float)scale;
 
           // Clamp to mesh bounds for dilation
           if (fi < 0) fi = 0;
@@ -1189,16 +1182,8 @@ void TraceLtm(int num) {
           // Apply nudge along the interpolated normal
           for (k = 0; k < 3; k++) {
             base[k] += (double)normal[k] * SAMPLE_NUDGE;
-            origin[k] = (float)base[k]; // Use the nudged point as the ray origin
           }
-
-          // Real Lighting
-          LightingAtSample(origin, normal, accumColor, accumIrradianceScalar, 
-                          (g_game->deluxeMap ? &accumDir : NULL), 
-                          (g_game->deluxeMap ? &accumLambertDir : NULL),
-                          (g_game->deluxeMap ? accumColorVecs : NULL), 
-                          qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
-          hitCount = 1;
+          MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else {
           numPositions = 9;
           // Dilation: offset the planar calculation
