@@ -254,6 +254,7 @@ static void RadiosityEmit(const float *srcBuffer) {
 
         if (ds->lightmapNum[0] < 0) continue;
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
+        if (si->surfaceFlags & SURF_SKY) continue;
 
         localSurfaces[i].emitterStart = g_numEmitters;
         float maxIntensity = 0;
