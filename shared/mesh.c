@@ -300,9 +300,6 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 	float len;
 	mesh_t out;
 	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
-	int	originalWidths[MAX_EXPANDED_AXIS];
-	int	originalHeights[MAX_EXPANDED_AXIS];
-
 	if (!expand) {
 		Error("SubdivideMesh: malloc failed for expand buffer");
 	}
@@ -479,8 +476,6 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 	vec3_t proj, dir;
 	mesh_t out;
 	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
-	int	originalWidths[MAX_EXPANDED_AXIS];
-	int	originalHeights[MAX_EXPANDED_AXIS];
 
 	if (!expand) {
 		Error("RemoveLinearMeshColumnsRows: malloc failed for expand buffer");
@@ -601,13 +596,6 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 
 	out.width = in->width;
 	out.height = in->height;
-
-	for (i = 0; i < in->width; i++) {
-		originalWidths[i] = i;
-	}
-	for (i = 0; i < in->height; i++) {
-		originalHeights[i] = i;
-	}
 
 	for (i = 0; i < in->width; i++) {
 		for (j = 0; j < in->height; j++) {

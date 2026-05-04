@@ -362,26 +362,41 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   ds->lightmapY = y;
 
   for (i = 0; i < ds->patchWidth; i++) {
-    for (k = 0; k < w; k++) {
-      if (originalWidths[k] >= i) {
+    int k_w;
+    for (k_w = 0; k_w < w; k_w++) {
+      if (originalWidths[k_w] >= i) {
         break;
       }
     }
-    if (k >= w)
-      k = w - 1;
-    s = x + k;
+    if (k_w >= w)
+      k_w = w - 1;
+    s = x + k_w;
     for (j = 0; j < ds->patchHeight; j++) {
-      for (k = 0; k < h; k++) {
-        if (originalHeights[k] >= j) {
+      int k_h;
+      for (k_h = 0; k_h < h; k_h++) {
+        if (originalHeights[k_h] >= j) {
           break;
         }
       }
-      if (k >= h)
-        k = h - 1;
-      t = y + k;
-      verts[i + j * ds->patchWidth].lightmap[0][0] = (s + 0.5) / LIGHTMAP_WIDTH;
-      verts[i + j * ds->patchWidth].lightmap[0][1] = (t + 0.5) / LIGHTMAP_HEIGHT;
+      if (k_h >= h)
+        k_h = h - 1;
+      t = y + k_h;
+      verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
+      verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
     }
+  }
+
+  // precision nudge pass: shift UVs slightly inward to prevent luxel bleeding
+  for (i = 0; i < ds->patchWidth * ds->patchHeight; i++) {
+    float *uv = verts[i].lightmap[0];
+    if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.00001f)
+      uv[0] += 0.0001f / LIGHTMAP_WIDTH;
+    if (uv[0] >= (float)(x + w - 1) / LIGHTMAP_WIDTH - 0.00001f)
+      uv[0] -= 0.0001f / LIGHTMAP_WIDTH;
+    if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.00001f)
+      uv[1] += 0.0001f / LIGHTMAP_HEIGHT;
+    if (uv[1] >= (float)(y + h - 1) / LIGHTMAP_HEIGHT - 0.00001f)
+      uv[1] -= 0.0001f / LIGHTMAP_HEIGHT;
   }
 }
 

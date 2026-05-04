@@ -1,0 +1,75 @@
+# Light Falloff Ramps Research Report
+
+This report outlines modern and classic techniques for controlling point and spot light distance falloff in lightmap baking. The goal is to provide mappers with alternatives to the raw 1/d² law that prevent mathematical singularities (hotspots) and offer better artistic control.
+
+## 1. Inverse-Square with Minimum Size (Offset Model)
+This is the most common modern approach (used by Frostbite, Unity HDRP, and Bakery). Instead of a point singularity, it treats the light as having a physical volume.
+
+**Formula:**
+Intensity = Photons / (dist² + size²)
+
+**Parameters:**
+- `size`: The virtual radius of the light (e.g., 0.1 to 10.0 units).
+
+**Characteristics:**
+- **Prevents Hotspots:** The peak intensity at dist=0 is capped at `Photons / size²`.
+- **Physicality:** At distances much larger than `size`, it behaves exactly like the 1/d² inverse-square law.
+- **Usage:** Ideal for realistic scenes where lights are placed very close to walls or ceilings.
+
+---
+
+## 2. Constant-Linear-Quadratic (CLQ Model)
+The classic approach from the Source Engine and older Quake-based toolsets. It gives artists direct control over the attenuation curve.
+
+**Formula:**
+Intensity = Photons / (C + L*dist + Q*dist²)
+
+**Parameters:**
+- `C` (Constant): Controls the peak intensity at the source.
+- `L` (Linear): Provides a slower, more even fade.
+- `Q` (Quadratic): The physical inverse-square term.
+
+**Characteristics:**
+- **High Control:** Setting L=1 and Q=0 creates a linear falloff. Setting C=1, L=0, Q=1 mimics a softened inverse-square.
+- **Non-Physical:** Allows for "unrealistic" but visually pleasing lighting that travels further than physical light would.
+- **Usage:** Great for "fill lights" or stylised environments.
+
+---
+
+## 3. Epic/Karis "Windowed" Falloff
+The model used in Unreal Engine 4/5. It combines a softened inverse-square law with a windowing function to ensure the light fades to exactly zero at a specific radius.
+
+**Formula:**
+Attenuation = [ 1 / (dist² + 1) ] * [ clamp(1 - (dist / Reach)⁴, 0, 1) ]²
+
+**Parameters:**
+- `Reach`: The maximum distance the light can travel (already exists as "reach" in most compilers).
+
+**Characteristics:**
+- **No Hard Cuts:** Standard inverse-square light often "cuts off" abruptly when it hits the maximum reach distance. This formula forces a smooth fade-to-zero at the boundary.
+- **Leak Prevention:** Because it hits zero exactly, it prevents "light leaking" through thin geometry at long distances.
+- **Usage:** Best for large scenes where performance (culling lights by radius) and visual consistency are both important.
+
+---
+
+## 4. Rational / Smoothstep Falloff
+A purely artistic, non-physical ramp that prioritizes smoothness over realism.
+
+**Formula:**
+Intensity = Photons * [ 1 / (1 + (dist / Reach)²) ]
+
+**Characteristics:**
+- **No Hotspots:** The curve is extremely flat near the source.
+- **Slow Decay:** It maintains energy much better than inverse-square.
+- **Usage:** Perfect for "glow" effects or ambient light sources where you want a very soft, broad pool of light.
+
+---
+
+## Comparison Summary
+
+| Model | Complexity | Realism | Hotspot Prevention | Best For |
+| :--- | :--- | :--- | :--- | :--- |
+| **Offset** | Low | High | Excellent (via Size) | Realistic PBR scenes |
+| **CLQ** | High | Low-Medium | Good (via Constant) | Artistic/Legacy control |
+| **Windowed** | Medium | High | Good (+1 offset) | Avoiding hard radius cuts |
+| **Rational** | Low | Low | Perfect | Soft glow / Ambient fill |
