@@ -402,13 +402,28 @@ int main(int argc, char **argv) {
     // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)
     BuildLocalSurfaces();
 
-    // Determine samplesize from worldspawn or game default
+    // Determine samplesize and lightmap size from worldspawn or game default
     if (num_entities > 0) {
         const char *val = ValueForKey(&entities[0], "__texelsize");
         if (val[0]) {
             samplesize = atoi(val);
             _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
         }
+
+        const char *lmSizeVal = ValueForKey(&entities[0], "__lightmapImageSize");
+        if (!lmSizeVal[0]) {
+            Error("Worldspawn missing required key '__lightmapImageSize'.\n"
+                  "This BSP was likely compiled with an old version of q3map.\n"
+                  "Please re-run the BSP phase.");
+        }
+        int bspLmSize = atoi(lmSizeVal);
+        if (bspLmSize != g_game->lightmapSize) {
+            Error("Lightmap size mismatch!\n"
+                  "BSP was built for %dx%d lightmaps, but the lighting tool is configured for %dx%d.\n"
+                  "Check your game profile or -lightmapsize command line setting.",
+                  bspLmSize, bspLmSize, g_game->lightmapSize, g_game->lightmapSize);
+        }
+        _printf("Verified lightmap image size %dx%d from worldspawn (__lightmapImageSize)\n", bspLmSize, bspLmSize);
     }
 
     if (samplesize <= 0) {

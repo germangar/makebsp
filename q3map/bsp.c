@@ -685,6 +685,8 @@ int main(int argc, char **argv) {
     char buf[16];
     sprintf(buf, "%d", samplesize);
     SetKeyValue(&entities[0], "__texelsize", buf);
+    sprintf(buf, "%d", g_game->lightmapSize);
+    SetKeyValue(&entities[0], "__lightmapImageSize", buf);
   }
 
   InjectSunEntity();

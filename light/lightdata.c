@@ -116,6 +116,7 @@ static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats
 	if (sNewH <= 0) sNewH = 1;
 
 	// This follows the logic in lm_postprocess.c:1700-1719
+	// Loop through new luxels and average the corresponding 'ratio x ratio' block from the old atlas
 	for (y = 0; y < sNewH; y++) {
 		for (x = 0; x < sNewW; x++) {
 			int nX = sNewX + x;
@@ -123,11 +124,19 @@ static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats
 			int newP = (sLM * newW * newW) + nY * newW + nX;
 
 			float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
+			
+			// Map back to absolute coordinates in the old atlas to maintain alignment
+			int startX = sOldX + (x * ratio);
+			int startY = sOldY + (y * ratio);
+
 			for (dy = 0; dy < ratio; dy++) {
 				for (dx = 0; dx < ratio; dx++) {
-					int X = nX * ratio + dx;
-					int Y = nY * ratio + dy;
+					int X = startX + dx;
+					int Y = startY + dy;
+					
+					// Ensure we stay within the boundaries of the original surface and the atlas
 					if (X >= oldW || Y >= oldW) continue;
+					if (X >= sOldX + sOldW || Y >= sOldY + sOldH) continue;
 
 					int oldP = (sLM * oldW * oldW) + Y * oldW + X;
 					if (oldMask[oldP] != 0) {
