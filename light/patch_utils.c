@@ -1,6 +1,41 @@
 #include "light.h"
 
 /*
+=================
+UnifyMeshNormals
+
+Averages the normals of all vertices in the mesh that share the same physical world position.
+This fixes shading singularities (e.g., the "tip" of a fan-shaped Bezier patch).
+=================
+*/
+static void UnifyMeshNormals(mesh_t *mesh) {
+    int i, j;
+    int numVerts = mesh->width * mesh->height;
+    vec3_t *accumNormals = malloc(numVerts * sizeof(vec3_t));
+    
+    for (i = 0; i < numVerts; i++) {
+        VectorCopy(mesh->verts[i].normal, accumNormals[i]);
+    }
+    
+    for (i = 0; i < numVerts; i++) {
+        for (j = i + 1; j < numVerts; j++) {
+            vec3_t delta;
+            VectorSubtract(mesh->verts[i].xyz, mesh->verts[j].xyz, delta);
+            if (VectorLength(delta) < 0.1f) {
+                VectorAdd(accumNormals[i], mesh->verts[j].normal, accumNormals[i]);
+                VectorAdd(accumNormals[j], mesh->verts[i].normal, accumNormals[j]);
+            }
+        }
+    }
+    
+    for (i = 0; i < numVerts; i++) {
+        VectorNormalize(accumNormals[i], mesh->verts[i].normal);
+    }
+    
+    free(accumNormals);
+}
+
+/*
 =========================
 SubdividePatchForLighting
 
@@ -42,6 +77,9 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     // Step 6: Recompute normals for the denser final grid
     //         Do NOT call PutMeshOnCurve here - final grid may be even-sized
     MakeMeshNormals(*final);
+
+    // Step 7: Unify normals at singularities (collapsed edges / fan shapes)
+    UnifyMeshNormals(final);
 
     return final;
 }

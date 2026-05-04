@@ -231,8 +231,6 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
       float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
       float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
 
-      float area, w0, w1, w2;
-      
       // Fast Bounding Box rejection
       float mins[2], maxs[2];
       mins[0] = st00[0]; maxs[0] = st00[0];
@@ -250,50 +248,52 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
         continue;
       }
 
-      // Tri 1: v00, v10, v01
-      if (PointInTriangle(st[0], st[1], st00, st10, st01)) {
-        area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
-        if (fabs(area) > 0.0001f) {
-          w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
-          w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
-          w2 = 1.0f - w0 - w1;
+      // Check if ST is within this quad's bounds (using a small epsilon)
+      if (st[0] >= mins[0] - 0.001f && st[0] <= maxs[0] + 0.001f &&
+          st[1] >= mins[1] - 0.001f && st[1] <= maxs[1] + 0.001f) {
+          
+          float u = (maxs[0] > mins[0]) ? (st[0] - mins[0]) / (maxs[0] - mins[0]) : 0.0f;
+          float v = (maxs[1] > mins[1]) ? (st[1] - mins[1]) / (maxs[1] - mins[1]) : 0.0f;
+          
+          // Clamp to [0, 1] for safety
+          if (u < 0.0f) u = 0.0f; if (u > 1.0f) u = 1.0f;
+          if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f;
+          
           for (k = 0; k < 3; k++) {
-            origin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
-            normal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
+              origin[k] = (1.0f - u) * (1.0f - v) * v00->xyz[k] +
+                                 u * (1.0f - v) * v10->xyz[k] +
+                          (1.0f - u) *        v * v01->xyz[k] +
+                                 u *        v * v11->xyz[k];
+                                 
+              normal[k] = (1.0f - u) * (1.0f - v) * v00->normal[k] +
+                                 u * (1.0f - v) * v10->normal[k] +
+                          (1.0f - u) *        v * v01->normal[k] +
+                                 u *        v * v11->normal[k];
           }
-          found = qtrue; break;
-        }
-      }
-
-      // Tri 2: v10, v11, v01
-      if (PointInTriangle(st[0], st[1], st10, st11, st01)) {
-        area = (st11[1] - st01[1]) * (st10[0] - st01[0]) + (st01[0] - st11[0]) * (st10[1] - st01[1]);
-        if (fabs(area) > 0.0001f) {
-          w0 = ((st11[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st11[0]) * (st[1] - st01[1])) / area;
-          w1 = ((st01[1] - st10[1]) * (st[0] - st01[0]) + (st10[0] - st01[0]) * (st[1] - st01[1])) / area;
-          w2 = 1.0f - w0 - w1;
-          for (k = 0; k < 3; k++) {
-            origin[k] = w0 * v10->xyz[k] + w1 * v11->xyz[k] + w2 * v01->xyz[k];
-            normal[k] = w0 * v10->normal[k] + w1 * v11->normal[k] + w2 * v01->normal[k];
-          }
-          found = qtrue; break;
-        }
+          found = qtrue;
+          break;
       }
       
-      // Extrapolation / Dilation fallback
-      float t, dSq;
-      dSq = DistanceSqToSegment(st[0], st[1], st00, st10, &t);
+      // Extrapolation / Dilation fallback: track closest quad by center distance
+      float center_s = (mins[0] + maxs[0]) * 0.5f;
+      float center_t = (mins[1] + maxs[1]) * 0.5f;
+      float dSq = (st[0] - center_s) * (st[0] - center_s) + (st[1] - center_t) * (st[1] - center_t);
+      
       if (dSq < bestExtrapDistSq) {
           bestExtrapDistSq = dSq;
-          area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
-          if (fabs(area) > 0.0001f) {
-              w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
-              w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
-              w2 = 1.0f - w0 - w1;
-              for (k = 0; k < 3; k++) {
-                  bestExtrapOrigin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
-                  bestExtrapNormal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
-              }
+          float u = (maxs[0] > mins[0]) ? (st[0] - mins[0]) / (maxs[0] - mins[0]) : 0.0f;
+          float v = (maxs[1] > mins[1]) ? (st[1] - mins[1]) / (maxs[1] - mins[1]) : 0.0f;
+          
+          for (k = 0; k < 3; k++) {
+              bestExtrapOrigin[k] = (1.0f - u) * (1.0f - v) * v00->xyz[k] +
+                                     u * (1.0f - v) * v10->xyz[k] +
+                              (1.0f - u) *        v * v01->xyz[k] +
+                                     u *        v * v11->xyz[k];
+                                     
+              bestExtrapNormal[k] = (1.0f - u) * (1.0f - v) * v00->normal[k] +
+                                     u * (1.0f - v) * v10->normal[k] +
+                              (1.0f - u) *        v * v01->normal[k] +
+                                     u *        v * v11->normal[k];
           }
       }
     }
@@ -301,6 +301,7 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
   }
 
   if (!found) {
+      // Allow extrapolation if within reasonable gutter distance
       if (bestExtrapDistSq < (float)GUTTER * GUTTER * 4.0f) {
           for (k = 0; k < 3; k++) {
               origin[k] = bestExtrapOrigin[k];
@@ -1249,92 +1250,16 @@ void TraceLtm(int num) {
           float target_s = (float)ds->lightmapOffset[0][0] + ((float)(i - currentGutter) + jdx) * step + offset;
           float target_t = (float)ds->lightmapOffset[0][1] + ((float)(j - currentGutter) + jdy) * step + offset;
 
-          qboolean found = qfalse;
-          vec3_t bestExtrapOrigin, bestExtrapNormal;
-          float bestExtrapDistSq = 999999.0f;
+          float st[2] = {target_s, target_t};
+          vec3_t temp_origin;
 
-          // Search the patch mesh grid for the triangle containing (s,t)
-          for (int my = 0; my < mesh->height - 1; my++) {
-            for (int mx = 0; mx < mesh->width - 1; mx++) {
-              drawVert_t *v00 = &mesh->verts[my * mesh->width + mx];
-              drawVert_t *v10 = &mesh->verts[my * mesh->width + mx + 1];
-              drawVert_t *v01 = &mesh->verts[(my + 1) * mesh->width + mx];
-              drawVert_t *v11 = &mesh->verts[(my + 1) * mesh->width + mx + 1];
-
-              float st00[2] = {v00->lightmap[0][0] * LIGHTMAP_WIDTH, v00->lightmap[0][1] * LIGHTMAP_HEIGHT};
-              float st10[2] = {v10->lightmap[0][0] * LIGHTMAP_WIDTH, v10->lightmap[0][1] * LIGHTMAP_HEIGHT};
-              float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
-              float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
-
-              float st[2] = {target_s, target_t};
-              float area, w0, w1, w2;
-              
-              // Tri 1: v00, v10, v01
-              if (PointInTriangle(st[0], st[1], st00, st10, st01)) {
-                area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
-                if (fabs(area) > 0.0001f) {
-                  w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
-                  w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
-                  w2 = 1.0f - w0 - w1;
-                  for (k = 0; k < 3; k++) {
-                    base[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
-                    normal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
-                  }
-                  found = qtrue; break;
-                }
-              }
-
-              // Tri 2: v10, v11, v01
-              if (PointInTriangle(st[0], st[1], st10, st11, st01)) {
-                area = (st11[1] - st01[1]) * (st10[0] - st01[0]) + (st01[0] - st11[0]) * (st10[1] - st01[1]);
-                if (fabs(area) > 0.0001f) {
-                  w0 = ((st11[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st11[0]) * (st[1] - st01[1])) / area;
-                  w1 = ((st01[1] - st10[1]) * (st[0] - st01[0]) + (st10[0] - st01[0]) * (st[1] - st01[1])) / area;
-                  w2 = 1.0f - w0 - w1;
-                  for (k = 0; k < 3; k++) {
-                    base[k] = w0 * v10->xyz[k] + w1 * v11->xyz[k] + w2 * v01->xyz[k];
-                    normal[k] = w0 * v10->normal[k] + w1 * v11->normal[k] + w2 * v01->normal[k];
-                  }
-                  found = qtrue; break;
-                }
-              }
-              
-              // Extrapolation / Dilation fallback
-              float t, dSq;
-              dSq = DistanceSqToSegment(st[0], st[1], st00, st10, &t);
-              if (dSq < bestExtrapDistSq) {
-                  bestExtrapDistSq = dSq;
-                  area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
-                  if (fabs(area) > 0.0001f) {
-                      w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
-                      w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
-                      w2 = 1.0f - w0 - w1;
-                      for (k = 0; k < 3; k++) {
-                          bestExtrapOrigin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
-                          bestExtrapNormal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
-                      }
-                  }
-              }
-            }
-            if (found) break;
+          if (!PatchSamplePoint(mesh, st, temp_origin, normal)) {
+              continue; // completely missed
           }
-
-          if (!found) {
-              if (bestExtrapDistSq < (float)GUTTER * GUTTER * 4.0f) {
-                  for (k = 0; k < 3; k++) {
-                      base[k] = bestExtrapOrigin[k];
-                      normal[k] = bestExtrapNormal[k];
-                  }
-              } else {
-                  continue; // completely missed
-              }
-          }
-
-          VectorNormalize(normal, normal);
 
           // Apply nudge along the interpolated normal
           for (k = 0; k < 3; k++) {
-            base[k] += (double)normal[k] * SAMPLE_NUDGE;
+            base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
           }
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else {
