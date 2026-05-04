@@ -344,10 +344,11 @@ static void RadiosityEmit(const float *srcBuffer) {
                     VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
                     VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                 } else if (ds->surfaceType == MST_PATCH) {
-                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
-                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
-                        VectorCopy(dv->normal, em->normal);
-                        VectorMA(dv->xyz, RAD_ORIGIN_NUDGE, em->normal, em->center);
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + (float)rad_interval * 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_interval * 0.5f;
+                    if (PatchSamplePoint(patchMesh, st, em->center, em->normal)) {
+                        VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
                         VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                     } else {
                         VectorClear(em->normal);
@@ -436,15 +437,12 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else if (ds->surfaceType == MST_PATCH) {
-
-                if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
-                    drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
-                    VectorCopy(dv->normal, dstNormal);
-                    VectorMA(dv->xyz, RAD_ORIGIN_NUDGE, dstNormal, dst);
-                    VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
-                } else {
-                    continue;
-                }
+                float st[2];
+                st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                if (!PatchSamplePoint(patchMesh, st, dst, dstNormal)) continue;
+                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
+                VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else {
                 VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], dst);
                 VectorMA(dst, (float)ly + 0.5f, ds->lightmapVecs[1], dst);
@@ -683,10 +681,10 @@ static void RadiosityVoxelize(void) {
 
                 vec3_t pos, normal;
                 if (ds->surfaceType == MST_PATCH) {
-                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
-                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
-                        VectorCopy(dv->xyz, pos);
-                        VectorCopy(dv->normal, normal);
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    if (PatchSamplePoint(patchMesh, st, pos, normal)) {
                         VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
                     } else {
                         continue;
@@ -982,10 +980,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                     if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
                     VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
                 } else if (ds->surfaceType == MST_PATCH) {
-                    if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
-                        drawVert_t *dv = &patchMesh->verts[ly * patchMesh->width + lx];
-                        VectorCopy(dv->xyz, pos);
-                        VectorCopy(dv->normal, normal);
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    if (PatchSamplePoint(patchMesh, st, pos, normal)) {
                         VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
                     } else {
                         continue;

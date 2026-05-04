@@ -88,13 +88,6 @@ qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y) {
 
 /*
 ===================
-AllocateLightmapForPatch
-===================
-*/
-// #define LIGHTMAP_PATCHSHIFT
-
-/*
-===================
 AllocateLightmapForMiscModel
 ===================
 */
@@ -328,21 +321,11 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   ssize = ds->samplesize;
 
-#ifdef LIGHTMAP_PATCHSHIFT
-  subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 1,
-                                      widthtable, heighttable);
-#else
   subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH,
                                       widthtable, heighttable);
-#endif
 
   w = subdividedMesh->width;
   h = subdividedMesh->height;
-
-#ifdef LIGHTMAP_PATCHSHIFT
-  w++;
-  h++;
-#endif
 
   FreeMesh(subdividedMesh);
 

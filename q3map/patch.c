@@ -21,18 +21,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "qbsp.h"
 
-void PrintCtrl(vec3_t ctrl[9]) {
-  int i, j;
-
-  for (i = 0; i < 3; i++) {
-    for (j = 0; j < 3; j++) {
-      _printf("(%5.2f %5.2f %5.2f) ", ctrl[i * 3 + j][0], ctrl[i * 3 + j][1],
-              ctrl[i * 3 + j][2]);
-    }
-    _printf("\n");
-  }
-}
-
 /*
 ================
 DrawSurfaceForMesh
@@ -298,9 +286,6 @@ void PatchMapDrawSurfs(entity_t *e) {
         ds->samplesize = ent_sample;
       }
     }
-
-    VectorCopy(bounds[0], ds->lightmapVecs[0]);
-    VectorCopy(bounds[1], ds->lightmapVecs[1]);
   }
 
   qprintf("%5i patches\n", patchCount);

@@ -206,6 +206,116 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
 }
 
 /*
+=================
+PatchSamplePoint
+
+Finds the position and normal for a lightmap sample point (st in pixel space)
+on a Bezier patch mesh using barycentric interpolation on the subdivided quads.
+=================
+*/
+qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal) {
+  int mx, my, k;
+  qboolean found = qfalse;
+  vec3_t bestExtrapOrigin, bestExtrapNormal;
+  float bestExtrapDistSq = 999999.0f;
+
+  for (my = 0; my < mesh->height - 1; my++) {
+    for (mx = 0; mx < mesh->width - 1; mx++) {
+      drawVert_t *v00 = &mesh->verts[my * mesh->width + mx];
+      drawVert_t *v10 = &mesh->verts[my * mesh->width + mx + 1];
+      drawVert_t *v01 = &mesh->verts[(my + 1) * mesh->width + mx];
+      drawVert_t *v11 = &mesh->verts[(my + 1) * mesh->width + mx + 1];
+
+      float st00[2] = {v00->lightmap[0][0] * LIGHTMAP_WIDTH, v00->lightmap[0][1] * LIGHTMAP_HEIGHT};
+      float st10[2] = {v10->lightmap[0][0] * LIGHTMAP_WIDTH, v10->lightmap[0][1] * LIGHTMAP_HEIGHT};
+      float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
+      float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
+
+      float area, w0, w1, w2;
+      
+      // Fast Bounding Box rejection
+      float mins[2], maxs[2];
+      mins[0] = st00[0]; maxs[0] = st00[0];
+      if (st10[0] < mins[0]) mins[0] = st10[0]; if (st10[0] > maxs[0]) maxs[0] = st10[0];
+      if (st01[0] < mins[0]) mins[0] = st01[0]; if (st01[0] > maxs[0]) maxs[0] = st01[0];
+      if (st11[0] < mins[0]) mins[0] = st11[0]; if (st11[0] > maxs[0]) maxs[0] = st11[0];
+      
+      mins[1] = st00[1]; maxs[1] = st00[1];
+      if (st10[1] < mins[1]) mins[1] = st10[1]; if (st10[1] > maxs[1]) maxs[1] = st10[1];
+      if (st01[1] < mins[1]) mins[1] = st01[1]; if (st01[1] > maxs[1]) maxs[1] = st01[1];
+      if (st11[1] < mins[1]) mins[1] = st11[1]; if (st11[1] > maxs[1]) maxs[1] = st11[1];
+
+      if (st[0] < mins[0] - GUTTER || st[0] > maxs[0] + GUTTER ||
+          st[1] < mins[1] - GUTTER || st[1] > maxs[1] + GUTTER) {
+        continue;
+      }
+
+      // Tri 1: v00, v10, v01
+      if (PointInTriangle(st[0], st[1], st00, st10, st01)) {
+        area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
+        if (fabs(area) > 0.0001f) {
+          w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
+          w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
+          w2 = 1.0f - w0 - w1;
+          for (k = 0; k < 3; k++) {
+            origin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
+            normal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
+          }
+          found = qtrue; break;
+        }
+      }
+
+      // Tri 2: v10, v11, v01
+      if (PointInTriangle(st[0], st[1], st10, st11, st01)) {
+        area = (st11[1] - st01[1]) * (st10[0] - st01[0]) + (st01[0] - st11[0]) * (st10[1] - st01[1]);
+        if (fabs(area) > 0.0001f) {
+          w0 = ((st11[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st11[0]) * (st[1] - st01[1])) / area;
+          w1 = ((st01[1] - st10[1]) * (st[0] - st01[0]) + (st10[0] - st01[0]) * (st[1] - st01[1])) / area;
+          w2 = 1.0f - w0 - w1;
+          for (k = 0; k < 3; k++) {
+            origin[k] = w0 * v10->xyz[k] + w1 * v11->xyz[k] + w2 * v01->xyz[k];
+            normal[k] = w0 * v10->normal[k] + w1 * v11->normal[k] + w2 * v01->normal[k];
+          }
+          found = qtrue; break;
+        }
+      }
+      
+      // Extrapolation / Dilation fallback
+      float t, dSq;
+      dSq = DistanceSqToSegment(st[0], st[1], st00, st10, &t);
+      if (dSq < bestExtrapDistSq) {
+          bestExtrapDistSq = dSq;
+          area = (st10[1] - st01[1]) * (st00[0] - st01[0]) + (st01[0] - st10[0]) * (st00[1] - st01[1]);
+          if (fabs(area) > 0.0001f) {
+              w0 = ((st10[1] - st01[1]) * (st[0] - st01[0]) + (st01[0] - st10[0]) * (st[1] - st01[1])) / area;
+              w1 = ((st01[1] - st00[1]) * (st[0] - st01[0]) + (st00[0] - st01[0]) * (st[1] - st01[1])) / area;
+              w2 = 1.0f - w0 - w1;
+              for (k = 0; k < 3; k++) {
+                  bestExtrapOrigin[k] = w0 * v00->xyz[k] + w1 * v10->xyz[k] + w2 * v01->xyz[k];
+                  bestExtrapNormal[k] = w0 * v00->normal[k] + w1 * v10->normal[k] + w2 * v01->normal[k];
+              }
+          }
+      }
+    }
+    if (found) break;
+  }
+
+  if (!found) {
+      if (bestExtrapDistSq < (float)GUTTER * GUTTER * 4.0f) {
+          for (k = 0; k < 3; k++) {
+              origin[k] = bestExtrapOrigin[k];
+              normal[k] = bestExtrapNormal[k];
+          }
+      } else {
+          return qfalse;
+      }
+  }
+  
+  VectorNormalize(normal, normal);
+  return qtrue;
+}
+
+/*
 ================
 PointToPolygonFormFactor
 ================
@@ -839,7 +949,7 @@ TraceLtm
 =============
 */
 void TraceLtm(int num) {
-  int i, j, k, x, y;
+  int i, j, k;
   int position, numPositions;
   int realSurfIndex;
   dsurface_t *ds;
