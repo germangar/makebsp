@@ -236,10 +236,13 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args) {
       return;
     }
 
-    // NUCLEAR TEST: Always ignore self-shadowing for patches
+    // Only ignore the surface if it's truly planar (can't shadow itself).
+    // For patches and triangle soups (models), we want them to cast shadows on themselves.
     if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface) {
-        args->valid[0] = 0;
-        return;
+        if (ds->surfaceType == MST_PLANAR) {
+            args->valid[0] = 0;
+            return;
+        }
     }
 
     shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
