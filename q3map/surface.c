@@ -214,7 +214,7 @@ void MergeSides(entity_t *e, tree_t *tree) {
 SubdivideDrawSurf
 ===================
 */
-void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
+static void SubdivideDrawSurf_r(mapDrawSurface_t *ds, winding_t *w, float subdivisions, int axisMask, qboolean forceGrid) {
   int i;
   int axis;
   vec3_t bounds[2];
@@ -236,6 +236,10 @@ void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
   }
 
   for (axis = 0; axis < 3; axis++) {
+    if (!(axisMask & (1 << axis))) {
+      continue;
+    }
+
     vec3_t planePoint = {0, 0, 0};
     vec3_t planeNormal = {0, 0, 0};
     float d;
@@ -249,7 +253,12 @@ void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
     d = DotProduct(planePoint, planeNormal);
 
     // subdivide if necessary
-    if (subCeil - subFloor > subdivisions) {
+    float size = bounds[1][axis] - bounds[0][axis];
+    if (size > subdivisions || (forceGrid && subCeil - subFloor > subdivisions)) {
+      if (g_game->enforceSampleSize && !forceGrid) {
+        _printf("   splitting axis %d: range [%.2f, %.2f] size %.2f > limit %.2f (texels: %.1f)\n", 
+                axis, bounds[0][axis], bounds[1][axis], size, subdivisions, size / ds->samplesize + 1);
+      }
       // gotta clip polygon into two polygons
       ClipWindingEpsilon(w, planeNormal, d, epsilon, &frontWinding,
                          &backWinding);
@@ -260,8 +269,8 @@ void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
       } else if (!backWinding) {
         w = frontWinding;
       } else {
-        SubdivideDrawSurf(ds, frontWinding, subdivisions);
-        SubdivideDrawSurf(ds, backWinding, subdivisions);
+        SubdivideDrawSurf_r(ds, frontWinding, subdivisions, axisMask, forceGrid);
+        SubdivideDrawSurf_r(ds, backWinding, subdivisions, axisMask, forceGrid);
 
         return;
       }
@@ -271,6 +280,10 @@ void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
   // emit this polygon
   newds = DrawSurfaceForSide(ds->mapBrush, ds->side, w);
   newds->fogNum = ds->fogNum;
+}
+
+void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions) {
+  SubdivideDrawSurf_r(ds, w, subdivisions, 7, qtrue);
 }
 
 /*
@@ -285,7 +298,6 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
   mapDrawSurface_t *ds;
   int numBaseDrawSurfs;
   winding_t *w;
-  float subdivision;
   shaderInfo_t *si;
 
   qprintf("----- SubdivideDrawSurfs -----\n");
@@ -293,8 +305,9 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
   for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++) {
     ds = &mapDrawSurfs[i];
 
-    // only subdivide brush sides, not patches or misc_models
-    if (!ds->side) {
+    // Candidate surfaces MUST be MST_PLANAR (only brush sides have ds->side set)
+    // We also exclude patches, misc_models and flares (though ds->side handles most of this)
+    if (!ds->side || ds->patch || ds->miscModel || ds->flareSurface) {
       continue;
     }
 
@@ -308,28 +321,62 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
       continue;
     }
 
-    subdivision = si->subdivisions;
-    
-    if (g_game->enforceSampleSize && ds->samplesize > 0) {
-      // Calculate the maximum physical size a surface can be before its lightmap 
-      // exceeds the available atlas block size (causing stretching).
-      // We subtract 3: 2 for the padding gutter, and 1 because AllocateLightmapForSurface 
-      // adds 1 to the bounds difference when calculating texel size.
-      float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * ds->samplesize;
-      
-      // If shader has no subdivision, or if the lightmap limit is stricter, use the lightmap limit
-      if (subdivision == 0 || maxLightmapSubdiv < subdivision) {
-        subdivision = maxLightmapSubdiv;
-      }
-    }
-
-    if (!subdivision) {
+    // 1. If shader has tessSize (subdivisions > 0), it takes precedence as per requirements
+    if (si->subdivisions > 0) {
+      w = WindingFromDrawSurf(ds);
+      ds->numVerts = 0; // remove this reference
+      SubdivideDrawSurf(ds, w, si->subdivisions);
       continue;
     }
 
-    w = WindingFromDrawSurf(ds);
-    ds->numVerts = 0; // remove this reference
-    SubdivideDrawSurf(ds, w, subdivision);
+    // 2. Lightmap consistency subdivision (enforceSampleSize)
+    if (g_game->enforceSampleSize && ds->samplesize > 0) {
+      // Filter out surfaces that don't receive lightmaps
+      if (si->surfaceFlags & (SURF_NOLIGHTMAP | SURF_POINTLIGHT)) {
+        continue;
+      }
+
+      // Filter out liquid and fog contents
+      if (si->contents &
+          (CONTENTS_FOG | CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA)) {
+        continue;
+      }
+
+      // Calculate the maximum physical size a surface can be before its lightmap
+      // exceeds the available atlas block size (causing stretching).
+      // We subtract 3: 2 for the padding gutter, and 1 because
+      // AllocateLightmapForSurface adds 1 to the bounds difference when
+      // calculating texel size.
+      float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * ds->samplesize;
+
+      if (i == e->firstDrawSurf) {
+        _printf("--- enforceSampleSize: max dimension %.2f (samplesize %d, atlas %d) ---\n", 
+                maxLightmapSubdiv, ds->samplesize, LIGHTMAP_WIDTH);
+      }
+
+      // Determine lightmap projection axes (logic mirrors
+      // AllocateLightmapForSurface)
+      plane_t *plane = &mapplanes[ds->side->planenum];
+      vec3_t planeNormal;
+      planeNormal[0] = fabs(plane->normal[0]);
+      planeNormal[1] = fabs(plane->normal[1]);
+      planeNormal[2] = fabs(plane->normal[2]);
+
+      int axisMask = 0;
+      if (planeNormal[0] >= planeNormal[1] &&
+          planeNormal[0] >= planeNormal[2]) {
+        axisMask = (1 << 1) | (1 << 2); // Y and Z axes
+      } else if (planeNormal[1] >= planeNormal[0] &&
+                 planeNormal[1] >= planeNormal[2]) {
+        axisMask = (1 << 0) | (1 << 2); // X and Z axes
+      } else {
+        axisMask = (1 << 0) | (1 << 1); // X and Y axes
+      }
+
+      w = WindingFromDrawSurf(ds);
+      ds->numVerts = 0; // remove this reference
+      SubdivideDrawSurf_r(ds, w, maxLightmapSubdiv, axisMask, qfalse);
+    }
   }
 }
 
