@@ -9,6 +9,8 @@ int numGames = 2;
 float falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 float sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 
+vec3_t blockSize = {1024, 1024, 1024};
+
 game_t games[MAX_GAMES] = {
 	{
 		"quake3",
@@ -29,51 +31,54 @@ game_t games[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
-		4,          // radiosityPasses
+		0,          // radiosityPasses
 		1.0f,       // radiosityIntensity
-		0.75f,      // radiosityColorRatio
+		0.1f,       // radiosityColorRatio
 		FALLOFF_LAMBERT, // falloff
 		FALLOFF_LAMBERT, // sunFalloff
 		qfalse,     // deluxeMap
-		qtrue,      // forceUVGen
-		qtrue,      // snapUVs
+		qfalse,     // forceUVGen
+		qfalse,     // snapUVs
 		0,          // antialiasingPasses
-		4,          // defaultSmoothPasses
-		0.35f,      // defaultSmoothRadius
-		TONEMAP_LINEAR, // exposureFilter
+		0,          // defaultSmoothPasses
+		1.0f,       // defaultSmoothRadius
+        TONEMAP_LINEAR, // exposureFilter
+        qtrue       // enforceSampleSize
 	},
 	{
 		"qfusion",
 		".",
 		"FBSP",
 		1,
-		18,
-		65535,
-		65535,
-		393210,
-		512,
-		512,        // writeLightmapSize
+		21,
+		64,
+		999,
+		6000,
+		128,
+		128,        // writeLightmapSize
 		// Global Map Limits removed
-		4,          // defaultSampleSize
-        HDR_8BIT,   // hdr
-		3.0f,       // hdr8BitScale
+		8,          // defaultSampleSize
+        HDR_OFF,    // hdr
+		1.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
-		qfalse,     // lightgridRGB
+		qtrue,      // lightgridRGB
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
-		4,          // radiosityPasses
+		0,          // radiosityPasses
 		1.0f,       // radiosityIntensity
-		1.0f,       // radiosityColorRatio
+		0.1f,       // radiosityColorRatio
 		FALLOFF_LAMBERT, // falloff
 		FALLOFF_LAMBERT, // sunFalloff
-		qtrue,       // deluxeMap
-		qtrue,       // forceUVGen
-		qtrue,       // snapUVs
-		0,           // antialiasingPasses
-		4,           // defaultSmoothPasses
-		0.25f,       // defaultSmoothRadius
-		TONEMAP_REINHARD, // exposureFilter
+		qfalse,     // deluxeMap
+		qfalse,     // forceUVGen
+		qfalse,     // snapUVs
+		0,          // antialiasingPasses
+		0,          // defaultSmoothPasses
+		1.0f,       // defaultSmoothRadius
+        TONEMAP_LINEAR, // exposureFilter
+        qtrue       // enforceSampleSize
 	}
 };
+
 
 game_t *g_game = &games[1];

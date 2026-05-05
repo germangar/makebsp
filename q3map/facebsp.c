@@ -76,8 +76,9 @@ int SelectSplitPlaneNum( node_t *node, bspface_t *list ) {
 
 	hintsplit = qfalse;
 	// if it is crossing a 1k block boundary, force a split
-	for ( i = 0 ; i < 2 ; i++ ) {
-		dist = BLOCK_SIZE * ( floor( node->mins[i] / BLOCK_SIZE ) + 1 );	
+	for ( i = 0 ; i < 3 ; i++ ) {
+        if (blockSize[i] <= 0) continue;
+		dist = blockSize[i] * ( floor( node->mins[i] / blockSize[i] ) + 1 );	
 		if ( node->maxs[i] > dist ) {
 			VectorClear( normal );
 			normal[i] = 1;

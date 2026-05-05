@@ -529,7 +529,7 @@ static void ParseShaderFile(const char *filename) {
       }
 
       // tesssize is used to force liquid surfaces to subdivide
-      if (!Q_stricmp(token, "tesssize")) {
+      if (!Q_stricmp(token, "tesssize") || !Q_stricmp(token, "q3map_tesssize")) {
         GetToken(qfalse);
         si->subdivisions = atof(token);
         continue;

@@ -139,6 +139,17 @@ void ProcessWorldModel(void) {
   // create drawsurfs for triangle models
   AddTriangleModels(tree);
 
+  // Set default block size
+  VectorSet(blockSize, 1024, 1024, 1024);
+  const char *value = ValueForKey(&entities[0], "_blocksize");
+  if (value && value[0]) {
+    int s = sscanf(value, "%f %f %f", &blockSize[0], &blockSize[1], &blockSize[2]);
+    if (s == 1) {
+        blockSize[1] = blockSize[2] = blockSize[0];
+    }
+    _printf("block size = { %1.0f %1.0f %1.0f }\n", blockSize[0], blockSize[1], blockSize[2]);
+  }
+
   // drawsurfs that cross fog boundaries will need to
   // be split along the bound
   if (!nofog) {
@@ -558,6 +569,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "-snapuvs")) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-snapuvs requires a 0|1 argument");
       snapUVs = atoi(argv[++i]);
+    } else if (!strcmp(argv[i], "-enforceSampleSize")) {
+      if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-enforceSampleSize requires a 0|1 argument");
+      g_game->enforceSampleSize = atoi(argv[++i]);
     } else if (!strcmp(argv[i], "-bsp")) {
         // Redundant, just to satisfy usage
     } else {
@@ -596,7 +610,8 @@ int main(int argc, char **argv) {
             "   fakemap        = generate a fakemap.map after processing\n"
             "   samplesize <N> = set the default lightmap sample size to NxN\n"
             "   forceuvgen <0|1> = force UV reconstruction for all misc_models\n"
-            "   snapuvs <0|1>    = align misc_model UVs to lightmap grid\n");
+            "   snapuvs <0|1>    = align misc_model UVs to lightmap grid\n"
+            "   enforceSampleSize <0|1> = strictly follow shader/global sample size\n");
     exit(0);
   }
 

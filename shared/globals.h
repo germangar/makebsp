@@ -1,7 +1,7 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#include "../common/qtypes.h"
+#include "../common/mathlib.h"
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;
 
@@ -58,10 +58,12 @@ typedef struct {
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;
+    qboolean    enforceSampleSize;
 } game_t;
 
 extern float falloffSoftBias;
 extern float sunSoftBias;
+extern vec3_t blockSize;
 
 #define MAX_GAMES 128
 extern int numGames;

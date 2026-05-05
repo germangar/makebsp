@@ -223,6 +223,9 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
         game->exposureFilter = TONEMAP_FILMIC;
       else
         game->exposureFilter = TONEMAP_LINEAR;
+    } else if (!strcmp(key, "enforceSampleSize")) {
+      if (val->type == json_type_true) game->enforceSampleSize = qtrue;
+      else if (val->type == json_type_false) game->enforceSampleSize = qfalse;
     }
 
     el = el->next;
@@ -386,7 +389,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
           "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
           "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
-          "  \"exposurefilter\": \"%s\" /* [ off, softknee, reinhard, filmic ] */\n"
+          "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
+          "  \"enforceSampleSize\": %s\n"
           "}\n",
           game->arg, game->gamePath, game->bspIdent, game->bspVersion,
           game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
@@ -405,7 +409,8 @@ void JSON_ExportGame(const char *filename, game_t *game) {
           game->forceUVGen ? "true" : "false",
           game->snapUVs ? "true" : "false",
           game->antialiasingPasses,
-          game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr);
+          game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
+          game->enforceSampleSize ? "true" : "false");
   SaveFile(filename, buffer, strlen(buffer));
 }
 

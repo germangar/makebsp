@@ -479,14 +479,14 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     Error("Chose a 0 valued axis");
   }
 
-  if (w > LIGHTMAP_WIDTH) {
-    VectorScale(vecs[0], (float)LIGHTMAP_WIDTH / w, vecs[0]);
-    w = LIGHTMAP_WIDTH;
+  if (w > LIGHTMAP_WIDTH - 2) {
+    VectorScale(vecs[0], (float)(LIGHTMAP_WIDTH - 2) / w, vecs[0]);
+    w = LIGHTMAP_WIDTH - 2;
   }
 
-  if (h > LIGHTMAP_HEIGHT) {
-    VectorScale(vecs[1], (float)LIGHTMAP_HEIGHT / h, vecs[1]);
-    h = LIGHTMAP_HEIGHT;
+  if (h > LIGHTMAP_HEIGHT - 2) {
+    VectorScale(vecs[1], (float)(LIGHTMAP_HEIGHT - 2) / h, vecs[1]);
+    h = LIGHTMAP_HEIGHT - 2;
   }
 
   // allocate the lightmap (including 1-texel padding on all sides)

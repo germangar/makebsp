@@ -309,6 +309,20 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
     }
 
     subdivision = si->subdivisions;
+    
+    if (g_game->enforceSampleSize && ds->samplesize > 0) {
+      // Calculate the maximum physical size a surface can be before its lightmap 
+      // exceeds the available atlas block size (causing stretching).
+      // We subtract 3: 2 for the padding gutter, and 1 because AllocateLightmapForSurface 
+      // adds 1 to the bounds difference when calculating texel size.
+      float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * ds->samplesize;
+      
+      // If shader has no subdivision, or if the lightmap limit is stricter, use the lightmap limit
+      if (subdivision == 0 || maxLightmapSubdiv < subdivision) {
+        subdivision = maxLightmapSubdiv;
+      }
+    }
+
     if (!subdivision) {
       continue;
     }
