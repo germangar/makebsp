@@ -1111,6 +1111,12 @@ void TraceLtm(int num) {
         float invScale = 1.0f / (float)scale;
         VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
         VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
+        
+        // Shift lightmapOrigin to the center of the first upscaled texel.
+        // Original origin is center-aligned. The first upscaled texel center
+        // is shifted by -(1.0 - 1.0/scale) * 0.5 of the original vector.
+        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[0], lightmapOrigin);
+        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[1], lightmapOrigin);
       }
 
       // NOTE: do NOT shift origin by -currentGutter here. The trace loop uses
