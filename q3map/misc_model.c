@@ -265,7 +265,7 @@ TryXAtlasUVs
 Use xatlas library to pack existing UVs.
 ====================
 */
-static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel) {
+static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize) {
   int numIslands = 0;
   int *triIsland = IdentifyIslands(mesh, &numIslands);
   if (!triIsland) return NULL;
@@ -321,8 +321,11 @@ static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel) {
 
   xatlasPackOptions packOptions;
   xatlasPackOptionsInit(&packOptions);
-  packOptions.padding = 2;
-  // Sync packing resolution with the game's actual lightmap size
+  packOptions.padding = 2; // 2 texels of padding
+  
+  // Since we use xatlasAddUvMesh (2D only), xatlas doesn't know the 3D physical size.
+  // We must use resolution-based packing. The scale will be recalculated later.
+  // To preserve 2-texel padding, we use a fixed resolution and rely on the scale.
   int targetRes = (LIGHTMAP_WIDTH >= 64) ? LIGHTMAP_WIDTH : 1024;
   packOptions.resolution = targetRes; 
   packOptions.texelsPerUnit = 0.0f; 
@@ -346,7 +349,12 @@ static uv_t* TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel) {
         uint32_t xIdx = xMesh->indexArray[validIdx * 3 + v];
         xatlasVertex *xv = &xMesh->vertexArray[xIdx];
         
-        // Normalize UVs to [0, 1]
+        // Output UVs directly in the new texel-space bounds, optionally normalizing if texelsPerUnit was 0.
+        // Wait, if texelsPerUnit > 0, atlas->width/height is the exact texel size needed.
+        // By normalizing to [0, 1] relative to the generated atlas width/height, 
+        // the standard scaling logic in AllocateLightmapForMiscModel will mathematically 
+        // re-scale it back to EXACTLY atlas->width and atlas->height!
+        // This ensures the 2 texels of padding we requested here are preserved.
         outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
         outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
       }
@@ -653,7 +661,10 @@ void LoadTriangleModels(void) {
 
           if (potentialOverlap) {
             _printf("Potential UV overlap detected (ratio: %.2f). Trying xatlas packing...\n", areaRatio);
-            xatlasUVs = TryXAtlasUVs(mesh, uvChannel);
+            int ssize = samplesize;
+            if (si && si->lightmapSampleSize > 0) ssize = si->lightmapSampleSize;
+            
+            xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize);
             if (xatlasUVs) {
               _printf("xatlas packing successful.\n");
             } else {
