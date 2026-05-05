@@ -391,7 +391,10 @@ static void RadiosityEmit(const float *srcBuffer) {
 
 static void RadiosityIntegrateOneSurface(int surfIdx) {
     dsurface_t   *ds = &drawSurfaces[surfIdx];
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+
     if (ds->lightmapNum[0] < 0 || ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0 || g_numEmitters <= 0) return;
+    if (si->surfaceFlags & SURF_SKY) return;
 
     mesh_t *patchMesh = NULL;
     vec3_t dstNormal;
@@ -635,7 +638,10 @@ static void RadiosityVoxelize(void) {
 
     for (int s = 0; s < numDrawSurfaces; s++) {
         dsurface_t *ds = &drawSurfaces[s];
+        shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+
         if (ds->lightmapNum[0] < 0) continue;
+        if (si->surfaceFlags & SURF_SKY) continue;
 
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
