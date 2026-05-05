@@ -505,6 +505,7 @@ extern mapDrawSurface_t mapDrawSurfs[MAX_MAP_DRAW_SURFS];
 extern int numMapDrawSurfs;
 
 mapDrawSurface_t *AllocDrawSurf(void);
+winding_t *WindingFromDrawSurf(mapDrawSurface_t *ds);
 void MergeSides(entity_t *e, tree_t *tree);
 void SubdivideDrawSurfs(entity_t *e, tree_t *tree);
 void MakeDrawSurfaces(bspbrush_t *b);

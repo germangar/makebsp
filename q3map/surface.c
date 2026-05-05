@@ -190,21 +190,176 @@ void AddSideRef(side_t *side) {
 }
 
 /*
+==================
+WindingsShareEdge
+==================
+*/
+static qboolean WindingsShareEdge(winding_t *w1, winding_t *w2) {
+  int i, j;
+
+  for (i = 0; i < w1->numpoints; i++) {
+    int i2 = (i + 1) % w1->numpoints;
+    for (j = 0; j < w2->numpoints; j++) {
+      int j2 = (j + 1) % w2->numpoints;
+      if (VectorCompare(w1->points[i], w2->points[j2]) &&
+          VectorCompare(w1->points[i2], w2->points[j])) {
+        return qtrue;
+      }
+    }
+  }
+  return qfalse;
+}
+
+/*
+==================
+MergeDrawSurfs
+==================
+*/
+void MergeDrawSurfs(entity_t *e) {
+  int i, j;
+  mapDrawSurface_t *ds1, *ds2;
+  winding_t *w1, *w2, *hull;
+  float limit;
+  shaderInfo_t *si;
+  int mergedCount = 0;
+  qboolean changed;
+  int numBaseDrawSurfs;
+
+  qprintf("----- MergeDrawSurfs -----\n");
+
+  do {
+    changed = qfalse;
+    numBaseDrawSurfs = numMapDrawSurfs;
+    for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++) {
+      ds1 = &mapDrawSurfs[i];
+      if (ds1->numVerts <= 0 || !ds1->side || ds1->patch || ds1->miscModel ||
+          ds1->flareSurface) {
+        continue;
+      }
+      si = ds1->side->shaderInfo;
+      if (!si || si->subdivisions > 0) {
+        continue;
+      }
+      if (!g_game->enforceSampleSize || ds1->samplesize <= 0) {
+        continue;
+      }
+      if (si->surfaceFlags & (SURF_NOLIGHTMAP | SURF_POINTLIGHT)) {
+        continue;
+      }
+      if (si->contents &
+          (CONTENTS_FOG | CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA)) {
+        continue;
+      }
+
+      limit = (float)(LIGHTMAP_WIDTH - 3) * ds1->samplesize;
+
+      for (j = i + 1; j < numBaseDrawSurfs; j++) {
+        ds2 = &mapDrawSurfs[j];
+        if (ds2->numVerts <= 0 || !ds2->side || ds2->patch || ds2->miscModel ||
+            ds2->flareSurface) {
+          continue;
+        }
+
+        // Must be coplanar
+        if (ds1->side->planenum != ds2->side->planenum) {
+          continue;
+        }
+
+        // Must have same shader and samplesize
+        if (ds1->shaderInfo != ds2->shaderInfo ||
+            ds1->samplesize != ds2->samplesize) {
+          continue;
+        }
+
+        w1 = WindingFromDrawSurf(ds1);
+        w2 = WindingFromDrawSurf(ds2);
+
+        if (!w1 || !w2 || !WindingsShareEdge(w1, w2)) {
+          if (w1) FreeWinding(w1);
+          if (w2) FreeWinding(w2);
+          continue;
+        }
+
+        // Check if combined hull fits the limit
+        hull = NULL;
+        AddWindingToConvexHull(w1, &hull,
+                               mapplanes[ds1->side->planenum].normal);
+        AddWindingToConvexHull(w2, &hull,
+                               mapplanes[ds1->side->planenum].normal);
+
+        vec3_t mins, maxs;
+        WindingBounds(hull, mins, maxs);
+
+        // Determine lightmap projection axes
+        plane_t *plane = &mapplanes[ds1->side->planenum];
+        vec3_t planeNormal;
+        planeNormal[0] = fabs(plane->normal[0]);
+        planeNormal[1] = fabs(plane->normal[1]);
+        planeNormal[2] = fabs(plane->normal[2]);
+
+        qboolean fits = qtrue;
+        if (planeNormal[0] >= planeNormal[1] &&
+            planeNormal[0] >= planeNormal[2]) {
+          if (maxs[1] - mins[1] > limit || maxs[2] - mins[2] > limit)
+            fits = qfalse;
+        } else if (planeNormal[1] >= planeNormal[0] &&
+                   planeNormal[1] >= planeNormal[2]) {
+          if (maxs[0] - mins[0] > limit || maxs[2] - mins[2] > limit)
+            fits = qfalse;
+        } else {
+          if (maxs[0] - mins[0] > limit || maxs[1] - mins[1] > limit)
+            fits = qfalse;
+        }
+
+        if (fits) {
+          // Check convexity/area to avoid merging concave setups into big boxes
+          float area1 = WindingArea(w1);
+          float area2 = WindingArea(w2);
+          float hullArea = WindingArea(hull);
+
+          if (hullArea < (area1 + area2) + 0.1) {
+            // MERGE!
+            mapDrawSurface_t *tempds =
+                DrawSurfaceForSide(ds1->mapBrush, ds1->side, hull);
+
+            // Copy the newly generated surface content to ds1
+            free(ds1->verts);
+            ds1->numVerts = tempds->numVerts;
+            ds1->verts = tempds->verts;
+            tempds->numVerts = 0; // mark the new one as empty
+
+            ds2->numVerts = 0; // mark the second one as merged
+            mergedCount++;
+            changed = qtrue;
+
+            FreeWinding(w1);
+            FreeWinding(w2);
+            FreeWinding(hull);
+            break; // restart inner loop because ds1 changed
+          }
+        }
+
+        FreeWinding(w1);
+        FreeWinding(w2);
+        if (hull) FreeWinding(hull);
+      }
+      if (changed) break;
+    }
+  } while (changed);
+
+  if (mergedCount > 0) {
+    _printf("%5i surfaces merged\n", mergedCount);
+  }
+}
+
+/*
 =====================
 MergeSides
 
 =====================
 */
 void MergeSides(entity_t *e, tree_t *tree) {
-  int i;
-
-  qprintf("----- MergeSides -----\n");
-
-  for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
-    //			AddSideRef( side );
-  }
-
-  qprintf("%5i siderefs\n", numSideRefs);
+  MergeDrawSurfs(e);
 }
 
 //=====================================================================
@@ -255,10 +410,6 @@ static void SubdivideDrawSurf_r(mapDrawSurface_t *ds, winding_t *w, float subdiv
     // subdivide if necessary
     float size = bounds[1][axis] - bounds[0][axis];
     if (size > subdivisions || (forceGrid && subCeil - subFloor > subdivisions)) {
-      if (g_game->enforceSampleSize && !forceGrid) {
-        _printf("   splitting axis %d: range [%.2f, %.2f] size %.2f > limit %.2f (texels: %.1f)\n", 
-                axis, bounds[0][axis], bounds[1][axis], size, subdivisions, size / ds->samplesize + 1);
-      }
       // gotta clip polygon into two polygons
       ClipWindingEpsilon(w, planeNormal, d, epsilon, &frontWinding,
                          &backWinding);
@@ -348,11 +499,6 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
       // AllocateLightmapForSurface adds 1 to the bounds difference when
       // calculating texel size.
       float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * ds->samplesize;
-
-      if (i == e->firstDrawSurf) {
-        _printf("--- enforceSampleSize: max dimension %.2f (samplesize %d, atlas %d) ---\n", 
-                maxLightmapSubdiv, ds->samplesize, LIGHTMAP_WIDTH);
-      }
 
       // Determine lightmap projection axes (logic mirrors
       // AllocateLightmapForSurface)
