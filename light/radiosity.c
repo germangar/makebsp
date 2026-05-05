@@ -1017,6 +1017,10 @@ flush:
         }
     }
 
+    if (ds->surfaceType == MST_PATCH) {
+        DilatePatchSurface(ds, radiosityFloats);
+    }
+
     free(tempBuffer);
     if (patchMesh) FreeMesh(patchMesh);
 }

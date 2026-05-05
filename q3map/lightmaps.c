@@ -321,7 +321,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   ssize = ds->samplesize;
 
-  subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH,
+  subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 2,
                                       widthtable, heighttable);
 
   w = subdividedMesh->width;
@@ -329,12 +329,12 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   FreeMesh(subdividedMesh);
 
-  // allocate the lightmap
-  c_exactLightmap += w * h;
+  // allocate the lightmap (including 1-texel padding on all sides)
+  c_exactLightmap += (w + 2) * (h + 2);
 
   qboolean allocated_patch_success = qfalse;
   for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w, h, &x, &y)) {
+    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
       ds->lightmapNum = i;
       allocated_patch_success = qtrue;
       break;
@@ -343,7 +343,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   if (!allocated_patch_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
       Error("Entity %i, brush %i: Patch lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
@@ -356,10 +356,14 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 #endif
 
   // set the lightmap texture coordinates in the drawVerts
+  // we add 1 to x and y to account for the padding gutter
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
-  ds->lightmapX = x;
-  ds->lightmapY = y;
+  ds->lightmapX = x + 1;
+  ds->lightmapY = y + 1;
+
+  x = ds->lightmapX;
+  y = ds->lightmapY;
 
   for (i = 0; i < ds->patchWidth; i++) {
     int k_w;

@@ -1519,6 +1519,10 @@ void TraceLtm(int num) {
   }
 
   if (ds->surfaceType == MST_PATCH) {
+    DilatePatchSurface(ds, lightFloats);
+    if (deluxeFloats) {
+        DilatePatchSurface(ds, deluxeFloats);
+    }
     FreeMesh(mesh);
   }
   free(sampleHit);

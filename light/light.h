@@ -105,6 +105,8 @@ void GpuLightmapState_Upload(void);
 void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
+void DilatePatchSurface(dsurface_t *ds, float *buffer);
+
 #define ALPHA_SURF_WORLD 1
 #define ALPHA_TRISOUP 2
 
