@@ -1111,8 +1111,6 @@ void TraceLtm(int num) {
         float invScale = 1.0f / (float)scale;
         VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
         VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
-        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, lightmapVecs[0], lightmapOrigin);
-        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, lightmapVecs[1], lightmapOrigin);
       }
 
       // NOTE: do NOT shift origin by -currentGutter here. The trace loop uses
@@ -1518,11 +1516,14 @@ void TraceLtm(int num) {
     }
   }
 
-  if (ds->surfaceType == MST_PATCH) {
-    DilatePatchSurface(ds, lightFloats);
+  if (ds->surfaceType == MST_PATCH || ds->surfaceType == MST_PLANAR) {
+    DilateLightmapSurface(ds, lightFloats);
     if (deluxeFloats) {
-        DilatePatchSurface(ds, deluxeFloats);
+        DilateLightmapSurface(ds, deluxeFloats);
     }
+  }
+
+  if (ds->surfaceType == MST_PATCH) {
     FreeMesh(mesh);
   }
   free(sampleHit);

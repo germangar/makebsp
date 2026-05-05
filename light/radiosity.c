@@ -445,8 +445,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else {
-                VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], dst);
-                VectorMA(dst, (float)ly + 0.5f, ds->lightmapVecs[1], dst);
+                VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], dst);
+                VectorMA(dst, (float)ly, ds->lightmapVecs[1], dst);
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             }
@@ -691,8 +691,8 @@ static void RadiosityVoxelize(void) {
                         continue;
                     }
                 } else {
-                    VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
-                    VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
+                    VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], pos);
+                    VectorMA(pos, (float)ly, ds->lightmapVecs[1], pos);
                     VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
                     VectorCopy(surfNormal, normal);
                 }
@@ -1017,8 +1017,8 @@ flush:
         }
     }
 
-    if (ds->surfaceType == MST_PATCH) {
-        DilatePatchSurface(ds, radiosityFloats);
+    if (ds->surfaceType == MST_PATCH || ds->surfaceType == MST_PLANAR) {
+        DilateLightmapSurface(ds, radiosityFloats);
     }
 
     free(tempBuffer);

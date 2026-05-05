@@ -370,10 +370,14 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, 
 	planarInfo_t *pInfo = &planarSurfaces[sIdx];
 	dsurface_t *ds = &drawSurfaces[pInfo->surfaceNum];
 	
-	int x0 = (int)floorf(px);
-	int y0 = (int)floorf(py);
-	float fx = px - (float)x0;
-	float fy = py - (float)y0;
+	// Shift to node-relative coordinates (centers at 0.5, 1.5...)
+	float ux = px - 0.5f;
+	float vy = py - 0.5f;
+
+	int x0 = (int)floorf(ux);
+	int y0 = (int)floorf(vy);
+	float fx = ux - (float)x0;
+	float fy = vy - (float)y0;
 	
 	qboolean needsX1 = (fx > 0.001f);
 	qboolean needsY1 = (fy > 0.001f);
@@ -1084,8 +1088,8 @@ void GpuLightmapState_Upload(void) {
             for (int y_s = 0; y_s < sHs; y_s++) {
                 for (int x_s = 0; x_s < sWs; x_s++) {
                     /* Convert scaled index to native coordinate (e.g. 0.25, 0.75 for 2x) */
-                    float px = ((float)x_s + 0.5f) / (float)scale - 0.5f;
-                    float py = ((float)y_s + 0.5f) / (float)scale - 0.5f;
+                    float px = ((float)x_s + 0.5f) / (float)scale;
+                    float py = ((float)y_s + 0.5f) / (float)scale;
                     float col[3];
                     int pa = (lm * Hs + offYs + y_s) * Ws + offXs + x_s;
                     if (GetFilteredTexel(sidx, px, py, col, lightFloats)) {
@@ -1400,8 +1404,8 @@ void AntiAliasLightmapsCPU(int passes) {
                     int cnt = 0;
                     for (k = 0; k < SS_PATTERN8_COUNT; k++) {
                         float col[3];
-                        float px = (float)x + ssPattern8[k][0] * radius;
-                        float py = (float)y + ssPattern8[k][1] * radius;
+                        float px = (float)x + 0.5f + ssPattern8[k][0] * radius;
+                        float py = (float)y + 0.5f + ssPattern8[k][1] * radius;
                         if (GetFilteredTexel(s, px, py, col, tempFloats)) {
                             r += col[0]; g += col[1]; b += col[2];
                             cnt++;
@@ -1461,8 +1465,8 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 	// 1. Upscale to 2x
 	for (int Y = 0; Y < H2; Y++) {
 		for (int X = 0; X < W2; X++) {
-			float px = ((float)X + 0.5f) * 0.5f - 0.5f;
-			float py = ((float)Y + 0.5f) * 0.5f - 0.5f;
+			float px = ((float)X + 0.5f) * 0.5f;
+			float py = ((float)Y + 0.5f) * 0.5f;
 			float col[3];
 			if (GetFilteredTexel(sIdx, px, py, col, tempFloats)) {
 				mask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
@@ -1514,8 +1518,8 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 								sumWeight += 1.0f;
 							}
 						} else {
-							float srcX = ((float)px + 0.5f) * 0.5f - 0.5f;
-							float srcY = ((float)py + 0.5f) * 0.5f - 0.5f;
+							float srcX = ((float)px + 0.5f) * 0.5f;
+							float srcY = ((float)py + 0.5f) * 0.5f;
 							float col[3];
 							if (GetFilteredTexel(sIdx, srcX, srcY, col, tempFloats)) {
 								VectorAdd(sumColor, col, sumColor);
@@ -1535,8 +1539,8 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 									sumWeight += weight;
 								}
 							} else {
-								float srcX = ((float)ix + 0.5f) * 0.5f - 0.5f;
-								float srcY = ((float)iy + 0.5f) * 0.5f - 0.5f;
+								float srcX = ((float)ix + 0.5f) * 0.5f;
+								float srcY = ((float)iy + 0.5f) * 0.5f;
 								float col[3];
 								if (GetFilteredTexel(sIdx, srcX, srcY, col, tempFloats)) {
 									VectorMA(sumColor, weight, col, sumColor);
@@ -1649,7 +1653,7 @@ void SmoothLightmapsCPU(float radius) {
                     for (i = -kernelRadius; i <= kernelRadius; i++) {
                         float weight = kernel[j+kernelRadius][i+kernelRadius];
                         float sampleColor[3];
-                        if (GetFilteredTexel(s, (float)(x+i), (float)(y+j), sampleColor, tempFloats)) {
+                        if (GetFilteredTexel(s, (float)(x+i) + 0.5f, (float)(y+j) + 0.5f, sampleColor, tempFloats)) {
                             VectorMA(sumColor, weight, sampleColor, sumColor);
                             sumWeight += weight;
                         }

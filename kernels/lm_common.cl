@@ -56,8 +56,12 @@ static bool gpu_sample_masked_bilinear(
     float u, float v,
     float *outR, float *outG, float *outB)
 {
-    int   x0 = (int)floor(u), y0 = (int)floor(v);
-    float fx  = u - (float)x0, fy = v - (float)y0;
+    // Shift to node-relative coordinates (centers at 0.5, 1.5...)
+    float ux = u - 0.5f;
+    float vy = v - 0.5f;
+
+    int   x0 = (int)floor(ux), y0 = (int)floor(vy);
+    float fx  = ux - (float)x0, fy = vy - (float)y0;
 
     int x1 = x0 + 1, y1 = y0 + 1;
     if (x0 < 0)  x0 = 0;  if (x0 >= w) x0 = w - 1;

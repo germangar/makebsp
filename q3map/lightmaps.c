@@ -489,11 +489,12 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     h = LIGHTMAP_HEIGHT;
   }
 
-  c_exactLightmap += w * h;
+  // allocate the lightmap (including 1-texel padding on all sides)
+  c_exactLightmap += (w + 2) * (h + 2);
 
   qboolean allocated_surf_success = qfalse;
   for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w, h, &x, &y)) {
+    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
       ds->lightmapNum = i;
       allocated_surf_success = qtrue;
       break;
@@ -502,7 +503,7 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
 
   if (!allocated_surf_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
       Error("Entity %i, brush %i: Surface lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
@@ -510,15 +511,26 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
   }
 
   // set the lightmap texture coordinates in the drawVerts
+  // we add 1 to x and y to account for the padding gutter
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
-  ds->lightmapX = x;
-  ds->lightmapY = y;
+  ds->lightmapX = x + 1;
+  ds->lightmapY = y + 1;
+
+  x = ds->lightmapX;
+  y = ds->lightmapY;
 
   for (i = 0; i < ds->numVerts; i++) {
     VectorSubtract(verts[i].xyz, mins, delta);
-    s = DotProduct(delta, vecs[0]) + x + 0.5;
-    t = DotProduct(delta, vecs[1]) + y + 0.5;
+    s = DotProduct(delta, vecs[0]) + x + 0.5f;
+    t = DotProduct(delta, vecs[1]) + y + 0.5f;
+
+    // micro-nudge UVs slightly inward to prevent float point errors
+    if (s <= (float)x + 0.5001f) s += 0.0001f;
+    if (s >= (float)(x + w) - 0.5001f) s -= 0.0001f;
+    if (t <= (float)y + 0.5001f) t += 0.0001f;
+    if (t >= (float)(y + h) - 0.5001f) t -= 0.0001f;
+
     verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
     verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
   }

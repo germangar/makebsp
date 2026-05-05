@@ -93,7 +93,7 @@ from the nearest valid edge luxels.
 Also marks the dilated texels in lightAlphaMask as ALPHA_SURF_WORLD.
 =========================
 */
-void DilatePatchSurface(dsurface_t *ds, float *buffer) {
+void DilateLightmapSurface(dsurface_t *ds, float *buffer) {
     if (!buffer) return;
 
     int w = ds->lightmapWidth;
