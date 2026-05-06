@@ -1,4 +1,5 @@
 #include "lightdata.h"
+#include "light.h"
 #include "../common/bspfile.h"
 #include "../common/cmdlib.h"
 #include "../shared/globals.h"
@@ -825,11 +826,16 @@ VOXEL CACHE SERVICE
 */
 
 void VoxelCache_BakeAll(void) {
-    _printf("--- VoxelCache_BakeAll ---\n");
     Q_mkdir("cache");
 
     int numBaked = 0;
     double start = I_FloatTime();
+
+    if (g_fast) {
+        _printf("--- VoxelCache_BakeAll (FAST/Rasterized) ---\n");
+    } else {
+        _printf("--- VoxelCache_BakeAll (FULL/Sampled) ---\n");
+    }
 
 #pragma omp parallel for reduction(+:numBaked) schedule(dynamic)
     for (int i = 0; i < numDrawSurfaces; i++) {
@@ -847,75 +853,91 @@ void VoxelCache_BakeAll(void) {
         int W = ds->lightmapWidth;
         int H = ds->lightmapHeight;
         
-        // Rasterization approach: iterate triangles once and splat into a grid
         voxelPoint_t *grid = calloc(W * H, sizeof(voxelPoint_t));
         byte *gridValid = calloc(W * H, sizeof(byte));
 
-        for (int j = 0; j < ds->numIndexes; j += 3) {
-            int i0 = drawIndexes[ds->firstIndex + j];
-            int i1 = drawIndexes[ds->firstIndex + j + 1];
-            int i2 = drawIndexes[ds->firstIndex + j + 2];
+        if (g_fast) {
+            // --- Optimized Path: Integrated Rasterization ---
+            for (int j = 0; j < ds->numIndexes; j += 3) {
+                int i0 = drawIndexes[ds->firstIndex + j];
+                int i1 = drawIndexes[ds->firstIndex + j + 1];
+                int i2 = drawIndexes[ds->firstIndex + j + 2];
 
-            drawVert_t *v[3] = {
-                &drawVerts[ds->firstVert + i0],
-                &drawVerts[ds->firstVert + i1],
-                &drawVerts[ds->firstVert + i2]
-            };
+                drawVert_t *v[3] = {
+                    &drawVerts[ds->firstVert + i0],
+                    &drawVerts[ds->firstVert + i1],
+                    &drawVerts[ds->firstVert + i2]
+                };
 
-            float st[3][2];
-            for (int k = 0; k < 3; k++) {
-                st[k][0] = v[k]->lightmap[0][0] * LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
-                st[k][1] = v[k]->lightmap[0][1] * LIGHTMAP_HEIGHT - ds->lightmapOffset[0][1];
-            }
+                float st[3][2];
+                for (int k = 0; k < 3; k++) {
+                    st[k][0] = v[k]->lightmap[0][0] * LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                    st[k][1] = v[k]->lightmap[0][1] * LIGHTMAP_HEIGHT - ds->lightmapOffset[0][1];
+                }
 
-            // Find triangle bounds in local lightmap space
-            float mins[2], maxs[2];
-            mins[0] = st[0][0]; mins[1] = st[0][1];
-            maxs[0] = st[0][0]; maxs[1] = st[0][1];
-            for (int k = 1; k < 3; k++) {
-                if (st[k][0] < mins[0]) mins[0] = st[k][0];
-                if (st[k][1] < mins[1]) mins[1] = st[k][1];
-                if (st[k][0] > maxs[0]) maxs[0] = st[k][0];
-                if (st[k][1] > maxs[1]) maxs[1] = st[k][1];
-            }
+                float mins[2], maxs[2];
+                mins[0] = st[0][0]; mins[1] = st[0][1];
+                maxs[0] = st[0][0]; maxs[1] = st[0][1];
+                for (int k = 1; k < 3; k++) {
+                    if (st[k][0] < mins[0]) mins[0] = st[k][0];
+                    if (st[k][1] < mins[1]) mins[1] = st[k][1];
+                    if (st[k][0] > maxs[0]) maxs[0] = st[k][0];
+                    if (st[k][1] > maxs[1]) maxs[1] = st[k][1];
+                }
 
-            int minX = (int)floorf(mins[0] - 0.5f);
-            int minY = (int)floorf(mins[1] - 0.5f);
-            int maxX = (int)ceilf(maxs[0] + 0.5f);
-            int maxY = (int)ceilf(maxs[1] + 0.5f);
+                int minX = (int)floorf(mins[0] - 0.5f);
+                int minY = (int)floorf(mins[1] - 0.5f);
+                int maxX = (int)ceilf(maxs[0] + 0.5f);
+                int maxY = (int)ceilf(maxs[1] + 0.5f);
 
-            if (minX < 0) minX = 0; if (minY < 0) minY = 0;
-            if (maxX >= W) maxX = W - 1; if (maxY >= H) maxY = H - 1;
+                if (minX < 0) minX = 0; 
+                if (minY < 0) minY = 0;
+                if (maxX >= W) maxX = W - 1; 
+                if (maxY >= H) maxY = H - 1;
 
-            for (int ty = minY; ty <= maxY; ty++) {
-                for (int tx = minX; tx <= maxX; tx++) {
-                    int pIdx = ty * W + tx;
-                    if (gridValid[pIdx]) continue; // Already sampled this pixel
+                for (int ty = minY; ty <= maxY; ty++) {
+                    for (int tx = minX; tx <= maxX; tx++) {
+                        int pIdx = ty * W + tx;
+                        if (gridValid[pIdx]) continue;
 
-                    float pST[2] = { (float)tx + 0.5f, (float)ty + 0.5f };
-                    // We need global ST for TriSoupSamplePoint (or just do barycentric here)
-                    // For speed and consistency, let's just do barycentric here
-                    float area = (st[1][1] - st[2][1]) * (st[0][0] - st[2][0]) + (st[2][0] - st[1][0]) * (st[0][1] - st[2][1]);
-                    if (fabs(area) < 0.0001f) continue;
+                        float pST[2] = { (float)tx + 0.5f, (float)ty + 0.5f };
+                        float area = (st[1][1] - st[2][1]) * (st[0][0] - st[2][0]) + (st[2][0] - st[1][0]) * (st[0][1] - st[2][1]);
+                        if (fabs(area) < 0.0001f) continue;
 
-                    float w0 = ((st[1][1] - st[2][1]) * (pST[0] - st[2][0]) + (st[2][0] - st[1][0]) * (pST[1] - st[2][1])) / area;
-                    float w1 = ((st[2][1] - st[0][1]) * (pST[0] - st[2][0]) + (st[0][0] - st[2][0]) * (pST[1] - st[2][1])) / area;
-                    float w2 = 1.0f - w0 - w1;
+                        float w0 = ((st[1][1] - st[2][1]) * (pST[0] - st[2][0]) + (st[2][0] - st[1][0]) * (pST[1] - st[2][1])) / area;
+                        float w1 = ((st[2][1] - st[0][1]) * (pST[0] - st[2][0]) + (st[0][0] - st[2][0]) * (pST[1] - st[2][1])) / area;
+                        float w2 = 1.0f - w0 - w1;
 
-                    if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f) {
-                        gridValid[pIdx] = 1;
-                        for (int k = 0; k < 3; k++) {
-                            grid[pIdx].pos[k]    = w0 * v[0]->xyz[k]    + w1 * v[1]->xyz[k]    + w2 * v[2]->xyz[k];
-                            grid[pIdx].normal[k] = w0 * v[0]->normal[k] + w1 * v[1]->normal[k] + w2 * v[2]->normal[k];
+                        if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f) {
+                            gridValid[pIdx] = 1;
+                            for (int k = 0; k < 3; k++) {
+                                grid[pIdx].pos[k]    = w0 * v[0]->xyz[k]    + w1 * v[1]->xyz[k]    + w2 * v[2]->xyz[k];
+                                grid[pIdx].normal[k] = w0 * v[0]->normal[k] + w1 * v[1]->normal[k] + w2 * v[2]->normal[k];
+                            }
+                            VectorNormalize(grid[pIdx].normal, grid[pIdx].normal);
+                            grid[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ty) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + tx;
                         }
-                        VectorNormalize(grid[pIdx].normal, grid[pIdx].normal);
+                    }
+                }
+            }
+        } else {
+            // --- High-Fidelity Path: Sampled Iteration ---
+            for (int ty = 0; ty < H; ty++) {
+                for (int tx = 0; tx < W; tx++) {
+                    int pIdx = ty * W + tx;
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + (float)tx + 0.5f;
+                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ty + 0.5f;
+
+                    if (TriSoupSamplePoint(ds, st, grid[pIdx].pos, grid[pIdx].normal)) {
+                        gridValid[pIdx] = 1;
                         grid[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ty) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + tx;
                     }
                 }
             }
         }
 
-        // Collect valid points
+        // Collect and save
         int validCount = 0;
         for (int j = 0; j < W * H; j++) if (gridValid[j]) validCount++;
 
@@ -930,7 +952,7 @@ void VoxelCache_BakeAll(void) {
 
             FILE *f = fopen(path, "wb");
             if (f) {
-                int magic = 0x4C584F56; // "VOXL"
+                int magic = 0x4C584F56; 
                 int version = 1;
                 fwrite(&magic, 4, 1, f);
                 fwrite(&version, 4, 1, f);

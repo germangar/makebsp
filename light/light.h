@@ -44,6 +44,7 @@ extern cl_command_queue g_clQueue;
 
 extern qboolean useOpenCL;
 extern qboolean openclEnabled;
+extern qboolean g_fast;
 
 /*
  * GpuPlanarSurface — CPU-side mirror of the struct in lm_common.cl.

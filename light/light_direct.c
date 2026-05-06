@@ -1405,8 +1405,47 @@ void TraceLtm(int num) {
     }
   }
 
+  
+  // smooth-fix#1: calculate average values for occluded samples
+  for (i = 0; i < sampleWidth; i++) {
+    for (j = 0; j < sampleHeight; j++) {
+      if (!occluded[i][j]) {
+        continue;
+      }
+      // scan all surrounding samples
+      int count = 0;
+      vec3_t average = {0, 0, 0};
+      vec3_t averageDir = {0, 0, 0};
 
-
+      for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+          if (i + x < 0 || i + x >= sampleWidth) {
+            continue;
+          }
+          if (j + y < 0 || j + y >= sampleHeight) {
+            continue;
+          }
+          if (occluded[i + x][j + y]) {
+            continue;
+          }
+          count++;
+          VectorAdd(color[i + x][j + y], average, average);
+          if (g_game->deluxeMap) {
+            VectorAdd(dir[i + x][j + y], averageDir, averageDir);
+          }
+        }
+      }
+      if (count) {
+        VectorScale(average, 1.0f / (float)count, color[i][j]);
+        if (g_game->deluxeMap) {
+          VectorScale(averageDir, 1.0f / (float)count, dir[i][j]);
+        }
+        sampleHit[i][j] = qtrue;
+        occluded[i][j] = qfalse;
+      }
+    }
+  }
+  
 
   // downscale HD buffer to LR: pick the strongest (brightest) lit HD sample
   if (superSample && use_upscale) {

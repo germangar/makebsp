@@ -410,7 +410,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
     voxelPoint_t *points = NULL;
     int numPoints = 0;
-    if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+    if (g_fast && ds->surfaceType == MST_TRIANGLE_SOUP) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
@@ -422,7 +422,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             vec3_t dst;
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                 qboolean found = qfalse;
-                if (points) {
+                if (g_fast && points) {
                     for (int i = 0; i < numPoints; i++) {
                         if (points[i].pixelIndex == k_dst) {
                             VectorCopy(points[i].pos, dst);
@@ -432,6 +432,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         }
                     }
                 }
+                
                 if (!found) {
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;

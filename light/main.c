@@ -39,6 +39,7 @@ extern tonemap_t tonemapMode;
 
 qboolean rad_voxel = qtrue;
 qboolean overrideDeluxeMap = qfalse;
+qboolean g_fast = qfalse;
 
 int main(int argc, char **argv) {
     int i;
@@ -273,6 +274,9 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
             g_game->hdr = HDR_8BIT;
+        } else if (!strcmp(argv[i], "-fast")) {
+            g_fast = qtrue;
+            _printf("Optimized voxelization mode (FAST) enabled\n");
         } else {
             break;
         }
@@ -327,7 +331,8 @@ int main(int argc, char **argv) {
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   rad_depthintensity <F>= set min bounce carryover (0.0 to 1.0) for creases\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
-                "   lightmaprange    = normalize intensities to the peak light found\n");
+                "   lightmaprange    = normalize intensities to the peak light found\n"
+                "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
         exit(0);
     }
 
