@@ -875,6 +875,7 @@ void VoxelCache_BakeAll(void) {
                     st[k][1] = v[k]->lightmap[0][1] * LIGHTMAP_HEIGHT - ds->lightmapOffset[0][1];
                 }
 
+                // Find triangle bounds in local lightmap space and expand by 2 texels for dilation
                 float mins[2], maxs[2];
                 mins[0] = st[0][0]; mins[1] = st[0][1];
                 maxs[0] = st[0][0]; maxs[1] = st[0][1];
@@ -885,15 +886,30 @@ void VoxelCache_BakeAll(void) {
                     if (st[k][1] > maxs[1]) maxs[1] = st[k][1];
                 }
 
-                int minX = (int)floorf(mins[0] - 0.5f);
-                int minY = (int)floorf(mins[1] - 0.5f);
-                int maxX = (int)ceilf(maxs[0] + 0.5f);
-                int maxY = (int)ceilf(maxs[1] + 0.5f);
+                int minX = (int)floorf(mins[0] - 0.5f) - 2;
+                int minY = (int)floorf(mins[1] - 0.5f) - 2;
+                int maxX = (int)ceilf(maxs[0] + 0.5f) + 2;
+                int maxY = (int)ceilf(maxs[1] + 0.5f) + 2;
 
                 if (minX < 0) minX = 0; 
                 if (minY < 0) minY = 0;
                 if (maxX >= W) maxX = W - 1; 
                 if (maxY >= H) maxY = H - 1;
+
+                // Pre-calculate distance thresholds for barycentric dilation (2 texels)
+                float area = (st[1][1] - st[2][1]) * (st[0][0] - st[2][0]) + (st[2][0] - st[1][0]) * (st[0][1] - st[2][1]);
+                if (fabsf(area) < 0.0001f) continue;
+
+                float thresholds[3];
+                for (int k = 0; k < 3; k++) {
+                    int k1 = (k + 1) % 3;
+                    int k2 = (k + 2) % 3;
+                    float dx = st[k1][0] - st[k2][0];
+                    float dy = st[k1][1] - st[k2][1];
+                    float edgeLen = sqrtf(dx * dx + dy * dy);
+                    float height = (edgeLen > 0.001f) ? (fabsf(area) / edgeLen) : 1.0f;
+                    thresholds[k] = -2.0f / height; // 2-texel outward threshold
+                }
 
                 for (int ty = minY; ty <= maxY; ty++) {
                     for (int tx = minX; tx <= maxX; tx++) {
@@ -901,14 +917,11 @@ void VoxelCache_BakeAll(void) {
                         if (gridValid[pIdx]) continue;
 
                         float pST[2] = { (float)tx + 0.5f, (float)ty + 0.5f };
-                        float area = (st[1][1] - st[2][1]) * (st[0][0] - st[2][0]) + (st[2][0] - st[1][0]) * (st[0][1] - st[2][1]);
-                        if (fabs(area) < 0.0001f) continue;
-
                         float w0 = ((st[1][1] - st[2][1]) * (pST[0] - st[2][0]) + (st[2][0] - st[1][0]) * (pST[1] - st[2][1])) / area;
                         float w1 = ((st[2][1] - st[0][1]) * (pST[0] - st[2][0]) + (st[0][0] - st[2][0]) * (pST[1] - st[2][1])) / area;
                         float w2 = 1.0f - w0 - w1;
 
-                        if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f) {
+                        if (w0 >= thresholds[0] && w1 >= thresholds[1] && w2 >= thresholds[2]) {
                             gridValid[pIdx] = 1;
                             for (int k = 0; k < 3; k++) {
                                 grid[pIdx].pos[k]    = w0 * v[0]->xyz[k]    + w1 * v[1]->xyz[k]    + w2 * v[2]->xyz[k];
