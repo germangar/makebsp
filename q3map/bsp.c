@@ -48,8 +48,8 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
-int forceUVGen = -1;
-int snapUVs = -1;
+int forceUVGen;
+int snapUVs;
 
 char outbase[32];
 
@@ -435,6 +435,8 @@ ExportGameToJson
 */
 int VisMain(int argc, char **argv);
 
+static game_t activeGame;
+
 int main(int argc, char **argv) {
   int i;
   double start, end;
@@ -463,7 +465,34 @@ int main(int argc, char **argv) {
   ClearCacheDirectory();
 
   JSON_ExportStandardPackages("games");
-  JSON_LoadPackages("games");
+
+  // Initialize the local 'activeGame' struct by copying the default game_t into it.
+  memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
+
+  // Pre-scan CLI for -game switch
+  const char *gameName = "qfusion";
+  for (int j = 1; j < argc; j++) {
+      if (!strcmp(argv[j], "-game") && j + 1 < argc) {
+          gameName = argv[j + 1];
+          break;
+      }
+  }
+
+  // Load the specific game JSON to override defaults in the local struct
+  char gameJsonPath[1024];
+  sprintf(gameJsonPath, "games/%s.json", gameName);
+  if (FileExists(gameJsonPath)) {
+      _printf("Loading game profile: %s\n", gameJsonPath);
+      JSON_LoadGame(gameJsonPath, &activeGame);
+  }
+
+  // Point the global g_game to our local struct
+  g_game = &activeGame;
+
+  // Apply game defaults before parsing CLI
+  samplesize = g_game->defaultSampleSize;
+  forceUVGen = g_game->forceUVGen;
+  snapUVs = g_game->snapUVs;
 
   tempsource[0] = '\0';
 
@@ -540,19 +569,7 @@ int main(int argc, char **argv) {
       strcpy(qdir, argv[++i]);
     } else if (!strcmp(argv[i], "-game")) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
-      char *arg = argv[++i];
-      int j;
-      qboolean found = qfalse;
-      for (j = 0; j < numGames; j++) {
-        if (games[j].arg && !strcmp(games[j].arg, arg)) {
-          g_game = &games[j];
-          found = qtrue;
-          break;
-        }
-      }
-      if (!found) {
-        Error("Unknown game: %s", arg);
-      }
+      i++; // Handled in pre-scan
     } else if (!strcmp(argv[i], "-fakemap")) {
       fakemap = qtrue;
       _printf("will generate fakemap.map\n");
@@ -619,14 +636,7 @@ int main(int argc, char **argv) {
 
   start = I_FloatTime();
 
-  if (samplesize == 0) {
-    samplesize = g_game->defaultSampleSize;
-    _printf("Defaulting lightmap sample size to %dx%d units\n", samplesize,
-            samplesize);
-  }
 
-  if (forceUVGen == -1) forceUVGen = g_game->forceUVGen;
-  if (snapUVs == -1) snapUVs = g_game->snapUVs;
 
   _printf("forceUVGen: %s, snapUVs: %s\n", forceUVGen ? "true" : "false", snapUVs ? "true" : "false");
 

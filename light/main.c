@@ -39,14 +39,12 @@ extern tonemap_t tonemapMode;
 
 qboolean g_fast = qfalse;
 
+static game_t activeGame;
+
 int main(int argc, char **argv) {
     int i;
     double start, end;
-    qboolean falloffOverridden = qfalse;
-    falloff_t overrideFalloff = FALLOFF_LAMBERT;
-    qboolean lightmapsRGBOverridden = qfalse;
-    qboolean deluxeMapOverridden = qfalse;
-    qboolean overrideDeluxeMap = qfalse;
+
 
     _printf("----- Lighting (Ag Build v1.1) ----\n");
 
@@ -54,17 +52,37 @@ int main(int argc, char **argv) {
     upscale = qfalse;
     areaScale = 0.25;
     pointScale = 7500;
-    lightmapSmoothPasses = -1;
-    lightmapSmoothRadius = -1.0f;
-    lightmapAA = -1;
-    superSampleMode = SUPERSAMPLE_NONE;
-    radiosityPasses = -1;
-    rad_bounce_scale = -1.0f;
-    rad_color_ratio = -1.0f;
+
     openclEnabled = qtrue;
 
+
+    // 1. Export standard profiles if missing (ensures games/qfusion.json exists)
     JSON_ExportStandardPackages("games");
-    JSON_LoadPackages("games");
+
+    // 2. Initialize the local 'activeGame' struct by copying the default game_t into it.
+    memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
+
+    // 3. Pre-scan CLI for -game switch
+    const char *gameName = "qfusion";
+    for (int j = 1; j < argc; j++) {
+        if (!strcmp(argv[j], "-game") && j + 1 < argc) {
+            gameName = argv[j + 1];
+            break;
+        }
+    }
+
+    // 4. Load the specific game JSON to override defaults in the local struct
+    char gameJsonPath[1024];
+    sprintf(gameJsonPath, "games/%s.json", gameName);
+    if (FileExists(gameJsonPath)) {
+        _printf("Loading game profile: %s\n", gameJsonPath);
+        JSON_LoadGame(gameJsonPath, &activeGame);
+    }
+
+    // 5. Point the global g_game to our local struct
+    g_game = &activeGame;
+
+    superSampleMode = SUPERSAMPLE_NONE;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-tempname")) {
@@ -109,22 +127,9 @@ int main(int argc, char **argv) {
             _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
         } else if (!strcmp(argv[i], "-game")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
-            char *arg = argv[++i];
-            int j;
-            qboolean found = qfalse;
-            for (j = 0; j < numGames; j++) {
-                if (games[j].arg && !strcmp(games[j].arg, arg)) {
-                    g_game = &games[j];
-                    found = qtrue;
-                    break;
-                }
-            }
-            if (!found) {
-                Error("Unknown game: %s", arg);
-            }
+            i++; // Handled in pre-scan
         } else if (!strcmp(argv[i], "-sRGB")) {
             g_game->lightmapsRGB = qtrue;
-            lightmapsRGBOverridden = qtrue;
         } else if (!strcmp(argv[i], "-falloff")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
@@ -151,8 +156,6 @@ int main(int argc, char **argv) {
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
-            falloffOverridden = qtrue;
-            overrideFalloff = g_game->falloff;
         } else if (!strcmp(argv[i], "-falloff_softbias")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_softbias requires a numeric value");
             falloffSoftBias = (float)atof(argv[i + 1]);
@@ -183,9 +186,8 @@ int main(int argc, char **argv) {
             }
         } else if (!strcmp(argv[i], "-deluxe")) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe requires 1 or 0");
-            overrideDeluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
-            deluxeMapOverridden = qtrue;
-            _printf("Deluxemaps %s via command line override\n", overrideDeluxeMap ? "enabled" : "disabled");
+            g_game->deluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
+            _printf("Deluxemaps %s via command line override\n", g_game->deluxeMap ? "enabled" : "disabled");
         } else if (!strcmp(argv[i], "-supersampling")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
@@ -201,26 +203,26 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-smooth")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smooth requires a number of passes");
-            lightmapSmoothPasses = atoi(argv[i + 1]);
-            if (lightmapSmoothPasses < 0) lightmapSmoothPasses = 0;
-            _printf("Smoothing passes set to %d\n", lightmapSmoothPasses);
+            g_game->defaultSmoothPasses = atoi(argv[i + 1]);
+            if (g_game->defaultSmoothPasses < 0) g_game->defaultSmoothPasses = 0;
+            _printf("Smoothing passes set to %d\n", g_game->defaultSmoothPasses);
             i++;
         } else if (!strcmp(argv[i], "-antialiasing")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-antialiasing requires a number of passes");
-            lightmapAA = atoi(argv[i + 1]);
-            _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", lightmapAA);
+            g_game->antialiasingPasses = atoi(argv[i + 1]);
+            _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", g_game->antialiasingPasses);
             i++;
         } else if (!strcmp(argv[i], "-smoothradius")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothradius requires a radius value");
-            lightmapSmoothRadius = (float)atof(argv[i + 1]);
-            if (lightmapSmoothRadius < 0.1f)
-                lightmapSmoothRadius = 0.1f;
+            g_game->defaultSmoothRadius = (float)atof(argv[i + 1]);
+            if (g_game->defaultSmoothRadius < 0.1f)
+                g_game->defaultSmoothRadius = 0.1f;
             i++;
         } else if (!strcmp(argv[i], "-radiosity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a number of passes");
-            radiosityPasses = atoi(argv[i + 1]);
-            if (radiosityPasses < 0)
-                radiosityPasses = 0;
+            g_game->radiosityPasses = atoi(argv[i + 1]);
+            if (g_game->radiosityPasses < 0)
+                g_game->radiosityPasses = 0;
             i++;
         } else if (!strcmp(argv[i], "-rad_depthmin")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmin requires a numeric value");
@@ -241,11 +243,11 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_color_ratio")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
-            rad_color_ratio = (float)atof(argv[i + 1]);
+            g_game->radiosityColorRatio = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_intensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_intensity requires a numeric value");
-            rad_bounce_scale = (float)atof(argv[i + 1]);
+            g_game->radiosityIntensity = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_depthintensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthintensity requires a numeric value");
@@ -266,13 +268,13 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
-                tonemapMode = TONEMAP_SOFTKNEE;
+                g_game->exposureFilter = TONEMAP_SOFTKNEE;
             } else if (!strcmp(mode, "reinhard")) {
-                tonemapMode = TONEMAP_REINHARD;
+                g_game->exposureFilter = TONEMAP_REINHARD;
             } else if (!strcmp(mode, "filmic")) {
-                tonemapMode = TONEMAP_FILMIC;
+                g_game->exposureFilter = TONEMAP_FILMIC;
             } else {
-                tonemapMode = TONEMAP_LINEAR;
+                g_game->exposureFilter = TONEMAP_LINEAR;
             }
             i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
@@ -285,17 +287,7 @@ int main(int argc, char **argv) {
         }
     }
     
-    if (tonemapMode == (tonemap_t)-1) {
-        tonemapMode = g_game->exposureFilter;
-    }
 
-    /* Apply game defaults if not overridden by CLI */
-    if (lightmapSmoothPasses == -1) lightmapSmoothPasses = g_game->defaultSmoothPasses;
-    if (lightmapSmoothRadius <= 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
-    if (lightmapAA == -1) lightmapAA = g_game->antialiasingPasses;
-    if (radiosityPasses == -1) radiosityPasses = g_game->radiosityPasses;
-    if (rad_bounce_scale <= 0.0f) rad_bounce_scale = g_game->radiosityIntensity;
-    if (rad_color_ratio < 0.0f) rad_color_ratio = g_game->radiosityColorRatio;
 
     ThreadSetDefault();
     if (openclEnabled) {
@@ -365,10 +357,7 @@ int main(int argc, char **argv) {
 
     LoadShaderInfo();
 
-    // Re-apply CLI overrides (user choice takes priority over JSON/header defaults)
-    if (falloffOverridden) g_game->falloff = overrideFalloff;
-    if (lightmapsRGBOverridden) g_game->lightmapsRGB = qtrue;
-    if (deluxeMapOverridden) g_game->deluxeMap = overrideDeluxeMap;
+
 
     // Print active configuration summary
     const char *fLog = "lambert";
@@ -393,20 +382,15 @@ int main(int argc, char **argv) {
             (g_game->hdr == HDR_8BIT) ? "range" : "clamped");
     _printf("Lightmap size: %d (Write: %d)\n", g_game->lightmapSize, g_game->writeLightmapSize);
 
-    if (lightmapSmoothPasses < 0) lightmapSmoothPasses = g_game->defaultSmoothPasses;
-    if (lightmapSmoothRadius < 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
-    if (lightmapAA < 0) lightmapAA = g_game->antialiasingPasses;
-    if (radiosityPasses < 0) radiosityPasses = g_game->radiosityPasses;
-    if (rad_bounce_scale < 0.0f) rad_bounce_scale = g_game->radiosityIntensity;
-    if (rad_color_ratio < 0.0f) rad_color_ratio = g_game->radiosityColorRatio;
 
-    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", lightmapSmoothPasses, lightmapSmoothRadius, lightmapAA);
-    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", radiosityPasses, rad_bounce_scale, rad_color_ratio);
+
+    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", g_game->defaultSmoothPasses, g_game->defaultSmoothRadius, g_game->antialiasingPasses);
+    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", g_game->radiosityPasses, g_game->radiosityIntensity, g_game->radiosityColorRatio);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
-        int ssCnt = (lightmapSmoothRadius >= 2.0f) ? 16 : 8;
-        _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, lightmapSmoothRadius);
+        int ssCnt = (g_game->defaultSmoothRadius >= 2.0f) ? 16 : 8;
+        _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, g_game->defaultSmoothRadius);
     }
 
     _printf("reading %s\n", source);
@@ -451,7 +435,7 @@ int main(int argc, char **argv) {
     VoxelCache_BakeAll();
 
     // Call core lighting process
-    LightMain(radiosityPasses);
+    LightMain();
 
     DownConvertLightingData();
     WriteBSPFile(source);

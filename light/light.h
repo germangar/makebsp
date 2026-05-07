@@ -124,7 +124,7 @@ If the distance falloff calculation changes they would need to be recalibrated *
 #define GUTTER 1
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
 
-extern tonemap_t tonemapMode;
+
 
 
 
@@ -297,9 +297,6 @@ extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
 
-extern float lightmapSmoothRadius;
-extern int lightmapSmoothPasses;
-extern int lightmapAA;
 
 typedef enum {
     SUPERSAMPLE_NONE = 0,
@@ -312,7 +309,7 @@ void SmoothLightmaps(float radius);
 void PostProcessLightmaps(void);
 
 // Program flow
-void LightMain(int radiosityPasses);
+void LightMain(void);
 extern light_t *lights;
 extern qboolean patchshadows;
 

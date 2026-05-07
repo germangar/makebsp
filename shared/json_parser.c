@@ -96,24 +96,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
     return qfalse;
   }
 
-  // Smart template selection: Peek at 'bspIdent' to decide between Qfusion or Quake 3 baseline.
-  // Defaults to games[0] (qfusion) unless "IBSP" is explicitly found.
-  int templateIdx = 0; // qfusion
-  struct json_object_element_s *peek_el = obj->start;
-  while (peek_el) {
-    if (!strcmp(peek_el->name->string, "bspIdent") && peek_el->value->type == json_type_string) {
-      const char *ident = json_value_as_string(peek_el->value)->string;
-      if (!strcmp(ident, "IBSP") || !strcmp(ident, "RBSP")) {
-        templateIdx = 1; // quake3
-      }
-      break;
-    }
-    peek_el = peek_el->next;
-  }
-  
-  // Initialize with the selected template baseline
-  memcpy(game, &games[templateIdx], sizeof(game_t));
-
   struct json_object_element_s *el = obj->start;
   while (el) {
     const char *key = el->name->string;
@@ -248,38 +230,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game) {
   return qtrue;
 }
 
-static const char *g_loadDir;
-static int g_loadCount;
-
-static void JSON_LoadGameCallback(const char *filename) {
-  char fullpath[1024];
-  sprintf(fullpath, "%s/%s", g_loadDir, filename);
-
-  game_t temp;
-  if (JSON_LoadGame(fullpath, &temp)) {
-    // Check if we already have a game with this name (e.g. hardcoded)
-    for (int i = 0; i < numGames; i++) {
-      if (games[i].arg && !strcmp(games[i].arg, temp.arg)) {
-        memcpy(&games[i], &temp, sizeof(game_t));
-        return;
-      }
-    }
-
-    // Otherwise append
-    if (numGames < MAX_GAMES) {
-      memcpy(&games[numGames], &temp, sizeof(game_t));
-      numGames++;
-      g_loadCount++;
-    }
-  }
-}
-
-int JSON_LoadPackages(const char *directory) {
-  g_loadDir = directory;
-  g_loadCount = 0;
-  Sys_ListFiles(directory, "*.json", JSON_LoadGameCallback);
-  return g_loadCount;
-}
 
 void JSON_ExportGame(const char *filename, game_t *game) {
   char buffer[4096];
@@ -420,13 +370,13 @@ void JSON_ExportStandardPackages(const char *directory) {
 
   sprintf(path, "%s/quake3.json", directory);
   if (!FileExists(path)) {
-    JSON_ExportGame(path, &games[1]);
+    JSON_ExportGame(path, &gameTemplates[1]);
     _printf("Exporting default 'quake3.json'...\n");
   }
 
   sprintf(path, "%s/qfusion.json", directory);
   if (!FileExists(path)) {
-    JSON_ExportGame(path, &games[0]);
+    JSON_ExportGame(path, &gameTemplates[0]);
     _printf("Exporting default 'qfusion.json'...\n");
   }
 }

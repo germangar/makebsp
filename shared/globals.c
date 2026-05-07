@@ -11,7 +11,7 @@ float sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 
 vec3_t blockSize = {1024, 1024, 1024};
 
-game_t games[MAX_GAMES] = {
+game_t gameTemplates[MAX_GAMES] = {
 	{
 		"qfusion",
 		".",
@@ -79,4 +79,4 @@ game_t games[MAX_GAMES] = {
 };
 
 
-game_t *g_game = &games[0];
+game_t *g_game = &gameTemplates[0];

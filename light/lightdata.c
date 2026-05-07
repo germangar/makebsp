@@ -23,7 +23,7 @@ byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
-tonemap_t tonemapMode = TONEMAP_LINEAR;
+static tonemap_t tonemapMode;
 
 #define HOTSPOT_TAME_FACTOR 1.05f
 
@@ -719,6 +719,7 @@ void DownConvertLightingData(void) {
 	int i;
 
 	_printf("--- DownConvertLightingData ---\n");
+	tonemapMode = g_game->exposureFilter;
 	
 	if (g_game->deluxeMap) {
 		ResolveLightmapScalars();

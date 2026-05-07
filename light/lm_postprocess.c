@@ -16,9 +16,9 @@ world surfaces.
 ===============================================================================
 */
 
-int lightmapAA = 0;
-float lightmapSmoothRadius = 0.0f;
-int lightmapSmoothPasses = 0;
+static int lightmapAA;
+static float lightmapSmoothRadius;
+static int lightmapSmoothPasses;
 
 /*
  * FILTER_UPSCALE: 1 = perform all GPU filtering at 2x resolution (higher quality).
@@ -1863,6 +1863,10 @@ void SmoothLightmapsCPU(float radius) {
 }
 
 void PostProcessLightmaps(void) {
+    lightmapAA = g_game->antialiasingPasses;
+    lightmapSmoothRadius = g_game->defaultSmoothRadius;
+    lightmapSmoothPasses = g_game->defaultSmoothPasses;
+
 	_printf("--- Post Processing ---\n");
 	BuildPlanarSurfaceIndex();
     double startFiltering = I_FloatTime();

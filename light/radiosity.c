@@ -27,8 +27,8 @@ Architecture:
 // Tuning parameters (managed via main.c CLI)
 // ---------------------------------------------------------------------------
 
-float rad_bounce_scale  = 0.5f;   // Energy per bounce (conserved)
-float rad_color_ratio   = 0.5f;   // Greyscale vs colour bleeding
+static float rad_bounce_scale;    // Energy per bounce (conserved)
+static float rad_color_ratio;     // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
 float rad_depth_min     = RAD_DEPTH_MIN_DEFAULT;
 float rad_depth_max     = RAD_DEPTH_MAX_DEFAULT;
@@ -475,12 +475,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     // Cull C: Emitter Plane (is destination entirely behind the emitter?)
                     if (drawSurfaces[s].surfaceType == MST_PLANAR) {
-                        vec3_t emitNormal;
-                        CrossProduct(drawSurfaces[s].lightmapVecs[0], drawSurfaces[s].lightmapVecs[1], emitNormal);
-                        if (VectorNormalize(emitNormal, emitNormal) > 0) {
-                            vec3_t v_to_dst; VectorSubtract(dst, localSurfaces[s].origin, v_to_dst);
-                            if (DotProduct(v_to_dst, emitNormal) < -localSurfaces[s].radius) continue;
-                        }
+                        vec3_t v_to_dst; VectorSubtract(dst, localSurfaces[s].origin, v_to_dst);
+                        if (DotProduct(v_to_dst, g_emitters[localSurfaces[s].emitterStart].normal) < -localSurfaces[s].radius) continue;
                     }
 
                     for (int e = localSurfaces[s].emitterStart; e < localSurfaces[s].emitterStart + localSurfaces[s].emitterCount; e++) {
@@ -497,10 +493,6 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
                         float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
-                        if (g_game->deluxeMap) {
-                            // Store Irradiance: remove cosDst from the color contribution
-                            formFactor = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                        }
                         
                         if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
                         else if (dist < rad_depth_max) {
@@ -529,6 +521,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
                 vec3_t lvec = {0,0,0};
                 vec3_t energySumVec = {0,0,0};
+                float accum[3] = {0,0,0};
 
                 for (int s = 0; s < numDrawSurfaces; s++) {
                     if (localSurfaces[s].emitterCount == 0) continue;
@@ -543,12 +536,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                     // Cull C: Emitter Plane
                     if (drawSurfaces[s].surfaceType == MST_PLANAR) {
-                        vec3_t emitNormal;
-                        CrossProduct(drawSurfaces[s].lightmapVecs[0], drawSurfaces[s].lightmapVecs[1], emitNormal);
-                        if (VectorNormalize(emitNormal, emitNormal) > 0) {
-                            vec3_t v_to_dst; VectorSubtract(dst, localSurfaces[s].origin, v_to_dst);
-                            if (DotProduct(v_to_dst, emitNormal) < -localSurfaces[s].radius) continue;
-                        }
+                        vec3_t v_to_dst; VectorSubtract(dst, localSurfaces[s].origin, v_to_dst);
+                        if (DotProduct(v_to_dst, g_emitters[localSurfaces[s].emitterStart].normal) < -localSurfaces[s].radius) continue;
                     }
 
                     for (int e = localSurfaces[s].emitterStart; e < localSurfaces[s].emitterStart + localSurfaces[s].emitterCount; e++) {
@@ -578,30 +567,39 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         if (!RadVisCheck(dst, em->center)) continue;
 
-                        float energySum = 0;
-                        for (int c = 0; c < 3; c++) {
-                            float energy = formFactorBase * em->color[c];
-                            energySum += energy;
-                            energySumVec[c] += energy;
-                            VectorMA(ivec[c], energy, rayDir, ivec[c]);
+                        if (g_game->deluxeMap) {
+                            float energySum = 0;
+                            for (int c = 0; c < 3; c++) {
+                                float energy = formFactorBase * em->color[c];
+                                energySum += energy;
+                                energySumVec[c] += energy;
+                                VectorMA(ivec[c], energy, rayDir, ivec[c]);
+                            }
+                            // Lambertian weighted vector (Irradiance * Cosine)
+                            VectorMA(lvec, energySum * cosDst, rayDir, lvec);
+                        } else {
+                            float formFactor = formFactorBase * cosDst;
+                            for (int c = 0; c < 3; c++) {
+                                accum[c] += formFactor * em->color[c];
+                            }
                         }
-                        // Lambertian weighted vector (Irradiance * Cosine)
-                        VectorMA(lvec, energySum * cosDst, rayDir, lvec);
                     }
                 }
 
-                if (ivec[0][0] != 0 || ivec[0][1] != 0 || ivec[0][2] != 0 ||
-                    ivec[1][0] != 0 || ivec[1][1] != 0 || ivec[1][2] != 0 ||
-                    ivec[2][0] != 0 || ivec[2][1] != 0 || ivec[2][2] != 0) {
+                if (g_game->deluxeMap) {
+                    if (ivec[0][0] != 0 || ivec[0][1] != 0 || ivec[0][2] != 0 ||
+                        ivec[1][0] != 0 || ivec[1][1] != 0 || ivec[1][2] != 0 ||
+                        ivec[2][0] != 0 || ivec[2][1] != 0 || ivec[2][2] != 0) {
 
-                    // Write scalar result (dot with sparse-point normal) for voxel path compat
-                    float accum[3];
-                    for (int c = 0; c < 3; c++) {
-                        accum[c] = DotProduct(dstNormal, ivec[c]);
-                        if (accum[c] < 0.0f) accum[c] = 0.0f;
+                        // Write scalar result (dot with sparse-point normal) for voxel path compat
+                        for (int c = 0; c < 3; c++) {
+                            accum[c] = DotProduct(dstNormal, ivec[c]);
+                            if (accum[c] < 0.0f) accum[c] = 0.0f;
+                        }
                     }
+                }
 
-
+                if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
                     if (irradianceScalarFloats) {
@@ -1020,7 +1018,11 @@ static void RadiosityMerge(const float *srcBuffer) {
 // LightRadiosity — public entry point
 // ---------------------------------------------------------------------------
 
-void LightRadiosity(int radiosityPasses) {
+void LightRadiosity(void) {
+    int radiosityPasses = g_game->radiosityPasses;
+    rad_bounce_scale = g_game->radiosityIntensity;
+    rad_color_ratio = g_game->radiosityColorRatio;
+
     if (radiosityPasses <= 0) return;
     _printf("--- Radiosity ---\n");
 

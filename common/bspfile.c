@@ -185,9 +185,9 @@ void	LoadBSPFile( const char *filename ) {
 
     if (!g_game) {
         for (i = numGames - 1; i >= 0; i--) {
-            int gameIdent = *(int *)games[i].bspIdent;
-            if (ident == gameIdent && version == (int)games[i].bspVersion) {
-            g_game = &games[i];
+            int gameIdent = *(int *)gameTemplates[i].bspIdent;
+            if (ident == gameIdent && version == (int)gameTemplates[i].bspVersion) {
+            g_game = &gameTemplates[i];
             break;
             }
         }

@@ -1185,7 +1185,7 @@ void TraceLtm(int num) {
       if (!doSS) {
           actualSamples = 1;
           pattern = ssPattern8; // unused, but avoids uninitialized warning
-      } else if (lightmapSmoothRadius >= 2.0f) {
+      } else if (g_game->defaultSmoothRadius >= 2.0f) {
           actualSamples = SS_PATTERN16_COUNT;
           pattern = ssPattern16;
       } else {
@@ -1193,7 +1193,7 @@ void TraceLtm(int num) {
           pattern = ssPattern8;
       }
       
-      float jitterRadius = doSS ? lightmapSmoothRadius : 0.0f;
+      float jitterRadius = doSS ? g_game->defaultSmoothRadius : 0.0f;
       vec3_t accumColor, accumIrradianceScalar, accumDir, accumLambertDir;
       vec3_t accumColorVecs[3];
       int hitCount;

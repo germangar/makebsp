@@ -826,7 +826,7 @@ LightMain
 
 ========
 */
-void LightMain(int radiosityPasses) {
+void LightMain(void) {
   float f;
   
   _printf("--- LightMain ---\n");
@@ -923,7 +923,7 @@ void LightMain(int radiosityPasses) {
   }
 
   // Call radiosity passes
-  LightRadiosity(radiosityPasses);
+  LightRadiosity();
 
   PostProcessLightmaps();
 }
