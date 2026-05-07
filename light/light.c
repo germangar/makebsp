@@ -38,13 +38,7 @@ qboolean lightmapBorder;
 qboolean debugLightmaps;
 qboolean debugLightmapsAlpha;
 
-// CLI Overrides
-qboolean falloffOverridden = qfalse;
-falloff_t overrideFalloff;
-qboolean lightmapsRGBOverridden = qfalse;
-qboolean deluxeMapOverridden = qfalse;
 
-extern int samplesize; // sample size in units
 int novertexlighting = 0;
 int nogridlighting = 0;
 
@@ -52,10 +46,7 @@ int nogridlighting = 0;
 float areaScale = 0.25;
 
 // for run time tweaking of all point sources in the level
-float lightscale = 1.0;
 float pointScale = 7500;
-
-int *surfaceWorkOrder;
 int CompareSurfaces(const void *a, const void *b) {
   int i1 = *(int *)a;
   int i2 = *(int *)b;

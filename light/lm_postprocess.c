@@ -467,7 +467,6 @@ static const float ssPattern8[][2] = {
 // Per-Surface Volumetric Post-Process Smoothing (VPPS) for Triangle Soups
 // ---------------------------------------------------------------------------
 
-extern int samplesize;
 #define AA_ANGLE_MATCH_COS 0.85f
 
 typedef struct aaTexel_s {

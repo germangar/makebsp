@@ -846,18 +846,6 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0) return;
 
-    radFillMode_t mode = localSurfaces[surfIdx].radFillMode;
-
-    if (mode == RAD_FILL_DEFAULT) {
-        // Voxel fill is designed for MST_TRIANGLE_SOUP (no direct UV→world mapping).
-        // Patches and planar surfaces have a proper subdivided mesh / lightmapVecs,
-        // so they use the faster irradiance-vector bilinear path.
-        if (ds->surfaceType == MST_TRIANGLE_SOUP && rad_voxel) {
-            mode = RAD_FILL_VOXEL;
-        } else {
-            mode = RAD_FILL_BILINEAR;
-        }
-    }
 
     mesh_t *patchMesh = NULL;
     vec3_t surfNormal = {0,0,0};
@@ -894,7 +882,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     // -----------------------------------------------------------------------
     // Optimized Triangle Soup Path: Cache-driven + Inclusive Dilation
     // -----------------------------------------------------------------------
-    if (mode == RAD_FILL_VOXEL && ds->surfaceType == MST_TRIANGLE_SOUP) {
+    if (ds->surfaceType == MST_TRIANGLE_SOUP) {
         int numPoints = 0;
         voxelPoint_t *points = VoxelCache_Load(surfIdx, &numPoints);
         if (points) {
@@ -969,7 +957,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 VectorCopy(surfNormal, texelNormal);
             }
 
-            if (mode == RAD_FILL_BILINEAR) {
+            if (ds->surfaceType != MST_TRIANGLE_SOUP) {
                 if (ds->surfaceType == MST_PATCH) {
                     RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
                 } else if (lx % rad_interval == 0 && ly % rad_interval == 0) {
@@ -980,38 +968,15 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 continue;
             }
 
-            if (mode == RAD_FILL_VOXEL) {
-                vec3_t pos, normal;
-                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                    // Fallback path if cache was missing
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                    if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
-                    VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
-                } else if (ds->surfaceType == MST_PATCH) {
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                    if (PatchSamplePoint(patchMesh, st, pos, normal)) {
-                        VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // lightmapOrigin is already center-aligned — no +0.5f offset needed.
-                    VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], pos);
-                    VectorMA(pos, (float)ly, ds->lightmapVecs[1], pos);
-                    VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
-                    VectorCopy(surfNormal, normal);
-                }
+            // Fallback path if cache was missing
+            vec3_t pos, normal;
+            float st[2];
+            st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
+            st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+            if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
+            VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
 
-                if (!RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
-                    RadiosityBilinearSample(ds, lx, ly, normal, tempBuffer[k_temp]);
-                }
-            } else {
-                RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
-            }
+            RadiosityVoxelSample(pos, normal, tempBuffer[k_temp]);
         }
     }
 
@@ -1059,23 +1024,14 @@ void LightRadiosity(int radiosityPasses) {
     if (radiosityPasses <= 0) return;
     _printf("--- Radiosity ---\n");
 
-    qboolean anyVoxel = rad_voxel;
-    for (int i = 0; i < numDrawSurfaces; i++) {
-        if (localSurfaces[i].radFillMode == RAD_FILL_VOXEL) {
-            anyVoxel = qtrue;
-            break;
-        }
+    if (rad_voxel_size <= 0.0f) {
+        rad_voxel_size = (float)(samplesize * rad_interval);
     }
+    if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
+    rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));
+    _printf("  Voxel Grid enabled (Size: %.1f, Angle Match: %.1f deg / %.2f cos)\n", 
+            rad_voxel_size, rad_angle_match, rad_angle_match_cos);
 
-    if (anyVoxel) {
-        if (rad_voxel_size <= 0.0f) {
-            rad_voxel_size = (float)(samplesize * rad_interval);
-        }
-        if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
-        rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));
-        _printf("  Voxel Grid enabled (Size: %.1f, Angle Match: %.1f deg / %.2f cos)\n", 
-                rad_voxel_size, rad_angle_match, rad_angle_match_cos);
-    }
 
     AllocateRadiosityFloats();
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
@@ -1095,9 +1051,8 @@ void LightRadiosity(int radiosityPasses) {
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
 
-        if (anyVoxel) {
-            RadiosityVoxelize();
-        }
+        RadiosityVoxelize();
+
         
         _printf("  [reconstruct] Fill ");
         fflush(stdout);

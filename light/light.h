@@ -215,12 +215,9 @@ extern float *lightFloats;
 extern float *deluxeFloats;
 extern int *lightSurfaceIndex;
 extern byte *lightAlphaMask;
-extern float direct_scale;
-extern float entity_scale;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
-extern qboolean rad_voxel;
 
 //===============================================================
 
@@ -300,11 +297,6 @@ extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
 
-extern qboolean falloffOverridden;
-extern falloff_t overrideFalloff;
-extern qboolean lightmapsRGBOverridden;
-extern qboolean deluxeMapOverridden;
-
 extern float lightmapSmoothRadius;
 extern int lightmapSmoothPasses;
 extern int lightmapAA;
@@ -323,7 +315,6 @@ void PostProcessLightmaps(void);
 void LightMain(int radiosityPasses);
 extern light_t *lights;
 extern qboolean patchshadows;
-extern int *surfaceWorkOrder;
 
 int CompareSurfaces(const void *a, const void *b);
 void LightWorld(void);

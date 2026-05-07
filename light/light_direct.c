@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <float.h>
 
+static int *surfaceWorkOrder;
+
 // 8-point Rotated Grid (tilted ~26.6 degrees)
 static const float ssPattern8[][2] = {
   { 0.000f,  0.000f},   // center

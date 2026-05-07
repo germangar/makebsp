@@ -37,13 +37,16 @@ extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 
-qboolean rad_voxel = qtrue;
-qboolean overrideDeluxeMap = qfalse;
 qboolean g_fast = qfalse;
 
 int main(int argc, char **argv) {
     int i;
     double start, end;
+    qboolean falloffOverridden = qfalse;
+    falloff_t overrideFalloff = FALLOFF_LAMBERT;
+    qboolean lightmapsRGBOverridden = qfalse;
+    qboolean deluxeMapOverridden = qfalse;
+    qboolean overrideDeluxeMap = qfalse;
 
     _printf("----- Lighting (Ag Build v1.1) ----\n");
 
