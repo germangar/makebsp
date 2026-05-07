@@ -1,5 +1,0 @@
---- RADIOSITY REFINEMENT TODO ---
-
-1. [FEATURE] Sky surface emission: Radiosity from sky shaders.
-2. [BUGFIX] Identify sky surfaces in RadiosityEmit to prevent "bounce" from sky.
-3. [OPTIMIZATION] Disk-based lightmap cache (Low memory mode).
