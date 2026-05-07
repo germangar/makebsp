@@ -356,8 +356,10 @@ static void RadiosityEmit(const float *srcBuffer) {
                         VectorClear(em->center);
                     }
                 } else {
-                    VectorMA(ds->lightmapOrigin, (float)lx + (float)rad_interval * 0.5f, ds->lightmapVecs[0], em->center);
-                    VectorMA(em->center, (float)ly + (float)rad_interval * 0.5f, ds->lightmapVecs[1], em->center);
+                    // lightmapOrigin is already center-aligned (q3map stores it at texel 0 center).
+                    // Use lx/ly directly — no +0.5f offset needed.
+                    VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], em->center);
+                    VectorMA(em->center, (float)ly, ds->lightmapVecs[1], em->center);
                     VectorMA(em->center, RAD_ORIGIN_NUDGE, surfNormal, em->center);
                     VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                     VectorCopy(surfNormal, em->normal);
@@ -997,8 +999,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                         continue;
                     }
                 } else {
-                    VectorMA(ds->lightmapOrigin, (float)lx + 0.5f, ds->lightmapVecs[0], pos);
-                    VectorMA(pos, (float)ly + 0.5f, ds->lightmapVecs[1], pos);
+                    // lightmapOrigin is already center-aligned — no +0.5f offset needed.
+                    VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], pos);
+                    VectorMA(pos, (float)ly, ds->lightmapVecs[1], pos);
                     VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
                     VectorCopy(surfNormal, normal);
                 }
