@@ -236,13 +236,8 @@ CalcPortalVis
 ==================
 */
 void CalcPortalVis(void) {
-#ifdef MREDEBUG
-  _printf("%6d v_portals out of %d", 0, v_numportals * 2);
-  // get rid of the counter
-  RunThreadsOnIndividual(v_numportals * 2, qfalse, PortalFlow);
-#else
   RunThreadsOnIndividual(v_numportals * 2, qtrue, PortalFlow);
-#endif
+  _printf("\n");
 }
 
 /*
@@ -253,17 +248,10 @@ CalcPassageVis
 void CalcPassageVis(void) {
   PassageMemory();
 
-#ifdef MREDEBUG
-  _printf("%6d v_portals out of %d", 0, v_numportals * 2);
-  RunThreadsOnIndividual(v_numportals * 2, qfalse, CreatePassages);
-  _printf("\n");
-  _printf("%6d v_portals out of %d", 0, v_numportals * 2);
-  RunThreadsOnIndividual(v_numportals * 2, qfalse, PassageFlow);
-  _printf("\n");
-#else
   RunThreadsOnIndividual(v_numportals * 2, qtrue, CreatePassages);
+  _printf("\n");
   RunThreadsOnIndividual(v_numportals * 2, qtrue, PassageFlow);
-#endif
+  _printf("\n");
 }
 
 /*
@@ -274,17 +262,10 @@ CalcPassagePortalVis
 void CalcPassagePortalVis(void) {
   PassageMemory();
 
-#ifdef MREDEBUG
-  _printf("%6d v_portals out of %d", 0, v_numportals * 2);
-  RunThreadsOnIndividual(v_numportals * 2, qfalse, CreatePassages);
-  _printf("\n");
-  _printf("%6d v_portals out of %d", 0, v_numportals * 2);
-  RunThreadsOnIndividual(v_numportals * 2, qfalse, PassagePortalFlow);
-  _printf("\n");
-#else
   RunThreadsOnIndividual(v_numportals * 2, qtrue, CreatePassages);
+  _printf("\n");
   RunThreadsOnIndividual(v_numportals * 2, qtrue, PassagePortalFlow);
-#endif
+  _printf("\n");
 }
 
 /*
@@ -311,8 +292,7 @@ void CalcVis(void) {
   int i;
 
   RunThreadsOnIndividual(v_numportals * 2, qtrue, BasePortalVis);
-
-  //	RunThreadsOnIndividual (v_numportals*2, qtrue, BetterPortalVis);
+  _printf("\n");
 
   SortPortals();
 

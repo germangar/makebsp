@@ -1205,7 +1205,7 @@ void GpuLightmapState_Upload(void) {
         tempMask  = lightAlphaMask;
     } else {
         /* Bilinear upscale 1x -> 2x */
-        _printf("  Upscaling atlas to 2x for high-fidelity filtering...\n");
+        if (verbose) _printf("  Upscaling atlas to 2x for high-fidelity filtering...\n");
         tempAtlas = malloc(atlasBytes);
         tempMask  = malloc(maskBytes);
         if (!tempAtlas || !tempMask) { Error("Out of memory for GPU upscale"); }
@@ -1264,7 +1264,7 @@ void GpuLightmapState_Upload(void) {
         }
 
         /* High-fidelity refinement pass: re-calculate all indexed pixels using seam logic */
-        _printf("  Refining %dx surface edges with adjacency logic...\n", scale);
+        if (verbose) _printf("  Refining %dx surface edges with adjacency logic...\n", scale);
         #pragma omp parallel for schedule(dynamic, 1)
         for (int sidx = 0; sidx < numPlanarSurfaces; sidx++) {
             planarInfo_t *p = &planarSurfaces[sidx];
@@ -1403,7 +1403,7 @@ void GpuLightmapState_Upload(void) {
                                          totalPixels * sizeof(int), pixelToY, &err);
     free(pixelToSurface); free(pixelToX); free(pixelToY); free(validList);
 
-    _printf("  GPU state uploaded (%dx): %d planar surfaces, %d valid texels, %d partner links\n",
+    if (verbose) _printf("  GPU state uploaded (%dx): %d planar surfaces, %d valid texels, %d partner links\n",
             scale, numPlanarSurfaces, numValid, totalLinks);
 }
 
@@ -1871,7 +1871,7 @@ void PostProcessLightmaps(void) {
     /* Step 3 — Planar Filtering (AA and Smoothing) */
     if (useOpenCL) {
         /* ==== GPU PATH ==== */
-        _printf("  Uploading GPU lightmap state...\n");
+        if (verbose) _printf("  Uploading GPU lightmap state...\n");
         GpuLightmapState_Upload();
         if (lightmapAA) AntiAliasLightmapsGPU(lightmapAA);
         if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
@@ -1882,7 +1882,7 @@ void PostProcessLightmaps(void) {
             }
             _printf("Done\n");
         }
-        _printf("  Downloading GPU lightmap result...\n");
+        if (verbose) _printf("  Downloading GPU lightmap result...\n");
         GpuLightmapState_Download();
         GpuLightmapState_Free();
     } else {

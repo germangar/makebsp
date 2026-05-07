@@ -384,7 +384,6 @@ SunToPoint
 Returns an amount of light to add at the point (grid)
 ================
 */
-int c_sunHit, c_sunMiss;
 qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
                     qboolean applyColorFilter) {
   int i;
@@ -415,9 +414,6 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     TraceLine(origin, trace.hit, &trace, qtrue, tw);
 
     // we hit the sky, so add sunlight
-    if (numthreads == 1) {
-      c_sunHit++;
-    }
     if (!applyColorFilter) {
       trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
     }
@@ -430,9 +426,6 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     return qtrue;
   }
 
-  if (numthreads == 1) {
-    c_sunMiss++;
-  }
 
   return qfalse;
 }
@@ -1337,9 +1330,6 @@ void TraceLtm(int num) {
           sampleHit[i][j] = qtrue;
         }
         occluded[i][j] = qfalse;
-        if (numthreads == 1) {
-          c_visible++;
-        }
         float invHits = 1.0f / (float)hitCount;
         if (g_game->deluxeMap) {
             // UNIFIED IRRADIANCE RESOLUTION
@@ -1393,9 +1383,6 @@ void TraceLtm(int num) {
           sampleHit[i][j] = qfalse;
         }
         occluded[i][j] = qtrue;
-        if (numthreads == 1) {
-          c_occluded++;
-        }
       }
 
       // For non-trisoups with superSampleMode == SUPERSAMPLE_MODELS, preserve original sampleHit behavior
@@ -1775,9 +1762,7 @@ void LightWorld(void) {
   _printf("--- TraceLtm ---\n");
   start = I_FloatTime();
   RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceLtm);
-  end = I_FloatTime();
-  _printf("%5i visible samples\n", c_visible);
-  _printf("%5i occluded samples\n", c_occluded);
+  _printf("\n");
   _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
 
   free(surfaceWorkOrder);

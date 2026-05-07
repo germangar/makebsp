@@ -770,20 +770,21 @@ void AllocateRadiosityFloats(void) {
 	if (accumRadiosityFloats)
 		free(accumRadiosityFloats);
 
-	_printf("AllocateRadiosityFloats: Allocating %d pixel buffers for radiosity...\n", numLightBytes / 3);
 	radiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
 	if (!radiosityFloats)
 		Error("AllocateRadiosityFloats: malloc failed (radiosity). numLightBytes: %d", numLightBytes);
-	_printf("  radiosityFloats: %p. Memsetting...\n", (void *)radiosityFloats);
+	
 	memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-	_printf("  Allocating accumRadiosityFloats...\n");
 	accumRadiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
 	if (!accumRadiosityFloats)
 		Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
-	_printf("  accumRadiosityFloats: %p. Memsetting...\n", (void *)accumRadiosityFloats);
 	memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
-	_printf("AllocateRadiosityFloats: Done.\n");
+	{
+		int pixels = numLightBytes / 3;
+		float megabytes = (float)(pixels * sizeof(vec3_t) * 2) / (1024.0f * 1024.0f);
+		_printf("  AllocateRadiosityFloats: %d pixels allocated (%.1f MB)\n", pixels, megabytes);
+	}
 }
 
 void FreeRadiosityFloats(void) {
@@ -837,7 +838,7 @@ void VoxelCache_BakeAll(void) {
         _printf("--- VoxelCache_BakeAll (FULL/Sampled) ---\n");
     }
 
-    _printf("    [baking]     ");
+    _printf("    [baking] ");
     fflush(stdout);
 
 #pragma omp parallel for reduction(+:numBaked) schedule(dynamic)

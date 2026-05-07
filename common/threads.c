@@ -205,7 +205,7 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int)) {
   threaded = qfalse;
   end = I_FloatTime();
   if (pacifier)
-    _printf(" (%i)\n", end - start);
+    _printf(" (%i) ", end - start);
 }
 
 #endif

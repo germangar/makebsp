@@ -27,5 +27,6 @@
   "antialiasingPasses": 0, /* post-process AA passes */
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
-  "exposurefilter": "off" /* [ off, softknee, reinhard, filmic ] */
+  "exposurefilter": "off", /* [ off, softknee, reinhard, filmic ] */
+  "enforceSampleSize": true
 }

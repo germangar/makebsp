@@ -93,7 +93,6 @@ int gridBounds[3];
 
 
 
-int c_visible, c_occluded;
 
 // int			defaultLightSubdivide = 128;		// vary by
 // surface size?

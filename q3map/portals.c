@@ -22,10 +22,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qbsp.h"
 
-int c_active_portals;
-int c_peak_portals;
-int c_boundary;
-int c_boundary_sides;
 
 /*
 ===========
@@ -35,10 +31,6 @@ AllocPortal
 portal_t *AllocPortal(void) {
   portal_t *p;
 
-  if (numthreads == 1)
-    c_active_portals++;
-  if (c_active_portals > c_peak_portals)
-    c_peak_portals = c_active_portals;
 
   p = malloc(sizeof(portal_t));
   memset(p, 0, sizeof(portal_t));
@@ -49,8 +41,6 @@ portal_t *AllocPortal(void) {
 void FreePortal(portal_t *p) {
   if (p->winding)
     FreeWinding(p->winding);
-  if (numthreads == 1)
-    c_active_portals--;
   free(p);
 }
 

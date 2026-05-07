@@ -286,6 +286,14 @@ int main(int argc, char **argv) {
         tonemapMode = g_game->exposureFilter;
     }
 
+    /* Apply game defaults if not overridden by CLI */
+    if (lightmapSmoothPasses == -1) lightmapSmoothPasses = g_game->defaultSmoothPasses;
+    if (lightmapSmoothRadius <= 0.0f) lightmapSmoothRadius = g_game->defaultSmoothRadius;
+    if (lightmapAA == -1) lightmapAA = g_game->antialiasingPasses;
+    if (radiosityPasses == -1) radiosityPasses = g_game->radiosityPasses;
+    if (rad_bounce_scale <= 0.0f) rad_bounce_scale = g_game->radiosityIntensity;
+    if (rad_color_ratio < 0.0f) rad_color_ratio = g_game->radiosityColorRatio;
+
     ThreadSetDefault();
     if (openclEnabled) {
         InitOpenCL();

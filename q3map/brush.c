@@ -15,15 +15,12 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Foobar; if not, write to the Free Software
+along with Foobar; if not, write to the Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
 
-int c_active_brushes;
-
-int c_nodes;
 
 // if a brush just barely pokes onto the other side,
 // let it slide by without chopping
@@ -56,8 +53,6 @@ bspbrush_t *AllocBrush(int numsides) {
   c = (size_t)&(((bspbrush_t *)0)->sides[numsides]);
   bb = malloc(c);
   memset(bb, 0, c);
-  if (numthreads == 1)
-    c_active_brushes++;
   bb->original = bb;
   return bb;
 }
@@ -74,8 +69,6 @@ void FreeBrush(bspbrush_t *brushes) {
     if (brushes->sides[i].winding)
       FreeWinding(brushes->sides[i].winding);
   free(brushes);
-  if (numthreads == 1)
-    c_active_brushes--;
 }
 
 /*

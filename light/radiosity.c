@@ -1082,12 +1082,12 @@ void LightRadiosity(int radiosityPasses) {
         _printf("Pass %d/%d:\n", pnum, radiosityPasses);
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
-        _printf("  [emit]       ");
+        _printf("  [emit]   ");
         RadiosityEmit(emitSource);
 
         memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
         if (irradianceVecFloats) memset(irradianceVecFloats, 0, (numLightBytes / 3) * 9 * sizeof(float));
-        _printf("  [integrate]  %d emitters generated. Starting integration...\n", g_numEmitters);
+        _printf("  [integrate]  ");
         fflush(stdout);
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
@@ -1096,7 +1096,8 @@ void LightRadiosity(int radiosityPasses) {
             RadiosityVoxelize();
         }
         
-        _printf("  [reconstruct] Reconstruction Fill ");
+        _printf("  [reconstruct] Fill ");
+        fflush(stdout);
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityReconstructThread);
         _printf("done\n");
 

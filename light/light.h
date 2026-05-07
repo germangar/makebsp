@@ -324,7 +324,6 @@ void LightMain(int radiosityPasses);
 extern light_t *lights;
 extern qboolean patchshadows;
 extern int *surfaceWorkOrder;
-extern int c_visible, c_occluded;
 
 int CompareSurfaces(const void *a, const void *b);
 void LightWorld(void);
