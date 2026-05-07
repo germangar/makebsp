@@ -546,7 +546,10 @@ static void RunGpuTrisoupFilter(
     int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
     int N = mappedPixels;
 
-    _printf(" (GPU %d texels)...", N);
+    ThreadLock();
+    _printf(".");
+    fflush(stdout);
+    ThreadUnlock();
 
     float *texelPos    = malloc(N * 3 * sizeof(float));
     float *texelNormal = malloc(N * 3 * sizeof(float));
@@ -755,7 +758,10 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
         int N = numPoints;
         int numSamples = (aaPasses > 0) ? SS_PATTERN8_COUNT : 1;
 
-        _printf(" (GPU %d texels)...", N);
+        ThreadLock();
+        _printf(".");
+        fflush(stdout);
+        ThreadUnlock();
 
         float *texelPos    = malloc(N * 3 * sizeof(float));
         float *texelNormal = malloc(N * 3 * sizeof(float));

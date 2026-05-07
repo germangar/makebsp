@@ -837,6 +837,9 @@ void VoxelCache_BakeAll(void) {
         _printf("--- VoxelCache_BakeAll (FULL/Sampled) ---\n");
     }
 
+    _printf("    [baking]     ");
+    fflush(stdout);
+
 #pragma omp parallel for reduction(+:numBaked) schedule(dynamic)
     for (int i = 0; i < numDrawSurfaces; i++) {
         dsurface_t *ds = &drawSurfaces[i];
@@ -847,6 +850,11 @@ void VoxelCache_BakeAll(void) {
         FILE *f_test = fopen(path, "rb");
         if (f_test) {
             fclose(f_test);
+            #pragma omp critical
+            {
+                _printf(".");
+                fflush(stdout);
+            }
             continue;
         }
 
@@ -978,7 +986,15 @@ void VoxelCache_BakeAll(void) {
         }
         free(grid);
         free(gridValid);
+
+        #pragma omp critical
+        {
+            _printf(".");
+            fflush(stdout);
+        }
     }
+
+    _printf("\n");
 
     double end = I_FloatTime();
     _printf("    %d Trisoup surfaces baked to cache in %.2f seconds\n", numBaked, end - start);
