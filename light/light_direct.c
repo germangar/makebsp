@@ -1,4 +1,4 @@
-﻿#include "light.h"
+#include "light.h"
 #include "../common/imagelib.h"
 #include <math.h>
 #include <stdlib.h>
@@ -854,10 +854,7 @@ void TraceLtm(int num) {
   byte *occluded_data = NULL;
   vec3_t **color = NULL;
   vec3_t *color_data = NULL;
-  vec3_t **dir = NULL;
-  vec3_t *dir_data = NULL;
   mesh_t *mesh = NULL;
-  shaderInfo_t *si;
   static float nudge[2][9] = {{0, -1, 0, 1, -1, 1, -1, 0, 1},
                                {0, -1, -1, -1, 0, 0, 1, 1, 1}};
   int sampleWidth, sampleHeight, ssize;
@@ -876,7 +873,7 @@ void TraceLtm(int num) {
 
   realSurfIndex = surfaceWorkOrder[num];
   ds = &drawSurfaces[realSurfIndex];
-  si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+  shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
   surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
 
@@ -908,9 +905,6 @@ void TraceLtm(int num) {
           if (ds->surfaceType == MST_PLANAR) {
               if (light->type == emit_area) {
                   // Area lights always use standard lambertian falloff.
-                  // However, checking the angle against the light's center is mathematically
-                  // unsafe because the emitter's polygon might extend in front of the receiver
-                  // plane even if its center is behind it. Thus, we skip angle culling for them.
               } else if (d > 0.001f) {
                   VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
                   VectorScale(v, 1.0f / d, v); // Safely normalize using precomputed distance
@@ -959,7 +953,6 @@ void TraceLtm(int num) {
     return; // doesn't need lightmap lighting
   }
 
-  si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
   int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
   int use_upscale = upscale;
   ssize = samplesize;
@@ -1003,16 +996,10 @@ void TraceLtm(int num) {
         VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
         
         // Shift lightmapOrigin to the center of the first upscaled texel.
-        // Original origin is center-aligned. The first upscaled texel center
-        // is shifted by -(1.0 - 1.0/scale) * 0.5 of the original vector.
         VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[0], lightmapOrigin);
         VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[1], lightmapOrigin);
       }
 
-      // NOTE: do NOT shift origin by -currentGutter here. The trace loop uses
-      // pi = i - currentGutter, which already compensates for the gutter offset.
-      // Shifting origin here as well would double-displace all samples by 1 LR
-      // texel, placing edge blocks outside the polygon and producing black borders.
       sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
       sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
     }
@@ -1028,19 +1015,12 @@ void TraceLtm(int num) {
   byte *sampleHit_data = malloc(extW * extH * sizeof(byte));
   byte **sampleHit = malloc(extW * sizeof(byte *));
 
-  if (g_game->deluxeMap) {
-    dir = malloc(extW * sizeof(vec3_t *));
-    dir_data = malloc(extW * extH * sizeof(vec3_t));
-  }
-
-  if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data || (g_game->deluxeMap && (!dir || !dir_data))) {
-    _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", num, extW, extH);
+  if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data) {
+    _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", realSurfIndex, extW, extH);
     if (occluded) free(occluded);
     if (occluded_data) free(occluded_data);
     if (color) free(color);
     if (color_data) free(color_data);
-    if (dir) free(dir);
-    if (dir_data) free(dir_data);
     if (sampleHit) free(sampleHit);
     if (sampleHit_data) free(sampleHit_data);
     free(localLights);
@@ -1051,12 +1031,10 @@ void TraceLtm(int num) {
   for (i = 0; i < extW; i++) {
     occluded[i] = occluded_data + i * extH;
     color[i] = color_data + i * extH;
-    if (dir) dir[i] = dir_data + i * extH;
     sampleHit[i] = sampleHit_data + i * extH;
   }
 
   memset(color_data, 0, extW * extH * sizeof(vec3_t));
-  if (dir_data) memset(dir_data, 0, extW * extH * sizeof(vec3_t));
   memset(sampleHit_data, 0, extW * extH * sizeof(byte));
 
   // determine which samples are occluded
@@ -1064,9 +1042,6 @@ void TraceLtm(int num) {
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
 
-      // sample at a closer spacing for anti-aliasing
-      // Mode: 0 = OFF, 1 = Models Only, 2 = Everything
-      // Pattern: radius <= 1 -> 8 samples, radius >= 2 -> 16 samples
       qboolean doSS = qfalse;
       if (superSampleMode == SUPERSAMPLE_ALL) {
           doSS = qtrue;
@@ -1074,12 +1049,11 @@ void TraceLtm(int num) {
           doSS = qtrue;
       }
 
-      // Pick pattern based on smoothradius
       const float (*pattern)[2];
       int actualSamples;
       if (!doSS) {
           actualSamples = 1;
-          pattern = ssPattern8; // unused, but avoids uninitialized warning
+          pattern = ssPattern8; 
       } else if (g_game->defaultSmoothRadius >= 2.0f) {
           actualSamples = SS_PATTERN16_COUNT;
           pattern = ssPattern16;
@@ -1097,7 +1071,6 @@ void TraceLtm(int num) {
       int ss, k;
 
       for (ss = 0; ss < actualSamples; ss++) {
-        // Generate jitter offset using the selected pattern
         float jdx = 0.0f, jdy = 0.0f;
         if (jitterRadius > 0.0f && ss > 0) {
           int pidx = ss % actualSamples;
@@ -1109,8 +1082,6 @@ void TraceLtm(int num) {
           float st[2];
           vec3_t temp_origin;
           
-          // Calculate the target (s,t) coordinate in the lightmap
-          // Account for the Gutter shift and the optional 0.5x supersampling
           float fi = (float)(i - currentGutter) + jdx;
           float fj = (float)(j - currentGutter) + jdy;
           float step = 1.0f / (float)scale;
@@ -1120,7 +1091,7 @@ void TraceLtm(int num) {
           st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
 
           if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) {
-            continue; // jittered sample missed geometry, skip
+            continue; 
           }
           numPositions = 9;
           for (k = 0; k < 3; k++) {
@@ -1130,8 +1101,6 @@ void TraceLtm(int num) {
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else if (ds->surfaceType == MST_PATCH) {
           numPositions = 9;
-          
-          // Calculate the target (s,t) coordinate in the lightmap
           float step = 1.0f / (float)scale;
           float offset = 0.5f * step;
           float target_s = (float)ds->lightmapOffset[0][0] + ((float)(i - currentGutter) + jdx) * step + offset;
@@ -1141,17 +1110,15 @@ void TraceLtm(int num) {
           vec3_t temp_origin;
 
           if (!PatchSamplePoint(mesh, st, temp_origin, normal)) {
-              continue; // completely missed
+              continue; 
           }
 
-          // Apply nudge along the interpolated normal
           for (k = 0; k < 3; k++) {
             base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
           }
           MakeNormalVectors(normal, lightmapVecs[0], lightmapVecs[1]);
         } else {
           numPositions = 9;
-          // Dilation: offset the planar calculation
           float pi = (float)(i - currentGutter) + jdx;
           float pj = (float)(j - currentGutter) + jdy;
           for (k = 0; k < 3; k++) {
@@ -1165,10 +1132,7 @@ void TraceLtm(int num) {
           base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
         }
 
-        // we may need to slightly nudge the sample point
-        // if directly on a wall
         for (position = 0; position < numPositions; position++) {
-          // calculate lightmap sample position
           for (k = 0; k < 3; k++) {
             origin_d[k] = base[k] +
                           ((double)nudge[0][position] / 16.0) * lightmapVecs[0][k] +
@@ -1179,29 +1143,21 @@ void TraceLtm(int num) {
           if (notrace) {
             break;
           }
-
-          // --- PointInSolid Bypass (q3map2 style) ---
-          // We always use the nominal position (position 0) because our raytracer
-          // uses a 1.25 unit jump (SELF_SHADOW_EPSILON) to escape from solid 
-          // geometry at junctions.
           break;
         }
 
-        // if none of the nudges worked, this sub-sample is occluded
         if (position == numPositions) {
           continue;
         }
 
-        // Trace this sub-sample
         vec3_t subColor;
         tw->ignoreSurface = realSurfIndex;
         LightingAtSample(origin, normal, subColor,
                          qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
         VectorAdd(accumColor, subColor, accumColor);
         hitCount++;
-      } // end super-sample loop
+      } 
 
-      // Resolve: set the texel color from accumulated sub-samples
       if (hitCount > 0) {
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
           sampleHit[i][j] = qtrue;
@@ -1210,31 +1166,25 @@ void TraceLtm(int num) {
         float invHits = 1.0f / (float)hitCount;
         for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
       } else {
-        // No sub-samples hit â€” mark as occluded/miss
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
           sampleHit[i][j] = qfalse;
         }
         occluded[i][j] = qtrue;
       }
 
-      // For non-trisoups with superSampleMode == SUPERSAMPLE_MODELS, preserve original sampleHit behavior
       if (ds->surfaceType != MST_TRIANGLE_SOUP && actualSamples == 1) {
         sampleHit[i][j] = qtrue;
       }
     }
   }
 
-  
-  // smooth-fix#1: calculate average values for occluded samples
   for (i = 0; i < sampleWidth; i++) {
     for (j = 0; j < sampleHeight; j++) {
       if (!occluded[i][j]) {
         continue;
       }
-      // scan all surrounding samples
       int count = 0;
       vec3_t average = {0, 0, 0};
-      vec3_t averageDir = {0, 0, 0};
 
       for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
@@ -1249,24 +1199,16 @@ void TraceLtm(int num) {
           }
           count++;
           VectorAdd(color[i + x][j + y], average, average);
-          if (g_game->deluxeMap) {
-            VectorAdd(dir[i + x][j + y], averageDir, averageDir);
-          }
         }
       }
       if (count) {
         VectorScale(average, 1.0f / (float)count, color[i][j]);
-        if (g_game->deluxeMap) {
-          VectorScale(averageDir, 1.0f / (float)count, dir[i][j]);
-        }
         sampleHit[i][j] = qtrue;
         occluded[i][j] = qfalse;
       }
     }
   }
   
-
-  // downscale HD buffer to LR: pick the strongest (brightest) lit HD sample
   if (superSample && use_upscale) {
     for (i = 0; i < ds->lightmapWidth; i++) {
       for (j = 0; j < ds->lightmapHeight; j++) {
@@ -1294,48 +1236,32 @@ void TraceLtm(int num) {
 
         if (bestX >= 0) {
           VectorCopy(color[bestX][bestY], color[i][j]);
-          if (g_game->deluxeMap) VectorCopy(dir[bestX][bestY], dir[i][j]);
           sampleHit[i][j] = qtrue;
         } else {
           VectorClear(color[i][j]);
-          if (g_game->deluxeMap) VectorClear(dir[i][j]);
           sampleHit[i][j] = qfalse;
         }
       }
     }
   } else if (superSample && !use_upscale) {
-    // 1:1 dilation test: copy directly from guttered buffer
     for (i = 0; i < ds->lightmapWidth; i++) {
       for (j = 0; j < ds->lightmapHeight; j++) {
         VectorCopy(color[i + currentGutter][j + currentGutter], color[i][j]);
-        if (g_game->deluxeMap) VectorCopy(dir[i + currentGutter][j + currentGutter], dir[i][j]);
       }
     }
   }
 
-  // optionally create a debugging border around the lightmap
   if (lightmapBorder) {
     for (i = 0; i < ds->lightmapWidth; i++) {
-      color[i][0][0] = 255;
-      color[i][0][1] = 0;
-      color[i][0][2] = 0;
-
-      color[i][ds->lightmapHeight - 1][0] = 255;
-      color[i][ds->lightmapHeight - 1][1] = 0;
-      color[i][ds->lightmapHeight - 1][2] = 0;
+      color[i][0][0] = 255; color[i][0][1] = 0; color[i][0][2] = 0;
+      color[i][ds->lightmapHeight - 1][0] = 255; color[i][ds->lightmapHeight - 1][1] = 0; color[i][ds->lightmapHeight - 1][2] = 0;
     }
     for (i = 0; i < ds->lightmapHeight; i++) {
-      color[0][i][0] = 255;
-      color[0][i][1] = 0;
-      color[0][i][2] = 0;
-
-      color[ds->lightmapWidth - 1][i][0] = 255;
-      color[ds->lightmapWidth - 1][i][1] = 0;
-      color[ds->lightmapWidth - 1][i][2] = 0;
+      color[0][i][0] = 255; color[0][i][1] = 0; color[0][i][2] = 0;
+      color[ds->lightmapWidth - 1][i][0] = 255; color[ds->lightmapWidth - 1][i][1] = 0; color[ds->lightmapWidth - 1][i][2] = 0;
     }
   }
 
-  // clamp the colors to bytes and store off
   for (i = 0; i < ds->lightmapWidth; i++) {
     for (j = 0; j < ds->lightmapHeight; j++) {
       k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j) *
@@ -1352,13 +1278,6 @@ void TraceLtm(int num) {
                 if (lightSurfaceIndex) {
                     lightSurfaceIndex[k] = realSurfIndex;
                 }
-            }
-        } else {
-            // This should never happen if numLightBytes and lightmapNum are consistent
-            static qboolean warned = qfalse;
-            if (!warned) {
-                _printf("\nWARNING: TraceLtm: lightmap index %d out of bounds (max %d) on surface %d\n", k, numLightBytes / 3, realSurfIndex);
-                warned = qtrue;
             }
         }
       }
@@ -1379,9 +1298,6 @@ void TraceLtm(int num) {
 
   if (ds->surfaceType == MST_PATCH || ds->surfaceType == MST_PLANAR) {
     DilateLightmapSurface(ds, lightFloats);
-    if (deluxeFloats) {
-        DilateLightmapSurface(ds, deluxeFloats);
-    }
   }
 
   if (ds->surfaceType == MST_PATCH) {
@@ -1394,22 +1310,9 @@ void TraceLtm(int num) {
   free(occluded_data);
   free(color);
   free(color_data);
-  if (dir) free(dir);
-  if (dir_data) free(dir_data);
   free(localLights);
   ThreadCompletedWeighted(surfWeight);
 }
-
-//=============================================================================
-
-/*
-=============
-TraceGrid
-
-Grid samples are foe quickly determining the lighting
-of dynamically placed entities in the world
-=============
-*/
 
 #define MAX_CONTRIBUTIONS 1024
 
@@ -1435,10 +1338,8 @@ void TraceGrid(int num) {
   mod = num;
   z = mod / (gridBounds[0] * gridBounds[1]);
   mod -= z * (gridBounds[0] * gridBounds[1]);
-
   y = mod / gridBounds[0];
   mod -= y * gridBounds[0];
-
   x = mod;
 
   origin[0] = gridMins[0] + x * gridSize[0];
@@ -1448,98 +1349,55 @@ void TraceGrid(int num) {
   if (PointInSolid(origin)) {
     vec3_t baseOrigin;
     int step;
-
     VectorCopy(origin, baseOrigin);
-
-    // try to nudge the origin around to find a valid point
     for (step = 9; step <= 18; step += 9) {
       for (i = 0; i < 8; i++) {
         VectorCopy(baseOrigin, origin);
-        if (i & 1) {
-          origin[0] += step;
-        } else {
-          origin[0] -= step;
-        }
-        if (i & 2) {
-          origin[1] += step;
-        } else {
-          origin[1] -= step;
-        }
-        if (i & 4) {
-          origin[2] += step;
-        } else {
-          origin[2] -= step;
-        }
-
-        if (!PointInSolid(origin)) {
-          break;
-        }
+        if (i & 1) origin[0] += step; else origin[0] -= step;
+        if (i & 2) origin[1] += step; else origin[1] -= step;
+        if (i & 4) origin[2] += step; else origin[2] -= step;
+        if (!PointInSolid(origin)) break;
       }
-      if (i != 8) {
-        break;
-      }
+      if (i != 8) break;
     }
     if (step > 18) {
-      // can't find a valid point at all
-      if (gridData32) {
-        memset(&gridData32[num], 0, sizeof(gridData32[num]));
-      }
+      if (gridData32) memset(&gridData32[num], 0, sizeof(gridData32[num]));
       free(tw);
       return;
     }
   }
 
   VectorClear(summedDir);
-
-  // trace all lights
   numCon = 0;
   for (light = lights; light; light = light->next) {
     if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw)) {
       float addSize = VectorLength(contributions[numCon].color);
       VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
       numCon++;
-      if (numCon >= MAX_CONTRIBUTIONS) {
-        Error("TraceGrid: MAX_CONTRIBUTIONS (%i) exceeded at grid point (%f %f %f)",
-              MAX_CONTRIBUTIONS, origin[0], origin[1], origin[2]);
-      }
+      if (numCon >= MAX_CONTRIBUTIONS) break;
     }
   }
 
-  // sun
   if (SunToPoint(origin, tw, &contributions[numCon], qtrue)) {
     float addSize = VectorLength(contributions[numCon].color);
     VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
     numCon++;
-    if (numCon >= MAX_CONTRIBUTIONS) {
-      Error("TraceGrid: MAX_CONTRIBUTIONS (%i) exceeded with sun at grid point (%f %f %f)",
-            MAX_CONTRIBUTIONS, origin[0], origin[1], origin[2]);
-    }
   }
 
-  // now that we have identified the primary light direction,
-  // go back and seperate all the light into directed and ambient
   VectorNormalize(summedDir, summedDir);
   VectorCopy(ambientColor, color);
   VectorClear(directedColor);
 
   for (i = 0; i < numCon; i++) {
     float d;
-
     d = CalculateFalloff(DotProduct(contributions[i].dir, summedDir));
-
     VectorMA(directedColor, d, contributions[i].color, directedColor);
-
-    // the ambient light will be at 1/4 the value of directed light
     d = 0.25 * (1.0 - d);
     VectorMA(color, d, contributions[i].color, color);
   }
 
-  // now do some fudging to keep the ambient from being too low
   VectorMA(color, 0.25, directedColor, color);
 
-  //
-  // save the resulting value out
-  //
   if (gridData32) {
     VectorAdd(color, gridData32[num].ambient[0], gridData32[num].ambient[0]);
     VectorAdd(directedColor, gridData32[num].directed[0], gridData32[num].directed[0]);
@@ -1550,18 +1408,9 @@ void TraceGrid(int num) {
     gridData32[num].styles[2] = 0xff;
     gridData32[num].styles[3] = 0xff;
   }
-
   free(tw);
 }
 
-
-//=============================================================================
-
-/*
-=============
-LightWorld
-=============
-*/
 void LightWorld(void) {
   double start, end;
   int i;

@@ -37,14 +37,12 @@ static void DilateLightmapAtlas(int width, int passes) {
 	int lm, x, y, i, j, p;
 	int numLMs = (numLightBytes / 3) / (width * width);
 	float *temp = malloc(numLightBytes * sizeof(float));
-	float *tempDeluxe = deluxeFloats ? malloc(numLightBytes * sizeof(float)) : NULL;
 	byte *tempMask = malloc(numLMs * width * width);
 
 	_printf("Dilating lightmaps (%d passes)...\n", passes);
 
 	for (p = 0; p < passes; p++) {
 		memcpy(temp, lightFloats, numLightBytes * sizeof(float));
-		if (tempDeluxe) memcpy(tempDeluxe, deluxeFloats, numLightBytes * sizeof(float));
 		memcpy(tempMask, lightAlphaMask, numLMs * width * width);
 
 		for (lm = 0; lm < numLMs; lm++) {
@@ -54,8 +52,8 @@ static void DilateLightmapAtlas(int width, int passes) {
 					float energy = temp[idx * 3] + temp[idx * 3 + 1] + temp[idx * 3 + 2];
 					if (tempMask[idx] && energy > 0.0002f) continue;
 
-					float sum[3] = {0,0,0}, dsum[3] = {0,0,0}, weight = 0;
-					float litSum[3] = {0,0,0}, litDSum[3] = {0,0,0}, litWeight = 0;
+					float sum[3] = {0,0,0}, weight = 0;
+					float litSum[3] = {0,0,0}, litWeight = 0;
 
 					for (j = -1; j <= 1; j++) {
 						for (i = -1; i <= 1; i++) {
@@ -68,11 +66,9 @@ static void DilateLightmapAtlas(int width, int passes) {
 									float nEnergy = temp[nidx * 3] + temp[nidx * 3 + 1] + temp[nidx * 3 + 2];
 									if (nEnergy > 0.0001f) {
 										VectorAdd(litSum, &temp[nidx * 3], litSum);
-										if (tempDeluxe) VectorAdd(litDSum, &tempDeluxe[nidx * 3], litDSum);
 										litWeight += 1.0f;
 									}
 									VectorAdd(sum, &temp[nidx * 3], sum);
-									if (tempDeluxe) VectorAdd(dsum, &tempDeluxe[nidx * 3], dsum);
 									weight += 1.0f;
 								}
 							}
@@ -80,11 +76,9 @@ static void DilateLightmapAtlas(int width, int passes) {
 					}
 					if (litWeight > 0) {
 						VectorScale(litSum, 1.0f / litWeight, &lightFloats[idx * 3]);
-						if (deluxeFloats) VectorScale(litDSum, 1.0f / litWeight, &deluxeFloats[idx * 3]);
 						lightAlphaMask[idx] = 1;
 					} else if (weight > 0) {
 						VectorScale(sum, 1.0f / weight, &lightFloats[idx * 3]);
-						if (deluxeFloats) VectorScale(dsum, 1.0f / weight, &deluxeFloats[idx * 3]);
 						lightAlphaMask[idx] = 1;
 					}
 				}
@@ -92,7 +86,6 @@ static void DilateLightmapAtlas(int width, int passes) {
 		}
 	}
 	free(temp);
-	if (tempDeluxe) free(tempDeluxe);
 	free(tempMask);
 }
 
@@ -528,7 +521,6 @@ static void DownConvertGrid(float scale, qboolean lightmapRange) {
 
 void DownConvertLightingData(void) {
 	float scale = 1.0f;
-	int i;
 
 	_printf("--- DownConvertLightingData ---\n");
 	tonemapMode = g_game->exposureFilter;
