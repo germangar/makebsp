@@ -70,6 +70,8 @@ extern int numGames;
 extern game_t *game;
 extern game_t gameTemplates[MAX_GAMES];
 
+game_t *InitGame(int argc, char **argv);
+
 #define LIGHTMAP_WIDTH  (game->lightmapSize)
 #define LIGHTMAP_HEIGHT (game->lightmapSize)
 

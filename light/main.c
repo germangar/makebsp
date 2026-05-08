@@ -39,8 +39,6 @@ extern tonemap_t tonemapMode;
 
 qboolean g_fast = qfalse;
 
-static game_t activeGame;
-
 int main(int argc, char **argv) {
     int i;
     double start, end;
@@ -56,31 +54,8 @@ int main(int argc, char **argv) {
     openclEnabled = qtrue;
 
 
-    // 1. Export standard profiles if missing (ensures games/qfusion.json exists)
-    JSON_ExportStandardPackages("games");
-
-    // 2. Initialize the local 'activeGame' struct by copying the default game_t into it.
-    memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
-
-    // 3. Pre-scan CLI for -game switch
-    const char *gameName = "qfusion";
-    for (int j = 1; j < argc; j++) {
-        if (!strcmp(argv[j], "-game") && j + 1 < argc) {
-            gameName = argv[j + 1];
-            break;
-        }
-    }
-
-    // 4. Load the specific game JSON to override defaults in the local struct
-    char gameJsonPath[1024];
-    sprintf(gameJsonPath, "games/%s.json", gameName);
-    if (FileExists(gameJsonPath)) {
-        _printf("Loading game profile: %s\n", gameJsonPath);
-        JSON_LoadGame(gameJsonPath, &activeGame);
-    }
-
-    // 5. Point the global game to our local struct
-    game = &activeGame;
+    // Initialize game profile from JSON and CLI
+    game = InitGame(argc, argv);
 
     superSampleMode = SUPERSAMPLE_NONE;
 

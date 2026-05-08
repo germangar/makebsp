@@ -1,5 +1,9 @@
 #include <stddef.h>
+#include <string.h>
+#include <stdio.h>
 #include "globals.h"
+#include "json_parser.h"
+#include "../common/cmdlib.h"
 
 int samplesize = 0;
 char source[1024];
@@ -80,3 +84,41 @@ game_t gameTemplates[MAX_GAMES] = {
 
 
 game_t *game = &gameTemplates[0];
+static game_t activeGame;
+
+/*
+============
+InitGame
+
+Unified game profile initialization logic for both q3map and light tools.
+============
+*/
+game_t *InitGame(int argc, char **argv) {
+    // 1. Export standard profiles if missing (ensures games/qfusion.json exists)
+    JSON_ExportStandardPackages("games");
+
+    // 2. Initialize the local 'activeGame' struct by copying the default game_t into it.
+    memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
+
+    // 3. Pre-scan CLI for -game switch
+    const char *gameName = "qfusion";
+    for (int j = 1; j < argc; j++) {
+        if (!strcmp(argv[j], "-game") && j + 1 < argc) {
+            gameName = argv[j + 1];
+            break;
+        }
+    }
+
+    // 4. Load the specific game JSON to override defaults in the local struct
+    char gameJsonPath[1024];
+    sprintf(gameJsonPath, "games/%s.json", gameName);
+    if (FileExists(gameJsonPath)) {
+        _printf("Loading game profile: %s\n", gameJsonPath);
+        JSON_LoadGame(gameJsonPath, &activeGame);
+    }
+
+    // 5. Point the global game to our local struct
+    game = &activeGame;
+
+    return game;
+}
