@@ -58,8 +58,8 @@ __kernel void smooth_filter(
 
     for (int dj = -kernelRadius; dj <= kernelRadius; dj++) {
         for (int di = -kernelRadius; di <= kernelRadius; di++) {
-            float px = (float)(lx + di);
-            float py = (float)(ly + dj);
+            float px = (float)(lx + di) + 0.5f;
+            float py = (float)(ly + dj) + 0.5f;
 
             float r, g, b;
             if (gpu_get_filtered_texel(sIdx, px, py,

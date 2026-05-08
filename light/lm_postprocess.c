@@ -142,6 +142,10 @@ void BuildPlanarSurfaceIndex(void) {
 
 		p->surfaceNum = i;
 		VectorCopy(ds->lightmapOrigin, p->origin);
+		if (ds->surfaceType == MST_PLANAR) {
+			VectorMA(p->origin, -0.5f, ds->lightmapVecs[0], p->origin);
+			VectorMA(p->origin, -0.5f, ds->lightmapVecs[1], p->origin);
+		}
 		VectorAdd(p->origin, localSurfaces[i].entityOrigin, p->origin);
 		VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
 		VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
@@ -321,11 +325,14 @@ qboolean SampleLightmapWorldBilinear(int sourceSrfIdx, const vec3_t pos, const v
 		// Allow a tiny epsilon for float precision.
 		if (u < -0.51f || u > (float)p->width - 0.49f || v < -0.51f || v > (float)p->height - 0.49f) continue;
 
-		// Bilinear sample
-		int x0 = (int)floorf(u);
-		int y0 = (int)floorf(v);
-		float fx = u - x0;
-		float fy = v - y0;
+		// Bilinear sample (shift to node-relative coordinates, centers at 0.5, 1.5...)
+		float ux = u - 0.5f;
+		float vy = v - 0.5f;
+
+		int x0 = (int)floorf(ux);
+		int y0 = (int)floorf(vy);
+		float fx = ux - x0;
+		float fy = vy - y0;
 
 		int x1 = x0 + 1, y1 = y0 + 1;
 		if (x0 < 0) x0 = 0; 
@@ -424,9 +431,8 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, 
 
 	// Slow path: cross-surface lookup (strictly via shared edges)
 	vec3_t worldPos;
-	VectorMA(ds->lightmapOrigin, px, ds->lightmapVecs[0], worldPos);
-	VectorMA(worldPos, py, ds->lightmapVecs[1], worldPos);
-	VectorAdd(worldPos, localSurfaces[pInfo->surfaceNum].entityOrigin, worldPos);
+	VectorMA(pInfo->origin, px, pInfo->vecs[0], worldPos);
+	VectorMA(worldPos, py, pInfo->vecs[1], worldPos);
 	
 	if (SampleLightmapWorldBilinear(sIdx, worldPos, ds->lightmapVecs[2], outColor, buffer)) {
 		return qtrue;
@@ -890,6 +896,9 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
                     float aa_match = AA_ANGLE_MATCH_COS; clSetKernelArg(kernel, arg++, sizeof(float), &aa_match);
                     clSetKernelArg(kernel, arg++, sizeof(int), &samples); clSetKernelArg(kernel, arg++, sizeof(int), &N);
                     size_t globalSize = (size_t)N; clEnqueueNDRangeKernel(g_clQueue, kernel, 1, NULL, &globalSize, NULL, 0, NULL, NULL); clFinish(g_clQueue);
+                    if (currentPass < totalPasses - 1) {
+                        clEnqueueReadBuffer(g_clQueue, bOutput, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
+                    }
                 }
                 clEnqueueReadBuffer(g_clQueue, bOutput, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
                 clReleaseMemObject(bTexelPos); clReleaseMemObject(bTexelNormal); clReleaseMemObject(bJitterPos); clReleaseMemObject(bJitterNormal); clReleaseMemObject(bJitterValid);
@@ -1419,11 +1428,14 @@ static void RunGpuAAKernel(float *pattern, int numSamples, float radius) {
     GpuLightmapState *st = &g_gpuLM;
     cl_int err;
 
-    cl_program prog = BuildOpenCLProgramWithCommon("aa_filter.cl", "");
+    static cl_program prog = NULL;
+    if (!prog) {
+        prog = BuildOpenCLProgramWithCommon("aa_filter.cl", "");
+    }
     if (!prog) return;
 
     cl_kernel kernel = clCreateKernel(prog, "aa_filter", &err);
-    if (err != CL_SUCCESS) { clReleaseProgram(prog); return; }
+    if (err != CL_SUCCESS) { return; }
 
     cl_mem src = st->pingIsA ? st->atlasA : st->atlasB;
     cl_mem dst = st->pingIsA ? st->atlasB : st->atlasA;
@@ -1459,7 +1471,6 @@ static void RunGpuAAKernel(float *pattern, int numSamples, float radius) {
 
     clReleaseMemObject(patBuf);
     clReleaseKernel(kernel);
-    clReleaseProgram(prog);
 }
 
 /*
@@ -1490,11 +1501,14 @@ static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
     }
     for (int wi = 0; wi < wCount; wi++) weights[wi] /= wSum;
 
-    cl_program prog = BuildOpenCLProgramWithCommon("smooth_filter.cl", "");
+    static cl_program prog = NULL;
+    if (!prog) {
+        prog = BuildOpenCLProgramWithCommon("smooth_filter.cl", "");
+    }
     if (!prog) { free(weights); return; }
 
     cl_kernel kernel = clCreateKernel(prog, "smooth_filter", &err);
-    if (err != CL_SUCCESS) { free(weights); clReleaseProgram(prog); return; }
+    if (err != CL_SUCCESS) { free(weights); return; }
 
     cl_mem src     = st->pingIsA ? st->atlasA : st->atlasB;
     cl_mem dst     = st->pingIsA ? st->atlasB : st->atlasA;
@@ -1527,7 +1541,6 @@ static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
 
     clReleaseMemObject(wBuf);
     clReleaseKernel(kernel);
-    clReleaseProgram(prog);
 }
 
 /*

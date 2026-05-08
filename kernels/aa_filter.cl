@@ -60,8 +60,8 @@ __kernel void aa_filter(
     int   cnt  = 0;
 
     for (int k = 0; k < numSamples; k++) {
-        float px = (float)lx + pattern[k*2+0] * radius;
-        float py = (float)ly + pattern[k*2+1] * radius;
+        float px = (float)lx + 0.5f + pattern[k*2+0] * radius;
+        float py = (float)ly + 0.5f + pattern[k*2+1] * radius;
 
         float r, g, b;
         if (gpu_get_filtered_texel(sIdx, px, py,
