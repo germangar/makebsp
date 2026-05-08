@@ -38,10 +38,6 @@ extern float *lightFloats;
 extern float *deluxeFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
-extern float *irradianceVecFloats;  // 9 floats/pixel: irradiance vectors (R,G,B) × vec3 — sparse grid only, freed with FreeRadiosityFloats
-extern float *lambertianVecFloats;  // 3 floats/pixel: Lambertian-weighted direction vectors for deluxemap resolution
-extern float *pixelNormalFloats;    // 3 floats/pixel: surface normal for scalar resolution
-extern float *irradianceScalarFloats; // 3 floats/pixel: raw un-attenuated energy sum for physical capping
 extern byte *lightAlphaMask;
 
 typedef struct {
@@ -50,15 +46,10 @@ typedef struct {
     int    pixelIndex;
 } voxelPoint_t;
 
-void LockDeluxeDirections(void);
-void ResolveLightmapScalars(void);
-
 // Voxel Cache Service
 void VoxelCache_BakeAll(void);
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints);
-void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3],
-                            contribution_t *cont, qboolean isDeluxe,
-                            vec3_t *lambertianAccum, const vec3_t normal);
+void AccumulateContribution(vec3_t color, contribution_t *cont, const vec3_t normal);
 extern bspGridPoint32_t *gridData32;
 
 extern float maxLightIntensity;

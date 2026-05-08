@@ -1,4 +1,4 @@
-#include "light.h"
+﻿#include "light.h"
 #include "../common/imagelib.h"
 #include <math.h>
 #include <stdlib.h>
@@ -440,7 +440,7 @@ Returns an amount of light to add at the texel (surface)
 */
 qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
                       contribution_t *out, qboolean applyColorFilter,
-                      traceWork_t *tw, qboolean isDeluxe) {
+                      traceWork_t *tw) {
   float angle;
 
   if (!numSkyBrushes) {
@@ -465,12 +465,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
   }
 
   if (SunToPoint(origin, tw, out, applyColorFilter)) {
-    if (isDeluxe) {
-      // In deluxemapping mode, we store Irradiance (un-attenuated by receiver normal).
-      // The engine's shader will apply the dot(N, DeluxeDir) term dynamically.
-    } else {
-      VectorScale(out->color, angle, out->color);
-    }
+    VectorScale(out->color, angle, out->color);
     return qtrue;
   }
 
@@ -482,61 +477,12 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 AccumulateContribution
 ========================
 */
-void AccumulateContribution(vec3_t color, vec3_t maxColor, vec3_t colorVecs[3], contribution_t *cont, qboolean isDeluxe, vec3_t *lambertianVec, const vec3_t normal) {
-    int c;
+void AccumulateContribution(vec3_t color, contribution_t *cont, const vec3_t normal) {
+    if (!color) return;
 
-    if (maxColor) {
-        VectorAdd(maxColor, cont->color, maxColor);
-    }
-
-    if (!isDeluxe) {
-        if (color) VectorAdd(color, cont->color, color);
-        return;
-    }
-
-    float currentEnergy = color ? (color[0] + color[1] + color[2]) : 0.0f;
-    float newEnergy = cont->color[0] + cont->color[1] + cont->color[2];
-
-    if (newEnergy > MIN_RADIOSITY_EMITTER_ADD) {
-        float dot = DotProduct(normal, cont->dir);
-        float lambertian = (dot > 0.0f) ? dot : 0.0f;
-
-        if (currentEnergy <= MIN_RADIOSITY_EMITTER_ADD) {
-            // Replace placeholder direction with actual light
-            for (c = 0; c < 3; c++) {
-                VectorScale(cont->dir, cont->color[c], colorVecs[c]);
-                if (color) color[c] = cont->color[c] * lambertian;
-            }
-        } else {
-            // Standard weighted accumulation
-            for (c = 0; c < 3; c++) {
-                VectorMA(colorVecs[c], cont->color[c], cont->dir, colorVecs[c]);
-                if (color) color[c] += cont->color[c] * lambertian;
-            }
-        }
-    } else {
-        // Zero energy contribution (shadow direction placeholder)
-        if (currentEnergy <= MIN_RADIOSITY_EMITTER_ADD) {
-            // Accept the direction if we have no light yet.
-            // We use a tiny weight so it acts as a dominant direction for dilation.
-            for (c = 0; c < 3; c++) {
-                VectorScale(cont->dir, 0.0001f, colorVecs[c]);
-            }
-        }
-    }
-
-    if (lambertianVec && normal) {
-        float dot = DotProduct(normal, cont->dir);
-        float lambertian = (dot > 0.0f) ? dot : 0.0f;
-        float weight = lambertian * newEnergy;
-        
-        // Dilation Hack: ensure shadowed texels have a valid direction for interpolation
-        if (weight <= 0.0001f && newEnergy <= MIN_RADIOSITY_EMITTER_ADD) {
-            weight = 0.0001f;
-        }
-
-        VectorMA(*lambertianVec, weight, cont->dir, *lambertianVec);
-    }
+    color[0] += cont->color[0];
+    color[1] += cont->color[1];
+    color[2] += cont->color[2];
 }
 
 /*
@@ -546,7 +492,7 @@ LightContributionToPoint
 */
 qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                                   const vec3_t normal, contribution_t *out,
-                                  traceWork_t *tw, qboolean isDeluxe) {
+                                  traceWork_t *tw) {
   trace_t trace;
   float add = 0;
   vec3_t dir;
@@ -620,19 +566,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
       return qfalse;
     }
 
-    if (isDeluxe && normal) {
-        float dot = DotProduct(normal, out->dir);
-        float receiveAngle = (dot < 0.0f) ? 0.0f : dot;
-        if (receiveAngle > 0.01f) {
-            // Only strip the receiver cosine for standard Lambertian emitters.
-            // Liquid surfaces (Lava/Slime) already use an omnidirectional formula.
-            qboolean isLiquid = (light->si && (light->si->contents & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER | CONTENTS_FOG)));
-            if (!isLiquid) {
-                angle /= receiveAngle;
-            }
-        }
-    }
-
     if (normal) {
       float dot = DotProduct(normal, out->dir);
       float receiveAngle = (dot < 0.0f) ? 0.0f : dot;
@@ -656,14 +589,10 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         
         if (glowFactor > 0.0f) {
             angle *= glowFactor;
-            if (isDeluxe) {
-                VectorCopy(normal, out->dir); // Neutralize direction for glow
-            }
         } else {
             return qfalse;
         }
       }
-      //angle *= receiveAngle;
     }
 
     out->color[0] = light->emitColor[0] * angle * trace.filter[0];
@@ -718,18 +647,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     if (light->linearLight) {
       add = angle * light->photons * 0.000125f - dist;
       if (add < 0) return qfalse;
-      
-      if (isDeluxe) {
-          // If we have an angle > 0, we want the full irradiance for deluxemaps
-          add = (light->photons * 0.000125f - dist);
-      }
     } else {
-      if (isDeluxe) {
-          // Store Irradiance: remove the 'angle' (receiver cosine) multiplier
-          add = (light->photons / (dist * dist));
-      } else {
-          add = (light->photons / (dist * dist)) * angle;
-      }
+      add = (light->photons / (dist * dist)) * angle;
     }
   } else {
     return qfalse;
@@ -757,8 +676,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 LightingAtSample
 ========================
 */
-void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color, vec3_t maxColor,
-                      vec3_t *dirAccum, vec3_t *lambertianAccum, vec3_t *outColorVecs,
+void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
                       int numLights, traceWork_t *tw) {
@@ -767,61 +685,38 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color, ve
   int i;
 
   VectorClear(color);
-  if (maxColor) VectorClear(maxColor);
 
-  qboolean isDeluxe = (dirAccum != NULL);
-  vec3_t colorVecs[3];
-  int c;
-
-  for (c = 0; c < 3; c++) {
-      VectorClear(colorVecs[c]);
-  }
-
-      // Handle ambient as the first contribution
+  // Handle ambient as the first contribution
   if (ambientColor[0] > 0 || ambientColor[1] > 0 || ambientColor[2] > 0) {
       contribution_t amb;
       VectorClear(amb.color);
       VectorCopy(normal, amb.dir);
-      for (c = 0; c < 3; c++) {
-          amb.color[c] = ambientColor[c];
-      }
-      AccumulateContribution(color, maxColor, colorVecs, &amb, isDeluxe, lambertianAccum, normal);
+      amb.color[0] = ambientColor[0];
+      amb.color[1] = ambientColor[1];
+      amb.color[2] = ambientColor[2];
+      AccumulateContribution(color, &amb, normal);
   }
 
   if (lightList) {
     for (i = 0; i < numLights; i++) {
       light = lightList[i];
-      if (LightContributionToPoint(light, origin, normal, &cont, tw, isDeluxe)) {
-          AccumulateContribution(color, maxColor, colorVecs, &cont, isDeluxe, lambertianAccum, normal);
+      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
+          AccumulateContribution(color, &cont, normal);
       }
     }
   } else {
     for (light = lights; light; light = light->next) {
-      if (LightContributionToPoint(light, origin, normal, &cont, tw, isDeluxe)) {
-          AccumulateContribution(color, maxColor, colorVecs, &cont, isDeluxe, lambertianAccum, normal);
+      if (LightContributionToPoint(light, origin, normal, &cont, tw)) {
+          AccumulateContribution(color, &cont, normal);
       }
     }
   }
 
   // trace directly to the sun
   if (testOcclusion || forceSunLight) {
-    if (SunToPlane(origin, normal, &cont, applyColorFilter, tw, isDeluxe)) {
-        AccumulateContribution(color, maxColor, colorVecs, &cont, isDeluxe, lambertianAccum, normal);
+    if (SunToPlane(origin, normal, &cont, applyColorFilter, tw)) {
+        AccumulateContribution(color, &cont, normal);
     }
-  }
-
-  if (isDeluxe) {
-      // Resolve vector magnitude for the lightmap and store irradiance vectors
-      vec3_t netDir = {0,0,0};
-      for (c = 0; c < 3; c++) {
-          // IMPORTANT: color[c] already contains the True Lambertian Sum from AccumulateContribution.
-          // We no longer overwrite it with VectorLength to avoid directional cancellation.
-          VectorAdd(netDir, colorVecs[c], netDir);
-          if (outColorVecs) {
-              VectorCopy(colorVecs[c], outColorVecs[c]);
-          }
-      }
-      VectorAdd(*dirAccum, netDir, *dirAccum);
   }
 }
 
@@ -851,11 +746,11 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 
     if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP) {
       VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
-      LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, NULL, NULL, testOcclusion,
+      LightingAtSample(v_origin, dv->normal, sample, testOcclusion,
                        forceSunLight, qfalse, lightList, numLights, tw);
     } else {
       VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
-      LightingAtSample(v_origin, normal, sample, NULL, NULL, NULL, NULL, testOcclusion,
+      LightingAtSample(v_origin, normal, sample, testOcclusion,
                        forceSunLight, qfalse, lightList, numLights, tw);
     }
 
@@ -1194,17 +1089,10 @@ void TraceLtm(int num) {
       }
       
       float jitterRadius = doSS ? g_game->defaultSmoothRadius : 0.0f;
-      vec3_t accumColor, accumIrradianceScalar, accumDir, accumLambertDir;
-      vec3_t accumColorVecs[3];
+      vec3_t accumColor;
       int hitCount;
 
       VectorClear(accumColor);
-      VectorClear(accumIrradianceScalar);
-      VectorClear(accumDir);
-      VectorClear(accumLambertDir);
-      VectorClear(accumColorVecs[0]);
-      VectorClear(accumColorVecs[1]);
-      VectorClear(accumColorVecs[2]);
       hitCount = 0;
       int ss, k;
 
@@ -1306,23 +1194,10 @@ void TraceLtm(int num) {
 
         // Trace this sub-sample
         vec3_t subColor;
-        vec3_t subDir = {0, 0, 0};
-        vec3_t subLambertDir = {0, 0, 0};
-        vec3_t subColorVecs[3];
         tw->ignoreSurface = realSurfIndex;
-        vec3_t subMaxColor;
-        LightingAtSample(origin, normal, subColor, subMaxColor,
-                         (g_game->deluxeMap ? &subDir : NULL), 
-                         (g_game->deluxeMap ? &subLambertDir : NULL),
-                         (g_game->deluxeMap ? subColorVecs : NULL), 
+        LightingAtSample(origin, normal, subColor,
                          qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
         VectorAdd(accumColor, subColor, accumColor);
-        if (g_game->deluxeMap) {
-            VectorAdd(accumIrradianceScalar, subMaxColor, accumIrradianceScalar);
-            VectorAdd(accumDir, subDir, accumDir);
-            VectorAdd(accumLambertDir, subLambertDir, accumLambertDir);
-            for (k = 0; k < 3; k++) VectorAdd(accumColorVecs[k], subColorVecs[k], accumColorVecs[k]);
-        }
         hitCount++;
       } // end super-sample loop
 
@@ -1333,54 +1208,9 @@ void TraceLtm(int num) {
         }
         occluded[i][j] = qfalse;
         float invHits = 1.0f / (float)hitCount;
-        if (g_game->deluxeMap) {
-            // UNIFIED IRRADIANCE RESOLUTION
-            // 1. Calculate the final dominant direction for the luxel (weighted by Lambertian)
-            vec3_t finalDir;
-            VectorCopy(accumLambertDir, finalDir);
-            if (VectorNormalize(finalDir, finalDir) > 0) {
-                // 2. Store the target Lambertian sum (undivided).
-                // Final resolution (division by cosine) will happen globally in ResolveIrradianceVectors.
-                for (k = 0; k < 3; k++) {
-                    color[i][j][k] = (accumColor[k] * invHits);
-                    if (color[i][j][k] < 0) color[i][j][k] = 0;
-                }
-                VectorCopy(accumDir, dir[i][j]);
-
-                // 3. Store raw average vectors for the global unified resolution pass (in lightdata.c)
-                int k_global = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + i;
-                if (k_global >= 0 && k_global < numLightBytes / 3) {
-                    for (k = 0; k < 3; k++) {
-                        irradianceVecFloats[k_global * 9 + k * 3 + 0] = accumColorVecs[k][0];
-                        irradianceVecFloats[k_global * 9 + k * 3 + 1] = accumColorVecs[k][1];
-                        irradianceVecFloats[k_global * 9 + k * 3 + 2] = accumColorVecs[k][2];
-                    }
-                    if (lambertianVecFloats) {
-                        lambertianVecFloats[k_global * 3 + 0] = accumLambertDir[0] * invHits;
-                        lambertianVecFloats[k_global * 3 + 1] = accumLambertDir[1] * invHits;
-                        lambertianVecFloats[k_global * 3 + 2] = accumLambertDir[2] * invHits;
-                    }
-                    if (pixelNormalFloats) {
-                        pixelNormalFloats[k_global * 3 + 0] = normal[0];
-                        pixelNormalFloats[k_global * 3 + 1] = normal[1];
-                        pixelNormalFloats[k_global * 3 + 2] = normal[2];
-                    }
-                    if (irradianceScalarFloats) {
-                        irradianceScalarFloats[k_global * 3 + 0] = accumIrradianceScalar[0] * invHits;
-                        irradianceScalarFloats[k_global * 3 + 1] = accumIrradianceScalar[1] * invHits;
-                        irradianceScalarFloats[k_global * 3 + 2] = accumIrradianceScalar[2] * invHits;
-                    }
-                }
-            } else {
-                // Fallback for no direction
-                for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
-                VectorClear(dir[i][j]);
-            }
-        } else {
-            for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
-        }
+        for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
       } else {
-        // No sub-samples hit — mark as occluded/miss
+        // No sub-samples hit â€” mark as occluded/miss
         if (ds->surfaceType == MST_TRIANGLE_SOUP) {
           sampleHit[i][j] = qfalse;
         }
@@ -1519,9 +1349,6 @@ void TraceLtm(int num) {
             lightFloats[k * 3 + 2] += color[i][j][2];
             
             if (deluxeFloats) {
-                deluxeFloats[k * 3 + 0] += dir[i][j][0];
-                deluxeFloats[k * 3 + 1] += dir[i][j][1];
-                deluxeFloats[k * 3 + 2] += dir[i][j][2];
                 if (lightSurfaceIndex) {
                     lightSurfaceIndex[k] = realSurfIndex;
                 }
@@ -1667,7 +1494,7 @@ void TraceGrid(int num) {
   // trace all lights
   numCon = 0;
   for (light = lights; light; light = light->next) {
-    if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw, qfalse)) {
+    if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw)) {
       float addSize = VectorLength(contributions[numCon].color);
       VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
       numCon++;
@@ -1764,6 +1591,7 @@ void LightWorld(void) {
   _printf("--- TraceLtm ---\n");
   start = I_FloatTime();
   RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceLtm);
+  end = I_FloatTime();
   _printf("\n");
   _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
 

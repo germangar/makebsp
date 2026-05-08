@@ -918,10 +918,6 @@ void LightMain(void) {
   InitTrace();
   LightWorld();
 
-  if (g_game->deluxeMap) {
-      LockDeluxeDirections();
-  }
-
   // Call radiosity passes
   LightRadiosity();
 

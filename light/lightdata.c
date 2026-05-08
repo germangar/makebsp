@@ -15,10 +15,6 @@ float *deluxeFloats = NULL;
 int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
-float *irradianceVecFloats = NULL;  // 9 floats per pixel (3 irradiance vec3s, one per RGB channel)
-float *lambertianVecFloats = NULL;  // 3 floats per pixel (weighted direction sum)
-float *pixelNormalFloats = NULL;    // 3 floats per pixel (surface normal)
-float *irradianceScalarFloats = NULL; // 3 floats per pixel (raw un-attenuated energy sum)
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -397,22 +393,6 @@ static void UpConvertLightmaps(void) {
 		lightSurfaceIndex = malloc((numLightBytes / 3) * sizeof(int));
 		if (!lightSurfaceIndex) Error("UpConvert: malloc lightSurfaceIndex failed");
 		for (int i = 0; i < numLightBytes / 3; i++) lightSurfaceIndex[i] = -1;
-
-		if (irradianceVecFloats) free(irradianceVecFloats);
-		irradianceVecFloats = calloc((numLightBytes / 3) * 9, sizeof(float));
-		if (!irradianceVecFloats) Error("UpConvert: calloc irradianceVecFloats failed");
-
-		if (lambertianVecFloats) free(lambertianVecFloats);
-		lambertianVecFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
-		if (!lambertianVecFloats) Error("UpConvert: calloc lambertianVecFloats failed");
-
-		if (pixelNormalFloats) free(pixelNormalFloats);
-		pixelNormalFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
-		if (!pixelNormalFloats) Error("UpConvert: calloc pixelNormalFloats failed");
-
-		if (irradianceScalarFloats) free(irradianceScalarFloats);
-		irradianceScalarFloats = calloc((numLightBytes / 3) * 3, sizeof(float));
-		if (!irradianceScalarFloats) Error("UpConvert: calloc irradianceScalarFloats failed");
 	}
 }
 
@@ -458,174 +438,6 @@ static void DownConvertLightmaps(float scale, qboolean lightmapRange) {
 		if (lightAlphaMask && lightAlphaMask[i]) processedCount++;
 	}
 	_printf("DownConvert: %d pixels marked in alpha mask\n", processedCount);
-}
-
-void LockDeluxeDirections(void) {
-	if (!deluxeFloats || !irradianceVecFloats) return;
-
-	_printf("LockDeluxeDirections: Flooding directions from lit texels to shadows for %d pixels\n", numLightBytes / 3);
-
-	// Pass 1: Resolve the initial 'Seed' directions from direct lighting hits
-	for (int i = 0; i < numLightBytes / 3; i++) {
-		vec3_t totalDir = {0,0,0};
-		for (int c = 0; c < 3; c++) {
-			VectorAdd(totalDir, &irradianceVecFloats[i * 9 + c * 3], totalDir);
-		}
-
-		vec3_t finalDir;
-		if (lambertianVecFloats && DotProduct(&lambertianVecFloats[i * 3], &lambertianVecFloats[i * 3]) > 0.0001f) {
-			VectorCopy(&lambertianVecFloats[i * 3], finalDir);
-		} else {
-			VectorCopy(totalDir, finalDir);
-		}
-		
-		if (VectorNormalize(finalDir, finalDir) > 0) {
-			VectorCopy(finalDir, &deluxeFloats[i * 3]);
-		} else {
-			VectorClear(&deluxeFloats[i * 3]);
-		}
-	}
-
-	// Pass 2: 2D Flooding (The user's idea)
-	// Run through unmasked texels. If a lit texel has shadowed neighbors, push the direction into them.
-	// We run multiple passes to ensure directions reach deep into large shadows.
-	int width = g_game->lightmapSize;
-	int numLMs = (numLightBytes / 3) / (width * width);
-
-	for (int pass = 0; pass < 8; pass++) {
-		int floodCount = 0;
-		for (int lm = 0; lm < numLMs; lm++) {
-			for (int y = 0; y < width; y++) {
-				for (int x = 0; x < width; x++) {
-					int i = (lm * width * width) + y * width + x;
-
-					// Skip masked pixels or pixels that haven't received light yet
-					if (DotProduct(&deluxeFloats[i * 3], &deluxeFloats[i * 3]) <= 0.0001f) continue;
-
-					// Check adjacent texels in the atlas
-					for (int dy = -1; dy <= 1; dy++) {
-						for (int dx = -1; dx <= 1; dx++) {
-							if (dx == 0 && dy == 0) continue;
-							int nx = x + dx;
-							int ny = y + dy;
-
-							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
-								int j = (lm * width * width) + ny * width + nx;
-
-								// If the neighbor is in shadow (no contribution yet), push our direction into it
-								if (DotProduct(&irradianceVecFloats[j * 9], &irradianceVecFloats[j * 9]) <= 0.0001f) {
-									contribution_t cont;
-									VectorCopy(&deluxeFloats[i * 3], cont.dir);
-									VectorSet(cont.color, 0.0001f, 0.0001f, 0.0001f);
-
-									// Use AccumulateContribution to write the contribution into the shadowed texel
-									AccumulateContribution(NULL, NULL, (vec3_t*)&irradianceVecFloats[j * 9], &cont, qtrue, NULL, &pixelNormalFloats[j * 3]);
-									
-									// Update deluxeFloats for the next step of the pass
-									vec3_t tempDir = {0,0,0};
-									for (int c = 0; c < 3; c++) VectorAdd(tempDir, &irradianceVecFloats[j * 9 + c * 3], tempDir);
-									VectorNormalize(tempDir, &deluxeFloats[j * 3]);
-									floodCount++;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		if (floodCount == 0) break;
-	}
-}
-
-void ResolveLightmapScalars(void) {
-	if (!lightFloats || !deluxeFloats) return;
-
-	_printf("ResolveLightmapScalars: Finalizing scalars with locked directions for %d pixels\n", numLightBytes / 3);
-
-	// Pass 3: Resolve the final scalar lightmap using the LOCKED and SMOOTHED directions
-	for (int i = 0; i < numLightBytes / 3; i++) {
-		vec3_t finalDir;
-		VectorCopy(&deluxeFloats[i * 3], finalDir);
-
-		if (VectorLength(finalDir) > 0.03f) {
-			// Resolve the lightmap color by dividing the target Lambertian by the direction cosine.
-			// PHYSICAL CAP: Never exceed the raw un-attenuated energy sum (irradianceScalarFloats).
-			vec3_t normal;
-			VectorCopy(&pixelNormalFloats[i * 3], normal);
-			float dot = DotProduct(normal, finalDir);
-			
-			// Soft-Weighting: Use a smooth hyperbolic curve instead of a hard clamp.
-			float weight = 0.5f * (dot + (float)sqrt(dot * dot + 0.01f));
-
-			for (int c = 0; c < 3; c++) {
-				float resolved = lightFloats[i * 3 + c] / weight;
-				
-				if (irradianceScalarFloats) {
-					float maxEnergy = irradianceScalarFloats[i * 3 + c];
-					// Cap at raw physical energy to prevent rims/blooming
-					if (resolved > maxEnergy) resolved = maxEnergy;
-				}
-				
-				lightFloats[i * 3 + c] = resolved;
-				if (lightFloats[i * 3 + c] < 0) lightFloats[i * 3 + c] = 0;
-			}
-		}
-	}
-}
-
-void DilateDeluxeDirections(int passes) {
-	if (!deluxeFloats || !lightFloats) return;
-
-	int width = g_game->lightmapSize;
-	int totalPixels = numLightBytes / 3;
-	int numLMs = totalPixels / (width * width);
-	float *tempDir = malloc(numLightBytes * sizeof(float));
-	int p, lm, x, y, i, j;
-
-	_printf("DilateDeluxeDirections: Extrapolating light directions for shadow edges (%d passes)...\n", passes);
-
-	for (p = 0; p < passes; p++) {
-		memcpy(tempDir, deluxeFloats, numLightBytes * sizeof(float));
-
-		for (lm = 0; lm < numLMs; lm++) {
-			for (y = 0; y < width; y++) {
-				for (x = 0; x < width; x++) {
-					int idx = (lm * width * width) + y * width + x;
-					
-					// We only want to "fill in" directions for pixels that are mostly dark
-					// (which would otherwise default to the surface normal or zero, causing rims)
-					float intensity = lightFloats[idx * 3] + lightFloats[idx * 3 + 1] + lightFloats[idx * 3 + 2];
-					if (intensity > 1.0f) continue; // Skip lit pixels
-
-					float bestIntensity = -1.0f;
-					int bestIdx = -1;
-
-					// Look for the brightest neighbor to steal the direction from
-					for (j = -1; j <= 1; j++) {
-						for (i = -1; i <= 1; i++) {
-							if (i == 0 && j == 0) continue;
-							int nx = x + i;
-							int ny = y + j;
-							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
-								int nidx = (lm * width * width) + ny * width + nx;
-								// Neighbor must be significantly brighter than us
-								float nIntensity = lightFloats[nidx * 3] + lightFloats[nidx * 3 + 1] + lightFloats[nidx * 3 + 2];
-								if (nIntensity > intensity && nIntensity > bestIntensity) {
-									bestIntensity = nIntensity;
-									bestIdx = nidx;
-								}
-							}
-						}
-					}
-
-					if (bestIdx != -1) {
-						VectorCopy(&tempDir[bestIdx * 3], &deluxeFloats[idx * 3]);
-					}
-				}
-			}
-		}
-	}
-	free(tempDir);
 }
 
 static void DownConvertDeluxeMaps(void) {
@@ -720,10 +532,6 @@ void DownConvertLightingData(void) {
 
 	_printf("--- DownConvertLightingData ---\n");
 	tonemapMode = g_game->exposureFilter;
-	
-	if (g_game->deluxeMap) {
-		ResolveLightmapScalars();
-	}
 
 	// Always perform background dilation to prevent bilinear bleeding at shell edges
 	DilateLightmapAtlas(g_game->lightmapSize, 2);
@@ -796,22 +604,6 @@ void FreeRadiosityFloats(void) {
 	if (accumRadiosityFloats) {
 		free(accumRadiosityFloats);
 		accumRadiosityFloats = NULL;
-	}
-	if (irradianceVecFloats) {
-		free(irradianceVecFloats);
-		irradianceVecFloats = NULL;
-	}
-	if (lambertianVecFloats) {
-		free(lambertianVecFloats);
-		lambertianVecFloats = NULL;
-	}
-	if (pixelNormalFloats) {
-		free(pixelNormalFloats);
-		pixelNormalFloats = NULL;
-	}
-	if (irradianceScalarFloats) {
-		free(irradianceScalarFloats);
-		irradianceScalarFloats = NULL;
 	}
 	if (lightSurfaceIndex) {
 		free(lightSurfaceIndex);
