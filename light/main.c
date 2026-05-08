@@ -79,8 +79,8 @@ int main(int argc, char **argv) {
         JSON_LoadGame(gameJsonPath, &activeGame);
     }
 
-    // 5. Point the global g_game to our local struct
-    g_game = &activeGame;
+    // 5. Point the global game to our local struct
+    game = &activeGame;
 
     superSampleMode = SUPERSAMPLE_NONE;
 
@@ -129,28 +129,28 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
             i++; // Handled in pre-scan
         } else if (!strcmp(argv[i], "-sRGB")) {
-            g_game->lightmapsRGB = qtrue;
+            game->lightmapsRGB = qtrue;
         } else if (!strcmp(argv[i], "-falloff")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
-                g_game->falloff = FALLOFF_HALFLAMBERT;
+                game->falloff = FALLOFF_HALFLAMBERT;
                 falloffSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
                 sunSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "lambert")) {
-                g_game->falloff = FALLOFF_LAMBERT;
+                game->falloff = FALLOFF_LAMBERT;
                 falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
                 sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "quadratic")) {
-                g_game->falloff = FALLOFF_QUADRATIC;
+                game->falloff = FALLOFF_QUADRATIC;
                 falloffSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
                 sunSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "doublequadratic")) {
-                g_game->falloff = FALLOFF_DOUBLEQUADRATIC;
+                game->falloff = FALLOFF_DOUBLEQUADRATIC;
                 falloffSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
                 sunSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "unreal")) {
-                g_game->falloff = FALLOFF_UNREAL;
+                game->falloff = FALLOFF_UNREAL;
                 falloffSoftBias = FALLOFF_UNREAL_SOFTBIAS;
                 sunSoftBias = FALLOFF_UNREAL_SOFTBIAS;
             } else {
@@ -172,22 +172,22 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
-                g_game->sunFalloff = FALLOFF_HALFLAMBERT;
+                game->sunFalloff = FALLOFF_HALFLAMBERT;
             } else if (!strcmp(arg, "lambert")) {
-                g_game->sunFalloff = FALLOFF_LAMBERT;
+                game->sunFalloff = FALLOFF_LAMBERT;
             } else if (!strcmp(arg, "quadratic")) {
-                g_game->sunFalloff = FALLOFF_QUADRATIC;
+                game->sunFalloff = FALLOFF_QUADRATIC;
             } else if (!strcmp(arg, "doublequadratic")) {
-                g_game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
+                game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
             } else if (!strcmp(arg, "unreal")) {
-                g_game->sunFalloff = FALLOFF_UNREAL;
+                game->sunFalloff = FALLOFF_UNREAL;
             } else {
                 Error("Unknown sun falloff type: %s", arg);
             }
         } else if (!strcmp(argv[i], "-deluxe")) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe requires 1 or 0");
-            g_game->deluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
-            _printf("Deluxemaps %s via command line override\n", g_game->deluxeMap ? "enabled" : "disabled");
+            game->deluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
+            _printf("Deluxemaps %s via command line override\n", game->deluxeMap ? "enabled" : "disabled");
         } else if (!strcmp(argv[i], "-supersampling")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
@@ -203,26 +203,26 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-smooth")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smooth requires a number of passes");
-            g_game->defaultSmoothPasses = atoi(argv[i + 1]);
-            if (g_game->defaultSmoothPasses < 0) g_game->defaultSmoothPasses = 0;
-            _printf("Smoothing passes set to %d\n", g_game->defaultSmoothPasses);
+            game->defaultSmoothPasses = atoi(argv[i + 1]);
+            if (game->defaultSmoothPasses < 0) game->defaultSmoothPasses = 0;
+            _printf("Smoothing passes set to %d\n", game->defaultSmoothPasses);
             i++;
         } else if (!strcmp(argv[i], "-antialiasing")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-antialiasing requires a number of passes");
-            g_game->antialiasingPasses = atoi(argv[i + 1]);
-            _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", g_game->antialiasingPasses);
+            game->antialiasingPasses = atoi(argv[i + 1]);
+            _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", game->antialiasingPasses);
             i++;
         } else if (!strcmp(argv[i], "-smoothradius")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothradius requires a radius value");
-            g_game->defaultSmoothRadius = (float)atof(argv[i + 1]);
-            if (g_game->defaultSmoothRadius < 0.1f)
-                g_game->defaultSmoothRadius = 0.1f;
+            game->defaultSmoothRadius = (float)atof(argv[i + 1]);
+            if (game->defaultSmoothRadius < 0.1f)
+                game->defaultSmoothRadius = 0.1f;
             i++;
         } else if (!strcmp(argv[i], "-radiosity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a number of passes");
-            g_game->radiosityPasses = atoi(argv[i + 1]);
-            if (g_game->radiosityPasses < 0)
-                g_game->radiosityPasses = 0;
+            game->radiosityPasses = atoi(argv[i + 1]);
+            if (game->radiosityPasses < 0)
+                game->radiosityPasses = 0;
             i++;
         } else if (!strcmp(argv[i], "-rad_depthmin")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmin requires a numeric value");
@@ -243,11 +243,11 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_color_ratio")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
-            g_game->radiosityColorRatio = (float)atof(argv[i + 1]);
+            game->radiosityColorRatio = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_intensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_intensity requires a numeric value");
-            g_game->radiosityIntensity = (float)atof(argv[i + 1]);
+            game->radiosityIntensity = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_depthintensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthintensity requires a numeric value");
@@ -268,17 +268,17 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
             if (!strcmp(mode, "softknee")) {
-                g_game->exposureFilter = TONEMAP_SOFTKNEE;
+                game->exposureFilter = TONEMAP_SOFTKNEE;
             } else if (!strcmp(mode, "reinhard")) {
-                g_game->exposureFilter = TONEMAP_REINHARD;
+                game->exposureFilter = TONEMAP_REINHARD;
             } else if (!strcmp(mode, "filmic")) {
-                g_game->exposureFilter = TONEMAP_FILMIC;
+                game->exposureFilter = TONEMAP_FILMIC;
             } else {
-                g_game->exposureFilter = TONEMAP_LINEAR;
+                game->exposureFilter = TONEMAP_LINEAR;
             }
             i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
-            g_game->hdr = HDR_8BIT;
+            game->hdr = HDR_8BIT;
         } else if (!strcmp(argv[i], "-fast")) {
             g_fast = qtrue;
             _printf("Optimized voxelization mode (FAST) enabled\n");
@@ -342,8 +342,8 @@ int main(int argc, char **argv) {
     start = I_FloatTime();
 
     SetQdirFromPath(argv[i]);
-    if (g_game->gamePath[0] && strcmp(g_game->gamePath, ".")) {
-        strcat(gamedir, g_game->gamePath);
+    if (game->gamePath[0] && strcmp(game->gamePath, ".")) {
+        strcat(gamedir, game->gamePath);
         strcat(gamedir, "/");
     }
 
@@ -361,36 +361,36 @@ int main(int argc, char **argv) {
 
     // Print active configuration summary
     const char *fLog = "lambert";
-    if (g_game->falloff == FALLOFF_HALFLAMBERT) fLog = "halflambert";
-    else if (g_game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
-    else if (g_game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
-    else if (g_game->falloff == FALLOFF_UNREAL) fLog = "unreal";
+    if (game->falloff == FALLOFF_HALFLAMBERT) fLog = "halflambert";
+    else if (game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
+    else if (game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
+    else if (game->falloff == FALLOFF_UNREAL) fLog = "unreal";
 
-    _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+    _printf("Active game: %s (BSP format: %s)\n", game->arg, game->bspIdent);
     _printf("Falloff mode: %s (Bias %.2f)\n", fLog, falloffSoftBias);
     
     const char *sfLog = "lambert";
-    if (g_game->sunFalloff == FALLOFF_HALFLAMBERT) sfLog = "halflambert";
-    else if (g_game->sunFalloff == FALLOFF_QUADRATIC) sfLog = "quadratic";
-    else if (g_game->sunFalloff == FALLOFF_DOUBLEQUADRATIC) sfLog = "doublequadratic";
-    else if (g_game->sunFalloff == FALLOFF_UNREAL) sfLog = "unreal";
+    if (game->sunFalloff == FALLOFF_HALFLAMBERT) sfLog = "halflambert";
+    else if (game->sunFalloff == FALLOFF_QUADRATIC) sfLog = "quadratic";
+    else if (game->sunFalloff == FALLOFF_DOUBLEQUADRATIC) sfLog = "doublequadratic";
+    else if (game->sunFalloff == FALLOFF_UNREAL) sfLog = "unreal";
     
     _printf("Sun Falloff mode: %s (Bias %.2f)\n", sfLog, sunSoftBias);
     _printf("Lighting flags: %s %s %s\n", 
-            g_game->lightmapsRGB ? "sRGB" : "Linear",
-            g_game->deluxeMap ? "Deluxe" : "Standard",
-            (g_game->hdr == HDR_8BIT) ? "range" : "clamped");
-    _printf("Lightmap size: %d (Write: %d)\n", g_game->lightmapSize, g_game->writeLightmapSize);
+            game->lightmapsRGB ? "sRGB" : "Linear",
+            game->deluxeMap ? "Deluxe" : "Standard",
+            (game->hdr == HDR_8BIT) ? "range" : "clamped");
+    _printf("Lightmap size: %d (Write: %d)\n", game->lightmapSize, game->writeLightmapSize);
 
 
 
-    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", g_game->defaultSmoothPasses, g_game->defaultSmoothRadius, g_game->antialiasingPasses);
-    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", g_game->radiosityPasses, g_game->radiosityIntensity, g_game->radiosityColorRatio);
+    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", game->defaultSmoothPasses, game->defaultSmoothRadius, game->antialiasingPasses);
+    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
-        int ssCnt = (g_game->defaultSmoothRadius >= 2.0f) ? 16 : 8;
-        _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, g_game->defaultSmoothRadius);
+        int ssCnt = (game->defaultSmoothRadius >= 2.0f) ? 16 : 8;
+        _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, game->defaultSmoothRadius);
     }
 
     _printf("reading %s\n", source);
@@ -417,17 +417,17 @@ int main(int argc, char **argv) {
                   "Please re-run the BSP phase.");
         }
         int bspLmSize = atoi(lmSizeVal);
-        if (bspLmSize != g_game->lightmapSize) {
+        if (bspLmSize != game->lightmapSize) {
             Error("Lightmap size mismatch!\n"
                   "BSP was built for %dx%d lightmaps, but the lighting tool is configured for %dx%d.\n"
                   "Check your game profile or -lightmapsize command line setting.",
-                  bspLmSize, bspLmSize, g_game->lightmapSize, g_game->lightmapSize);
+                  bspLmSize, bspLmSize, game->lightmapSize, game->lightmapSize);
         }
         _printf("Verified lightmap image size %dx%d from worldspawn (__lightmapImageSize)\n", bspLmSize, bspLmSize);
     }
 
     if (samplesize <= 0) {
-        samplesize = g_game->defaultSampleSize;
+        samplesize = game->defaultSampleSize;
         _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
     }
 

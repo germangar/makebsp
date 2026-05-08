@@ -240,7 +240,7 @@ void MergeDrawSurfs(entity_t *e) {
       if (!si || si->subdivisions > 0) {
         continue;
       }
-      if (!g_game->enforceSampleSize || ds1->samplesize <= 0) {
+      if (!game->enforceSampleSize || ds1->samplesize <= 0) {
         continue;
       }
       if (si->surfaceFlags & (SURF_NOLIGHTMAP | SURF_POINTLIGHT)) {
@@ -481,7 +481,7 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree) {
     }
 
     // 2. Lightmap consistency subdivision (enforceSampleSize)
-    if (g_game->enforceSampleSize && ds->samplesize > 0) {
+    if (game->enforceSampleSize && ds->samplesize > 0) {
       // Filter out surfaces that don't receive lightmaps
       if (si->surfaceFlags & (SURF_NOLIGHTMAP | SURF_POINTLIGHT)) {
         continue;

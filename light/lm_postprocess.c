@@ -1924,9 +1924,9 @@ void SmoothLightmapsCPU(float radius) {
 }
 
 void PostProcessLightmaps(void) {
-    lightmapAA = g_game->antialiasingPasses;
-    lightmapSmoothRadius = g_game->defaultSmoothRadius;
-    lightmapSmoothPasses = g_game->defaultSmoothPasses;
+    lightmapAA = game->antialiasingPasses;
+    lightmapSmoothRadius = game->defaultSmoothRadius;
+    lightmapSmoothPasses = game->defaultSmoothPasses;
 
 	_printf("--- Post Processing ---\n");
 	BuildPlanarSurfaceIndex();

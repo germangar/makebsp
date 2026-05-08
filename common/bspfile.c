@@ -176,31 +176,31 @@ void	LoadBSPFile( const char *filename ) {
 
     // Check if the current game profile already matches this BSP format.
     // This allows the -game switch to take precedence over automatic detection.
-    if (g_game) {
-        int activeIdent = *(int *)g_game->bspIdent;
-        if (ident != activeIdent || version != (int)g_game->bspVersion) {
-            g_game = NULL;
+    if (game) {
+        int activeIdent = *(int *)game->bspIdent;
+        if (ident != activeIdent || version != (int)game->bspVersion) {
+            game = NULL;
         }
     }
 
-    if (!g_game) {
+    if (!game) {
         for (i = numGames - 1; i >= 0; i--) {
             int gameIdent = *(int *)gameTemplates[i].bspIdent;
             if (ident == gameIdent && version == (int)gameTemplates[i].bspVersion) {
-            g_game = &gameTemplates[i];
+            game = &gameTemplates[i];
             break;
             }
         }
     }
 
-    if (!g_game) {
+    if (!game) {
         Error("%s is an unknown BSP format (ident: %c%c%c%c, version: %d)", filename,
             ident & 0xFF, (ident >> 8) & 0xFF, (ident >> 16) & 0xFF,
             (ident >> 24) & 0xFF, version);
     }
 
 	// swap the header
-	for ( i = 0 ; i < g_game->lumpCount ; i++ ) {
+	for ( i = 0 ; i < game->lumpCount ; i++ ) {
 		header->lumps[i].fileofs = LittleLong( header->lumps[i].fileofs );
 		header->lumps[i].filelen = LittleLong( header->lumps[i].filelen );
 	}
@@ -357,7 +357,7 @@ void CompressGrid(void) {
 	bspGridPoint_t *palette;
 	int numPalette = 0;
 
-	if (g_game->bspVersion != 1) return;
+	if (game->bspVersion != 1) return;
 	if (numGridPoints == 0) return;
 
 	_printf("--- CompressGrid ---\n");
@@ -418,9 +418,9 @@ void	WriteBSPFile( const char *filename ) {
 	header = &outheader;
 	memset( header, 0, sizeof(dheader_t) );
 	
-	// identifier and version from g_game
-	header->ident = LittleLong( *(int *)g_game->bspIdent );
-	header->version = LittleLong( g_game->bspVersion );
+	// identifier and version from game
+	header->ident = LittleLong( *(int *)game->bspIdent );
+	header->version = LittleLong( game->bspVersion );
 	
 	// swap everything in place (internal format)
 
@@ -437,7 +437,7 @@ void	WriteBSPFile( const char *filename ) {
 	AddLump( bspfile, header, LUMP_NODES, dnodes, numnodes * sizeof(dnode_t) );
 	AddLump( bspfile, header, LUMP_BRUSHES, dbrushes, numbrushes * sizeof(dbrush_t) );
 
-	if ( g_game->bspVersion == 1 ) {
+	if ( game->bspVersion == 1 ) {
 		// FBSP: engine expects dbrushside_t (12 bytes: planeNum, shaderNum, surfaceNum)
 		AddLump( bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides * sizeof(dbrushside_t) );
 	} else {
@@ -458,7 +458,7 @@ void	WriteBSPFile( const char *filename ) {
 	AddLump( bspfile, header, LUMP_LIGHTMAPS, lightBytes, numLightBytes );
 	AddLump( bspfile, header, LUMP_FOGS, dfogs, numFogs * sizeof(dfog_t) );
 
-	if ( g_game->bspVersion == 1 ) {
+	if ( game->bspVersion == 1 ) {
 		// FBSP v1
 		CompressGrid();
 		AddLump( bspfile, header, LUMP_DRAWVERTS, drawVerts, numDrawVerts * sizeof(drawVert_t) );

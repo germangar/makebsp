@@ -67,10 +67,10 @@ extern vec3_t blockSize;
 
 #define MAX_GAMES 128
 extern int numGames;
-extern game_t *g_game;
+extern game_t *game;
 extern game_t gameTemplates[MAX_GAMES];
 
-#define LIGHTMAP_WIDTH  (g_game->lightmapSize)
-#define LIGHTMAP_HEIGHT (g_game->lightmapSize)
+#define LIGHTMAP_WIDTH  (game->lightmapSize)
+#define LIGHTMAP_HEIGHT (game->lightmapSize)
 
 #endif

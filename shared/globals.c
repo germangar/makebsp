@@ -79,4 +79,4 @@ game_t gameTemplates[MAX_GAMES] = {
 };
 
 
-game_t *g_game = &gameTemplates[0];
+game_t *game = &gameTemplates[0];

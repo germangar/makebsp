@@ -35,8 +35,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/surface_extra.h"
 
 // Currently active engine limits
-#define MAX_SURFACE_VERTS (g_game->maxSurfaceVerts)
-#define MAX_SURFACE_INDEXES (g_game->maxSurfaceIndexes)
+#define MAX_SURFACE_VERTS (game->maxSurfaceVerts)
+#define MAX_SURFACE_INDEXES (game->maxSurfaceIndexes)
 
 #define MAX_MAP_DRAW_VERTS_LIMIT 0x100000
 #define MAX_MAP_DRAW_SURFS_LIMIT 0x40000

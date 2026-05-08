@@ -193,7 +193,7 @@ void DownscaleLightmaps(int oldW, int newW) {
 	}
 
 	// Update global state
-	g_game->lightmapSize = newW;
+	game->lightmapSize = newW;
 	numLightBytes = newTotalPixels * 3;
 
 	// 4. Bleed the final low-resolution atlas to prevent bilinear bleeding in the engine
@@ -264,7 +264,7 @@ void InternalColorToBytesScaled(const float *color, byte *colorBytes, float scal
 		if (sample[2] > maxC) maxC = sample[2];
 
 		if (maxC > 0.001f) {
-			float limit = (g_game->hdr == HDR_8BIT) ? maxLightIntensity : 255.0f;
+			float limit = (game->hdr == HDR_8BIT) ? maxLightIntensity : 255.0f;
 			float threshold = limit * 0.75f;
 
 			if (tonemapMode == TONEMAP_SOFTKNEE) {
@@ -375,7 +375,7 @@ static void UpConvertLightmaps(void) {
 		memset(lightAlphaMask, 0, (numLightBytes / 3) * sizeof(byte));
 	}
 
-	if (g_game->deluxeMap) {
+	if (game->deluxeMap) {
 		if (deluxeFloats) free(deluxeFloats);
 		if (lightSurfaceIndex) free(lightSurfaceIndex);
 		_printf("UpConvert: Allocating deluxeMap buffers...\n");
@@ -409,9 +409,9 @@ static void DownConvertDrawVerts(float scale, qboolean lightmapRange) {
 	for (i = 0; i < numDrawVerts; i++) {
 		for (j = 0; j < 4; j++) {
 			if (lightmapRange) {
-				InternalColorToBytesScaled(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], scale, g_game->colorsRGB);
+				InternalColorToBytesScaled(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], scale, game->colorsRGB);
 			} else {
-				InternalColorToBytes(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], g_game->colorsRGB);
+				InternalColorToBytes(internalDrawVerts[i].color[j], (byte *)drawVerts[i].color[j], game->colorsRGB);
 			}
 		}
 	}
@@ -424,9 +424,9 @@ static void DownConvertLightmaps(float scale, qboolean lightmapRange) {
 	int processedCount = 0;
 	for (i = 0; i < numLightBytes / 3; i++) {
 		if (lightmapRange) {
-			InternalColorToBytesScaled(&lightFloats[i * 3], &lightBytes[i * 3], scale, g_game->lightmapsRGB);
+			InternalColorToBytesScaled(&lightFloats[i * 3], &lightBytes[i * 3], scale, game->lightmapsRGB);
 		} else {
-			InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], g_game->lightmapsRGB);
+			InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], game->lightmapsRGB);
 		}
 		if (lightAlphaMask && lightAlphaMask[i]) processedCount++;
 	}
@@ -438,8 +438,8 @@ static void DownConvertDeluxeMaps(void) {
 	if (!deluxeFloats) return;
 
 	int totalPixels = numLightBytes / 3;
-	int numLMs = totalPixels / (g_game->lightmapSize * g_game->lightmapSize);
-	int lmSize = g_game->lightmapSize * g_game->lightmapSize * 3;
+	int numLMs = totalPixels / (game->lightmapSize * game->lightmapSize);
+	int lmSize = game->lightmapSize * game->lightmapSize * 3;
 
 	_printf("DownConvert: %d DeluxeMap pixels (interleaving as stride 2 for QFusion)\n", totalPixels);
 
@@ -457,9 +457,9 @@ static void DownConvertDeluxeMaps(void) {
 	// Step 2: Encode and write deluxe maps into ODD slots
 	for (lm = 0; lm < numLMs; lm++) {
 		byte *dst = &lightBytes[(lm * 2 + 1) * lmSize];
-		int basePixel = lm * (g_game->lightmapSize * g_game->lightmapSize);
+		int basePixel = lm * (game->lightmapSize * game->lightmapSize);
 
-		for (i = 0; i < (g_game->lightmapSize * g_game->lightmapSize); i++) {
+		for (i = 0; i < (game->lightmapSize * game->lightmapSize); i++) {
 			vec3_t dir;
 			VectorCopy(&deluxeFloats[(basePixel + i) * 3], dir);
 
@@ -504,11 +504,11 @@ static void DownConvertGrid(float scale, qboolean lightmapRange) {
 	for (i = 0; i < numGridPoints; i++) {
 		for (j = 0; j < 4; j++) {
 			if (lightmapRange) {
-				InternalColorToBytesScaled(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], scale, g_game->lightgridRGB);
-				InternalColorToBytesScaled(gridData32[i].directed[j], (byte *)gridData[i].directed[j], scale, g_game->lightgridRGB);
+				InternalColorToBytesScaled(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], scale, game->lightgridRGB);
+				InternalColorToBytesScaled(gridData32[i].directed[j], (byte *)gridData[i].directed[j], scale, game->lightgridRGB);
 			} else {
-				InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], g_game->lightgridRGB);
-				InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], g_game->lightgridRGB);
+				InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], game->lightgridRGB);
+				InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], game->lightgridRGB);
 			}
 		}
 		gridData[i].latLong[0] = gridData32[i].latLong[0];
@@ -523,16 +523,16 @@ void DownConvertLightingData(void) {
 	float scale = 1.0f;
 
 	_printf("--- DownConvertLightingData ---\n");
-	tonemapMode = g_game->exposureFilter;
+	tonemapMode = game->exposureFilter;
 
 	// Always perform background dilation to prevent bilinear bleeding at shell edges
-	DilateLightmapAtlas(g_game->lightmapSize, 2);
+	DilateLightmapAtlas(game->lightmapSize, 2);
 
-	if (g_game->writeLightmapSize > 0 && g_game->writeLightmapSize < g_game->lightmapSize) {
-		DownscaleLightmaps(g_game->lightmapSize, g_game->writeLightmapSize);
+	if (game->writeLightmapSize > 0 && game->writeLightmapSize < game->lightmapSize) {
+		DownscaleLightmaps(game->lightmapSize, game->writeLightmapSize);
 	}
 
-	if (g_game->hdr == HDR_8BIT) {
+	if (game->hdr == HDR_8BIT) {
 		const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
 		float customIntensity = existingIntensity[0] ? atof(existingIntensity) : 0.0f;
 
@@ -542,7 +542,7 @@ void DownConvertLightingData(void) {
 			scale = customIntensity;
 		} else {
 			// No custom intensity: Apply fixed normalization from game profile
-			maxLightIntensity = 255.0f * g_game->hdr8BitScale;
+			maxLightIntensity = 255.0f * game->hdr8BitScale;
 			scale = 255.0f / maxLightIntensity;
 			float engineIntensity = maxLightIntensity / 255.0f;
 
@@ -551,10 +551,10 @@ void DownConvertLightingData(void) {
 		}
 	}
 
-	DownConvertDrawVerts(scale, (g_game->hdr == HDR_8BIT));
-	DownConvertLightmaps(scale, (g_game->hdr == HDR_8BIT));
+	DownConvertDrawVerts(scale, (game->hdr == HDR_8BIT));
+	DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
 	DownConvertDeluxeMaps();
-	DownConvertGrid(scale, (g_game->hdr == HDR_8BIT));
+	DownConvertGrid(scale, (game->hdr == HDR_8BIT));
 
 	_printf("DownConvert: Done\n");
 }

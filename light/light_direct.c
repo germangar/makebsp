@@ -73,7 +73,7 @@ float CalculateSpecificFalloff(float dot, falloff_t falloff, float bias) {
 }
 
 float CalculateFalloff(float dot) {
-  return CalculateSpecificFalloff(dot, g_game->falloff, falloffSoftBias);
+  return CalculateSpecificFalloff(dot, game->falloff, falloffSoftBias);
 }
 
 
@@ -452,14 +452,14 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
     if (DotProduct(normal, sunDirection) < -0.125f) {
       return qfalse; // facing away
     }
-  } else if (g_game->sunFalloff != FALLOFF_HALFLAMBERT &&
-             g_game->sunFalloff != FALLOFF_LAMBERT) {
+  } else if (game->sunFalloff != FALLOFF_HALFLAMBERT &&
+             game->sunFalloff != FALLOFF_LAMBERT) {
     if (DotProduct(normal, sunDirection) <= 0) {
       return qfalse; // facing away
     }
   }
 
-  angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), g_game->sunFalloff, sunSoftBias);
+  angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), game->sunFalloff, sunSoftBias);
   if (angle <= 0) {
     return qfalse; // facing away
   }
@@ -1054,7 +1054,7 @@ void TraceLtm(int num) {
       if (!doSS) {
           actualSamples = 1;
           pattern = ssPattern8; 
-      } else if (g_game->defaultSmoothRadius >= 2.0f) {
+      } else if (game->defaultSmoothRadius >= 2.0f) {
           actualSamples = SS_PATTERN16_COUNT;
           pattern = ssPattern16;
       } else {
@@ -1062,7 +1062,7 @@ void TraceLtm(int num) {
           pattern = ssPattern8;
       }
       
-      float jitterRadius = doSS ? g_game->defaultSmoothRadius : 0.0f;
+      float jitterRadius = doSS ? game->defaultSmoothRadius : 0.0f;
       vec3_t accumColor;
       int hitCount;
 

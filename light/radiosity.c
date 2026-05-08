@@ -954,9 +954,9 @@ static void RadiosityMerge(const float *srcBuffer) {
 // ---------------------------------------------------------------------------
 
 void LightRadiosity(void) {
-    int radiosityPasses = g_game->radiosityPasses;
-    rad_bounce_scale = g_game->radiosityIntensity;
-    rad_color_ratio = g_game->radiosityColorRatio;
+    int radiosityPasses = game->radiosityPasses;
+    rad_bounce_scale = game->radiosityIntensity;
+    rad_color_ratio = game->radiosityColorRatio;
 
     if (radiosityPasses <= 0) return;
     _printf("--- Radiosity ---\n");

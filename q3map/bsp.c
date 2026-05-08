@@ -486,13 +486,13 @@ int main(int argc, char **argv) {
       JSON_LoadGame(gameJsonPath, &activeGame);
   }
 
-  // Point the global g_game to our local struct
-  g_game = &activeGame;
+  // Point the global game to our local struct
+  game = &activeGame;
 
   // Apply game defaults before parsing CLI
-  samplesize = g_game->defaultSampleSize;
-  forceUVGen = g_game->forceUVGen;
-  snapUVs = g_game->snapUVs;
+  samplesize = game->defaultSampleSize;
+  forceUVGen = game->forceUVGen;
+  snapUVs = game->snapUVs;
 
   tempsource[0] = '\0';
 
@@ -588,7 +588,7 @@ int main(int argc, char **argv) {
       snapUVs = atoi(argv[++i]);
     } else if (!strcmp(argv[i], "-enforceSampleSize")) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-enforceSampleSize requires a 0|1 argument");
-      g_game->enforceSampleSize = atoi(argv[++i]);
+      game->enforceSampleSize = atoi(argv[++i]);
     } else if (!strcmp(argv[i], "-bsp")) {
         // Redundant, just to satisfy usage
     } else {
@@ -632,7 +632,7 @@ int main(int argc, char **argv) {
     exit(0);
   }
 
-  _printf("Active game: %s (BSP format: %s)\n", g_game->arg, g_game->bspIdent);
+  _printf("Active game: %s (BSP format: %s)\n", game->arg, game->bspIdent);
 
   start = I_FloatTime();
 
@@ -644,8 +644,8 @@ int main(int argc, char **argv) {
   // numthreads = 1;		// multiple threads aren't helping because of
   // heavy malloc use
   SetQdirFromPath(argv[i]);
-  if (g_game->gamePath[0] && strcmp(g_game->gamePath, ".")) {
-    strcat(gamedir, g_game->gamePath);
+  if (game->gamePath[0] && strcmp(game->gamePath, ".")) {
+    strcat(gamedir, game->gamePath);
     strcat(gamedir, "/");
   }
 
@@ -710,7 +710,7 @@ int main(int argc, char **argv) {
     char buf[16];
     sprintf(buf, "%d", samplesize);
     SetKeyValue(&entities[0], "__texelsize", buf);
-    sprintf(buf, "%d", g_game->lightmapSize);
+    sprintf(buf, "%d", game->lightmapSize);
     SetKeyValue(&entities[0], "__lightmapImageSize", buf);
   }
 
