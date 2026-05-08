@@ -26,7 +26,7 @@ static int lightmapSmoothPasses;
  */
 #define FILTER_UPSCALE 1
 
-#define TRISOUP_SMOOTH_CHEAT(A) ((A) + (useOpenCL ? 1.0f : 1.25f)) // offset smoothing radius for trisoups to get a closer result to world surfaces.
+#define TRISOUP_SMOOTH_CHEAT(A) ((A) + (useOpenCL ? 1.0f : 1.5f)) // offset smoothing radius for trisoups to get a closer result to world surfaces.
 
 #define AA_ANGLE_MATCH_DEGREES 30.0f
 
