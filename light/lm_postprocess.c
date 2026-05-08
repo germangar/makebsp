@@ -857,20 +857,38 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
             cl_kernel kernel = clCreateKernel(prog, "trisoup_filter", &err);
             if (err == CL_SUCCESS) {
                 size_t atlasBytes = (size_t)(numLightBytes / 3) * 3 * sizeof(float);
-                size_t nf3 = (size_t)N * 3 * sizeof(float), njf3 = (size_t)N * numSamples * 3 * sizeof(float);
-                size_t njv = (size_t)N * numSamples * sizeof(byte), bucketBytes = (size_t)numBuckets * sizeof(int);
+                size_t nf3 = (size_t)N * 3 * sizeof(float);
+                size_t njf3 = (size_t)N * numSamples * 3 * sizeof(float);
+                size_t njv = (size_t)N * numSamples * sizeof(byte);
+                size_t bucketBytes = (size_t)numBuckets * sizeof(int);
 
-                cl_mem bTexelPos = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nf3, texelPos, &err);
-                cl_mem bTexelNormal = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nf3, texelNormal, &err);
-                cl_mem bJitterPos = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njf3, jitterPos, &err);
-                cl_mem bJitterNormal = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njf3, jitterNormal, &err);
-                cl_mem bJitterValid = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njv, jitterValid, &err);
-                cl_mem bBucketStart = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, bucketBytes, bucketStart, &err);
-                cl_mem bBucketCount = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, bucketBytes, bucketCount, &err);
-                cl_mem bSortedTexels = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (size_t)N*sizeof(int), sortedTexels, &err);
-                cl_mem bOutput = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, atlasBytes, lightFloats, &err);
-                cl_mem bValidList = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (size_t)N*sizeof(int), validList, &err);
-                cl_mem bTexelColor = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY, nf3, NULL, &err);
+                cl_mem bTexelPos = NULL, bTexelNormal = NULL, bJitterPos = NULL, bJitterNormal = NULL, bJitterValid = NULL;
+                cl_mem bBucketStart = NULL, bBucketCount = NULL, bSortedTexels = NULL, bOutput = NULL, bValidList = NULL;
+                cl_mem bTexelColor = NULL;
+
+                err = CL_SUCCESS;
+                bTexelPos = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nf3, texelPos, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bTexelPos (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bTexelNormal = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nf3, texelNormal, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bTexelNormal (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bJitterPos = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njf3, jitterPos, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bJitterPos (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bJitterNormal = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njf3, jitterNormal, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bJitterNormal (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bJitterValid = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, njv, jitterValid, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bJitterValid (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bBucketStart = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, bucketBytes, bucketStart, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bBucketStart (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bBucketCount = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, bucketBytes, bucketCount, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bBucketCount (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bSortedTexels = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (size_t)N*sizeof(int), sortedTexels, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bSortedTexels (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bOutput = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, atlasBytes, lightFloats, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bOutput (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bValidList = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (size_t)N*sizeof(int), validList, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bValidList (%d)\n", err); goto cleanup_gpu_trisoup; }
+                bTexelColor = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY, nf3, NULL, &err);
+                if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate bTexelColor (%d)\n", err); goto cleanup_gpu_trisoup; }
 
                 int totalPasses = aaPasses + smoothPasses;
                 for (int currentPass = 0; currentPass < totalPasses; currentPass++) {
@@ -901,8 +919,14 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
                     }
                 }
                 clEnqueueReadBuffer(g_clQueue, bOutput, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
-                clReleaseMemObject(bTexelPos); clReleaseMemObject(bTexelNormal); clReleaseMemObject(bJitterPos); clReleaseMemObject(bJitterNormal); clReleaseMemObject(bJitterValid);
-                clReleaseMemObject(bTexelColor); clReleaseMemObject(bBucketStart); clReleaseMemObject(bBucketCount); clReleaseMemObject(bSortedTexels); clReleaseMemObject(bOutput); clReleaseMemObject(bValidList);
+                
+            cleanup_gpu_trisoup:
+                if (bTexelPos) clReleaseMemObject(bTexelPos); if (bTexelNormal) clReleaseMemObject(bTexelNormal); 
+                if (bJitterPos) clReleaseMemObject(bJitterPos); if (bJitterNormal) clReleaseMemObject(bJitterNormal); 
+                if (bJitterValid) clReleaseMemObject(bJitterValid);
+                if (bTexelColor) clReleaseMemObject(bTexelColor); if (bBucketStart) clReleaseMemObject(bBucketStart); 
+                if (bBucketCount) clReleaseMemObject(bBucketCount); if (bSortedTexels) clReleaseMemObject(bSortedTexels); 
+                if (bOutput) clReleaseMemObject(bOutput); if (bValidList) clReleaseMemObject(bValidList);
                 clReleaseKernel(kernel);
             }
             clReleaseProgram(prog);
@@ -1301,15 +1325,19 @@ void GpuLightmapState_Upload(void) {
 
     st->atlasA  = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                   atlasBytes, tempAtlas, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU atlasA (%d)\n", err); useOpenCL = qfalse; goto cleanup_upload; }
     st->atlasB  = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                   atlasBytes, tempAtlas, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU atlasB (%d)\n", err); useOpenCL = qfalse; goto cleanup_upload; }
     st->maskBuf = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                   maskBytes, tempMask, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU maskBuf (%d)\n", err); useOpenCL = qfalse; goto cleanup_upload; }
     
-    if (scale > 1) { free(tempAtlas); free(tempMask); }
+    if (scale > 1) { free(tempAtlas); tempAtlas = NULL; free(tempMask); tempMask = NULL; }
 
     /* --- Flatten GpuPlanarSurface[] (SCALED for GPU-oblivious path) --- */
     GpuPlanarSurface_t *cpuSurfaces = malloc(numPlanarSurfaces * sizeof(GpuPlanarSurface_t));
+    if (!cpuSurfaces) { _printf("ERROR: Out of memory for cpuSurfaces\n"); useOpenCL = qfalse; goto cleanup_upload; }
     int totalLinks = 0;
     float fScale = (float)scale;
     float shift  = (0.5f / fScale) - 0.5f;
@@ -1347,10 +1375,12 @@ void GpuLightmapState_Upload(void) {
                                       numPlanarSurfaces * sizeof(GpuPlanarSurface_t),
                                       cpuSurfaces, &err);
     free(cpuSurfaces);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU surfacesBuf (%d)\n", err); useOpenCL = qfalse; goto cleanup_upload; }
 
     /* --- Flatten partner CSR --- */
     int *offsets = malloc((numPlanarSurfaces + 1) * sizeof(int));
     int *data    = totalLinks > 0 ? malloc(totalLinks * sizeof(int)) : malloc(sizeof(int));
+    if (!offsets || !data) { _printf("ERROR: Out of memory for partner lists\n"); free(offsets); free(data); useOpenCL = qfalse; goto cleanup_upload; }
     offsets[0] = 0;
     for (s = 0; s < numPlanarSurfaces; s++) {
         int base = offsets[s];
@@ -1360,8 +1390,10 @@ void GpuLightmapState_Upload(void) {
     }
     st->partnerOffsets = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          (numPlanarSurfaces + 1) * sizeof(int), offsets, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU partnerOffsets (%d)\n", err); free(offsets); free(data); useOpenCL = qfalse; goto cleanup_upload; }
     st->partnerData    = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          (totalLinks > 0 ? totalLinks : 1) * sizeof(int), data, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU partnerData (%d)\n", err); free(offsets); free(data); useOpenCL = qfalse; goto cleanup_upload; }
     free(offsets); free(data);
 
     /* --- Per-pixel lookup tables (SCALED) --- */
@@ -1369,6 +1401,11 @@ void GpuLightmapState_Upload(void) {
     int *pixelToX       = malloc(totalPixels * sizeof(int));
     int *pixelToY       = malloc(totalPixels * sizeof(int));
     int *validList      = malloc(totalPixels * sizeof(int));
+    if (!pixelToSurface || !pixelToX || !pixelToY || !validList) {
+        _printf("ERROR: Out of memory for GPU lookup tables\n");
+        free(pixelToSurface); free(pixelToX); free(pixelToY); free(validList);
+        useOpenCL = qfalse; goto cleanup_upload;
+    }
     memset(pixelToSurface, -1, totalPixels * sizeof(int));
 
     int numValid = 0;
@@ -1403,16 +1440,27 @@ void GpuLightmapState_Upload(void) {
     st->numValid = numValid;
     st->validList      = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          numValid * sizeof(int), validList, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU validList (%d)\n", err); useOpenCL = qfalse; }
     st->pixelToSurface = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          totalPixels * sizeof(int), pixelToSurface, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU pixelToSurface (%d)\n", err); useOpenCL = qfalse; }
     st->pixelToX       = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          totalPixels * sizeof(int), pixelToX, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU pixelToX (%d)\n", err); useOpenCL = qfalse; }
     st->pixelToY       = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                          totalPixels * sizeof(int), pixelToY, &err);
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to allocate GPU pixelToY (%d)\n", err); useOpenCL = qfalse; }
+    
     free(pixelToSurface); free(pixelToX); free(pixelToY); free(validList);
 
     if (verbose) _printf("  GPU state uploaded (%dx): %d planar surfaces, %d valid texels, %d partner links\n",
             scale, numPlanarSurfaces, numValid, totalLinks);
+    return;
+
+cleanup_upload:
+    if (scale > 1) { if (tempAtlas) free(tempAtlas); if (tempMask) free(tempMask); }
+    GpuLightmapState_Free();
+    _printf("  GPU upload failed. Falling back to CPU filtering.\n");
 }
 
 /*
@@ -1431,11 +1479,11 @@ static void RunGpuAAKernel(float *pattern, int numSamples, float radius) {
     static cl_program prog = NULL;
     if (!prog) {
         prog = BuildOpenCLProgramWithCommon("aa_filter.cl", "");
+        if (!prog) { _printf("ERROR: Failed to build aa_filter.cl\n"); return; }
     }
-    if (!prog) return;
 
     cl_kernel kernel = clCreateKernel(prog, "aa_filter", &err);
-    if (err != CL_SUCCESS) { return; }
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to create aa_filter kernel (%d)\n", err); return; }
 
     cl_mem src = st->pingIsA ? st->atlasA : st->atlasB;
     cl_mem dst = st->pingIsA ? st->atlasB : st->atlasA;
@@ -1504,11 +1552,11 @@ static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
     static cl_program prog = NULL;
     if (!prog) {
         prog = BuildOpenCLProgramWithCommon("smooth_filter.cl", "");
+        if (!prog) { _printf("ERROR: Failed to build smooth_filter.cl\n"); free(weights); return; }
     }
-    if (!prog) { free(weights); return; }
 
     cl_kernel kernel = clCreateKernel(prog, "smooth_filter", &err);
-    if (err != CL_SUCCESS) { free(weights); return; }
+    if (err != CL_SUCCESS) { _printf("ERROR: Failed to create smooth_filter kernel (%d)\n", err); free(weights); return; }
 
     cl_mem src     = st->pingIsA ? st->atlasA : st->atlasB;
     cl_mem dst     = st->pingIsA ? st->atlasB : st->atlasA;
@@ -1889,6 +1937,10 @@ void PostProcessLightmaps(void) {
         /* ==== GPU PATH ==== */
         if (verbose) _printf("  Uploading GPU lightmap state...\n");
         GpuLightmapState_Upload();
+        if (!useOpenCL) {
+            _printf("  GPU initialization failed. Falling back to CPU path.\n");
+            goto fallback_cpu;
+        }
         if (lightmapAA) AntiAliasLightmapsGPU(lightmapAA);
         if (lightmapSmoothPasses > 0 && lightmapSmoothRadius > 0.0f) {
             _printf("  Smoothing surfaces (%d passes, radius %.2f): ", lightmapSmoothPasses, lightmapSmoothRadius);
@@ -1902,6 +1954,7 @@ void PostProcessLightmaps(void) {
         GpuLightmapState_Download();
         GpuLightmapState_Free();
     } else {
+    fallback_cpu:
         /* ==== CPU PATH ==== */
         if (FILTER_UPSCALE) {
             _printf("  High-Fidelity Filtering (Planar - 2x): ");
@@ -1959,20 +2012,27 @@ void PostProcessLightmaps(void) {
             memcpy(tempFloats, lightFloats, bufferSize);
             
             int progress = 0;
-            #pragma omp parallel for schedule(dynamic, 1)
-            for (int s = 0; s < numDrawSurfaces; s++) {
-                if (useOpenCL) {
+            if (useOpenCL) {
+                /* GPU path for trisoups: MUST be serial to avoid race conditions on lightFloats/g_clQueue and out-of-memory errors */
+                for (int s = 0; s < numDrawSurfaces; s++) {
                     ProcessTrisoupVolumetricGPU(s, radius, tempFloats, aaPasses, smoothPasses);
-                } else {
-                    ProcessTrisoupVolumetricCPU(s, radius, tempFloats, aaPasses, smoothPasses);
+                    int cur = ++progress;
+                    if (numDrawSurfaces >= 10) {
+                        int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
+                        if (np > op) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    }
                 }
-                
-                int cur;
-                #pragma omp atomic capture
-                cur = ++progress;
-                if (numDrawSurfaces >= 10) {
-                    int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
-                    if (np > op) { ThreadLock(); _printf("."); ThreadUnlock(); }
+            } else {
+                #pragma omp parallel for schedule(dynamic, 1)
+                for (int s = 0; s < numDrawSurfaces; s++) {
+                    ProcessTrisoupVolumetricCPU(s, radius, tempFloats, aaPasses, smoothPasses);
+                    int cur;
+                    #pragma omp atomic capture
+                    cur = ++progress;
+                    if (numDrawSurfaces >= 10) {
+                        int op = ((cur-1)*10)/numDrawSurfaces, np = (cur*10)/numDrawSurfaces;
+                        if (np > op) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    }
                 }
             }
             free(tempFloats);
