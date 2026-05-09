@@ -354,10 +354,10 @@ qboolean SampleLightmapWorldBilinear(int sourceSrfIdx, const vec3_t pos, const v
 		float w01 = (1.0f - fx) * fy;
 		float w11 = fx * fy;
 
-		if (lightAlphaMask[p00] != ALPHA_SURF_WORLD) w00 = 0.0f;
-		if (lightAlphaMask[p10] != ALPHA_SURF_WORLD) w10 = 0.0f;
-		if (lightAlphaMask[p01] != ALPHA_SURF_WORLD) w01 = 0.0f;
-		if (lightAlphaMask[p11] != ALPHA_SURF_WORLD) w11 = 0.0f;
+		if (lightAlphaMask[p00] != drawSurfaces[p->surfaceNum].surfaceType) w00 = 0.0f;
+		if (lightAlphaMask[p10] != drawSurfaces[p->surfaceNum].surfaceType) w10 = 0.0f;
+		if (lightAlphaMask[p01] != drawSurfaces[p->surfaceNum].surfaceType) w01 = 0.0f;
+		if (lightAlphaMask[p11] != drawSurfaces[p->surfaceNum].surfaceType) w11 = 0.0f;
 
 		float sumW = w00 + w10 + w01 + w11;
 		if (sumW > 0.01f) {
@@ -415,10 +415,10 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, 
 		float w01 = (1.0f - fx) * fy;
 		float w11 = fx * fy;
 
-		if (lightAlphaMask[p00] != ALPHA_SURF_WORLD) w00 = 0.0f;
-		if (lightAlphaMask[p10] != ALPHA_SURF_WORLD) w10 = 0.0f;
-		if (lightAlphaMask[p01] != ALPHA_SURF_WORLD) w01 = 0.0f;
-		if (lightAlphaMask[p11] != ALPHA_SURF_WORLD) w11 = 0.0f;
+		if (lightAlphaMask[p00] != ds->surfaceType) w00 = 0.0f;
+		if (lightAlphaMask[p10] != ds->surfaceType) w10 = 0.0f;
+		if (lightAlphaMask[p01] != ds->surfaceType) w01 = 0.0f;
+		if (lightAlphaMask[p11] != ds->surfaceType) w11 = 0.0f;
 
 		float sumW = w00 + w10 + w01 + w11;
 		if (sumW > 0.01f) {
@@ -448,7 +448,7 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *outColor, 
 	if (cy >= ds->lightmapHeight) cy = ds->lightmapHeight - 1;
 
 	int p00 = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + cy) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + cx;
-	if (lightAlphaMask[p00] != ALPHA_SURF_WORLD) return qfalse;
+	if (lightAlphaMask[p00] != ds->surfaceType) return qfalse;
 
 	outColor[0] = buffer[p00*3+0];
 	outColor[1] = buffer[p00*3+1];
@@ -582,7 +582,7 @@ static void RunGpuTrisoupFilter(
             if (!pc->valid) continue;
 
             int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-            if (lightAlphaMask && lightAlphaMask[p] != ALPHA_TRISOUP) continue;
+            if (lightAlphaMask && lightAlphaMask[p] != MST_TRIANGLE_SOUP) continue;
             validList[n] = p;
             tidX[n] = x;
             tidY[n] = y;
@@ -1021,7 +1021,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
             if (gridInBounds) {
                 aaTexel_t *newT = &pool[i]; VectorCopy(cachedPoints[i].pos, newT->pos); VectorCopy(cachedPoints[i].normal, newT->normal);
                 p = cachedPoints[i].pixelIndex;
-                if (lightAlphaMask && lightAlphaMask[p] != ALPHA_TRISOUP) continue;
+                if (lightAlphaMask && lightAlphaMask[p] != MST_TRIANGLE_SOUP) continue;
                 VectorCopy(&tempFloats[p * 3], newT->color);
                 size_t cell = (size_t)v[0] * gStride1 + (size_t)v[1] * gStride2 + (size_t)v[2];
                 newT->next = flatGrid[cell]; flatGrid[cell] = newT;
@@ -1055,7 +1055,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
             qboolean isAA = (currentPass < aaPasses);
             for (int pIdx = 0; pIdx < numPoints; pIdx++) {
                 p = cachedPoints[pIdx].pixelIndex;
-                if (lightAlphaMask && lightAlphaMask[p] != ALPHA_TRISOUP) continue;
+                if (lightAlphaMask && lightAlphaMask[p] != MST_TRIANGLE_SOUP) continue;
                 const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
                 vec3_t finalColor = {0,0,0}; float finalWeight = 0;
                 for (k = 0; k < numSamples; k++) {
@@ -1145,7 +1145,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
                 if (gridInBounds) {
                     aaTexel_t *newT = &pool[i]; VectorCopy(cachedPoints[i].pos, newT->pos); VectorCopy(cachedPoints[i].normal, newT->normal);
                     p = cachedPoints[i].pixelIndex; 
-                    if (lightAlphaMask && lightAlphaMask[p] != ALPHA_TRISOUP) continue;
+                    if (lightAlphaMask && lightAlphaMask[p] != MST_TRIANGLE_SOUP) continue;
                     VectorCopy(&tempFloats[p * 3], newT->color);
                     size_t cell = (size_t)v[0] * gStride1 + (size_t)v[1] * gStride2 + (size_t)v[2];
                     newT->next = flatGrid[cell]; flatGrid[cell] = newT;
@@ -1156,7 +1156,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tempFl
                 for (x = 0; x < W; x++) {
                     int pixIdx = y * W + x; if (!pixCache[pixIdx].valid) continue;
                     p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                    if (lightAlphaMask && lightAlphaMask[p] != ALPHA_TRISOUP) continue;
+                    if (lightAlphaMask && lightAlphaMask[p] != MST_TRIANGLE_SOUP) continue;
                     const int numSamples = isAA ? SS_PATTERN8_COUNT : 1;
                     vec3_t finalColor = {0,0,0}; float finalWeight = 0;
                     for (k = 0; k < numSamples; k++) {
@@ -1321,7 +1321,7 @@ void GpuLightmapState_Upload(void) {
                     int pa = (lm * Hs + offYs + y_s) * Ws + offXs + x_s;
                     if (GetFilteredTexel(sidx, px, py, col, lightFloats)) {
                         VectorCopy(col, &tempAtlas[pa * 3]);
-                        tempMask[pa] = ALPHA_SURF_WORLD; 
+                        tempMask[pa] = ds->surfaceType; 
                     } else {
                         tempMask[pa] = 0; // Strictly mask out pixels rejected by CPU logic
                     }
@@ -1653,7 +1653,7 @@ void AntiAliasLightmapsCPU(int passes) {
             for (y = 0; y < ds->lightmapHeight; y++) {
                 for (x = 0; x < ds->lightmapWidth; x++) {
                     p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                    if (lightAlphaMask[p] != ALPHA_SURF_WORLD) continue;
+                    if (lightAlphaMask[p] != ds->surfaceType) continue;
 
                     float r = 0, g = 0, b = 0;
                     int cnt = 0;
@@ -1724,7 +1724,7 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 			float py = ((float)Y + 0.5f) * 0.5f;
 			float col[3];
 			if (GetFilteredTexel(sIdx, px, py, col, tempFloats)) {
-				mask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
+				mask2x[Y * W2 + X] = ds->surfaceType;
 				VectorCopy(col, &grid2x[(Y * W2 + X) * 3]);
 			} else {
 				mask2x[Y * W2 + X] = 0;
@@ -1807,7 +1807,7 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 				}
 
 				if (sumWeight > 0.0001f) {
-					blurMask2x[Y * W2 + X] = ALPHA_SURF_WORLD;
+					blurMask2x[Y * W2 + X] = ds->surfaceType;
 					VectorScale(sumColor, 1.0f / sumWeight, &blur2x[(Y * W2 + X) * 3]);
 				} else {
 					blurMask2x[Y * W2 + X] = 0;
@@ -1823,7 +1823,7 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
 	for (y = 0; y < H; y++) {
 		for (x = 0; x < W; x++) {
 			p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-			if (lightAlphaMask[p] != ALPHA_SURF_WORLD) continue;
+			if (lightAlphaMask[p] != ds->surfaceType) continue;
 
 			float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
 			for (int dy = 0; dy < 2; dy++) {
@@ -1902,7 +1902,7 @@ void SmoothLightmapsCPU(float radius) {
         for (y = 0; y < ds->lightmapHeight; y++) {
             for (x = 0; x < ds->lightmapWidth; x++) {
                 p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x;
-                if (lightAlphaMask[p] != ALPHA_SURF_WORLD) continue;
+                if (lightAlphaMask[p] != ds->surfaceType) continue;
                 float sumColor[3] = {0,0,0}, sumWeight = 0.0f;
                 for (j = -kernelRadius; j <= kernelRadius; j++) {
                     for (i = -kernelRadius; i <= kernelRadius; i++) {

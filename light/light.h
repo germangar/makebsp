@@ -108,8 +108,6 @@ void GpuLightmapState_Free(void);
 
 
 
-#define ALPHA_SURF_WORLD 1
-#define ALPHA_TRISOUP 2
 
 #define SAMPLE_NUDGE 0.25f
 #define SELF_SHADOW_EPSILON 1.25f

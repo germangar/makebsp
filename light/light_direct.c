@@ -1262,10 +1262,10 @@ void TraceLtm(int num) {
         if (k >= 0 && k < numLightBytes / 3) {
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
               if (sampleHit[i][j]) {
-                lightAlphaMask[k] = ALPHA_TRISOUP;
+                lightAlphaMask[k] = MST_TRIANGLE_SOUP;
               }
             } else {
-              lightAlphaMask[k] = ALPHA_SURF_WORLD;
+              lightAlphaMask[k] = ds->surfaceType;
             }
         }
       }
