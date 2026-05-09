@@ -218,6 +218,7 @@ extern byte *lightAlphaMask;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
+extern qboolean g_jitterdance;
 
 //===============================================================
 
