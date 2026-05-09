@@ -74,10 +74,6 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     final = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH, widthtable, heighttable);
     FreeMesh(subdivided);
 
-    // Step 6: Recompute normals for the denser final grid
-    //         Do NOT call PutMeshOnCurve here - final grid may be even-sized
-    MakeMeshNormals(*final);
-
     // Step 7: Unify normals at singularities (collapsed edges / fan shapes)
     UnifyMeshNormals(final);
 
