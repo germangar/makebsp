@@ -63,7 +63,7 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
 
     // Step 3: Compute smooth normals from the curved CCW-wound mesh
     //         This gives correct outward-facing normals regardless of patch orientation
-    MakeMeshNormals(*mesh);
+        MakeMeshNormals(*mesh);
 
     // Step 4: Remove co-linear rows/columns to keep the mesh lean
     subdivided = RemoveLinearMeshColumnsRows(mesh);
@@ -80,52 +80,4 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     return final;
 }
 
-/*
-=========================
-DilatePatchSurface
 
-Fills the 1-texel padding around the patch lightmap block by copying colors
-from the nearest valid edge luxels.
-Also marks the dilated texels in lightAlphaMask as ALPHA_SURF_WORLD.
-=========================
-*/
-void DilateLightmapSurface(dsurface_t *ds, float *buffer) {
-    if (!buffer) return;
-
-    int w = ds->lightmapWidth;
-    int h = ds->lightmapHeight;
-    int x = ds->lightmapOffset[0][0];
-    int y = ds->lightmapOffset[0][1];
-    int lmNum = ds->lightmapNum[0];
-
-    // Padding is at x-1, y-1, etc.
-    // The allocated block in q3map was (w+2) x (h+2) starting at (x-1, y-1)
-    for (int dy = -1; dy <= h; dy++) {
-        for (int dx = -1; dx <= w; dx++) {
-            if (dx >= 0 && dx < w && dy >= 0 && dy < h) continue;
-
-            int curX = x + dx;
-            int curY = y + dy;
-
-            // Safety check for lightmap bounds
-            if (curX < 0 || curX >= LIGHTMAP_WIDTH || curY < 0 || curY >= LIGHTMAP_HEIGHT) continue;
-
-            int k_dst = (lmNum * LIGHTMAP_HEIGHT + curY) * LIGHTMAP_WIDTH + curX;
-            
-            // Dilate from nearest hit luxel in the w x h block
-            int nearest_x = dx;
-            if (nearest_x < 0) nearest_x = 0;
-            if (nearest_x >= w) nearest_x = w - 1;
-            int nearest_y = dy;
-            if (nearest_y < 0) nearest_y = 0;
-            if (nearest_y >= h) nearest_y = h - 1;
-
-            int k_src = (lmNum * LIGHTMAP_HEIGHT + y + nearest_y) * LIGHTMAP_WIDTH + x + nearest_x;
-
-            VectorCopy(&buffer[k_src * 3], &buffer[k_dst * 3]);
-            if (lightAlphaMask) {
-                lightAlphaMask[k_dst] = ALPHA_SURF_WORLD;
-            }
-        }
-    }
-}

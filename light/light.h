@@ -106,7 +106,7 @@ void GpuLightmapState_Upload(void);
 void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
-void DilateLightmapSurface(dsurface_t *ds, float *buffer);
+
 
 #define ALPHA_SURF_WORLD 1
 #define ALPHA_TRISOUP 2
@@ -223,14 +223,18 @@ extern qboolean debugLightmapsAlpha;
 
 // light.c
 typedef struct {
+  // local data
   vec3_t origin;          // Bounding sphere center
   float radius;           // Bounding sphere radius
-  vec3_t entityOrigin;    // Offset for inline models
-  qboolean isEntity;      // Entity membership flag
-  radFillMode_t radFillMode; // Sidecar flag
   float maxReach;         // Radiosity culling reach
   int emitterStart;       // Radiosity emitter indexing
   int emitterCount;
+  vec3_t entityOrigin;    // Offset for inline models
+  qboolean isEntity;      // Entity membership flag
+  
+  // sidecar data
+  radFillMode_t radFillMode;
+
 } localSurface_t;
 
 extern localSurface_t *localSurfaces;

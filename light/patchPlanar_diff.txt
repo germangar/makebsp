@@ -1,0 +1,76 @@
+--- e:/CODE/antigravity/makebsp/light/patch_utils.c
++++ e:/CODE/antigravity/makebsp/light/patch_utils.c
+@@ -38,51 +38,6 @@
++/*
++================
++CheckPatchPlanar
++
++Returns qtrue if all generated vertices of the patch mesh lie on a single plane.
++If planar, outNormal contains the uniform outward-facing normal.
++================
++*/
++static qboolean CheckPatchPlanar(mesh_t *mesh, int surfIdx, vec3_t outNormal) {
++    int numVerts = mesh->width * mesh->height;
++    if (numVerts < 3) return qfalse;
++
++    vec3_t p0, p1, p2, n;
++    VectorCopy(mesh->verts[0].xyz, p0);
++
++    // Find a valid normal from the first three non-collinear points
++    qboolean found = qfalse;
++    for (int i = 1; i < numVerts - 1; i++) {
++        for (int j = i + 1; j < numVerts; j++) {
++            VectorSubtract(mesh->verts[i].xyz, p0, p1);
++            VectorSubtract(mesh->verts[j].xyz, p0, p2);
++            CrossProduct(p1, p2, n);
++            if (VectorNormalize(n, n) > 0.001f) {
++                found = qtrue;
++                break;
++            }
++        }
++        if (found) break;
++    }
++
++    if (!found) return qfalse; // Degenerate patch
++
++    float dist = DotProduct(p0, n);
++    float maxDist = 0.0f;
++    for (int i = 0; i < numVerts; i++) {
++        float d = DotProduct(mesh->verts[i].xyz, n);
++        float dev = fabs(d - dist);
++        if (dev > maxDist) maxDist = dev;
++    }
++
++    if (maxDist > 0.1f) return qfalse;
++
++    // Ensure normal points outward (matches general direction of original control points)
++    dsurface_t *ds = &drawSurfaces[surfIdx];
++    if (DotProduct(n, drawVerts[ds->firstVert].normal) < 0.0f) {
++        VectorSubtract(vec3_origin, n, n);
++    }
++
++    VectorCopy(n, outNormal);
++    return qtrue;
++}
++
+@@ -102,1 +57,1 @@
+-    mesh_t srcMesh, *mesh, *subdivided, *final;
++    mesh_t srcMesh, *mesh, *subdivided, *final;
++    vec3_t planarNormal;
+@@ -117,1 +72,13 @@
+-    MakeMeshNormals(*mesh);
++    // Step 3: Compute normals
++    int surfIdx = (int)(ds - drawSurfaces);
++    if (CheckPatchPlanar(mesh, surfIdx, planarNormal)) {
++        localSurfaces[surfIdx].patchIsPlanar = qtrue;
++        // Enforce perfectly uniform normal to prevent shading artifacts on flat patches
++        int numVerts = mesh->width * mesh->height;
++        for (int i = 0; i < numVerts; i++) {
++            VectorCopy(planarNormal, mesh->verts[i].normal);
++        }
++    } else {
++        localSurfaces[surfIdx].patchIsPlanar = qfalse;
++        // Compute smooth normals from the curved CCW-wound mesh
++        // This gives correct outward-facing normals regardless of patch orientation
++        MakeMeshNormals(*mesh);
++    }

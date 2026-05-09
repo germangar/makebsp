@@ -925,9 +925,7 @@ flush:
         }
     }
 
-    if (ds->surfaceType == MST_PATCH || ds->surfaceType == MST_PLANAR) {
-        DilateLightmapSurface(ds, radiosityFloats);
-    }
+
 
     free(tempBuffer);
     if (patchMesh) FreeMesh(patchMesh);

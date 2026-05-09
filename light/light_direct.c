@@ -1178,36 +1178,7 @@ void TraceLtm(int num) {
     }
   }
 
-  for (i = 0; i < sampleWidth; i++) {
-    for (j = 0; j < sampleHeight; j++) {
-      if (!occluded[i][j]) {
-        continue;
-      }
-      int count = 0;
-      vec3_t average = {0, 0, 0};
 
-      for (int x = -1; x <= 1; x++) {
-        for (int y = -1; y <= 1; y++) {
-          if (i + x < 0 || i + x >= sampleWidth) {
-            continue;
-          }
-          if (j + y < 0 || j + y >= sampleHeight) {
-            continue;
-          }
-          if (occluded[i + x][j + y]) {
-            continue;
-          }
-          count++;
-          VectorAdd(color[i + x][j + y], average, average);
-        }
-      }
-      if (count) {
-        VectorScale(average, 1.0f / (float)count, color[i][j]);
-        sampleHit[i][j] = qtrue;
-        occluded[i][j] = qfalse;
-      }
-    }
-  }
   
   if (superSample && use_upscale) {
     for (i = 0; i < ds->lightmapWidth; i++) {
@@ -1296,9 +1267,7 @@ void TraceLtm(int num) {
     }
   }
 
-  if (ds->surfaceType == MST_PATCH || ds->surfaceType == MST_PLANAR) {
-    DilateLightmapSurface(ds, lightFloats);
-  }
+
 
   if (ds->surfaceType == MST_PATCH) {
     FreeMesh(mesh);

@@ -97,7 +97,6 @@ int main(int argc, char **argv) {
             debugLightmaps = qtrue;
             _printf("Lightmap debug visualization enabled (FAST mode)\n");
         } else if (!strcmp(argv[i], "-debuglightmapsalpha")) {
-            debugLightmaps = qtrue;
             debugLightmapsAlpha = qtrue;
             _printf("Lightmap debug visualization enabled (ALPHA/ACCURATE mode)\n");
         } else if (!strcmp(argv[i], "-game")) {

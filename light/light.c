@@ -726,79 +726,19 @@ void VisualizeLightmapAllocation(void) {
 
     rasterizedCount++;
 
-    int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
-    int use_upscale = upscale;
-    int scale = use_upscale ? 2 : 1;
-    int currentGutter = superSample ? (GUTTER * scale) : 0;
-
     // generate a unique color for this surface based on index
     color[0] = (i * 123) % 200 + 55;
     color[1] = (i * 456) % 200 + 55;
     color[2] = (i * 789) % 200 + 55;
 
-    if (debugLightmapsAlpha) {
-      if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-        // Use the exact same logic as TraceLtm for model lightmaps
-        int extW = ds->lightmapWidth * scale + currentGutter * 2;
-        int extH = ds->lightmapHeight * scale + currentGutter * 2;
-
-        for (y = 0; y < extH; y++) {
-          for (x = 0; x < extW; x++) {
-            float st[2];
-            vec3_t temp_origin, normal;
-            float fi = (float)(x - currentGutter);
-            float fj = (float)(y - currentGutter);
-            float step = 1.0f / (float)scale;
-            float offset = 0.5f * step;
-
-            st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
-            st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
-
-            if (TriSoupSamplePoint(ds, st, temp_origin, normal)) {
-              int px = (int)floor(st[0]);
-              int py = (int)floor(st[1]);
-
-              if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
-                p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
-                k = p * 3;
-                lightBytes[k] = color[0];
-                lightBytes[k + 1] = color[1];
-                lightBytes[k + 2] = color[2];
-              }
-            }
-          }
-        }
-      } else {
-        // For patches and planar surfaces, we also honor the dilated bounds
-        int extW = ds->lightmapWidth * scale + currentGutter * 2;
-        int extH = ds->lightmapHeight * scale + currentGutter * 2;
-
-        for (y = 0; y < extH; y++) {
-          for (x = 0; x < extW; x++) {
-            int px = ds->lightmapOffset[0][0] + (x - currentGutter) / scale;
-            int py = ds->lightmapOffset[0][1] + (y - currentGutter) / scale;
-
-            if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
-              p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
-              k = p * 3;
-              lightBytes[k] = color[0];
-              lightBytes[k + 1] = color[1];
-              lightBytes[k + 2] = color[2];
-            }
-          }
-        }
-      }
-    } else {
-      // FAST path: original debuglightmaps logic (rectangles)
-      for (y = 0; y < ds->lightmapHeight; y++) {
-        for (x = 0; x < ds->lightmapWidth; x++) {
-          p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH +
-              (ds->lightmapOffset[0][0] + x);
-          k = p * 3;
-          lightBytes[k] = color[0];
-          lightBytes[k + 1] = color[1];
-          lightBytes[k + 2] = color[2];
-        }
+    for (y = 0; y < ds->lightmapHeight; y++) {
+      for (x = 0; x < ds->lightmapWidth; x++) {
+        p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH +
+            (ds->lightmapOffset[0][0] + x);
+        k = p * 3;
+        lightBytes[k] = color[0];
+        lightBytes[k + 1] = color[1];
+        lightBytes[k + 2] = color[2];
       }
     }
   }
@@ -819,6 +759,67 @@ void VisualizeLightmapAllocation(void) {
   }
 }
 
+/*
+==========================
+VisualizeAlphaMask
+==========================
+*/
+void VisualizeAlphaMask(void) {
+  int i, x, y, p, numPages;
+  char filename[1024];
+  dsurface_t *ds;
+  int k;
+  byte color[3];
+
+  if (!lightAlphaMask) return;
+
+  _printf("--- VisualizeAlphaMask ---\n");
+  memset(lightBytes, 24, numLightBytes);
+
+  for (i = 0; i < numDrawSurfaces; i++) {
+    ds = &drawSurfaces[i];
+    if (ds->lightmapNum[0] < 0) continue;
+
+    color[0] = (i * 123) % 200 + 55;
+    color[1] = (i * 456) % 200 + 55;
+    color[2] = (i * 789) % 200 + 55;
+
+    int scale = upscale ? 2 : 1;
+    int currentGutter = upscale ? (GUTTER * 2) : 0;
+    int extW = ds->lightmapWidth * scale + currentGutter * 2;
+    int extH = ds->lightmapHeight * scale + currentGutter * 2;
+
+    for (y = 0; y < extH; y++) {
+      for (x = 0; x < extW; x++) {
+        int px = ds->lightmapOffset[0][0] + (x - currentGutter) / scale;
+        int py = ds->lightmapOffset[0][1] + (y - currentGutter) / scale;
+
+        if (px >= 0 && px < LIGHTMAP_WIDTH && py >= 0 && py < LIGHTMAP_HEIGHT) {
+          p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
+          if (lightAlphaMask[p]) {
+            k = p * 3;
+            lightBytes[k] = color[0];
+            lightBytes[k + 1] = color[1];
+            lightBytes[k + 2] = color[2];
+          }
+        }
+      }
+    }
+  }
+
+  numPages = 0;
+  for (i = 0; i < numDrawSurfaces; i++) {
+    if (drawSurfaces[i].lightmapNum[0] > numPages)
+      numPages = drawSurfaces[i].lightmapNum[0];
+  }
+  numPages++; 
+
+  for (i = 0; i < numPages; i++) {
+    sprintf(filename, "vis_alpha_%d.bmp", i);
+    _printf("    Writing %s...\n", filename);
+    SaveBMP(filename, &lightBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
+  }
+}
 
 /*
 ========
@@ -920,6 +921,10 @@ void LightMain(void) {
 
   // Call radiosity passes
   LightRadiosity();
+
+  if (debugLightmapsAlpha) {
+    VisualizeAlphaMask();
+  }
 
   PostProcessLightmaps();
 }
