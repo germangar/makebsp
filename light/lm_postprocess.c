@@ -922,12 +922,12 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
                 clEnqueueReadBuffer(g_clQueue, bOutput, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
                 
             cleanup_gpu_trisoup:
-                if (bTexelPos) clReleaseMemObject(bTexelPos); if (bTexelNormal) clReleaseMemObject(bTexelNormal); 
-                if (bJitterPos) clReleaseMemObject(bJitterPos); if (bJitterNormal) clReleaseMemObject(bJitterNormal); 
-                if (bJitterValid) clReleaseMemObject(bJitterValid);
-                if (bTexelColor) clReleaseMemObject(bTexelColor); if (bBucketStart) clReleaseMemObject(bBucketStart); 
-                if (bBucketCount) clReleaseMemObject(bBucketCount); if (bSortedTexels) clReleaseMemObject(bSortedTexels); 
-                if (bOutput) clReleaseMemObject(bOutput); if (bValidList) clReleaseMemObject(bValidList);
+                if (bTexelPos) { clReleaseMemObject(bTexelPos); } if (bTexelNormal) { clReleaseMemObject(bTexelNormal); }
+                if (bJitterPos) { clReleaseMemObject(bJitterPos); } if (bJitterNormal) { clReleaseMemObject(bJitterNormal); }
+                if (bJitterValid) { clReleaseMemObject(bJitterValid); }
+                if (bTexelColor) { clReleaseMemObject(bTexelColor); } if (bBucketStart) { clReleaseMemObject(bBucketStart); }
+                if (bBucketCount) { clReleaseMemObject(bBucketCount); } if (bSortedTexels) { clReleaseMemObject(bSortedTexels); }
+                if (bOutput) { clReleaseMemObject(bOutput); } if (bValidList) { clReleaseMemObject(bValidList); }
                 clReleaseKernel(kernel);
             }
             clReleaseProgram(prog);

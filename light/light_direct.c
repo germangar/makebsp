@@ -841,7 +841,6 @@ TraceLtm
 */
 void TraceLtm(int num) {
   int i, j, k;
-  int position;
   int realSurfIndex;
   dsurface_t *ds;
   light_t *light;

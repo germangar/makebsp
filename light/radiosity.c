@@ -518,9 +518,6 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 // ---------------------------------------------------------------
                 // Planar / Patch: irradiance vector path.
                 // ---------------------------------------------------------------
-                float ivec[3][3] = {{0,0,0},{0,0,0},{0,0,0}};
-                vec3_t lvec = {0,0,0};
-                vec3_t energySumVec = {0,0,0};
                 float accum[3] = {0,0,0};
 
                 for (int s = 0; s < numDrawSurfaces; s++) {

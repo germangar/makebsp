@@ -44,7 +44,6 @@ Builds the Embree scene for ray tracing against surfaces and brushes
 void InitTracingGeometry(void) {
   int i, j;
   dsurface_t *dsurf;
-  vec3_t mins, maxs;
 
   // Embree 4 initialization
   g_device = rtcNewDevice(NULL);
