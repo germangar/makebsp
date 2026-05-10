@@ -704,67 +704,144 @@ void BuildLocalSurfaces(void) {
 VisualizeLightmapAllocation
 ==========================
 */
-void VisualizeLightmapAllocation(void) {
-  int i, x, y, p, numPages;
-  char filename[1024];
+#define RASTERIZE_PLANAR_UVS 0
+
+static void RasterizeTriangleToMask(dsurface_t *ds, float st0[2], float st1[2], float st2[2]) {
+    float minX = st0[0]; if (st1[0] < minX) minX = st1[0]; if (st2[0] < minX) minX = st2[0];
+    float maxX = st0[0]; if (st1[0] > maxX) maxX = st1[0]; if (st2[0] > maxX) maxX = st2[0];
+    float minY = st0[1]; if (st1[1] < minY) minY = st1[1]; if (st2[1] < minY) minY = st2[1];
+    float maxY = st0[1]; if (st1[1] > maxY) maxY = st1[1]; if (st2[1] > maxY) maxY = st2[1];
+
+    int startX = (int)floor(minX) - ds->lightmapOffset[0][0];
+    int endX = (int)ceil(maxX) - ds->lightmapOffset[0][0];
+    int startY = (int)floor(minY) - ds->lightmapOffset[0][1];
+    int endY = (int)ceil(maxY) - ds->lightmapOffset[0][1];
+
+    if (startX < 0) startX = 0;
+    if (endX >= ds->lightmapWidth) endX = ds->lightmapWidth - 1;
+    if (startY < 0) startY = 0;
+    if (endY >= ds->lightmapHeight) endY = ds->lightmapHeight - 1;
+
+    if (startX > endX || startY > endY) return;
+
+    // Edge functions for fast incremental rasterization
+    float dx01 = st0[0] - st1[0];
+    float dy01 = st0[1] - st1[1];
+    float dx12 = st1[0] - st2[0];
+    float dy12 = st1[1] - st2[1];
+    float dx20 = st2[0] - st0[0];
+    float dy20 = st2[1] - st0[1];
+
+    // Determine winding order
+    float area = dx01 * dy20 - dy01 * dx20;
+    if (area == 0.0f) return; // Degenerate triangle
+
+    // Flip edges if winding is negative so "inside" is always positive
+    if (area < 0.0f) {
+        dx01 = -dx01; dy01 = -dy01;
+        dx12 = -dx12; dy12 = -dy12;
+        dx20 = -dx20; dy20 = -dy20;
+    }
+
+    // Starting point (pixel center)
+    float px0 = (float)ds->lightmapOffset[0][0] + (float)startX + 0.5f;
+    float py0 = (float)ds->lightmapOffset[0][1] + (float)startY + 0.5f;
+
+    // Initial edge values at (startX, startY)
+    float e0_row = (px0 - st0[0]) * dy01 - (py0 - st0[1]) * dx01;
+    float e1_row = (px0 - st1[0]) * dy12 - (py0 - st1[1]) * dx12;
+    float e2_row = (px0 - st2[0]) * dy20 - (py0 - st2[1]) * dx20;
+
+    for (int y = startY; y <= endY; y++) {
+        float e0 = e0_row;
+        float e1 = e1_row;
+        float e2 = e2_row;
+
+        int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + startX;
+
+        for (int x = startX; x <= endX; x++) {
+            // Epsilon tolerance for edge coverage
+            if (e0 >= -0.001f && e1 >= -0.001f && e2 >= -0.001f) {
+                lightAlphaMask[p] = ds->surfaceType;
+            }
+            // Step X
+            e0 += dy01;
+            e1 += dy12;
+            e2 += dy20;
+            p++;
+        }
+
+        // Step Y
+        e0_row -= dx01;
+        e1_row -= dx12;
+        e2_row -= dx20;
+    }
+}
+
+void GenerateLightmapAlphaMask(void) {
+  int i, x, y, p;
   dsurface_t *ds;
+  
+  if (!lightAlphaMask) return;
 
-  int k;
-  byte color[3];
-  int rasterizedCount = 0;
-
-  _printf("--- VisualizeLightmapAllocation ---\n");
-  _printf("numLightBytes: %d, Page Size: %dx%d\n", numLightBytes, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
-
-  // Clear the entire lightmap buffer with a dark grey color
-  memset(lightBytes, 24, numLightBytes);
+  _printf("--- GenerateLightmapAlphaMask ---\n");
 
   for (i = 0; i < numDrawSurfaces; i++) {
     ds = &drawSurfaces[i];
     if (ds->lightmapNum[0] < 0)
       continue;
 
-    rasterizedCount++;
-
-    // generate a unique color for this surface based on index
-    color[0] = (i * 123) % 200 + 55;
-    color[1] = (i * 456) % 200 + 55;
-    color[2] = (i * 789) % 200 + 55;
-
-    for (y = 0; y < ds->lightmapHeight; y++) {
-      for (x = 0; x < ds->lightmapWidth; x++) {
-        p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH +
-            (ds->lightmapOffset[0][0] + x);
-        k = p * 3;
-        lightBytes[k] = color[0];
-        lightBytes[k + 1] = color[1];
-        lightBytes[k + 2] = color[2];
-      }
+    if (ds->surfaceType == MST_PATCH) {
+        shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+        int ssize = samplesize;
+        if (si && si->lightmapSampleSize) ssize = si->lightmapSampleSize;
+        mesh_t *mesh = SubdividePatchForLighting(ds, (float)ssize);
+        
+        for (int my = 0; my < mesh->height - 1; my++) {
+            for (int mx = 0; mx < mesh->width - 1; mx++) {
+                drawVert_t *v00 = &mesh->verts[my * mesh->width + mx];
+                drawVert_t *v10 = &mesh->verts[my * mesh->width + mx + 1];
+                drawVert_t *v01 = &mesh->verts[(my + 1) * mesh->width + mx];
+                drawVert_t *v11 = &mesh->verts[(my + 1) * mesh->width + mx + 1];
+                float st00[2] = {v00->lightmap[0][0] * LIGHTMAP_WIDTH, v00->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                float st10[2] = {v10->lightmap[0][0] * LIGHTMAP_WIDTH, v10->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                
+                RasterizeTriangleToMask(ds, st00, st10, st11);
+                RasterizeTriangleToMask(ds, st00, st11, st01);
+            }
+        }
+        FreeMesh(mesh);
+    } else if (ds->surfaceType == MST_TRIANGLE_SOUP || (ds->surfaceType == MST_PLANAR && RASTERIZE_PLANAR_UVS)) {
+        for (int j = 0; j < ds->numIndexes; j += 3) {
+            drawVert_t *v0 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
+            drawVert_t *v1 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 1]];
+            drawVert_t *v2 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 2]];
+            float st0[2] = {v0->lightmap[0][0] * LIGHTMAP_WIDTH, v0->lightmap[0][1] * LIGHTMAP_HEIGHT};
+            float st1[2] = {v1->lightmap[0][0] * LIGHTMAP_WIDTH, v1->lightmap[0][1] * LIGHTMAP_HEIGHT};
+            float st2[2] = {v2->lightmap[0][0] * LIGHTMAP_WIDTH, v2->lightmap[0][1] * LIGHTMAP_HEIGHT};
+            RasterizeTriangleToMask(ds, st0, st1, st2);
+        }
+    } else {
+        // Planar faces (with RASTERIZE_PLANAR_UVS == 0) and others: fill the bounding box
+        for (y = 0; y < ds->lightmapHeight; y++) {
+          for (x = 0; x < ds->lightmapWidth; x++) {
+            p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH +
+                (ds->lightmapOffset[0][0] + x);
+            lightAlphaMask[p] = ds->surfaceType;
+          }
+        }
     }
-  }
-
-  _printf("    %d surfaces rasterized for visualization\n", rasterizedCount);
-
-  numPages = 0;
-  for (i = 0; i < numDrawSurfaces; i++) {
-    if (drawSurfaces[i].lightmapNum[0] > numPages)
-      numPages = drawSurfaces[i].lightmapNum[0];
-  }
-  numPages++; // 1-indexed count
-
-  for (i = 0; i < numPages; i++) {
-    sprintf(filename, "vis_lm_%d.bmp", i);
-    _printf("    Writing %s...\n", filename);
-    SaveBMP(filename, &lightBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
   }
 }
 
 /*
 ==========================
-VisualizeAlphaMask
+ExportAlphaMask
 ==========================
 */
-void VisualizeAlphaMask(void) {
+void ExportAlphaMask(const char *filenamePrefix) {
   int i, x, y, p, numPages;
   char filename[1024];
   dsurface_t *ds;
@@ -773,7 +850,7 @@ void VisualizeAlphaMask(void) {
 
   if (!lightAlphaMask) return;
 
-  _printf("--- VisualizeAlphaMask ---\n");
+  _printf("--- ExportAlphaMask (%s) ---\n", filenamePrefix);
   memset(lightBytes, 24, numLightBytes);
 
   for (i = 0; i < numDrawSurfaces; i++) {
@@ -815,7 +892,7 @@ void VisualizeAlphaMask(void) {
   numPages++; 
 
   for (i = 0; i < numPages; i++) {
-    sprintf(filename, "vis_alpha_%d.bmp", i);
+    sprintf(filename, "%s%d.bmp", filenamePrefix, i);
     _printf("    Writing %s...\n", filename);
     SaveBMP(filename, &lightBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
   }
@@ -872,8 +949,11 @@ void LightMain(void) {
     _printf("%5i lightmap samples\n", numSamples);
   }
 
+  // Generate the base geometric mask
+  GenerateLightmapAlphaMask();
+
   if (debugLightmaps) {
-    VisualizeLightmapAllocation();
+    ExportAlphaMask("vis_lm_");
     return;
   }
 
@@ -923,7 +1003,7 @@ void LightMain(void) {
   LightRadiosity();
 
   if (debugLightmapsAlpha) {
-    VisualizeAlphaMask();
+    ExportAlphaMask("vis_alpha_");
   }
 
   PostProcessLightmaps();
