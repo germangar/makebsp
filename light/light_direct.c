@@ -965,7 +965,7 @@ void TraceLtm(int num) {
   int currentGutter = superSample ? (GUTTER * scale) : 0;
 
   if (ds->surfaceType == MST_PATCH) {
-    mesh = SubdividePatchForLighting(ds, ssize);
+    mesh = localSurfaces[realSurfIndex].patchMesh;
     if (mesh->width != ds->lightmapWidth ||
         mesh->height != ds->lightmapHeight) {
       Error("Mesh lightmap miscount (%dx%d != %dx%d)\n"
@@ -1274,9 +1274,7 @@ void TraceLtm(int num) {
 
 
 
-  if (ds->surfaceType == MST_PATCH) {
-    FreeMesh(mesh);
-  }
+  
   free(sampleHit);
   free(sampleHit_data);
   free(tw);

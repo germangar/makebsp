@@ -667,6 +667,7 @@ void BuildLocalSurfaces(void) {
   int i, j;
   vec3_t mins, maxs;
   char mapName[1024];
+  int numPatchesSubdivided = 0;
 
   _printf("--- BuildLocalSurfaces ---\n");
 
@@ -686,6 +687,21 @@ void BuildLocalSurfaces(void) {
       VectorClear(localSurfaces[i].origin);
       localSurfaces[i].radius = 0;
     }
+    
+    // 1.5 Cache patch geometry
+    if (ds->surfaceType == MST_PATCH) {
+        shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+        int ssize = samplesize;
+        if (si && si->lightmapSampleSize) ssize = si->lightmapSampleSize;
+        localSurfaces[i].patchMesh = SubdividePatchForLighting(ds, (float)ssize);
+        numPatchesSubdivided++;
+    } else {
+        localSurfaces[i].patchMesh = NULL;
+    }
+  }
+
+  if (numPatchesSubdivided > 0) {
+      _printf("    %d patch meshes subdivided and cached.\n", numPatchesSubdivided);
   }
 
   // 2. Process entity origins (writes to localSurfaces[i].entityOrigin / isEntity)
@@ -792,10 +808,8 @@ void GenerateLightmapAlphaMask(void) {
       continue;
 
     if (ds->surfaceType == MST_PATCH) {
-        shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-        int ssize = samplesize;
-        if (si && si->lightmapSampleSize) ssize = si->lightmapSampleSize;
-        mesh_t *mesh = SubdividePatchForLighting(ds, (float)ssize);
+        mesh_t *mesh = localSurfaces[i].patchMesh;
+        if (!mesh) continue;
         
         for (int my = 0; my < mesh->height - 1; my++) {
             for (int mx = 0; mx < mesh->width - 1; mx++) {
@@ -812,7 +826,6 @@ void GenerateLightmapAlphaMask(void) {
                 RasterizeTriangleToMask(ds, st00, st11, st01);
             }
         }
-        FreeMesh(mesh);
     } else if (ds->surfaceType == MST_TRIANGLE_SOUP || (ds->surfaceType == MST_PLANAR && RASTERIZE_PLANAR_UVS)) {
         for (int j = 0; j < ds->numIndexes; j += 3) {
             drawVert_t *v0 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
@@ -1007,4 +1020,8 @@ void LightMain(void) {
   }
 
   PostProcessLightmaps();
+
+  for (int i = 0; i < numDrawSurfaces; i++) {
+    if (localSurfaces[i].patchMesh) FreeMesh(localSurfaces[i].patchMesh);
+  }
 }

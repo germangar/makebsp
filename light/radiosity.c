@@ -193,39 +193,6 @@ static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
 // Patch Subdivision Helper
 // ---------------------------------------------------------------------------
 
-static mesh_t *SubdividePatchToLightmap(dsurface_t *ds) {
-    mesh_t srcMesh, *mesh, *subdivided, *finalMesh;
-    int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
-    int ssize = samplesize;
-    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-    if (si && si->lightmapSampleSize) ssize = si->lightmapSampleSize;
-
-    srcMesh.width = ds->patchWidth;
-    srcMesh.height = ds->patchHeight;
-    srcMesh.verts = drawVerts + ds->firstVert;
-
-    mesh = SubdivideMesh(srcMesh, 8, 999);
-    PutMeshOnCurve(*mesh);
-    MakeMeshNormals(*mesh);
-
-    subdivided = RemoveLinearMeshColumnsRows(mesh);
-    FreeMesh(mesh);
-
-    finalMesh = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH, widthtable, heighttable);
-    FreeMesh(subdivided);
-
-    if (finalMesh->width != ds->lightmapWidth || finalMesh->height != ds->lightmapHeight) {
-        static qboolean warned = qfalse;
-        if (!warned) {
-            _printf("WARNING: Radiosity patch subdivision mismatch (%dx%d != %dx%d)\n",
-                    finalMesh->width, finalMesh->height, ds->lightmapWidth, ds->lightmapHeight);
-            warned = qtrue;
-        }
-    }
-
-    return finalMesh;
-}
-
 // ---------------------------------------------------------------------------
 // Phase 1 — Emit
 // ---------------------------------------------------------------------------
@@ -263,7 +230,7 @@ static void RadiosityEmit(const float *srcBuffer) {
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
         if (ds->surfaceType == MST_PATCH) {
-            patchMesh = SubdividePatchToLightmap(ds);
+            patchMesh = localSurfaces[i].patchMesh;
         } else if (ds->surfaceType == MST_PLANAR) {
             CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
             VectorNormalize(surfNormal, surfNormal);
@@ -374,7 +341,7 @@ static void RadiosityEmit(const float *srcBuffer) {
                 if (lum > maxIntensity) maxIntensity = lum;
             }
         }
-        if (patchMesh) FreeMesh(patchMesh);
+        
 
         localSurfaces[i].emitterCount = g_numEmitters - localSurfaces[i].emitterStart;
         if (localSurfaces[i].emitterCount > 0 && maxIntensity > 0) {
@@ -401,7 +368,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     mesh_t *patchMesh = NULL;
     vec3_t dstNormal;
     if (ds->surfaceType == MST_PATCH) {
-        patchMesh = SubdividePatchToLightmap(ds);
+        patchMesh = localSurfaces[surfIdx].patchMesh;
     } else if (ds->surfaceType == MST_PLANAR) {
         CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
         if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
@@ -579,7 +546,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             }
         }
     }
-    if (patchMesh) FreeMesh(patchMesh);
+    
     if (points) free(points);
 }
 
@@ -603,7 +570,7 @@ static void RadiosityVoxelize(void) {
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
         if (ds->surfaceType == MST_PATCH) {
-            patchMesh = SubdividePatchToLightmap(ds);
+            patchMesh = localSurfaces[s].patchMesh;
         } else if (ds->numVerts > 0) {
             VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
         } else {
@@ -631,7 +598,7 @@ static void RadiosityVoxelize(void) {
                     }
                 }
                 free(points);
-                if (patchMesh) FreeMesh(patchMesh);
+                
                 continue;
             }
         }
@@ -662,7 +629,7 @@ static void RadiosityVoxelize(void) {
                 RadiosityVoxelAdd(pos, normal, &radiosityFloats[k_dst * 3]);
             }
         }
-        if (patchMesh) FreeMesh(patchMesh);
+        
     }
 
     size_t total = (size_t)g_radVoxelDims[0] * g_radVoxelDims[1] * g_radVoxelDims[2];
@@ -780,7 +747,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     mesh_t *patchMesh = NULL;
     vec3_t surfNormal = {0,0,0};
     if (ds->surfaceType == MST_PATCH) {
-        patchMesh = SubdividePatchToLightmap(ds);
+        patchMesh = localSurfaces[surfIdx].patchMesh;
     } else if (ds->numVerts > 0) {
         VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
     } else {
@@ -789,14 +756,14 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
     int numPixels = ds->lightmapWidth * ds->lightmapHeight;
     if (numPixels <= 0) {
-        if (patchMesh) FreeMesh(patchMesh);
+        
         return;
     }
 
     vec3_t *tempBuffer = malloc(numPixels * sizeof(vec3_t));
     
     if (!tempBuffer) {
-        if (patchMesh) FreeMesh(patchMesh);
+        
         return;
     }
 
@@ -925,7 +892,7 @@ flush:
 
 
     free(tempBuffer);
-    if (patchMesh) FreeMesh(patchMesh);
+    
 }
 
 static void RadiosityReconstructThread(int surfIdx) {

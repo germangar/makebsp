@@ -376,9 +376,6 @@ int main(int argc, char **argv) {
     // Parse entity strings into structs
     ParseEntities();
 
-    // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)
-    BuildLocalSurfaces();
-
     // Determine samplesize and lightmap size from worldspawn or game default
     if (num_entities > 0) {
         const char *val = ValueForKey(&entities[0], "__texelsize");
@@ -407,6 +404,10 @@ int main(int argc, char **argv) {
         samplesize = game->defaultSampleSize;
         _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
     }
+
+    // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)
+    // Must be called AFTER samplesize is determined so Patches can tessellate
+    BuildLocalSurfaces();
 
     UpConvertLightingData();
     VoxelCache_BakeAll();

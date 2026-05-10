@@ -227,6 +227,7 @@ typedef struct {
   vec3_t entityOrigin;    // Offset for inline models
   qboolean isEntity;      // Entity membership flag
   qboolean isPlanarPatch;
+  mesh_t *patchMesh;      // Cached geometry for MST_PATCH
   
   // sidecar data
   radFillMode_t radFillMode;
