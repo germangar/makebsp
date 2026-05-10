@@ -107,8 +107,6 @@ void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
 
-
-
 #define SAMPLE_NUDGE 0.25f
 #define SELF_SHADOW_EPSILON 1.25f
 
@@ -121,8 +119,6 @@ If the distance falloff calculation changes they would need to be recalibrated *
 #define UPSCALE_FACTOR 2
 #define GUTTER 1
 typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
-
-
 
 
 
@@ -230,6 +226,7 @@ typedef struct {
   int emitterCount;
   vec3_t entityOrigin;    // Offset for inline models
   qboolean isEntity;      // Entity membership flag
+  qboolean isPlanarPatch;
   
   // sidecar data
   radFillMode_t radFillMode;

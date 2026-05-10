@@ -6,33 +6,77 @@ UnifyMeshNormals
 
 Averages the normals of all vertices in the mesh that share the same physical world position.
 This fixes shading singularities (e.g., the "tip" of a fan-shaped Bezier patch).
+Rewritten for maximum accuracy: uses equivalence classes to ensure all vertices
+in a singularity get the exact same final normal, and checks dot products to
+prevent averaging opposite-facing normals on thin geometry.
 =================
 */
 static void UnifyMeshNormals(mesh_t *mesh) {
     int i, j;
     int numVerts = mesh->width * mesh->height;
-    vec3_t *accumNormals = malloc(numVerts * sizeof(vec3_t));
+    int *group = malloc(numVerts * sizeof(int));
+    vec3_t *groupNormals = malloc(numVerts * sizeof(vec3_t));
     
+    // Initialize each vertex to its own group
     for (i = 0; i < numVerts; i++) {
-        VectorCopy(mesh->verts[i].normal, accumNormals[i]);
+        group[i] = i;
+        VectorCopy(mesh->verts[i].normal, groupNormals[i]);
     }
     
+    // Pass 1: Build equivalence classes (find all vertices that share a position and face the same way)
     for (i = 0; i < numVerts; i++) {
         for (j = i + 1; j < numVerts; j++) {
+            // Already in the same group?
+            if (group[i] == group[j]) continue;
+
             vec3_t delta;
             VectorSubtract(mesh->verts[i].xyz, mesh->verts[j].xyz, delta);
-            if (VectorLength(delta) < 0.1f) {
-                VectorAdd(accumNormals[i], mesh->verts[j].normal, accumNormals[i]);
-                VectorAdd(accumNormals[j], mesh->verts[i].normal, accumNormals[j]);
+            
+            // Check if they are physically co-located (distance < 0.1)
+            // Using 0.01 for squared distance (0.1 * 0.1)
+            if (DotProduct(delta, delta) < 0.01f) {
+                // Check if they are facing the same general hemisphere
+                // This prevents averaging the front and back of a thin patch
+                if (DotProduct(mesh->verts[i].normal, mesh->verts[j].normal) > 0.0f) {
+                    
+                    // Merge group j into group i
+                    int oldGroup = group[j];
+                    int targetGroup = group[i];
+                    for (int k = 0; k < numVerts; k++) {
+                        if (group[k] == oldGroup) {
+                            group[k] = targetGroup;
+                        }
+                    }
+                }
             }
         }
     }
     
+    // Pass 2: Accumulate normals for each group
+    // Reset accumulators
     for (i = 0; i < numVerts; i++) {
-        VectorNormalize(accumNormals[i], mesh->verts[i].normal);
+        VectorClear(groupNormals[i]);
     }
     
-    free(accumNormals);
+    // Sum normals
+    for (i = 0; i < numVerts; i++) {
+        int g = group[i];
+        VectorAdd(groupNormals[g], mesh->verts[i].normal, groupNormals[g]);
+    }
+    
+    // Pass 3: Normalize and apply back to mesh
+    for (i = 0; i < numVerts; i++) {
+        int g = group[i];
+        if (VectorLength(groupNormals[g]) > 0.001f) {
+            vec3_t finalNormal;
+            VectorCopy(groupNormals[g], finalNormal);
+            VectorNormalize(finalNormal, finalNormal);
+            VectorCopy(finalNormal, mesh->verts[i].normal);
+        }
+    }
+    
+    free(group);
+    free(groupNormals);
 }
 
 /*
@@ -43,7 +87,7 @@ Returns qtrue if all generated vertices of the patch mesh lie on a single plane.
 If planar, outNormal contains the uniform outward-facing normal.
 ================
 */
-static qboolean CheckPatchPlanar(mesh_t *mesh, int surfIdx, vec3_t outNormal) {
+static qboolean CheckPatchPlanar(mesh_t *mesh) {
     int numVerts = mesh->width * mesh->height;
     if (numVerts < 3) return qfalse;
 
@@ -75,16 +119,7 @@ static qboolean CheckPatchPlanar(mesh_t *mesh, int surfIdx, vec3_t outNormal) {
         if (dev > maxDist) maxDist = dev;
     }
 
-    if (maxDist > 0.1f) return qfalse;
-
-    // Ensure normal points outward (matches general direction of original control points)
-    dsurface_t *ds = &drawSurfaces[surfIdx];
-    if (DotProduct(n, drawVerts[ds->firstVert].normal) < 0.0f) {
-        VectorSubtract(vec3_origin, n, n);
-    }
-
-    VectorCopy(n, outNormal);
-    return qtrue;
+    return (maxDist <= 0.1f);
 }
 
 /*
@@ -100,7 +135,6 @@ Replicates the exact subdivision pipeline used by the BSP phase
 */
 mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     mesh_t srcMesh, *mesh, *subdivided, *final;
-    vec3_t planarNormal;
     int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
 
     srcMesh.width = ds->patchWidth;
@@ -115,7 +149,8 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     PutMeshOnCurve(*mesh);
 
     // Step 3: Compute normals
-    qboolean isPlanar = CheckPatchPlanar(mesh, (int)(ds - drawSurfaces), planarNormal);
+    localSurface_t *localSurface = &localSurfaces[(int)(ds - drawSurfaces)];
+    localSurface->isPlanarPatch = CheckPatchPlanar(mesh);
     
     // Compute smooth normals from the curved CCW-wound mesh
     // This gives correct outward-facing normals regardless of patch orientation
@@ -132,14 +167,6 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
 
     // Step 7: Unify normals at singularities (collapsed edges / fan shapes)
     UnifyMeshNormals(final);
-
-    if (isPlanar) {
-        // Enforce perfectly uniform normal to prevent shading artifacts on flat patches
-        int numVerts = final->width * final->height;
-        for (int i = 0; i < numVerts; i++) {
-            VectorCopy(planarNormal, final->verts[i].normal);
-        }
-    }
 
     return final;
 }
