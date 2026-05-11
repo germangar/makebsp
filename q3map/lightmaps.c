@@ -190,13 +190,11 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
 
     // Check if the snapped block fits in the atlas
     if (w_snapped <= LIGHTMAP_WIDTH && h_snapped <= LIGHTMAP_HEIGHT) {
-      w = w_snapped;
-      h = h_snapped;
 
       // Allocate
       qboolean allocated_success = qfalse;
       for (i = 0; i < numLightmaps; i++) {
-        if (AllocLMBlock(i, w, h, &x, &y)) {
+        if (AllocLMBlock(i, W + 2, H + 2, &x, &y)) {
           ds->lightmapNum = i;
           allocated_success = qtrue;
           break;
@@ -205,17 +203,17 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
 
       if (!allocated_success) {
         PrepareNewLightmap();
-        if (AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+        if (AllocLMBlock(numLightmaps - 1, W + 2, H + 2, &x, &y)) {
             ds->lightmapNum = numLightmaps - 1;
             allocated_success = qtrue;
         }
       }
 
       if (allocated_success) {
-        ds->lightmapWidth = w;
-        ds->lightmapHeight = h;
-        ds->lightmapX = x;
-        ds->lightmapY = y;
+        ds->lightmapWidth = W;
+        ds->lightmapHeight = H;
+        ds->lightmapX = x + 1;
+        ds->lightmapY = y + 1;
 
         for (i = 0; i < ds->numVerts; i++) {
           float s_scaled = (ds->verts[i].lightmap[0][0] - min_s) * scale;
@@ -244,15 +242,15 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   w = ceil((max_s - min_s) * scale) + 1;
   h = ceil((max_t - min_t) * scale) + 1;
 
-  if (w > LIGHTMAP_WIDTH || h > LIGHTMAP_HEIGHT) {
+  if (w > LIGHTMAP_WIDTH - 2 || h > LIGHTMAP_HEIGHT - 2) {
     float scaleX = scale;
     float scaleY = scale;
     
-    if (w > LIGHTMAP_WIDTH) {
-      scaleX = (LIGHTMAP_WIDTH - 2) / (max_s - min_s);
+    if (w > LIGHTMAP_WIDTH - 2) {
+      scaleX = (float)(LIGHTMAP_WIDTH - 3) / (max_s - min_s);
     }
-    if (h > LIGHTMAP_HEIGHT) {
-      scaleY = (LIGHTMAP_HEIGHT - 2) / (max_t - min_t);
+    if (h > LIGHTMAP_HEIGHT - 2) {
+      scaleY = (float)(LIGHTMAP_HEIGHT - 3) / (max_t - min_t);
     }
     
     // Use the more restrictive scale to keep aspect ratio
@@ -267,10 +265,10 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
   if (h < 1)
     h = 1;
 
-  // 4. Allocation
+  // 4. Allocation (including 1-texel padding on all sides)
   qboolean allocated_success = qfalse;
   for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w, h, &x, &y)) {
+    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
       ds->lightmapNum = i;
       allocated_success = qtrue;
       break;
@@ -279,22 +277,22 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
 
   if (!allocated_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w, h, &x, &y)) {
+    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
       Error("misc_model: Lightmap allocation failed");
     }
     ds->lightmapNum = numLightmaps - 1;
   }
   ds->lightmapWidth = w;
   ds->lightmapHeight = h;
-  ds->lightmapX = x;
-  ds->lightmapY = y;
+  ds->lightmapX = x + 1;
+  ds->lightmapY = y + 1;
 
   for (i = 0; i < ds->numVerts; i++) {
     ds->verts[i].lightmap[0][0] =
-        (x + 0.5 + (ds->verts[i].lightmap[0][0] - min_s) * scale) /
+        (x + 1.0f + 0.5f + (ds->verts[i].lightmap[0][0] - min_s) * scale) /
         LIGHTMAP_WIDTH;
     ds->verts[i].lightmap[0][1] =
-        (y + 0.5 + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
+        (y + 1.0f + 0.5f + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
         LIGHTMAP_HEIGHT;
   }
 }
@@ -329,12 +327,16 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   FreeMesh(subdividedMesh);
 
+  // MST_PATCH UVs are mapped to the edges of texels. A patch with 'w' vertices spans 'w-1' texels.
+  int texels_w = w - 1;
+  int texels_h = h - 1;
+
   // allocate the lightmap (including 1-texel padding on all sides)
-  c_exactLightmap += (w + 2) * (h + 2);
+  c_exactLightmap += (texels_w + 2) * (texels_h + 2);
 
   qboolean allocated_patch_success = qfalse;
   for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
+    if (AllocLMBlock(i, texels_w + 2, texels_h + 2, &x, &y)) {
       ds->lightmapNum = i;
       allocated_patch_success = qtrue;
       break;
@@ -343,22 +345,17 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   if (!allocated_patch_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
+    if (!AllocLMBlock(numLightmaps - 1, texels_w + 2, texels_h + 2, &x, &y)) {
       Error("Entity %i, brush %i: Patch lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
     ds->lightmapNum = numLightmaps - 1;
   }
 
-#ifdef LIGHTMAP_PATCHSHIFT
-  w--;
-  h--;
-#endif
-
   // set the lightmap texture coordinates in the drawVerts
   // we add 1 to x and y to account for the padding gutter
-  ds->lightmapWidth = w;
-  ds->lightmapHeight = h;
+  ds->lightmapWidth = texels_w;
+  ds->lightmapHeight = texels_h;
   ds->lightmapX = x + 1;
   ds->lightmapY = y + 1;
 
