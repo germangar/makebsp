@@ -1164,21 +1164,13 @@ void TraceLtm(int num) {
       } 
 
       if (hitCount > 0) {
-        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-          sampleHit[i][j] = qtrue;
-        }
+        sampleHit[i][j] = qtrue;
         occluded[i][j] = qfalse;
         float invHits = 1.0f / (float)hitCount;
         for (k = 0; k < 3; k++) color[i][j][k] = accumColor[k] * invHits;
       } else {
-        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-          sampleHit[i][j] = qfalse;
-        }
+        sampleHit[i][j] = qfalse;
         occluded[i][j] = qtrue;
-      }
-
-      if (ds->surfaceType != MST_TRIANGLE_SOUP && actualSamples == 1) {
-        sampleHit[i][j] = qtrue;
       }
     }
   }
@@ -1260,12 +1252,8 @@ void TraceLtm(int num) {
 
       if (lightAlphaMask) {
         if (k >= 0 && k < numLightBytes / 3) {
-            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-              if (sampleHit[i][j]) {
-                lightAlphaMask[k] = MST_TRIANGLE_SOUP;
-              }
-            } else {
-              lightAlphaMask[k] = ds->surfaceType;
+            if (sampleHit[i][j]) {
+                lightAlphaMask[k] = ds->surfaceType;
             }
         }
       }
