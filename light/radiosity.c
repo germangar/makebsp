@@ -222,6 +222,8 @@ static void RadiosityEmit(const float *srcBuffer) {
         if (ds->lightmapNum[0] < 0) continue;
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
         if (si->surfaceFlags & SURF_SKY) continue;
+        
+        int surf_rad_interval = localSurfaces[i].radInterval;
 
         localSurfaces[i].emitterStart = g_numEmitters;
         float maxIntensity = 0;
@@ -365,6 +367,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     if (ds->lightmapNum[0] < 0 || ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0 || g_numEmitters <= 0) return;
     if (si->surfaceFlags & SURF_SKY) return;
 
+    int surf_rad_interval = localSurfaces[surfIdx].radInterval;
+
     mesh_t *patchMesh = NULL;
     vec3_t dstNormal;
     if (ds->surfaceType == MST_PATCH) {
@@ -383,8 +387,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
-    for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
-        for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
+    for (int ly = 0; ly < ds->lightmapHeight; ly += surf_rad_interval) {
+        for (int lx = 0; lx < ds->lightmapWidth; lx += surf_rad_interval) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
@@ -566,6 +570,8 @@ static void RadiosityVoxelize(void) {
 
         if (ds->lightmapNum[0] < 0) continue;
         if (si->surfaceFlags & SURF_SKY) continue;
+        
+        int surf_rad_interval = localSurfaces[s].radInterval;
 
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
@@ -587,7 +593,7 @@ static void RadiosityVoxelize(void) {
                     int lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
                     int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
 
-                    if (lx % rad_interval == 0 && ly % rad_interval == 0) {
+                    if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
                         if (radiosityFloats[pIdx * 3] == 0 && radiosityFloats[pIdx * 3 + 1] == 0 && radiosityFloats[pIdx * 3 + 2] == 0) continue;
                         
                         vec3_t pos, normal;
@@ -603,8 +609,8 @@ static void RadiosityVoxelize(void) {
             }
         }
 
-        for (int ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
-            for (int lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
+        for (int ly = 0; ly < ds->lightmapHeight; ly += surf_rad_interval) {
+            for (int lx = 0; lx < ds->lightmapWidth; lx += surf_rad_interval) {
                 int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
                 if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
@@ -656,17 +662,17 @@ static void RadiosityVoxelize(void) {
 // ---------------------------------------------------------------------------
 
 // Helper: Bilinearly interpolate from the sparse grid
-static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, const vec3_t normal, vec3_t outColor) {
-    int x0 = (lx / rad_interval) * rad_interval;
-    int x1 = x0 + rad_interval;
-    int y0 = (ly / rad_interval) * rad_interval;
-    int y1 = y0 + rad_interval;
+static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, int surf_rad_interval, const vec3_t normal, vec3_t outColor) {
+    int x0 = (lx / surf_rad_interval) * surf_rad_interval;
+    int x1 = x0 + surf_rad_interval;
+    int y0 = (ly / surf_rad_interval) * surf_rad_interval;
+    int y1 = y0 + surf_rad_interval;
 
     if (x1 >= ds->lightmapWidth)  x1 = x0;
     if (y1 >= ds->lightmapHeight) y1 = y0;
 
-    float fx = (float)(lx - x0) / (float)rad_interval;
-    float fy = (float)(ly - y0) / (float)rad_interval;
+    float fx = (float)(lx - x0) / (float)surf_rad_interval;
+    float fy = (float)(ly - y0) / (float)surf_rad_interval;
 
     int k00 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0);
     int k10 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
@@ -743,6 +749,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->lightmapNum[0] < 0) return;
 
+    int surf_rad_interval = localSurfaces[surfIdx].radInterval;
 
     mesh_t *patchMesh = NULL;
     vec3_t surfNormal = {0,0,0};
@@ -856,11 +863,11 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
             if (ds->surfaceType != MST_TRIANGLE_SOUP) {
                 if (ds->surfaceType == MST_PATCH) {
-                    RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
-                } else if (lx % rad_interval == 0 && ly % rad_interval == 0) {
+                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempBuffer[k_temp]);
+                } else if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
                     continue; // Planar: sparse-grid pixels are already exact, keep them.
                 } else {
-                    RadiosityBilinearSample(ds, lx, ly, texelNormal, tempBuffer[k_temp]);
+                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempBuffer[k_temp]);
                 }
                 continue;
             }

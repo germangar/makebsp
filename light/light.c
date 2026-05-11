@@ -713,6 +713,14 @@ void BuildLocalSurfaces(void) {
   strcpy(mapName, source);
   StripExtension(mapName);
   LoadSurfaceExtraFile(mapName);
+
+  // 4. Initialize per-surface radiosity intervals
+  extern int rad_interval;
+  for (i = 0; i < numDrawSurfaces; i++) {
+    if (localSurfaces[i].radInterval < 1) {
+        localSurfaces[i].radInterval = rad_interval;
+    }
+  }
 }
 
 /*

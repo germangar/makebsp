@@ -231,6 +231,7 @@ typedef struct {
   
   // sidecar data
   radFillMode_t radFillMode;
+  int radInterval;
 
 } localSurface_t;
 
