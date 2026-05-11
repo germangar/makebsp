@@ -231,11 +231,16 @@ static void RadiosityEmit(const float *srcBuffer) {
 
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
+        vec3_t lightmapOrigin;
+        
+        VectorCopy(ds->lightmapOrigin, lightmapOrigin);
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = localSurfaces[i].patchMesh;
         } else if (ds->surfaceType == MST_PLANAR) {
             CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
             VectorNormalize(surfNormal, surfNormal);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         } else {
             if (ds->numVerts < 3) continue;
             VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
@@ -304,10 +309,13 @@ static void RadiosityEmit(const float *srcBuffer) {
 
                 emitter_t *em = &g_emitters[g_numEmitters++];
 
+                float st_x = (float)lx + (float)rad_interval * 0.5f;
+                float st_y = (float)ly + (float)rad_interval * 0.5f;
+
                 if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                     float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + (float)rad_interval * 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_interval * 0.5f;
+                    st[0] = (float)ds->lightmapOffset[0][0] + st_x;
+                    st[1] = (float)ds->lightmapOffset[0][1] + st_y;
                     if (!TriSoupSamplePoint(ds, st, em->center, em->normal)) {
                         VectorClear(em->center); VectorClear(em->normal);
                     }
@@ -315,8 +323,8 @@ static void RadiosityEmit(const float *srcBuffer) {
                     VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                 } else if (ds->surfaceType == MST_PATCH) {
                     float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + (float)rad_interval * 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + (float)rad_interval * 0.5f;
+                    st[0] = (float)ds->lightmapOffset[0][0] + st_x;
+                    st[1] = (float)ds->lightmapOffset[0][1] + st_y;
                     if (PatchSamplePoint(patchMesh, st, em->center, em->normal)) {
                         VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
                         VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
@@ -325,10 +333,8 @@ static void RadiosityEmit(const float *srcBuffer) {
                         VectorClear(em->center);
                     }
                 } else {
-                    // lightmapOrigin is already center-aligned (q3map stores it at texel 0 center).
-                    // Use lx/ly directly — no +0.5f offset needed.
-                    VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], em->center);
-                    VectorMA(em->center, (float)ly, ds->lightmapVecs[1], em->center);
+                    VectorMA(lightmapOrigin, st_x, ds->lightmapVecs[0], em->center);
+                    VectorMA(em->center, st_y, ds->lightmapVecs[1], em->center);
                     VectorMA(em->center, RAD_ORIGIN_NUDGE, surfNormal, em->center);
                     VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                     VectorCopy(surfNormal, em->normal);
@@ -371,11 +377,16 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
     mesh_t *patchMesh = NULL;
     vec3_t dstNormal;
+    vec3_t lightmapOrigin;
+    
+    VectorCopy(ds->lightmapOrigin, lightmapOrigin);
     if (ds->surfaceType == MST_PATCH) {
         patchMesh = localSurfaces[surfIdx].patchMesh;
     } else if (ds->surfaceType == MST_PLANAR) {
         CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
         if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
+        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
     } else {
         if (ds->numVerts < 3) return;
         VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
@@ -393,6 +404,9 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
             vec3_t dst;
+            float st_x = (float)lx + 0.5f;
+            float st_y = (float)ly + 0.5f;
+
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                 qboolean found = qfalse;
                 if (g_fast && points) {
@@ -408,22 +422,22 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 
                 if (!found) {
                     float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                    st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                    st[0] = (float)ds->lightmapOffset[0][0] + st_x;
+                    st[1] = (float)ds->lightmapOffset[0][1] + st_y;
                     if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
                 }
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else if (ds->surfaceType == MST_PATCH) {
                 float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-                st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
+                st[0] = (float)ds->lightmapOffset[0][0] + st_x;
+                st[1] = (float)ds->lightmapOffset[0][1] + st_y;
                 if (!PatchSamplePoint(patchMesh, st, dst, dstNormal)) continue;
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else {
-                VectorMA(ds->lightmapOrigin, (float)lx, ds->lightmapVecs[0], dst);
-                VectorMA(dst, (float)ly, ds->lightmapVecs[1], dst);
+                VectorMA(lightmapOrigin, st_x, ds->lightmapVecs[0], dst);
+                VectorMA(dst, st_y, ds->lightmapVecs[1], dst);
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             }
@@ -575,8 +589,16 @@ static void RadiosityVoxelize(void) {
 
         mesh_t *patchMesh = NULL;
         vec3_t surfNormal = {0,0,0};
+        vec3_t lightmapOrigin;
+        
+        VectorCopy(ds->lightmapOrigin, lightmapOrigin);
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = localSurfaces[s].patchMesh;
+        } else if (ds->surfaceType == MST_PLANAR) {
+            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
+            if (VectorNormalize(surfNormal, surfNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         } else if (ds->numVerts > 0) {
             VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
         } else {

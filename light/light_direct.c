@@ -979,24 +979,28 @@ void TraceLtm(int num) {
     sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
   } else {
     VectorCopy(ds->lightmapVecs[2], normal);
+    VectorCopy(ds->lightmapOrigin, lightmapOrigin);
+
+    if (ds->surfaceType == MST_PLANAR) {
+        // Shift origin from center to the top-left edge to unify math with Patches/TriSoup
+        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
+    }
 
     if (!superSample) {
-      VectorCopy(ds->lightmapOrigin, lightmapOrigin);
       VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
       VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
       sampleWidth = ds->lightmapWidth;
       sampleHeight = ds->lightmapHeight;
     } else {
       // sample at a closer spacing for antialiasing
-      VectorCopy(ds->lightmapOrigin, lightmapOrigin);
       if (use_upscale) {
         float invScale = 1.0f / (float)scale;
         VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
         VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
-        
-        // Shift lightmapOrigin to the center of the first upscaled texel.
-        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[0], lightmapOrigin);
-        VectorMA(lightmapOrigin, -(1.0f - invScale) * 0.5f, ds->lightmapVecs[1], lightmapOrigin);
+      } else {
+        VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
+        VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
       }
 
       sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
@@ -1089,15 +1093,16 @@ void TraceLtm(int num) {
             float occ_dx = nudge[0][position] / 16.0f;
             float occ_dy = nudge[1][position] / 16.0f;
 
+            // Add 0.5f to move from the texel edge to the exact center
+            float u = (float)(i - currentGutter) + jdx + occ_dx + 0.5f;
+            float v = (float)(j - currentGutter) + jdy + occ_dy + 0.5f;
+            float step = 1.0f / (float)scale;
+
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                 float st[2];
                 vec3_t temp_origin;
-                float fi = (float)(i - currentGutter) + jdx + occ_dx;
-                float fj = (float)(j - currentGutter) + jdy + occ_dy;
-                float step = 1.0f / (float)scale;
-                float offset = 0.5f * step;
-                st[0] = (float)ds->lightmapOffset[0][0] + fi * step + offset;
-                st[1] = (float)ds->lightmapOffset[0][1] + fj * step + offset;
+                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
 
                 if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) continue;
 
@@ -1105,10 +1110,8 @@ void TraceLtm(int num) {
                     base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
                 }
             } else if (ds->surfaceType == MST_PATCH) {
-                float step = 1.0f / (float)scale;
-                float offset = 0.5f * step;
-                float target_s = (float)ds->lightmapOffset[0][0] + ((float)(i - currentGutter) + jdx + occ_dx) * step + offset;
-                float target_t = (float)ds->lightmapOffset[0][1] + ((float)(j - currentGutter) + jdy + occ_dy) * step + offset;
+                float target_s = (float)ds->lightmapOffset[0][0] + u * step;
+                float target_t = (float)ds->lightmapOffset[0][1] + v * step;
                 float st[2] = {target_s, target_t};
                 vec3_t temp_origin;
 
@@ -1118,13 +1121,11 @@ void TraceLtm(int num) {
                     base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
                 }
             } else {
-                float pi = (float)(i - currentGutter) + jdx + occ_dx;
-                float pj = (float)(j - currentGutter) + jdy + occ_dy;
                 for (k = 0; k < 3; k++) {
                     base[k] = (double)lightmapOrigin[k] +
                               (double)normal[k] * SAMPLE_NUDGE +
-                              (double)pi * lightmapVecs[0][k] +
-                              (double)pj * lightmapVecs[1][k];
+                              (double)u * lightmapVecs[0][k] +
+                              (double)v * lightmapVecs[1][k];
                 }
             }
 
