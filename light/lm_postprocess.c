@@ -142,15 +142,45 @@ void BuildPlanarSurfaceIndex(void) {
 
 		p->surfaceNum = i;
 		VectorCopy(ds->lightmapOrigin, p->origin);
+
 		if (ds->surfaceType == MST_PLANAR) {
 			VectorMA(p->origin, -0.5f, ds->lightmapVecs[0], p->origin);
 			VectorMA(p->origin, -0.5f, ds->lightmapVecs[1], p->origin);
+			VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
+			VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
+		} else if (ds->surfaceType == MST_PATCH) {
+			mesh_t *mesh = localSurfaces[i].patchMesh;
+			if (mesh && mesh->width > 1 && mesh->height > 1) {
+				vec3_t vU, vV;
+				VectorSubtract(mesh->verts[1].xyz, mesh->verts[0].xyz, vU);
+				VectorSubtract(mesh->verts[mesh->width].xyz, mesh->verts[0].xyz, vV);
+				
+				// Shift origin from center of texel (0,0) to top-left edge
+				VectorMA(p->origin, -0.5f, vU, p->origin);
+				VectorMA(p->origin, -0.5f, vV, p->origin);
+				
+				VectorCopy(vU, p->vecs[0]);
+				VectorCopy(vV, p->vecs[1]);
+			} else {
+				// Fallback if mesh is degenerate
+				VectorClear(p->vecs[0]);
+				VectorClear(p->vecs[1]);
+			}
 		}
+
 		VectorAdd(p->origin, localSurfaces[i].entityOrigin, p->origin);
-		VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
-		VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
-		p->invMagSq[0] = 1.0f / DotProduct(p->vecs[0], p->vecs[0]);
-		p->invMagSq[1] = 1.0f / DotProduct(p->vecs[1], p->vecs[1]);
+		
+		if (ds->surfaceType == MST_PLANAR) {
+			// already copied above
+		} else if (ds->surfaceType == MST_PATCH) {
+			// already copied above
+		} else {
+			VectorCopy(ds->lightmapVecs[0], p->vecs[0]);
+			VectorCopy(ds->lightmapVecs[1], p->vecs[1]);
+		}
+
+		p->invMagSq[0] = (DotProduct(p->vecs[0], p->vecs[0]) > 0.0001f) ? 1.0f / DotProduct(p->vecs[0], p->vecs[0]) : 0;
+		p->invMagSq[1] = (DotProduct(p->vecs[1], p->vecs[1]) > 0.0001f) ? 1.0f / DotProduct(p->vecs[1], p->vecs[1]) : 0;
 		p->width = ds->lightmapWidth;
 		p->height = ds->lightmapHeight;
 		p->lmNum = ds->lightmapNum[0];

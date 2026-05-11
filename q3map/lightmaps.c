@@ -327,16 +327,12 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   FreeMesh(subdividedMesh);
 
-  // MST_PATCH UVs are mapped to the edges of texels. A patch with 'w' vertices spans 'w-1' texels.
-  int texels_w = w - 1;
-  int texels_h = h - 1;
-
   // allocate the lightmap (including 1-texel padding on all sides)
-  c_exactLightmap += (texels_w + 2) * (texels_h + 2);
+  c_exactLightmap += (w + 2) * (h + 2);
 
   qboolean allocated_patch_success = qfalse;
   for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, texels_w + 2, texels_h + 2, &x, &y)) {
+    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
       ds->lightmapNum = i;
       allocated_patch_success = qtrue;
       break;
@@ -345,7 +341,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   if (!allocated_patch_success) {
     PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, texels_w + 2, texels_h + 2, &x, &y)) {
+    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
       Error("Entity %i, brush %i: Patch lightmap allocation failed",
             ds->mapBrush->entitynum, ds->mapBrush->brushnum);
     }
@@ -354,8 +350,8 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
 
   // set the lightmap texture coordinates in the drawVerts
   // we add 1 to x and y to account for the padding gutter
-  ds->lightmapWidth = texels_w;
-  ds->lightmapHeight = texels_h;
+  ds->lightmapWidth = w;
+  ds->lightmapHeight = h;
   ds->lightmapX = x + 1;
   ds->lightmapY = y + 1;
 
@@ -371,7 +367,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
     }
     if (k_w >= w)
       k_w = w - 1;
-    s = x + k_w;
+    s = x + k_w + 0.5f;
     for (j = 0; j < ds->patchHeight; j++) {
       int k_h;
       for (k_h = 0; k_h < h; k_h++) {
@@ -381,23 +377,23 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
       }
       if (k_h >= h)
         k_h = h - 1;
-      t = y + k_h;
+      t = y + k_h + 0.5f;
       verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
       verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
     }
   }
 
-  // precision nudge pass: shift UVs slightly inward to prevent luxel bleeding
+  // precision nudge pass: shift UVs slightly outward to prevent float point inaccuracies
   for (i = 0; i < ds->patchWidth * ds->patchHeight; i++) {
     float *uv = verts[i].lightmap[0];
-    if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.00001f)
-      uv[0] += 0.0001f / LIGHTMAP_WIDTH;
-    if (uv[0] >= (float)(x + w - 1) / LIGHTMAP_WIDTH - 0.00001f)
+    if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
       uv[0] -= 0.0001f / LIGHTMAP_WIDTH;
-    if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.00001f)
-      uv[1] += 0.0001f / LIGHTMAP_HEIGHT;
-    if (uv[1] >= (float)(y + h - 1) / LIGHTMAP_HEIGHT - 0.00001f)
+    if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
+      uv[0] += 0.0001f / LIGHTMAP_WIDTH;
+    if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
       uv[1] -= 0.0001f / LIGHTMAP_HEIGHT;
+    if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
+      uv[1] += 0.0001f / LIGHTMAP_HEIGHT;
   }
 }
 
@@ -522,11 +518,11 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     s = DotProduct(delta, vecs[0]) + x + 0.5f;
     t = DotProduct(delta, vecs[1]) + y + 0.5f;
 
-    // micro-nudge UVs slightly inward to prevent float point errors
-    if (s <= (float)x + 0.5001f) s += 0.0001f;
-    if (s >= (float)(x + w) - 0.5001f) s -= 0.0001f;
-    if (t <= (float)y + 0.5001f) t += 0.0001f;
-    if (t >= (float)(y + h) - 0.5001f) t -= 0.0001f;
+    // micro-nudge UVs slightly outward to prevent float point inaccuracies
+    if (s <= (float)x + 0.5001f) s -= 0.0001f;
+    if (s >= (float)(x + w) - 0.5001f) s += 0.0001f;
+    if (t <= (float)y + 0.5001f) t -= 0.0001f;
+    if (t >= (float)(y + h) - 0.5001f) t += 0.0001f;
 
     verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
     verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
