@@ -50,14 +50,15 @@ extern qboolean g_fast;
  * GpuPlanarSurface — CPU-side mirror of the struct in lm_common.cl.
  * Must stay layout-identical (64 bytes, all float/int).
  */
-typedef struct {
-    float originX,   originY,   originZ;
-    float vecs0X,    vecs0Y,    vecs0Z;
-    float vecs1X,    vecs1Y,    vecs1Z;
-    float invMagSq0, invMagSq1;
-    int   width,     height;
-    int   lmNum;
-    int   lmOffX,    lmOffY;
+typedef struct
+{
+	float originX, originY, originZ;
+	float vecs0X, vecs0Y, vecs0Z;
+	float vecs1X, vecs1Y, vecs1Z;
+	float invMagSq0, invMagSq1;
+	int width, height;
+	int lmNum;
+	int lmOffX, lmOffY;
 } GpuPlanarSurface_t;
 
 /*
@@ -67,33 +68,34 @@ typedef struct {
  *           [kernel dispatches] → GpuLightmapState_Download() →
  *           GpuLightmapState_Free() → FreePlanarSurfaceIndex()
  */
-typedef struct {
-    /* Ping-pong atlas buffers (float RGB).                        */
-    /* Input for each pass is atlasA when pingIsA==1, atlasB when 0 */
-    cl_mem atlasA;
-    cl_mem atlasB;
+typedef struct
+{
+	/* Ping-pong atlas buffers (float RGB).                        */
+	/* Input for each pass is atlasA when pingIsA==1, atlasB when 0 */
+	cl_mem atlasA;
+	cl_mem atlasB;
 
-    /* Alpha validity mask (uchar, 0 = invalid texel)              */
-    cl_mem maskBuf;
+	/* Alpha validity mask (uchar, 0 = invalid texel)              */
+	cl_mem maskBuf;
 
-    /* Planar surface metadata (GpuPlanarSurface[])                */
-    cl_mem surfacesBuf;
+	/* Planar surface metadata (GpuPlanarSurface[])                */
+	cl_mem surfacesBuf;
 
-    /* Partner adjacency in CSR layout                             */
-    cl_mem partnerData;     /* int[] flat partner indices          */
-    cl_mem partnerOffsets;  /* int[numPlanarSurfaces+1]            */
+	/* Partner adjacency in CSR layout                             */
+	cl_mem partnerData;	   /* int[] flat partner indices          */
+	cl_mem partnerOffsets; /* int[numPlanarSurfaces+1]            */
 
-    /* Per-texel lookup tables (all indexed by flat atlas pixel)   */
-    cl_mem validList;       /* int[numValid] — valid texel indices */
-    cl_mem pixelToSurface;  /* int[totalPixels] -> surface index  */
-    cl_mem pixelToX;        /* int[totalPixels] -> local x        */
-    cl_mem pixelToY;        /* int[totalPixels] -> local y        */
+	/* Per-texel lookup tables (all indexed by flat atlas pixel)   */
+	cl_mem validList;	   /* int[numValid] — valid texel indices */
+	cl_mem pixelToSurface; /* int[totalPixels] -> surface index  */
+	cl_mem pixelToX;	   /* int[totalPixels] -> local x        */
+	cl_mem pixelToY;	   /* int[totalPixels] -> local y        */
 
-    int  numPlanarSurfaces;
-    int  numValid;
-    int  totalAtlasPixels;
-    int  pingIsA;           /* 1 = atlasA is current output       */
-    int  upscale;           /* 1 = native, 2 = 2x resolution, etc. */
+	int numPlanarSurfaces;
+	int numValid;
+	int totalAtlasPixels;
+	int pingIsA; /* 1 = atlasA is current output       */
+	int upscale; /* 1 = native, 2 = 2x resolution, etc. */
 } GpuLightmapState;
 
 extern GpuLightmapState g_gpuLM;
@@ -106,11 +108,11 @@ void GpuLightmapState_Upload(void);
 void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
-
 #define SAMPLE_NUDGE 0.25f
 #define SELF_SHADOW_EPSILON 1.25f
+#define JITTER_NUDGE 4.0f // actually 1/JITTER_NUDGE
 
-/* These values have been manually calibrated. 
+/* These values have been manually calibrated.
 If the distance falloff calculation changes they would need to be recalibrated */
 #define MIN_LIGHT_ADD 0.1f
 #define MIN_RADIOSITY_EMITTER_ADD 0.0002f
@@ -118,9 +120,13 @@ If the distance falloff calculation changes they would need to be recalibrated *
 
 #define UPSCALE_FACTOR 2
 #define GUTTER 1
-typedef enum { emit_point, emit_area, emit_spotlight, emit_sun } emittype_t;
-
-
+typedef enum
+{
+	emit_point,
+	emit_area,
+	emit_spotlight,
+	emit_sun
+} emittype_t;
 
 #define MAX_LIGHT_EDGES 8
 
@@ -132,68 +138,81 @@ Calculates the distance at which a light's contribution falls below threshold.
 If area > 0, it uses the area-light formula (Lambertian).
 If area <= 0, it uses the point-light formula.
 ================
-*/static inline float CalculateLightReach(float area, float intensity, float threshold, qboolean linearLight) {
-  if (intensity <= 0 || threshold <= 0) {
-    return 0.0f;
-  }
-  if (linearLight) {
-    // Linear light math: add = intensity * 0.000125f - dist
-    float reach = (intensity * 0.000125f) - threshold;
-    return (reach > 0.0f) ? reach : 0.0f;
-  }
-  if (area > 0) {
-    return (float)sqrt((area * intensity) / threshold);
-  } else {
-    return (float)sqrt(intensity / threshold);
-  }
+*/
+static inline float CalculateLightReach(float area, float intensity, float threshold, qboolean linearLight)
+{
+	if (intensity <= 0 || threshold <= 0)
+	{
+		return 0.0f;
+	}
+	if (linearLight)
+	{
+		// Linear light math: add = intensity * 0.000125f - dist
+		float reach = (intensity * 0.000125f) - threshold;
+		return (reach > 0.0f) ? reach : 0.0f;
+	}
+	if (area > 0)
+	{
+		return (float)sqrt((area * intensity) / threshold);
+	}
+	else
+	{
+		return (float)sqrt(intensity / threshold);
+	}
 }
 
 /*
 ================
 CalculateRadiosityLightReach
 
-Specialized version for Radiosity emitters that accounts for the 1/PI factor 
+Specialized version for Radiosity emitters that accounts for the 1/PI factor
 in the physical form factor formula used in radiosity.c.
 ================
 */
-static inline float CalculateRadiosityLightReach(float area, float intensity, float threshold) {
-  if (intensity <= 0 || threshold <= 0) {
-    return 0.0f;
-  }
-  if (area > 0) {
-    return (float)sqrt((area * intensity) / (M_PI * threshold));
-  } else {
-    return (float)sqrt(intensity / (M_PI * threshold));
-  }
+static inline float CalculateRadiosityLightReach(float area, float intensity, float threshold)
+{
+	if (intensity <= 0 || threshold <= 0)
+	{
+		return 0.0f;
+	}
+	if (area > 0)
+	{
+		return (float)sqrt((area * intensity) / (M_PI * threshold));
+	}
+	else
+	{
+		return (float)sqrt(intensity / (M_PI * threshold));
+	}
 }
 
+typedef struct light_s
+{
+	struct light_s *next;
+	emittype_t type;
+	struct shaderInfo_s *si;
 
-typedef struct light_s {
-  struct light_s *next;
-  emittype_t type;
-  struct shaderInfo_s *si;
+	vec3_t origin;
+	vec3_t normal; // for surfaces, spotlights, and suns
+	float dist;	   // plane location along normal
 
-  vec3_t origin;
-  vec3_t normal; // for surfaces, spotlights, and suns
-  float dist;    // plane location along normal
+	qboolean linearLight;
+	int photons;
+	int style;
+	vec3_t color;
+	float radiusByDist; // for spotlights
 
-  qboolean linearLight;
-  int photons;
-  int style;
-  vec3_t color;
-  float radiusByDist; // for spotlights
+	qboolean twosided; // fog lights both sides
 
-  qboolean twosided; // fog lights both sides
-
-  winding_t *w;
-  float area;       // pre-calculated winding area (for seam fix)
-  vec3_t emitColor; // full out-of-gamut value
-  float reach;      // pre-calculated max distance
+	winding_t *w;
+	float area;		  // pre-calculated winding area (for seam fix)
+	vec3_t emitColor; // full out-of-gamut value
+	float reach;	  // pre-calculated max distance
 } light_t;
 
-typedef struct {
-  dbrush_t *b;
-  vec3_t bounds[2];
+typedef struct
+{
+	dbrush_t *b;
+	vec3_t bounds[2];
 } skyBrush_t;
 
 extern vec3_t sunDirection, sunLight, ambientColor;
@@ -212,49 +231,51 @@ extern byte *lightAlphaMask;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
-extern qboolean g_jitterdance;
 
 //===============================================================
 
 // light.c
-typedef struct {
-  // local data
-  vec3_t origin;          // Bounding sphere center
-  float radius;           // Bounding sphere radius
-  float maxReach;         // Radiosity culling reach
-  int emitterStart;       // Radiosity emitter indexing
-  int emitterCount;
-  vec3_t entityOrigin;    // Offset for inline models
-  qboolean isEntity;      // Entity membership flag
-  qboolean isPlanarPatch;
-  mesh_t *patchMesh;      // Cached geometry for MST_PATCH
-  
-  // sidecar data
-  radFillMode_t radFillMode;
-  int radInterval;
+typedef struct
+{
+	// local data
+	vec3_t origin;	  // Bounding sphere center
+	float radius;	  // Bounding sphere radius
+	float maxReach;	  // Radiosity culling reach
+	int emitterStart; // Radiosity emitter indexing
+	int emitterCount;
+	vec3_t entityOrigin; // Offset for inline models
+	qboolean isEntity;	 // Entity membership flag
+	qboolean isPlanarPatch;
+	mesh_t *patchMesh; // Cached geometry for MST_PATCH
+
+	// sidecar data
+	radFillMode_t radFillMode;
+	int radInterval;
 
 } localSurface_t;
 
 extern localSurface_t *localSurfaces;
 void BuildLocalSurfaces(void);
 
-typedef struct {
-  qboolean passSolid;
-  vec3_t filter; // starts out 1.0, 1.0, 1.0, may be reduced if
-                 // transparent surfaces are crossed
+typedef struct
+{
+	qboolean passSolid;
+	vec3_t filter; // starts out 1.0, 1.0, 1.0, may be reduced if
+				   // transparent surfaces are crossed
 
-  vec3_t hit;        // the impact point of a completely opaque surface
-  float hitFraction; // 0 = at start, 1.0 = at end
+	vec3_t hit;		   // the impact point of a completely opaque surface
+	float hitFraction; // 0 = at start, 1.0 = at end
 } trace_t;
 
-typedef struct {
-  vec3_t start, end;
-  int numOpenLeafs;
-  int openLeafNumbers[MAX_MAP_LEAFS];
-  trace_t *trace;
-  int patchshadows;
-  qboolean forceFrontOnly;
-  int ignoreSurface;
+typedef struct
+{
+	vec3_t start, end;
+	int numOpenLeafs;
+	int openLeafNumbers[MAX_MAP_LEAFS];
+	trace_t *trace;
+	int patchshadows;
+	qboolean forceFrontOnly;
+	int ignoreSurface;
 } traceWork_t;
 
 void InitTrace(void);
@@ -263,33 +284,34 @@ qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t fi
 qboolean PointInTrisoup(vec3_t origin, vec3_t normal);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
-               qboolean testAll, traceWork_t *tw);
+			   qboolean testAll, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);
 qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal);
 mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize);
-struct MyRayQueryContext {
-  struct RTCRayQueryContext context;
-  traceWork_t *tw;
-  int patchshadows;
+struct MyRayQueryContext
+{
+	struct RTCRayQueryContext context;
+	traceWork_t *tw;
+	int patchshadows;
 };
 
 //===============================================================
 
-
 //===============================================================
 
-typedef struct {
-  int textureNum;
-  int x, y, width, height;
+typedef struct
+{
+	int textureNum;
+	int x, y, width, height;
 
-  // for patches
-  qboolean patch;
-  mesh32_t mesh;
+	// for patches
+	qboolean patch;
+	mesh32_t mesh;
 
-  // for faces
-  vec3_t origin;
-  vec3_t vecs[3];
+	// for faces
+	vec3_t origin;
+	vec3_t vecs[3];
 } lightmap_t;
 
 extern float areaScale;
@@ -300,11 +322,11 @@ extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
 
-
-typedef enum {
-    SUPERSAMPLE_NONE = 0,
-    SUPERSAMPLE_MODELS = 1,
-    SUPERSAMPLE_ALL = 2
+typedef enum
+{
+	SUPERSAMPLE_NONE = 0,
+	SUPERSAMPLE_MODELS = 1,
+	SUPERSAMPLE_ALL = 2
 } ssMode_t;
 
 extern ssMode_t superSampleMode;
@@ -321,11 +343,11 @@ void LightWorld(void);
 void TraceLtm(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
-                      qboolean testOcclusion, qboolean forceSunLight,
-                      qboolean applyColorFilter, light_t **lightList,
-                      int numLights, traceWork_t *tw);
+					  qboolean testOcclusion, qboolean forceSunLight,
+					  qboolean applyColorFilter, light_t **lightList,
+					  int numLights, traceWork_t *tw);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
-                    qboolean forceSunLight, float scale, light_t **lightList,
-                    int numLights, traceWork_t *tw);
+					qboolean forceSunLight, float scale, light_t **lightList,
+					int numLights, traceWork_t *tw);
 void CountLightmaps(void);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);

@@ -854,8 +854,6 @@ void TraceLtm(int num) {
   vec3_t **color = NULL;
   vec3_t *color_data = NULL;
   mesh_t *mesh = NULL;
-  static float nudge[2][9] = {{0, -1, 0, 1, -1, 1, -1, 0, 1},
-                               {0, -1, -1, -1, 0, 0, 1, 1, 1}};
   int sampleWidth, sampleHeight, ssize;
   int extW, extH;
   vec3_t lightmapOrigin, lightmapVecs[2];
@@ -1081,72 +1079,45 @@ void TraceLtm(int num) {
           jdy = pattern[pidx][1] * jitterRadius;
         }
 
-        // ====================================================================
-        // OCCLUSION RECOVERY (JITTER DANCE)
-        // Wraps the surface evaluation in a 9-point ST-space jitter grid to 
-        // try and "escape" from solid geometry if the exact texel center is buried.
-        // ====================================================================
-        int position;
-        qboolean valid_origin = qfalse;
-        int maxPositions = g_jitterdance ? 9 : 1;
-        for (position = 0; position < maxPositions; position++) {
-            float occ_dx = nudge[0][position] / 16.0f;
-            float occ_dy = nudge[1][position] / 16.0f;
+        // Add 0.5f to move from the texel edge to the exact center
+        float u = (float)(i - currentGutter) + jdx + 0.5f;
+        float v = (float)(j - currentGutter) + jdy + 0.5f;
+        float step = 1.0f / (float)scale;
 
-            // Add 0.5f to move from the texel edge to the exact center
-            float u = (float)(i - currentGutter) + jdx + occ_dx + 0.5f;
-            float v = (float)(j - currentGutter) + jdy + occ_dy + 0.5f;
-            float step = 1.0f / (float)scale;
+        if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+            float st[2];
+            vec3_t temp_origin;
+            st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+            st[1] = (float)ds->lightmapOffset[0][1] + v * step;
 
-            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                float st[2];
-                vec3_t temp_origin;
-                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
-
-                if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) continue;
-
-                for (k = 0; k < 3; k++) {
-                    base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
-                }
-            } else if (ds->surfaceType == MST_PATCH) {
-                float target_s = (float)ds->lightmapOffset[0][0] + u * step;
-                float target_t = (float)ds->lightmapOffset[0][1] + v * step;
-                float st[2] = {target_s, target_t};
-                vec3_t temp_origin;
-
-                if (!PatchSamplePoint(mesh, st, temp_origin, normal)) continue;
-
-                for (k = 0; k < 3; k++) {
-                    base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
-                }
-            } else {
-                for (k = 0; k < 3; k++) {
-                    base[k] = (double)lightmapOrigin[k] +
-                              (double)normal[k] * SAMPLE_NUDGE +
-                              (double)u * lightmapVecs[0][k] +
-                              (double)v * lightmapVecs[1][k];
-                }
-            }
+            if (!TriSoupSamplePoint(ds, st, temp_origin, normal)) continue;
 
             for (k = 0; k < 3; k++) {
-                base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
-                origin[k] = (float)base[k];
+                base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
             }
+        } else if (ds->surfaceType == MST_PATCH) {
+            float target_s = (float)ds->lightmapOffset[0][0] + u * step;
+            float target_t = (float)ds->lightmapOffset[0][1] + v * step;
+            float st[2] = {target_s, target_t};
+            vec3_t temp_origin;
 
-            if (notrace || !g_jitterdance) {
-                valid_origin = qtrue;
-                break;
+            if (!PatchSamplePoint(mesh, st, temp_origin, normal)) continue;
+
+            for (k = 0; k < 3; k++) {
+                base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
             }
-
-            if (!PointInSolid(origin)) {
-                valid_origin = qtrue;
-                break;
+        } else {
+            for (k = 0; k < 3; k++) {
+                base[k] = (double)lightmapOrigin[k] +
+                          (double)normal[k] * SAMPLE_NUDGE +
+                          (double)u * lightmapVecs[0][k] +
+                          (double)v * lightmapVecs[1][k];
             }
-        } // end of 9-point loop
+        }
 
-        if (!valid_origin) {
-          continue;
+        for (k = 0; k < 3; k++) {
+            base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
+            origin[k] = (float)base[k];
         }
 
         vec3_t subColor;

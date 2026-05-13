@@ -37,7 +37,6 @@ extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
-qboolean g_jitterdance = qfalse;
 
 int main(int argc, char **argv) {
     int i;
@@ -256,9 +255,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-fast")) {
             g_fast = qtrue;
             _printf("Optimized voxelization mode (FAST) enabled\n");
-        } else if (!strcmp(argv[i], "-jitterdance")) {
-            g_jitterdance = qtrue;
-            _printf("Occlusion recovery jitter dance enabled\n");
         } else {
             break;
         }
