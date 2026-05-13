@@ -292,6 +292,15 @@ void PatchMapDrawSurfs(entity_t *e) {
     if (rad_str[0]) {
       ds->smoothingRadius = atof(rad_str);
     }
+
+    const char *fill_str = ValueForKey(e, "rad_fill");
+    if (fill_str[0]) {
+      if (!Q_stricmp(fill_str, "voxel")) {
+        ds->radFillMode = RAD_FILL_VOXEL;
+      } else if (!Q_stricmp(fill_str, "bilinear")) {
+        ds->radFillMode = RAD_FILL_BILINEAR;
+      }
+    }
   }
 
   qprintf("%5i patches\n", patchCount);

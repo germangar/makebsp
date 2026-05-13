@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "globals.h"
@@ -121,4 +122,13 @@ game_t *InitGame(int argc, char **argv) {
     game = &activeGame;
 
     return game;
+}
+
+void ClearCacheDirectory(void) {
+    _printf("Clearing cache directory...\n");
+#ifdef _WIN32
+    system("powershell -NoProfile -Command \"if (Test-Path cache) { Get-ChildItem cache | Remove-Item -Force -Recurse }\"");
+#else
+    system("rm -rf cache/*");
+#endif
 }

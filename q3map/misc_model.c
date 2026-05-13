@@ -593,7 +593,7 @@ void LoadTriangleModels(void) {
       inst->creator = entity;
 
       // rad_fill override
-      radFillMode_t radFillMode = RAD_FILL_DEFAULT;
+      radFillMode_t radFillMode = RAD_FILL_UNSET;
       const char *radFillStr = ValueForKey(entity, "rad_fill");
       if (radFillStr[0]) {
         if (!Q_stricmp(radFillStr, "voxel")) {

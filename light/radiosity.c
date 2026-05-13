@@ -18,7 +18,6 @@ Architecture:
 
 #include "light.h"
 #include "radiosity.h"
-#include "../shared/surface_extra.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>

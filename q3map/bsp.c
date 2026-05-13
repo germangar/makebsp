@@ -435,6 +435,43 @@ ExportGameToJson
 */
 int VisMain(int argc, char **argv);
 
+/*
+================
+WriteSurfaceExtraFile
+
+Writes per-surface metadata (radiosity fill mode, smoothing radius)
+into a binary .srf sidecar file for the light.exe tool.
+================
+*/
+static void WriteSurfaceExtraFile(const char *path) {
+    char srfPath[1024];
+    char baseName[256];
+    FILE *f;
+    int i;
+    extraSurface_t *extra;
+
+    ExtractFileBase(path, baseName);
+    sprintf(srfPath, "cache/%s.srf", baseName);
+    Q_mkdir("cache");
+
+    f = fopen(srfPath, "wb");
+    if (!f) {
+        _printf("WARNING: Could not write surface extra file %s\n", srfPath);
+        return;
+    }
+
+    extra = malloc(sizeof(extraSurface_t) * numMapDrawSurfs);
+    for (i = 0; i < numMapDrawSurfs; i++) {
+        extra[i].radFillMode = (int)mapDrawSurfs[i].radFillMode;
+        extra[i].smoothingRadius = mapDrawSurfs[i].smoothingRadius;
+    }
+
+    fwrite(&numMapDrawSurfs, sizeof(int), 1, f);
+    fwrite(extra, sizeof(extraSurface_t), numMapDrawSurfs, f);
+    fclose(f);
+    free(extra);
+}
+
 int main(int argc, char **argv) {
   int i;
   double start, end;

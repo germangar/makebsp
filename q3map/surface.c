@@ -49,6 +49,7 @@ mapDrawSurface_t *AllocDrawSurf(void) {
   numMapDrawSurfs++;
 
   ds->samplesize = samplesize;
+  ds->radFillMode = RAD_FILL_UNSET;
   ds->smoothingRadius = -1.0f;
 
   return ds;
@@ -101,6 +102,15 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
   if (!radiusStr[0]) radiusStr = ValueForKey(e, "_smoothingradius");
   if (radiusStr[0]) {
     ds->smoothingRadius = atof(radiusStr);
+  }
+
+  const char *fillStr = ValueForKey(e, "rad_fill");
+  if (fillStr[0]) {
+    if (!Q_stricmp(fillStr, "voxel")) {
+      ds->radFillMode = RAD_FILL_VOXEL;
+    } else if (!Q_stricmp(fillStr, "bilinear")) {
+      ds->radFillMode = RAD_FILL_BILINEAR;
+    }
   }
 
   ds->numVerts = w->numpoints;

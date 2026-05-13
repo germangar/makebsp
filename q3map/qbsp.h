@@ -32,7 +32,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/globals.h"
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
-#include "../shared/surface_extra.h"
 
 // Currently active engine limits
 #define MAX_SURFACE_VERTS (game->maxSurfaceVerts)

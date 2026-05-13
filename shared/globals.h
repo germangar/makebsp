@@ -2,6 +2,19 @@
 #define GLOBALS_H
 
 #include "../common/mathlib.h"
+#include "../common/qtypes.h"
+
+typedef enum {
+    RAD_FILL_UNSET = -1,
+    RAD_FILL_DEFAULT = 0,
+    RAD_FILL_VOXEL,
+    RAD_FILL_BILINEAR
+} radFillMode_t;
+
+typedef struct {
+    int radFillMode;
+    float smoothingRadius;
+} extraSurface_t;
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;
 
@@ -71,6 +84,7 @@ extern game_t *game;
 extern game_t gameTemplates[MAX_GAMES];
 
 game_t *InitGame(int argc, char **argv);
+void ClearCacheDirectory(void);
 
 #define LIGHTMAP_WIDTH  (game->lightmapSize)
 #define LIGHTMAP_HEIGHT (game->lightmapSize)

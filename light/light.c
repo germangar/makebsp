@@ -723,6 +723,48 @@ void SetEntityOrigins(void)
 
 /*
 ================
+LoadSurfaceExtraFile
+
+Loads per-surface metadata from a binary .srf sidecar file.
+================
+*/
+static extraSurface_t *LoadSurfaceExtraFile(const char *path, int *numSurfaces)
+{
+    char srfPath[1024];
+    char baseName[256];
+    FILE *f;
+    int count;
+    extraSurface_t *extra;
+
+    ExtractFileBase(path, baseName);
+    sprintf(srfPath, "cache/%s.srf", baseName);
+
+    f = fopen(srfPath, "rb");
+    if (!f)
+        return NULL;
+
+    if (fread(&count, sizeof(int), 1, f) != 1)
+    {
+        fclose(f);
+        return NULL;
+    }
+
+    extra = malloc(sizeof(extraSurface_t) * count);
+    if (fread(extra, sizeof(extraSurface_t), count, f) != (size_t)count)
+    {
+        free(extra);
+        fclose(f);
+        return NULL;
+    }
+
+    fclose(f);
+    if (numSurfaces)
+        *numSurfaces = count;
+    return extra;
+}
+
+/*
+================
 BuildLocalSurfaces
 
 Consolidates geometric bounds, entity offsets, and sidecar data
@@ -784,31 +826,33 @@ void BuildLocalSurfaces(void)
     // 2. Process entity origins (writes to localSurfaces[i].entityOrigin / isEntity)
     SetEntityOrigins();
 
-    // 3. Load sidecar metadata (writes to localSurfaces[i].radFillMode)
+    // 3. Load sidecar metadata and initialize defaults
     // mapName logic from main.c
     extern char source[];
     strcpy(mapName, source);
     StripExtension(mapName);
-    LoadSurfaceExtraFile(mapName);
-
-    // 4. Initialize per-surface radiosity intervals and smoothing radius
+    
+    int numExtra;
+    extraSurface_t *extra = LoadSurfaceExtraFile(mapName, &numExtra);
+    
     extern int rad_interval;
     for (i = 0; i < numDrawSurfaces; i++)
     {
-        if (localSurfaces[i].radInterval < 1)
+        localSurfaces[i].radInterval = rad_interval;
+        localSurfaces[i].smoothingRadius = game->defaultSmoothRadius;
+
+        // Apply sidecar if present
+        if (extra && i < numExtra)
         {
-            localSurfaces[i].radInterval = rad_interval;
-        }
-        if (localSurfaces[i].smoothingRadius < 0.0f)
-        {
-            localSurfaces[i].smoothingRadius = game->defaultSmoothRadius;
-        }
-        // Clamp to non-negative
-        if (localSurfaces[i].smoothingRadius < 0.0f)
-        {
-            localSurfaces[i].smoothingRadius = 0.0f;
+            if (extra[i].radFillMode >= 0) {
+                localSurfaces[i].radFillMode = extra[i].radFillMode;
+            }
+            if (extra[i].smoothingRadius >= 0.0f) {
+                localSurfaces[i].smoothingRadius = extra[i].smoothingRadius;
+            }
         }
     }
+    if (extra) free(extra);
 }
 
 /*
