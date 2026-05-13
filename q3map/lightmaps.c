@@ -33,6 +33,7 @@ mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
 
 #define MAX_LIGHTMAPS 2048
 #define MAX_LIGHTMAP_WIDTH 1024
+#define UV_PRECISION_NUDGE 0.0001f
 int *lightmapHeights = NULL;
 
 int numLightmaps = 0;
@@ -387,13 +388,13 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
   for (i = 0; i < ds->patchWidth * ds->patchHeight; i++) {
     float *uv = verts[i].lightmap[0];
     if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
-      uv[0] -= 0.0001f / LIGHTMAP_WIDTH;
+      uv[0] -= UV_PRECISION_NUDGE;
     if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
-      uv[0] += 0.0001f / LIGHTMAP_WIDTH;
+      uv[0] += UV_PRECISION_NUDGE;
     if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
-      uv[1] -= 0.0001f / LIGHTMAP_HEIGHT;
+      uv[1] -= UV_PRECISION_NUDGE;
     if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
-      uv[1] += 0.0001f / LIGHTMAP_HEIGHT;
+      uv[1] += UV_PRECISION_NUDGE;
   }
 }
 
@@ -518,14 +519,13 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
     s = DotProduct(delta, vecs[0]) + x + 0.5f;
     t = DotProduct(delta, vecs[1]) + y + 0.5f;
 
-    // micro-nudge UVs slightly outward to prevent float point inaccuracies
-    if (s <= (float)x + 0.5001f) s -= 0.0001f;
-    if (s >= (float)(x + w) - 0.5001f) s += 0.0001f;
-    if (t <= (float)y + 0.5001f) t -= 0.0001f;
-    if (t >= (float)(y + h) - 0.5001f) t += 0.0001f;
-
     verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
+    if (s <= (float)x + 0.5001f) verts[i].lightmap[0][0] -= UV_PRECISION_NUDGE;
+    if (s >= (float)(x + w) - 0.5001f) verts[i].lightmap[0][0] += UV_PRECISION_NUDGE;
+
     verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
+    if (t <= (float)y + 0.5001f) verts[i].lightmap[0][1] -= UV_PRECISION_NUDGE;
+    if (t >= (float)(y + h) - 0.5001f) verts[i].lightmap[0][1] += UV_PRECISION_NUDGE;
   }
 
   // calculate the world coordinates of the lightmap samples
