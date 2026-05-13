@@ -34,7 +34,7 @@ Don't use.
 */
 
 static void DilateLightmapAtlas(int width, int passes) {
-	int lm, x, y, i, j, p;
+	int i, j, p, s;
 	int numLMs = (numLightBytes / 3) / (width * width);
 	float *temp = malloc(numLightBytes * sizeof(float));
 	byte *tempMask = malloc(numLMs * width * width);
@@ -45,10 +45,32 @@ static void DilateLightmapAtlas(int width, int passes) {
 		memcpy(temp, lightFloats, numLightBytes * sizeof(float));
 		memcpy(tempMask, lightAlphaMask, numLMs * width * width);
 
-		for (lm = 0; lm < numLMs; lm++) {
-			for (y = 0; y < width; y++) {
-				for (x = 0; x < width; x++) {
-					int idx = (lm * width * width) + y * width + x;
+		for (s = 0; s < numDrawSurfaces; s++) {
+			dsurface_t *ds = &drawSurfaces[s];
+			int sLM = ds->lightmapNum[0];
+			if (sLM < 0) continue;
+
+			int sX = ds->lightmapOffset[0][0];
+			int sY = ds->lightmapOffset[0][1];
+			int sW = ds->lightmapWidth;
+			int sH = ds->lightmapHeight;
+
+			// The allocator reserves a 1-texel gutter around the surface.
+			// sX and sY already include the +1 offset, so the true allocated block is:
+			int minX = sX - 1;
+			int minY = sY - 1;
+			int maxX = sX + sW;
+			int maxY = sY + sH;
+
+			// Clamp to atlas bounds just in case
+			if (minX < 0) minX = 0;
+			if (minY < 0) minY = 0;
+			if (maxX >= width) maxX = width - 1;
+			if (maxY >= width) maxY = width - 1;
+
+			for (int y = minY; y <= maxY; y++) {
+				for (int x = minX; x <= maxX; x++) {
+					int idx = (sLM * width * width) + y * width + x;
 					float energy = temp[idx * 3] + temp[idx * 3 + 1] + temp[idx * 3 + 2];
 					if (tempMask[idx] && energy > 0.0002f) continue;
 
@@ -60,8 +82,9 @@ static void DilateLightmapAtlas(int width, int passes) {
 							if (i == 0 && j == 0) continue;
 							int nx = x + i;
 							int ny = y + j;
-							if (nx >= 0 && nx < width && ny >= 0 && ny < width) {
-								int nidx = (lm * width * width) + ny * width + nx;
+							// Only sample neighbors that are WITHIN this surface's bounding box
+							if (nx >= minX && nx <= maxX && ny >= minY && ny <= maxY) {
+								int nidx = (sLM * width * width) + ny * width + nx;
 								if (tempMask[nidx]) {
 									float nEnergy = temp[nidx * 3] + temp[nidx * 3 + 1] + temp[nidx * 3 + 2];
 									if (nEnergy > 0.0001f) {
@@ -195,10 +218,6 @@ void DownscaleLightmaps(int oldW, int newW) {
 	// Update global state
 	game->lightmapSize = newW;
 	numLightBytes = newTotalPixels * 3;
-
-	// 4. Bleed the final low-resolution atlas to prevent bilinear bleeding in the engine
-	// Running 2 passes in the new resolution is equivalent to 2*ratio pixels in the old one.
-	DilateLightmapAtlas(newW, 2);
 
 	if (num_entities > 0) {
 		SetKeyValue(&entities[0], "__lightmapsize", va("%d", newW));
@@ -525,12 +544,12 @@ void DownConvertLightingData(void) {
 	_printf("--- DownConvertLightingData ---\n");
 	tonemapMode = game->exposureFilter;
 
-	// Always perform background dilation to prevent bilinear bleeding at shell edges
-	DilateLightmapAtlas(game->lightmapSize, 2);
-
+	// experimental (and broken) feature
 	if (game->writeLightmapSize > 0 && game->writeLightmapSize < game->lightmapSize) {
 		DownscaleLightmaps(game->lightmapSize, game->writeLightmapSize);
 	}
+
+	DilateLightmapAtlas(game->lightmapSize, 2);
 
 	if (game->hdr == HDR_8BIT) {
 		const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
