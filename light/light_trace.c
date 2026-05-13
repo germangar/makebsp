@@ -420,10 +420,10 @@ qboolean PointInSolid_r(vec3_t start, int node) {
 
 /*
 =============
-PointInSolid
+PointInBrush
 =============
 */
-qboolean PointInSolid(vec3_t start) { return PointInSolid_r(start, 0); }
+qboolean PointInBrush(vec3_t start) { return PointInSolid_r(start, 0); }
 
 /*
 ===================
@@ -458,6 +458,14 @@ qboolean PointInTrisoup(vec3_t origin, vec3_t normal) {
   if (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID && rayhit.hit.geomID < (unsigned int)numDrawSurfaces) {
       dsurface_t *ds = &drawSurfaces[rayhit.hit.geomID];
       if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+          shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+          if (si) {
+              if ((si->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NONSOLID)) ||
+                  (si->contents & (CONTENTS_TRANSLUCENT | CONTENTS_FOG | CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA))) {
+                  return qfalse; // Skip positive returns for transparent, liquid, or non-solid materials
+              }
+          }
+
           // Check if we hit the backface (inside of the Trisoup looking out)
           float dot = rayhit.ray.dir_x * rayhit.hit.Ng_x + rayhit.ray.dir_y * rayhit.hit.Ng_y + rayhit.ray.dir_z * rayhit.hit.Ng_z;
           if (dot > 0.0f) {
@@ -467,6 +475,18 @@ qboolean PointInTrisoup(vec3_t origin, vec3_t normal) {
   }
 
   return qfalse;
+}
+
+/*
+=============
+PointInSolid
+=============
+*/
+qboolean PointInSolid(vec3_t start) {
+  if (PointInBrush(start)) return qtrue;
+  
+  vec3_t up = {0, 0, 1};
+  return PointInTrisoup(start, up);
 }
 
 /*

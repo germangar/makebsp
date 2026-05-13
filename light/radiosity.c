@@ -932,7 +932,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             if (RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
                 // Unmask if it was masked
                 if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
-                    if (!PointInSolid(pos) && !PointInTrisoup(pos, normal)) {
+                    if (!PointInSolid(pos)) {
                         lightAlphaMask[k_dst] = ds->surfaceType;
                     }
                 }

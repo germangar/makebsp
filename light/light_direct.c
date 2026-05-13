@@ -1140,15 +1140,8 @@ void TraceLtm(int num) {
             }
 
             if (!PointInSolid(origin)) {
-                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                    if (!PointInTrisoup(origin, normal)) {
-                        valid_origin = qtrue;
-                        break;
-                    }
-                } else {
-                    valid_origin = qtrue;
-                    break;
-                }
+                valid_origin = qtrue;
+                break;
             }
         } // end of 9-point loop
 
