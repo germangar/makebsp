@@ -844,9 +844,6 @@ void BuildLocalSurfaces(void)
         // Apply sidecar if present
         if (extra && i < numExtra)
         {
-            if (extra[i].radFillMode >= 0) {
-                localSurfaces[i].radFillMode = extra[i].radFillMode;
-            }
             if (extra[i].smoothingRadius >= 0.0f) {
                 localSurfaces[i].smoothingRadius = extra[i].smoothingRadius;
             }

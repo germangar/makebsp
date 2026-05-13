@@ -4,15 +4,7 @@
 #include "../common/mathlib.h"
 #include "../common/qtypes.h"
 
-typedef enum {
-    RAD_FILL_UNSET = -1,
-    RAD_FILL_DEFAULT = 0,
-    RAD_FILL_VOXEL,
-    RAD_FILL_BILINEAR
-} radFillMode_t;
-
 typedef struct {
-    int radFillMode;
     float smoothingRadius;
 } extraSurface_t;
 

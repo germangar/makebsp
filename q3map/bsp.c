@@ -462,7 +462,6 @@ static void WriteSurfaceExtraFile(const char *path) {
 
     extra = malloc(sizeof(extraSurface_t) * numMapDrawSurfs);
     for (i = 0; i < numMapDrawSurfs; i++) {
-        extra[i].radFillMode = (int)mapDrawSurfs[i].radFillMode;
         extra[i].smoothingRadius = mapDrawSurfs[i].smoothingRadius;
     }
 

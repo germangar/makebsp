@@ -247,10 +247,9 @@ typedef struct
 	qboolean isEntity;	 // Entity membership flag
 	qboolean isPlanarPatch;
 	mesh_t *patchMesh; // Cached geometry for MST_PATCH
+    int radInterval;
 
 	// sidecar data
-	radFillMode_t radFillMode;
-	int radInterval;
 	float smoothingRadius;
 
 } localSurface_t;

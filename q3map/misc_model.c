@@ -592,17 +592,6 @@ void LoadTriangleModels(void) {
       inst->modelName[MAX_QPATH - 1] = '\0';
       inst->creator = entity;
 
-      // rad_fill override
-      radFillMode_t radFillMode = RAD_FILL_UNSET;
-      const char *radFillStr = ValueForKey(entity, "rad_fill");
-      if (radFillStr[0]) {
-        if (!Q_stricmp(radFillStr, "voxel")) {
-          radFillMode = RAD_FILL_VOXEL;
-        } else if (!Q_stricmp(radFillStr, "bilinear")) {
-          radFillMode = RAD_FILL_BILINEAR;
-        }
-      }
-
       // smoothing_radius override
       float smoothingRadius = -1.0f;
       const char *radStr = ValueForKey(entity, "smoothingradius");
@@ -759,7 +748,6 @@ void LoadTriangleModels(void) {
           inst->drawSurfs[inst->numDrawSurfs++] = ds;
           memset(ds, 0, sizeof(*ds));
           ds->miscModel = qtrue;
-          ds->radFillMode = radFillMode;
           ds->smoothingRadius = smoothingRadius;
           ds->planeNum = -1;
           ds->shaderInfo = si;
