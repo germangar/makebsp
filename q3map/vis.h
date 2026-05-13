@@ -42,80 +42,92 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // can't have more seperators than the max number of points on a winding
 #define MAX_SEPERATORS 64
 
-typedef struct {
-  vec3_t normal;
-  float dist;
+typedef struct
+{
+    vec3_t normal;
+    float dist;
 } plane_t;
 
 #define MAX_POINTS_ON_WINDING 64
 #define MAX_POINTS_ON_FIXED_WINDING 12
 
-typedef struct {
-  int numpoints;
-  vec3_t points[MAX_POINTS_ON_FIXED_WINDING]; // variable sized
+typedef struct
+{
+    int numpoints;
+    vec3_t points[MAX_POINTS_ON_FIXED_WINDING]; // variable sized
 } winding_t;
 
 winding_t *NewWinding(int points);
 void FreeWinding(winding_t *w);
 winding_t *CopyWinding(winding_t *w);
 
-typedef struct passage_s {
-  struct passage_s *next;
-  byte cansee[1]; // all portals that can be seen through this passage
+typedef struct passage_s
+{
+    struct passage_s *next;
+    byte cansee[1]; // all portals that can be seen through this passage
 } passage_t;
 
-typedef enum { stat_none, stat_working, stat_done } vstatus_t;
-typedef struct {
-  int num;
-  qboolean hint; // true if this portal was created from a hint splitter
-  qboolean removed;
-  plane_t plane; // normal pointing into neighbor
-  int leaf;      // neighbor
+typedef enum
+{
+    stat_none,
+    stat_working,
+    stat_done
+} vstatus_t;
+typedef struct
+{
+    int num;
+    qboolean hint; // true if this portal was created from a hint splitter
+    qboolean removed;
+    plane_t plane; // normal pointing into neighbor
+    int leaf;      // neighbor
 
-  vec3_t origin; // for fast clip testing
-  float radius;
+    vec3_t origin; // for fast clip testing
+    float radius;
 
-  winding_t *winding;
-  vstatus_t status;
-  byte *portalfront; // [v_portals], preliminary
-  byte *portalflood; // [v_portals], intermediate
-  byte *portalvis;   // [v_portals], final
+    winding_t *winding;
+    vstatus_t status;
+    byte *portalfront; // [v_portals], preliminary
+    byte *portalflood; // [v_portals], intermediate
+    byte *portalvis;   // [v_portals], final
 
-  int nummightsee;     // bit count on portalflood for sort
-  passage_t *passages; // there are just as many passages as there
-                       // are v_portals in the leaf this portal leads to
+    int nummightsee;     // bit count on portalflood for sort
+    passage_t *passages; // there are just as many passages as there
+                         // are v_portals in the leaf this portal leads to
 } vportal_t;
 
 #define MAX_PORTALS_ON_LEAF 128
-typedef struct leaf_s {
-  int numportals_in_leaf;
-  int merged;
-  vportal_t *portals_in_leaf[MAX_PORTALS_ON_LEAF];
+typedef struct leaf_s
+{
+    int numportals_in_leaf;
+    int merged;
+    vportal_t *portals_in_leaf[MAX_PORTALS_ON_LEAF];
 } leaf_t;
 
-typedef struct pstack_s {
-  byte mightsee[MAX_PORTALS / 8]; // bit string
-  struct pstack_s *next;
-  leaf_t *leaf;
-  vportal_t *portal; // portal exiting
-  winding_t *source;
-  winding_t *pass;
+typedef struct pstack_s
+{
+    byte mightsee[MAX_PORTALS / 8]; // bit string
+    struct pstack_s *next;
+    leaf_t *leaf;
+    vportal_t *portal; // portal exiting
+    winding_t *source;
+    winding_t *pass;
 
-  winding_t windings[3]; // source, pass, temp in any order
-  int freewindings[3];
+    winding_t windings[3]; // source, pass, temp in any order
+    int freewindings[3];
 
-  plane_t portalplane;
-  int depth;
+    plane_t portalplane;
+    int depth;
 #ifdef SEPERATORCACHE
-  plane_t seperators[2][MAX_SEPERATORS];
-  int numseperators[2];
+    plane_t seperators[2][MAX_SEPERATORS];
+    int numseperators[2];
 #endif
 } pstack_t;
 
-typedef struct {
-  vportal_t *base;
-  int c_chains;
-  pstack_t pstack_head;
+typedef struct
+{
+    vportal_t *base;
+    int c_chains;
+    pstack_t pstack_head;
 } threaddata_t;
 
 extern int v_numportals;

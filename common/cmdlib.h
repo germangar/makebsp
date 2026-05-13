@@ -142,9 +142,10 @@ char *va(const char *format, ...);
 void ExpandWildcards(int *argc, char ***argv);
 
 // for compression routines
-typedef struct {
-  void *data;
-  int count, width, height;
+typedef struct
+{
+    void *data;
+    int count, width, height;
 } cblock_t;
 
 #endif

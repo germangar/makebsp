@@ -52,170 +52,180 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define HINT_PRIORITY 1000
 
-typedef struct parseMesh_s {
-  struct parseMesh_s *next;
-  mesh_t mesh;
-  shaderInfo_t *shaderInfo;
+typedef struct parseMesh_s
+{
+    struct parseMesh_s *next;
+    mesh_t mesh;
+    shaderInfo_t *shaderInfo;
 
-  qboolean grouped; // used during shared edge grouping
-  struct parseMesh_s *groupChain;
+    qboolean grouped; // used during shared edge grouping
+    struct parseMesh_s *groupChain;
 } parseMesh_t;
 
-typedef struct bspface_s {
-  struct bspface_s *next;
-  int planenum;
-  int priority; // added to value calculation
-  qboolean checked;
-  qboolean hint;
-  winding_t *w;
+typedef struct bspface_s
+{
+    struct bspface_s *next;
+    int planenum;
+    int priority; // added to value calculation
+    qboolean checked;
+    qboolean hint;
+    winding_t *w;
 } bspface_t;
 
-typedef struct plane_s {
-  vec3_t normal;
-  vec_t dist;
-  int type;
-  struct plane_s *hash_chain;
+typedef struct plane_s
+{
+    vec3_t normal;
+    vec_t dist;
+    int type;
+    struct plane_s *hash_chain;
 } plane_t;
 
-typedef struct side_s {
-  int planenum;
+typedef struct side_s
+{
+    int planenum;
 
-  float texMat[2][3]; // brush primitive texture matrix
-  // for old brush coordinates mode
-  float vecs[2][4]; // texture coordinate mapping
+    float texMat[2][3]; // brush primitive texture matrix
+    // for old brush coordinates mode
+    float vecs[2][4]; // texture coordinate mapping
 
-  winding_t *winding;
-  winding_t *visibleHull; // convex hull of all visible fragments
+    winding_t *winding;
+    winding_t *visibleHull; // convex hull of all visible fragments
 
-  struct shaderInfo_s *shaderInfo;
+    struct shaderInfo_s *shaderInfo;
 
-  int contents;     // from shaderInfo
-  int surfaceFlags; // from shaderInfo
-  int value;        // from shaderInfo
+    int contents;     // from shaderInfo
+    int surfaceFlags; // from shaderInfo
+    int value;        // from shaderInfo
 
-  qboolean visible;  // choose visble planes first
-  qboolean bevel;    // don't ever use for bsp splitting, and don't bother
-                     // making windings for it
-  qboolean backSide; // generated side for a q3map_backShader
+    qboolean visible;  // choose visble planes first
+    qboolean bevel;    // don't ever use for bsp splitting, and don't bother
+                       // making windings for it
+    qboolean backSide; // generated side for a q3map_backShader
 
-  int surfaceNum; // the index of the dsurface_t this side generated
-  int outputNum;  // the index of the dbrushside_t this side generated
+    int surfaceNum; // the index of the dsurface_t this side generated
+    int outputNum;  // the index of the dbrushside_t this side generated
 } side_t;
 
 #define MAX_BRUSH_SIDES 1024
 
-typedef struct bspbrush_s {
-  struct bspbrush_s *next;
+typedef struct bspbrush_s
+{
+    struct bspbrush_s *next;
 
-  int entitynum; // editor numbering
-  int brushnum;  // editor numbering
+    int entitynum; // editor numbering
+    int brushnum;  // editor numbering
 
-  struct shaderInfo_s *contentShader;
+    struct shaderInfo_s *contentShader;
 
-  int contents;
-  qboolean detail;
-  qboolean opaque;
-  int outputNumber; // set when the brush is written to the file list
+    int contents;
+    qboolean detail;
+    qboolean opaque;
+    int outputNumber; // set when the brush is written to the file list
 
-  int portalareas[2];
+    int portalareas[2];
 
-  struct bspbrush_s
-      *original; // chopped up brushes will reference the originals
+    struct bspbrush_s
+        *original; // chopped up brushes will reference the originals
 
-  vec3_t mins, maxs;
-  int numsides;
-  side_t sides[6]; // variably sized
+    vec3_t mins, maxs;
+    int numsides;
+    side_t sides[6]; // variably sized
 } bspbrush_t;
 
-typedef struct drawsurf_s {
-  shaderInfo_t *shaderInfo;
+typedef struct drawsurf_s
+{
+    shaderInfo_t *shaderInfo;
 
-  bspbrush_t *mapBrush; // not valid for patches
-  side_t *side;         // not valid for patches
+    bspbrush_t *mapBrush; // not valid for patches
+    side_t *side;         // not valid for patches
 
-  struct drawsurf_s *nextOnShader; // when sorting by shader for lightmaps
+    struct drawsurf_s *nextOnShader; // when sorting by shader for lightmaps
 
-  int fogNum; // set by FogDrawSurfs
+    int fogNum; // set by FogDrawSurfs
 
-  int lightmapNum; // -1 = no lightmap
-  int lightmapX, lightmapY;
-  int lightmapWidth, lightmapHeight;
+    int lightmapNum; // -1 = no lightmap
+    int lightmapX, lightmapY;
+    int lightmapWidth, lightmapHeight;
 
-  int numVerts;
-  drawVert_t *verts;
+    int numVerts;
+    drawVert_t *verts;
 
-  int numIndexes;
-  int *indexes;
+    int numIndexes;
+    int *indexes;
 
-  // for faces only
-  int planeNum;
+    // for faces only
+    int planeNum;
 
-  vec3_t lightmapOrigin;  // also used for flares
-  vec3_t lightmapVecs[3]; // also used for flares
+    vec3_t lightmapOrigin;  // also used for flares
+    vec3_t lightmapVecs[3]; // also used for flares
 
-  // for patches only
-  qboolean patch;
-  int patchWidth;
-  int patchHeight;
+    // for patches only
+    qboolean patch;
+    int patchWidth;
+    int patchHeight;
 
-  // for misc_models only
-  qboolean miscModel;
+    // for misc_models only
+    qboolean miscModel;
 
-  qboolean flareSurface;
-  int samplesize;
-  float lightmapScale;
-  float smoothingRadius;
+    qboolean flareSurface;
+    int samplesize;
+    float lightmapScale;
+    float smoothingRadius;
 } mapDrawSurface_t;
 
-typedef struct drawSurfRef_s {
-  struct drawSurfRef_s *nextRef;
-  int outputNumber;
+typedef struct drawSurfRef_s
+{
+    struct drawSurfRef_s *nextRef;
+    int outputNumber;
 } drawSurfRef_t;
 
-typedef struct node_s {
-  // both leafs and nodes
-  int planenum; // -1 = leaf node
-  struct node_s *parent;
-  vec3_t mins, maxs;  // valid after portalization
-  bspbrush_t *volume; // one for each leaf/node
+typedef struct node_s
+{
+    // both leafs and nodes
+    int planenum; // -1 = leaf node
+    struct node_s *parent;
+    vec3_t mins, maxs;  // valid after portalization
+    bspbrush_t *volume; // one for each leaf/node
 
-  // nodes only
-  side_t *side; // the side that created the node
-  struct node_s *children[2];
-  qboolean hint;
-  int tinyportals;
-  vec3_t referencepoint;
+    // nodes only
+    side_t *side; // the side that created the node
+    struct node_s *children[2];
+    qboolean hint;
+    int tinyportals;
+    vec3_t referencepoint;
 
-  // leafs only
-  qboolean opaque; // view can never be inside
-  qboolean areaportal;
-  int cluster;                       // for portalfile writing
-  int area;                          // for areaportals
-  bspbrush_t *brushlist;             // fragments of all brushes in this leaf
-  drawSurfRef_t *drawSurfReferences; // references to patches pushed down
+    // leafs only
+    qboolean opaque; // view can never be inside
+    qboolean areaportal;
+    int cluster;                       // for portalfile writing
+    int area;                          // for areaportals
+    bspbrush_t *brushlist;             // fragments of all brushes in this leaf
+    drawSurfRef_t *drawSurfReferences; // references to patches pushed down
 
-  int occupied;       // 1 or greater can reach entity
-  entity_t *occupant; // for leak file testing
+    int occupied;       // 1 or greater can reach entity
+    entity_t *occupant; // for leak file testing
 
-  struct portal_s *portals; // also on nodes during construction
+    struct portal_s *portals; // also on nodes during construction
 } node_t;
 
-typedef struct portal_s {
-  plane_t plane;
-  node_t *onnode;   // NULL = outside box
-  node_t *nodes[2]; // [0] = front side of plane
-  struct portal_s *next[2];
-  winding_t *winding;
+typedef struct portal_s
+{
+    plane_t plane;
+    node_t *onnode;   // NULL = outside box
+    node_t *nodes[2]; // [0] = front side of plane
+    struct portal_s *next[2];
+    winding_t *winding;
 
-  qboolean sidefound; // false if ->side hasn't been checked
-  qboolean hint;
-  side_t *side; // NULL = non-visible
+    qboolean sidefound; // false if ->side hasn't been checked
+    qboolean hint;
+    side_t *side; // NULL = non-visible
 } portal_t;
 
-typedef struct {
-  node_t *headnode;
-  node_t outside_node;
-  vec3_t mins, maxs;
+typedef struct
+{
+    node_t *headnode;
+    node_t outside_node;
+    vec3_t mins, maxs;
 } tree_t;
 
 extern int entity_num;
@@ -299,7 +309,6 @@ void MoveBrushesToWorld(entity_t *mapent);
 //=============================================================================
 
 // draw.c
-
 
 extern vec3_t draw_mins, draw_maxs;
 extern qboolean drawflag;
@@ -447,27 +456,29 @@ tree_t *FaceBSP(bspface_t *list);
 
 // misc_model.c
 
-typedef enum {
-  MC_NONE,
-  MC_OBJECT,
-  MC_WALKABLE,
-  MC_WRAP,
-  MC_SHELL,
-  MC_TERRAIN
+typedef enum
+{
+    MC_NONE,
+    MC_OBJECT,
+    MC_WALKABLE,
+    MC_WRAP,
+    MC_SHELL,
+    MC_TERRAIN
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256
 
-typedef struct modelInstance_s {
-  char modelName[MAX_QPATH];
-  int numDrawSurfs;
-  mapDrawSurface_t **drawSurfs; // References to surfaces created for this instance
-  entity_t *creator;            // Reference to the entity that created this instance
-  float triangle_density;
-  modelCategory_t category;
+typedef struct modelInstance_s
+{
+    char modelName[MAX_QPATH];
+    int numDrawSurfs;
+    mapDrawSurface_t **drawSurfs; // References to surfaces created for this instance
+    entity_t *creator;            // Reference to the entity that created this instance
+    float triangle_density;
+    modelCategory_t category;
 
-  int num_collision_meshes;
-  struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes
+    int num_collision_meshes;
+    struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes
 } modelInstance_t;
 
 extern int c_triangleModels;

@@ -66,38 +66,42 @@ int ex_argc;
 char *ex_argv[MAX_EX_ARGC];
 #ifdef _WIN32
 #include "io.h"
-void ExpandWildcards(int *argc, char ***argv) {
-  struct _finddata_t fileinfo;
-  int handle;
-  int i;
-  char filename[1024];
-  char filebase[1024];
-  char *path;
+void ExpandWildcards(int *argc, char ***argv)
+{
+    struct _finddata_t fileinfo;
+    int handle;
+    int i;
+    char filename[1024];
+    char filebase[1024];
+    char *path;
 
-  ex_argc = 0;
-  for (i = 0; i < *argc; i++) {
-    path = (*argv)[i];
-    if (path[0] == '-' || (!strstr(path, "*") && !strstr(path, "?"))) {
-      ex_argv[ex_argc++] = path;
-      continue;
+    ex_argc = 0;
+    for (i = 0; i < *argc; i++)
+    {
+        path = (*argv)[i];
+        if (path[0] == '-' || (!strstr(path, "*") && !strstr(path, "?")))
+        {
+            ex_argv[ex_argc++] = path;
+            continue;
+        }
+
+        handle = _findfirst(path, &fileinfo);
+        if (handle == -1)
+            return;
+
+        ExtractFilePath(path, filebase);
+
+        do
+        {
+            sprintf(filename, "%s%s", filebase, fileinfo.name);
+            ex_argv[ex_argc++] = copystring(filename);
+        } while (_findnext(handle, &fileinfo) != -1);
+
+        _findclose(handle);
     }
 
-    handle = _findfirst(path, &fileinfo);
-    if (handle == -1)
-      return;
-
-    ExtractFilePath(path, filebase);
-
-    do {
-      sprintf(filename, "%s%s", filebase, fileinfo.name);
-      ex_argv[ex_argc++] = copystring(filename);
-    } while (_findnext(handle, &fileinfo) != -1);
-
-    _findclose(handle);
-  }
-
-  *argc = ex_argc;
-  *argv = ex_argv;
+    *argc = ex_argc;
+    *argv = ex_argv;
 }
 #else
 void ExpandWildcards(int *argc, char ***argv) {}
@@ -112,22 +116,23 @@ Error
 For abnormal program terminations in windowed apps
 =================
 */
-void Error(const char *error, ...) {
-  va_list argptr;
-  char text[1024];
-  char text2[1024];
-  int err;
+void Error(const char *error, ...)
+{
+    va_list argptr;
+    char text[1024];
+    char text2[1024];
+    int err;
 
-  err = GetLastError();
+    err = GetLastError();
 
-  va_start(argptr, error);
-  vsprintf(text, error, argptr);
-  va_end(argptr);
+    va_start(argptr, error);
+    vsprintf(text, error, argptr);
+    va_end(argptr);
 
-  sprintf(text2, "%s\nGetLastError() = %i", text, err);
-  MessageBox(NULL, text2, "Error", 0 /* MB_OK */);
+    sprintf(text2, "%s\nGetLastError() = %i", text, err);
+    MessageBox(NULL, text2, "Error", 0 /* MB_OK */);
 
-  exit(1);
+    exit(1);
 }
 
 #else
@@ -138,40 +143,42 @@ Error
 For abnormal program terminations in console apps
 =================
 */
-void Error(const char *error, ...) {
-  va_list argptr;
+void Error(const char *error, ...)
+{
+    va_list argptr;
 
-  printf("\n************ ERROR ************\n");
-  fprintf(stderr, "\n************ ERROR ************\n");
+    printf("\n************ ERROR ************\n");
+    fprintf(stderr, "\n************ ERROR ************\n");
 
-  va_start(argptr, error);
-  vprintf(error, argptr);
-  va_end(argptr);
+    va_start(argptr, error);
+    vprintf(error, argptr);
+    va_end(argptr);
 
-  va_start(argptr, error);
-  vfprintf(stderr, error, argptr);
-  va_end(argptr);
+    va_start(argptr, error);
+    vfprintf(stderr, error, argptr);
+    va_end(argptr);
 
-  printf("\n");
-  fprintf(stderr, "\n");
-  fflush(stdout);
-  fflush(stderr);
+    printf("\n");
+    fprintf(stderr, "\n");
+    fflush(stdout);
+    fflush(stderr);
 
-  exit(1);
+    exit(1);
 }
 #endif
 
 // only printf if in verbose mode
 qboolean verbose = qfalse;
-void qprintf(const char *format, ...) {
-  va_list argptr;
+void qprintf(const char *format, ...)
+{
+    va_list argptr;
 
-  if (!verbose)
-    return;
+    if (!verbose)
+        return;
 
-  va_start(argptr, format);
-  vprintf(format, argptr);
-  va_end(argptr);
+    va_start(argptr, format);
+    vprintf(format, argptr);
+    va_end(argptr);
 }
 
 #ifdef _WIN32
@@ -180,30 +187,34 @@ qboolean lookedForServer = qfalse;
 UINT wm_BroadcastCommand = -1;
 #endif
 
-void _printf(const char *format, ...) {
-  va_list argptr;
-  char text[4096];
-  ATOM a;
+void _printf(const char *format, ...)
+{
+    va_list argptr;
+    char text[4096];
+    ATOM a;
 
-  va_start(argptr, format);
-  vsprintf(text, format, argptr);
-  va_end(argptr);
+    va_start(argptr, format);
+    vsprintf(text, format, argptr);
+    va_end(argptr);
 
-  printf("%s", text);
-  fflush(stdout);
+    printf("%s", text);
+    fflush(stdout);
 
 #ifdef _WIN32
-  if (!lookedForServer) {
-    lookedForServer = qtrue;
-    hwndOut = FindWindow(NULL, "Q3Map Process Server");
-    if (hwndOut) {
-      wm_BroadcastCommand = RegisterWindowMessage("Q3MPS_BroadcastCommand");
+    if (!lookedForServer)
+    {
+        lookedForServer = qtrue;
+        hwndOut = FindWindow(NULL, "Q3Map Process Server");
+        if (hwndOut)
+        {
+            wm_BroadcastCommand = RegisterWindowMessage("Q3MPS_BroadcastCommand");
+        }
     }
-  }
-  if (hwndOut) {
-    a = GlobalAddAtom(text);
-    PostMessage(hwndOut, wm_BroadcastCommand, 0, (LPARAM)a);
-  }
+    if (hwndOut)
+    {
+        a = GlobalAddAtom(text);
+        PostMessage(hwndOut, wm_BroadcastCommand, 0, (LPARAM)a);
+    }
 #endif
 }
 
@@ -214,7 +225,8 @@ va
 Returns a static buffer cycling between 4 possible buffers
 ================
 */
-char *va(const char *format, ...) {
+char *va(const char *format, ...)
+{
     va_list argptr;
     static char string[4][1024];
     static int curstring;
@@ -226,7 +238,6 @@ char *va(const char *format, ...) {
 
     return string[curstring];
 }
-
 
 /*
 
@@ -243,105 +254,125 @@ char qdir[1024];
 char gamedir[1024];
 char writedir[1024];
 
-void SetQdirFromPath(const char *path) {
-  int i;
+void SetQdirFromPath(const char *path)
+{
+    int i;
 
-  // If no directory is set, default to current directory
-  if (!qdir[0]) {
-    Q_getwd(qdir);
-  }
+    // If no directory is set, default to current directory
+    if (!qdir[0])
+    {
+        Q_getwd(qdir);
+    }
 
-  if (!gamedir[0]) {
-    strcpy(gamedir, qdir);
-  }
+    if (!gamedir[0])
+    {
+        strcpy(gamedir, qdir);
+    }
 
-  if (!writedir[0]) {
-    strcpy(writedir, gamedir);
-  }
+    if (!writedir[0])
+    {
+        strcpy(writedir, gamedir);
+    }
 
-  // Ensure all paths use forward slashes for consistency
-  for (i = 0; i < strlen(qdir); i++) {
-    if (qdir[i] == '\\')
-      qdir[i] = '/';
-  }
-  if (qdir[0] && qdir[strlen(qdir) - 1] != '/') {
-    strcat(qdir, "/");
-  }
+    // Ensure all paths use forward slashes for consistency
+    for (i = 0; i < strlen(qdir); i++)
+    {
+        if (qdir[i] == '\\')
+            qdir[i] = '/';
+    }
+    if (qdir[0] && qdir[strlen(qdir) - 1] != '/')
+    {
+        strcat(qdir, "/");
+    }
 
-  for (i = 0; i < strlen(gamedir); i++) {
-    if (gamedir[i] == '\\')
-      gamedir[i] = '/';
-  }
-  if (gamedir[0] && gamedir[strlen(gamedir) - 1] != '/') {
-    strcat(gamedir, "/");
-  }
+    for (i = 0; i < strlen(gamedir); i++)
+    {
+        if (gamedir[i] == '\\')
+            gamedir[i] = '/';
+    }
+    if (gamedir[0] && gamedir[strlen(gamedir) - 1] != '/')
+    {
+        strcat(gamedir, "/");
+    }
 
-  for (i = 0; i < strlen(writedir); i++) {
-    if (writedir[i] == '\\')
-      writedir[i] = '/';
-  }
-  if (writedir[0] && writedir[strlen(writedir) - 1] != '/') {
-    strcat(writedir, "/");
-  }
+    for (i = 0; i < strlen(writedir); i++)
+    {
+        if (writedir[i] == '\\')
+            writedir[i] = '/';
+    }
+    if (writedir[0] && writedir[strlen(writedir) - 1] != '/')
+    {
+        strcat(writedir, "/");
+    }
 
-  qprintf("qdir: %s\n", qdir);
-  qprintf("gamedir: %s\n", gamedir);
-  qprintf("writedir: %s\n", writedir);
+    qprintf("qdir: %s\n", qdir);
+    qprintf("gamedir: %s\n", gamedir);
+    qprintf("writedir: %s\n", writedir);
 }
 
-char *ExpandArg(const char *path) {
-  static char full[1024];
+char *ExpandArg(const char *path)
+{
+    static char full[1024];
 
-  if (path[0] != '/' && path[0] != '\\' && path[1] != ':') {
-    Q_getwd(full);
-    strcat(full, path);
-  } else
-    strcpy(full, path);
-  return full;
-}
-
-char *ExpandPath(const char *path) {
-  static char full[1024];
-  if (!qdir[0])
-    Error("ExpandPath called without qdir set");
-  if (path[0] == '/' || path[0] == '\\' || path[1] == ':') {
-    strcpy(full, path);
+    if (path[0] != '/' && path[0] != '\\' && path[1] != ':')
+    {
+        Q_getwd(full);
+        strcat(full, path);
+    }
+    else
+        strcpy(full, path);
     return full;
-  }
-  sprintf(full, "%s%s", qdir, path);
-  return full;
 }
 
-char *ExpandGamePath(const char *path) {
-  static char full[1024];
-  if (!qdir[0])
-    Error("ExpandGamePath called without qdir set");
-  if (path[0] == '/' || path[0] == '\\' || path[1] == ':') {
-    strcpy(full, path);
+char *ExpandPath(const char *path)
+{
+    static char full[1024];
+    if (!qdir[0])
+        Error("ExpandPath called without qdir set");
+    if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
+    {
+        strcpy(full, path);
+        return full;
+    }
+    sprintf(full, "%s%s", qdir, path);
     return full;
-  }
-  sprintf(full, "%s%s", gamedir, path);
-  return full;
 }
 
-char *ExpandPathAndArchive(const char *path) {
-  char *expanded;
-  char archivename[1024];
-
-  expanded = ExpandPath(path);
-
-  if (archive) {
-    sprintf(archivename, "%s/%s", archivedir, path);
-    QCopyFile(expanded, archivename);
-  }
-  return expanded;
+char *ExpandGamePath(const char *path)
+{
+    static char full[1024];
+    if (!qdir[0])
+        Error("ExpandGamePath called without qdir set");
+    if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
+    {
+        strcpy(full, path);
+        return full;
+    }
+    sprintf(full, "%s%s", gamedir, path);
+    return full;
 }
 
-char *copystring(const char *s) {
-  char *b;
-  b = malloc(strlen(s) + 1);
-  strcpy(b, s);
-  return b;
+char *ExpandPathAndArchive(const char *path)
+{
+    char *expanded;
+    char archivename[1024];
+
+    expanded = ExpandPath(path);
+
+    if (archive)
+    {
+        sprintf(archivename, "%s/%s", archivedir, path);
+        QCopyFile(expanded, archivename);
+    }
+    return expanded;
+}
+
+char *copystring(const char *s)
+{
+    char *b;
+    b = malloc(strlen(s) + 1);
+    strcpy(b, s);
+    return b;
 }
 
 /*
@@ -349,12 +380,13 @@ char *copystring(const char *s) {
 I_FloatTime
 ================
 */
-double I_FloatTime(void) {
-  time_t t;
+double I_FloatTime(void)
+{
+    time_t t;
 
-  time(&t);
+    time(&t);
 
-  return t;
+    return t;
 #if 0
 // more precise, less portable
 	struct timeval tp;
@@ -373,34 +405,37 @@ double I_FloatTime(void) {
 #endif
 }
 
-void Q_getwd(char *out) {
-  int i = 0;
+void Q_getwd(char *out)
+{
+    int i = 0;
 
 #ifdef _WIN32
-  _getcwd(out, 256);
-  strcat(out, "\\");
+    _getcwd(out, 256);
+    strcat(out, "\\");
 #else
-  getwd(out);
-  strcat(out, "/");
+    getwd(out);
+    strcat(out, "/");
 #endif
 
-  while (out[i] != 0) {
-    if (out[i] == '\\')
-      out[i] = '/';
-    i++;
-  }
+    while (out[i] != 0)
+    {
+        if (out[i] == '\\')
+            out[i] = '/';
+        i++;
+    }
 }
 
-void Q_mkdir(const char *path) {
+void Q_mkdir(const char *path)
+{
 #ifdef _WIN32
-  if (_mkdir(path) != -1)
-    return;
+    if (_mkdir(path) != -1)
+        return;
 #else
-  if (mkdir(path, 0777) != -1)
-    return;
+    if (mkdir(path, 0777) != -1)
+        return;
 #endif
-  if (errno != EEXIST)
-    Error("mkdir %s: %s", path, strerror(errno));
+    if (errno != EEXIST)
+        Error("mkdir %s: %s", path, strerror(errno));
 }
 
 /*
@@ -410,13 +445,14 @@ FileTime
 returns -1 if not present
 ============
 */
-int FileTime(const char *path) {
-  struct stat buf;
+int FileTime(const char *path)
+{
+    struct stat buf;
 
-  if (stat(path, &buf) == -1)
-    return -1;
+    if (stat(path, &buf) == -1)
+        return -1;
 
-  return buf.st_mtime;
+    return buf.st_mtime;
 }
 
 /*
@@ -426,114 +462,131 @@ COM_Parse
 Parse a token out of a string
 ==============
 */
-char *COM_Parse(char *data) {
-  int c;
-  int len;
+char *COM_Parse(char *data)
+{
+    int c;
+    int len;
 
-  len = 0;
-  com_token[0] = 0;
+    len = 0;
+    com_token[0] = 0;
 
-  if (!data)
-    return NULL;
+    if (!data)
+        return NULL;
 
 // skip whitespace
 skipwhite:
-  while ((c = *data) <= ' ') {
-    if (c == 0) {
-      com_eof = qtrue;
-      return NULL; // end of file;
+    while ((c = *data) <= ' ')
+    {
+        if (c == 0)
+        {
+            com_eof = qtrue;
+            return NULL; // end of file;
+        }
+        data++;
     }
-    data++;
-  }
 
-  // skip // comments
-  if (c == '/' && data[1] == '/') {
-    while (*data && *data != '\n')
-      data++;
-    goto skipwhite;
-  }
+    // skip // comments
+    if (c == '/' && data[1] == '/')
+    {
+        while (*data && *data != '\n')
+            data++;
+        goto skipwhite;
+    }
 
-  // handle quoted strings specially
-  if (c == '\"') {
-    data++;
-    do {
-      c = *data++;
-      if (c == '\"') {
-        com_token[len] = 0;
-        return data;
-      }
-      com_token[len] = c;
-      len++;
-    } while (1);
-  }
+    // handle quoted strings specially
+    if (c == '\"')
+    {
+        data++;
+        do
+        {
+            c = *data++;
+            if (c == '\"')
+            {
+                com_token[len] = 0;
+                return data;
+            }
+            com_token[len] = c;
+            len++;
+        } while (1);
+    }
 
-  // parse single characters
-  if (c == '{' || c == '}' || c == ')' || c == '(' || c == '\'' || c == ':') {
-    com_token[len] = c;
-    len++;
-    com_token[len] = 0;
-    return data + 1;
-  }
-
-  // parse a regular word
-  do {
-    com_token[len] = c;
-    data++;
-    len++;
-    c = *data;
+    // parse single characters
     if (c == '{' || c == '}' || c == ')' || c == '(' || c == '\'' || c == ':')
-      break;
-  } while (c > 32);
-
-  com_token[len] = 0;
-  return data;
-}
-
-int Q_strncasecmp(const char *s1, const char *s2, int n) {
-  int c1, c2;
-
-  do {
-    c1 = *s1++;
-    c2 = *s2++;
-
-    if (!n--)
-      return 0; // strings are equal until end point
-
-    if (c1 != c2) {
-      if (c1 >= 'a' && c1 <= 'z')
-        c1 -= ('a' - 'A');
-      if (c2 >= 'a' && c2 <= 'z')
-        c2 -= ('a' - 'A');
-      if (c1 != c2)
-        return -1; // strings not equal
+    {
+        com_token[len] = c;
+        len++;
+        com_token[len] = 0;
+        return data + 1;
     }
-  } while (c1);
 
-  return 0; // strings are equal
+    // parse a regular word
+    do
+    {
+        com_token[len] = c;
+        data++;
+        len++;
+        c = *data;
+        if (c == '{' || c == '}' || c == ')' || c == '(' || c == '\'' || c == ':')
+            break;
+    } while (c > 32);
+
+    com_token[len] = 0;
+    return data;
 }
 
-int Q_stricmp(const char *s1, const char *s2) {
-  return Q_strncasecmp(s1, s2, 99999);
+int Q_strncasecmp(const char *s1, const char *s2, int n)
+{
+    int c1, c2;
+
+    do
+    {
+        c1 = *s1++;
+        c2 = *s2++;
+
+        if (!n--)
+            return 0; // strings are equal until end point
+
+        if (c1 != c2)
+        {
+            if (c1 >= 'a' && c1 <= 'z')
+                c1 -= ('a' - 'A');
+            if (c2 >= 'a' && c2 <= 'z')
+                c2 -= ('a' - 'A');
+            if (c1 != c2)
+                return -1; // strings not equal
+        }
+    } while (c1);
+
+    return 0; // strings are equal
 }
 
-char *strupr(char *start) {
-  char *in;
-  in = start;
-  while (*in) {
-    *in = toupper(*in);
-    in++;
-  }
-  return start;
+int Q_stricmp(const char *s1, const char *s2)
+{
+    return Q_strncasecmp(s1, s2, 99999);
 }
 
-char *strlower(char *start) {
-  char *in;
-  in = start;
-  while (*in) {
-    *in = tolower(*in);
-    in++;
-  }
-  return start;
+char *strupr(char *start)
+{
+    char *in;
+    in = start;
+    while (*in)
+    {
+        *in = toupper(*in);
+        in++;
+    }
+    return start;
+}
+
+char *strlower(char *start)
+{
+    char *in;
+    in = start;
+    while (*in)
+    {
+        *in = tolower(*in);
+        in++;
+    }
+    return start;
 }
 
 /*
@@ -552,15 +605,17 @@ Checks for the given parameter in the program's command line arguments
 Returns the argument number (1 to argc-1) or 0 if not present
 =================
 */
-int CheckParm(const char *check) {
-  int i;
+int CheckParm(const char *check)
+{
+    int i;
 
-  for (i = 1; i < myargc; i++) {
-    if (!Q_stricmp(check, myargv[i]))
-      return i;
-  }
+    for (i = 1; i < myargc; i++)
+    {
+        if (!Q_stricmp(check, myargv[i]))
+            return i;
+    }
 
-  return 0;
+    return 0;
 }
 
 /*
@@ -568,48 +623,53 @@ int CheckParm(const char *check) {
 Q_filelength
 ================
 */
-int Q_filelength(FILE *f) {
-  int pos;
-  int end;
+int Q_filelength(FILE *f)
+{
+    int pos;
+    int end;
 
-  pos = ftell(f);
-  fseek(f, 0, SEEK_END);
-  end = ftell(f);
-  fseek(f, pos, SEEK_SET);
+    pos = ftell(f);
+    fseek(f, 0, SEEK_END);
+    end = ftell(f);
+    fseek(f, pos, SEEK_SET);
 
-  return end;
+    return end;
 }
 
-FILE *SafeOpenWrite(const char *filename) {
-  FILE *f;
+FILE *SafeOpenWrite(const char *filename)
+{
+    FILE *f;
 
-  f = fopen(filename, "wb");
+    f = fopen(filename, "wb");
 
-  if (!f)
-    Error("Error opening %s: %s", filename, strerror(errno));
+    if (!f)
+        Error("Error opening %s: %s", filename, strerror(errno));
 
-  return f;
+    return f;
 }
 
-FILE *SafeOpenRead(const char *filename) {
-  FILE *f;
+FILE *SafeOpenRead(const char *filename)
+{
+    FILE *f;
 
-  f = fopen(filename, "rb");
+    f = fopen(filename, "rb");
 
-  if (!f)
-    Error("Error opening %s: %s", filename, strerror(errno));
+    if (!f)
+        Error("Error opening %s: %s", filename, strerror(errno));
 
-  return f;
+    return f;
 }
 
-void SafeRead(FILE *f, void *buffer, int count) {
-  if (fread(buffer, 1, count, f) != (size_t)count)
-    Error("File read failure");
+void SafeRead(FILE *f, void *buffer, int count)
+{
+    if (fread(buffer, 1, count, f) != (size_t)count)
+        Error("File read failure");
 }
 
-void SafeWrite(FILE *f, const void *buffer, int count) {
-  if (fwrite(buffer, 1, count, f) != (size_t)count)
-    Error("File write failure");
+void SafeWrite(FILE *f, const void *buffer, int count)
+{
+    if (fwrite(buffer, 1, count, f) != (size_t)count)
+        Error("File write failure");
 }
 
 /*
@@ -617,15 +677,17 @@ void SafeWrite(FILE *f, const void *buffer, int count) {
 FileExists
 ==============
 */
-qboolean FileExists(const char *filename) {
-  FILE *f;
+qboolean FileExists(const char *filename)
+{
+    FILE *f;
 
-  f = fopen(filename, "rb");
-  if (!f) {
-    return qfalse;
-  }
-  fclose(f);
-  return qtrue;
+    f = fopen(filename, "rb");
+    if (!f)
+    {
+        return qfalse;
+    }
+    fclose(f);
+    return qtrue;
 }
 
 /*
@@ -633,20 +695,21 @@ qboolean FileExists(const char *filename) {
 LoadFile
 ==============
 */
-int LoadFile(const char *filename, void **bufferptr) {
-  FILE *f;
-  int length;
-  void *buffer;
+int LoadFile(const char *filename, void **bufferptr)
+{
+    FILE *f;
+    int length;
+    void *buffer;
 
-  f = SafeOpenRead(filename);
-  length = Q_filelength(f);
-  buffer = malloc(length + 1);
-  ((char *)buffer)[length] = 0;
-  SafeRead(f, buffer, length);
-  fclose(f);
+    f = SafeOpenRead(filename);
+    length = Q_filelength(f);
+    buffer = malloc(length + 1);
+    ((char *)buffer)[length] = 0;
+    SafeRead(f, buffer, length);
+    fclose(f);
 
-  *bufferptr = buffer;
-  return length;
+    *bufferptr = buffer;
+    return length;
 }
 
 /*
@@ -657,31 +720,34 @@ rounds up memory allocation to 4K boundry
 -
 ==============
 */
-int LoadFileBlock(const char *filename, void **bufferptr) {
-  FILE *f;
-  int length, nBlock, nAllocSize;
-  void *buffer;
+int LoadFileBlock(const char *filename, void **bufferptr)
+{
+    FILE *f;
+    int length, nBlock, nAllocSize;
+    void *buffer;
 
-  f = SafeOpenRead(filename);
-  length = Q_filelength(f);
-  nAllocSize = length;
-  nBlock = nAllocSize % MEM_BLOCKSIZE;
-  if (nBlock > 0) {
-    nAllocSize += MEM_BLOCKSIZE - nBlock;
-  }
+    f = SafeOpenRead(filename);
+    length = Q_filelength(f);
+    nAllocSize = length;
+    nBlock = nAllocSize % MEM_BLOCKSIZE;
+    if (nBlock > 0)
+    {
+        nAllocSize += MEM_BLOCKSIZE - nBlock;
+    }
 
-  buffer = malloc(nAllocSize + 1);
-  if (!buffer) {
-    Error("LoadFileBlock: Failed to allocate %i bytes", nAllocSize + 1);
-  }
-  memset(buffer, 0, nAllocSize + 1);
+    buffer = malloc(nAllocSize + 1);
+    if (!buffer)
+    {
+        Error("LoadFileBlock: Failed to allocate %i bytes", nAllocSize + 1);
+    }
+    memset(buffer, 0, nAllocSize + 1);
 
-  SafeRead(f, buffer, length);
-  fclose(f);
+    SafeRead(f, buffer, length);
+    fclose(f);
 
-  *bufferptr = buffer;
+    *bufferptr = buffer;
 
-  return length;
+    return length;
 }
 
 /*
@@ -691,24 +757,25 @@ TryLoadFile
 Allows failure
 ==============
 */
-int TryLoadFile(const char *filename, void **bufferptr) {
-  FILE *f;
-  int length;
-  void *buffer;
+int TryLoadFile(const char *filename, void **bufferptr)
+{
+    FILE *f;
+    int length;
+    void *buffer;
 
-  *bufferptr = NULL;
+    *bufferptr = NULL;
 
-  f = fopen(filename, "rb");
-  if (!f)
-    return -1;
-  length = Q_filelength(f);
-  buffer = malloc(length + 1);
-  ((char *)buffer)[length] = 0;
-  SafeRead(f, buffer, length);
-  fclose(f);
+    f = fopen(filename, "rb");
+    if (!f)
+        return -1;
+    length = Q_filelength(f);
+    buffer = malloc(length + 1);
+    ((char *)buffer)[length] = 0;
+    SafeRead(f, buffer, length);
+    fclose(f);
 
-  *bufferptr = buffer;
-  return length;
+    *bufferptr = buffer;
+    return length;
 }
 
 /*
@@ -716,61 +783,68 @@ int TryLoadFile(const char *filename, void **bufferptr) {
 SaveFile
 ==============
 */
-void SaveFile(const char *filename, const void *buffer, int count) {
-  FILE *f;
+void SaveFile(const char *filename, const void *buffer, int count)
+{
+    FILE *f;
 
-  f = SafeOpenWrite(filename);
-  SafeWrite(f, buffer, count);
-  fclose(f);
+    f = SafeOpenWrite(filename);
+    SafeWrite(f, buffer, count);
+    fclose(f);
 }
 
-void DefaultExtension(char *path, const char *extension) {
-  char *src;
-  //
-  // if path doesnt have a .EXT, append extension
-  // (extension should include the .)
-  //
-  src = path + strlen(path) - 1;
+void DefaultExtension(char *path, const char *extension)
+{
+    char *src;
+    //
+    // if path doesnt have a .EXT, append extension
+    // (extension should include the .)
+    //
+    src = path + strlen(path) - 1;
 
-  while (*src != '/' && *src != '\\' && src != path) {
-    if (*src == '.')
-      return; // it has an extension
-    src--;
-  }
+    while (*src != '/' && *src != '\\' && src != path)
+    {
+        if (*src == '.')
+            return; // it has an extension
+        src--;
+    }
 
-  strcat(path, extension);
+    strcat(path, extension);
 }
 
-void DefaultPath(char *path, const char *basepath) {
-  char temp[128];
+void DefaultPath(char *path, const char *basepath)
+{
+    char temp[128];
 
-  if (path[0] == PATHSEPERATOR)
-    return; // absolute path location
-  strcpy(temp, path);
-  strcpy(path, basepath);
-  strcat(path, temp);
+    if (path[0] == PATHSEPERATOR)
+        return; // absolute path location
+    strcpy(temp, path);
+    strcpy(path, basepath);
+    strcat(path, temp);
 }
 
-void StripFilename(char *path) {
-  int length;
+void StripFilename(char *path)
+{
+    int length;
 
-  length = strlen(path) - 1;
-  while (length > 0 && path[length] != PATHSEPERATOR)
-    length--;
-  path[length] = 0;
-}
-
-void StripExtension(char *path) {
-  int length;
-
-  length = strlen(path) - 1;
-  while (length > 0 && path[length] != '.') {
-    length--;
-    if (path[length] == '/')
-      return; // no extension
-  }
-  if (length)
+    length = strlen(path) - 1;
+    while (length > 0 && path[length] != PATHSEPERATOR)
+        length--;
     path[length] = 0;
+}
+
+void StripExtension(char *path)
+{
+    int length;
+
+    length = strlen(path) - 1;
+    while (length > 0 && path[length] != '.')
+    {
+        length--;
+        if (path[length] == '/')
+            return; // no extension
+    }
+    if (length)
+        path[length] = 0;
 }
 
 /*
@@ -780,54 +854,59 @@ Extract file parts
 */
 // FIXME: should include the slash, otherwise
 // backing to an empty path will be wrong when appending a slash
-void ExtractFilePath(const char *path, char *dest) {
-  const char *src;
+void ExtractFilePath(const char *path, char *dest)
+{
+    const char *src;
 
-  src = path + strlen(path) - 1;
+    src = path + strlen(path) - 1;
 
-  //
-  // back up until a \ or the start
-  //
-  while (src != path && *(src - 1) != '\\' && *(src - 1) != '/')
-    src--;
+    //
+    // back up until a \ or the start
+    //
+    while (src != path && *(src - 1) != '\\' && *(src - 1) != '/')
+        src--;
 
-  memcpy(dest, path, src - path);
-  dest[src - path] = 0;
+    memcpy(dest, path, src - path);
+    dest[src - path] = 0;
 }
 
-void ExtractFileBase(const char *path, char *dest) {
-  const char *src;
+void ExtractFileBase(const char *path, char *dest)
+{
+    const char *src;
 
-  src = path + strlen(path) - 1;
+    src = path + strlen(path) - 1;
 
-  //
-  // back up until a \ or the start
-  //
-  while (src != path && *(src - 1) != PATHSEPERATOR)
-    src--;
+    //
+    // back up until a \ or the start
+    //
+    while (src != path && *(src - 1) != PATHSEPERATOR)
+        src--;
 
-  while (*src && *src != '.') {
-    *dest++ = *src++;
-  }
-  *dest = 0;
+    while (*src && *src != '.')
+    {
+        *dest++ = *src++;
+    }
+    *dest = 0;
 }
 
-void ExtractFileExtension(const char *path, char *dest) {
-  const char *src;
+void ExtractFileExtension(const char *path, char *dest)
+{
+    const char *src;
 
-  src = path + strlen(path) - 1;
+    src = path + strlen(path) - 1;
 
-  //
-  // back up until a . or the start
-  //
-  while (src != path && *(src - 1) != '.')
-    src--;
-  if (src == path) {
-    *dest = 0; // no extension
-    return;
-  }
+    //
+    // back up until a . or the start
+    //
+    while (src != path && *(src - 1) != '.')
+        src--;
+    if (src == path)
+    {
+        *dest = 0; // no extension
+        return;
+    }
 
-  strcpy(dest, src);
+    strcpy(dest, src);
 }
 
 /*
@@ -835,35 +914,38 @@ void ExtractFileExtension(const char *path, char *dest) {
 ParseNum / ParseHex
 ==============
 */
-int ParseHex(const char *hex) {
-  const char *str;
-  int num;
+int ParseHex(const char *hex)
+{
+    const char *str;
+    int num;
 
-  num = 0;
-  str = hex;
+    num = 0;
+    str = hex;
 
-  while (*str) {
-    num <<= 4;
-    if (*str >= '0' && *str <= '9')
-      num += *str - '0';
-    else if (*str >= 'a' && *str <= 'f')
-      num += 10 + *str - 'a';
-    else if (*str >= 'A' && *str <= 'F')
-      num += 10 + *str - 'A';
-    else
-      Error("Bad hex number: %s", hex);
-    str++;
-  }
+    while (*str)
+    {
+        num <<= 4;
+        if (*str >= '0' && *str <= '9')
+            num += *str - '0';
+        else if (*str >= 'a' && *str <= 'f')
+            num += 10 + *str - 'a';
+        else if (*str >= 'A' && *str <= 'F')
+            num += 10 + *str - 'A';
+        else
+            Error("Bad hex number: %s", hex);
+        str++;
+    }
 
-  return num;
+    return num;
 }
 
-int ParseNum(const char *str) {
-  if (str[0] == '$')
-    return ParseHex(str + 1);
-  if (str[0] == '0' && str[1] == 'x')
-    return ParseHex(str + 2);
-  return atol(str);
+int ParseNum(const char *str)
+{
+    if (str[0] == '$')
+        return ParseHex(str + 1);
+    if (str[0] == '0' && str[1] == 'x')
+        return ParseHex(str + 2);
+    return atol(str);
 }
 
 /*
@@ -880,86 +962,94 @@ int ParseNum(const char *str) {
 
 #ifdef __BIG_ENDIAN__
 
-short LittleShort(short l) {
-  byte b1, b2;
+short LittleShort(short l)
+{
+    byte b1, b2;
 
-  b1 = l & 255;
-  b2 = (l >> 8) & 255;
+    b1 = l & 255;
+    b2 = (l >> 8) & 255;
 
-  return (b1 << 8) + b2;
+    return (b1 << 8) + b2;
 }
 
 short BigShort(short l) { return l; }
 
-int LittleLong(int l) {
-  byte b1, b2, b3, b4;
+int LittleLong(int l)
+{
+    byte b1, b2, b3, b4;
 
-  b1 = l & 255;
-  b2 = (l >> 8) & 255;
-  b3 = (l >> 16) & 255;
-  b4 = (l >> 24) & 255;
+    b1 = l & 255;
+    b2 = (l >> 8) & 255;
+    b3 = (l >> 16) & 255;
+    b4 = (l >> 24) & 255;
 
-  return ((int)b1 << 24) + ((int)b2 << 16) + ((int)b3 << 8) + b4;
+    return ((int)b1 << 24) + ((int)b2 << 16) + ((int)b3 << 8) + b4;
 }
 
 int BigLong(int l) { return l; }
 
-float LittleFloat(float l) {
-  union {
-    byte b[4];
-    float f;
-  } in, out;
+float LittleFloat(float l)
+{
+    union
+    {
+        byte b[4];
+        float f;
+    } in, out;
 
-  in.f = l;
-  out.b[0] = in.b[3];
-  out.b[1] = in.b[2];
-  out.b[2] = in.b[1];
-  out.b[3] = in.b[0];
+    in.f = l;
+    out.b[0] = in.b[3];
+    out.b[1] = in.b[2];
+    out.b[2] = in.b[1];
+    out.b[3] = in.b[0];
 
-  return out.f;
+    return out.f;
 }
 
 float BigFloat(float l) { return l; }
 
 #else
 
-short BigShort(short l) {
-  byte b1, b2;
+short BigShort(short l)
+{
+    byte b1, b2;
 
-  b1 = l & 255;
-  b2 = (l >> 8) & 255;
+    b1 = l & 255;
+    b2 = (l >> 8) & 255;
 
-  return (b1 << 8) + b2;
+    return (b1 << 8) + b2;
 }
 
 short LittleShort(short l) { return l; }
 
-int BigLong(int l) {
-  byte b1, b2, b3, b4;
+int BigLong(int l)
+{
+    byte b1, b2, b3, b4;
 
-  b1 = l & 255;
-  b2 = (l >> 8) & 255;
-  b3 = (l >> 16) & 255;
-  b4 = (l >> 24) & 255;
+    b1 = l & 255;
+    b2 = (l >> 8) & 255;
+    b3 = (l >> 16) & 255;
+    b4 = (l >> 24) & 255;
 
-  return ((int)b1 << 24) + ((int)b2 << 16) + ((int)b3 << 8) + b4;
+    return ((int)b1 << 24) + ((int)b2 << 16) + ((int)b3 << 8) + b4;
 }
 
 int LittleLong(int l) { return l; }
 
-float BigFloat(float l) {
-  union {
-    byte b[4];
-    float f;
-  } in, out;
+float BigFloat(float l)
+{
+    union
+    {
+        byte b[4];
+        float f;
+    } in, out;
 
-  in.f = l;
-  out.b[0] = in.b[3];
-  out.b[1] = in.b[2];
-  out.b[2] = in.b[1];
-  out.b[3] = in.b[0];
+    in.f = l;
+    out.b[0] = in.b[3];
+    out.b[1] = in.b[2];
+    out.b[2] = in.b[1];
+    out.b[3] = in.b[0];
 
-  return out.f;
+    return out.f;
 }
 
 float LittleFloat(float l) { return l; }
@@ -1010,12 +1100,14 @@ static unsigned short crctable[256] = {
 
 void CRC_Init(unsigned short *crcvalue) { *crcvalue = CRC_INIT_VALUE; }
 
-void CRC_ProcessByte(unsigned short *crcvalue, byte data) {
-  *crcvalue = (*crcvalue << 8) ^ crctable[(*crcvalue >> 8) ^ data];
+void CRC_ProcessByte(unsigned short *crcvalue, byte data)
+{
+    *crcvalue = (*crcvalue << 8) ^ crctable[(*crcvalue >> 8) ^ data];
 }
 
-unsigned short CRC_Value(unsigned short crcvalue) {
-  return crcvalue ^ CRC_XOR_VALUE;
+unsigned short CRC_Value(unsigned short crcvalue)
+{
+    return crcvalue ^ CRC_XOR_VALUE;
 }
 //=============================================================================
 
@@ -1024,36 +1116,41 @@ unsigned short CRC_Value(unsigned short crcvalue) {
 CreatePath
 ============
 */
-void CreatePath(const char *path) {
-  const char *ofs;
-  char c;
-  char dir[1024];
+void CreatePath(const char *path)
+{
+    const char *ofs;
+    char c;
+    char dir[1024];
 
 #ifdef _WIN32
-  int olddrive = -1;
+    int olddrive = -1;
 
-  if (path[1] == ':') {
-    olddrive = _getdrive();
-    _chdrive(toupper(path[0]) - 'A' + 1);
-  }
+    if (path[1] == ':')
+    {
+        olddrive = _getdrive();
+        _chdrive(toupper(path[0]) - 'A' + 1);
+    }
 #endif
 
-  if (path[1] == ':')
-    path += 2;
+    if (path[1] == ':')
+        path += 2;
 
-  for (ofs = path + 1; *ofs; ofs++) {
-    c = *ofs;
-    if (c == '/' || c == '\\') { // create the directory
-      memcpy(dir, path, ofs - path);
-      dir[ofs - path] = 0;
-      Q_mkdir(dir);
+    for (ofs = path + 1; *ofs; ofs++)
+    {
+        c = *ofs;
+        if (c == '/' || c == '\\')
+        { // create the directory
+            memcpy(dir, path, ofs - path);
+            dir[ofs - path] = 0;
+            Q_mkdir(dir);
+        }
     }
-  }
 
 #ifdef _WIN32
-  if (olddrive != -1) {
-    _chdrive(olddrive);
-  }
+    if (olddrive != -1)
+    {
+        _chdrive(olddrive);
+    }
 #endif
 }
 
@@ -1064,56 +1161,61 @@ QCopyFile
   Used to archive source files
 ============
 */
-void QCopyFile(const char *from, const char *to) {
-  void *buffer;
-  int length;
+void QCopyFile(const char *from, const char *to)
+{
+    void *buffer;
+    int length;
 
-  length = LoadFile(from, &buffer);
-  CreatePath(to);
-  SaveFile(to, buffer, length);
-  free(buffer);
+    length = LoadFile(from, &buffer);
+    CreatePath(to);
+    SaveFile(to, buffer, length);
+    free(buffer);
 }
 void Sys_ListFiles(const char *directory, const char *extension,
-                   void (*callback)(const char *filename)) {
-  char search[MAX_OS_PATH];
+                   void (*callback)(const char *filename))
+{
+    char search[MAX_OS_PATH];
 
 #ifdef _WIN32
-  struct _finddata_t fileinfo;
-  intptr_t handle;
+    struct _finddata_t fileinfo;
+    intptr_t handle;
 
-  if (directory[0] && directory[strlen(directory) - 1] != '/' && directory[strlen(directory) - 1] != '\\')
-    sprintf(search, "%s/%s", directory, extension);
-  else
-    sprintf(search, "%s%s", directory, extension);
-  handle = _findfirst(search, &fileinfo);
-  if (handle == -1)
-    return;
+    if (directory[0] && directory[strlen(directory) - 1] != '/' && directory[strlen(directory) - 1] != '\\')
+        sprintf(search, "%s/%s", directory, extension);
+    else
+        sprintf(search, "%s%s", directory, extension);
+    handle = _findfirst(search, &fileinfo);
+    if (handle == -1)
+        return;
 
-  do {
-    callback(fileinfo.name);
-  } while (_findnext(handle, &fileinfo) != -1);
+    do
+    {
+        callback(fileinfo.name);
+    } while (_findnext(handle, &fileinfo) != -1);
 
-  _findclose(handle);
+    _findclose(handle);
 #else
-  DIR *dir;
-  struct dirent *entry;
-  int nameLen;
-  int extLen;
+    DIR *dir;
+    struct dirent *entry;
+    int nameLen;
+    int extLen;
 
-  extLen = strlen(extension);
+    extLen = strlen(extension);
 
-  dir = opendir(directory);
-  if (!dir)
-    return;
+    dir = opendir(directory);
+    if (!dir)
+        return;
 
-  while ((entry = readdir(dir)) != NULL) {
-    nameLen = strlen(entry->d_name);
-    if (nameLen >= extLen &&
-        !Q_stricmp(entry->d_name + nameLen - extLen, extension + 1)) {
-      callback(entry->d_name);
+    while ((entry = readdir(dir)) != NULL)
+    {
+        nameLen = strlen(entry->d_name);
+        if (nameLen >= extLen &&
+            !Q_stricmp(entry->d_name + nameLen - extLen, extension + 1))
+        {
+            callback(entry->d_name);
+        }
     }
-  }
 
-  closedir(dir);
+    closedir(dir);
 #endif
 }

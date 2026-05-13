@@ -89,18 +89,20 @@ void PrintBSPFileSizes(void);
 
 //===============
 
-typedef struct epair_s {
-  struct epair_s *next;
-  char *key;
-  char *value;
+typedef struct epair_s
+{
+    struct epair_s *next;
+    char *key;
+    char *value;
 } epair_t;
 
-typedef struct {
-  vec3_t origin;
-  struct bspbrush_s *brushes;
-  struct parseMesh_s *patches;
-  int firstDrawSurf;
-  epair_t *epairs;
+typedef struct
+{
+    vec3_t origin;
+    struct bspbrush_s *brushes;
+    struct parseMesh_s *patches;
+    int firstDrawSurf;
+    epair_t *epairs;
 } entity_t;
 
 extern int num_entities;

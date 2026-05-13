@@ -39,13 +39,15 @@ int *lightmapHeights = NULL;
 int numLightmaps = 0;
 int c_exactLightmap;
 
-void PrepareNewLightmap(void) {
-  if (numLightmaps >= MAX_LIGHTMAPS) {
-    Error("MAX_LIGHTMAPS exceeded");
-  }
-  // Explicitly clear the memory for the new lightmap's heightmap
-  memset(&lightmapHeights[numLightmaps * MAX_LIGHTMAP_WIDTH], 0, sizeof(int) * MAX_LIGHTMAP_WIDTH);
-  numLightmaps++;
+void PrepareNewLightmap(void)
+{
+    if (numLightmaps >= MAX_LIGHTMAPS)
+    {
+        Error("MAX_LIGHTMAPS exceeded");
+    }
+    // Explicitly clear the memory for the new lightmap's heightmap
+    memset(&lightmapHeights[numLightmaps * MAX_LIGHTMAP_WIDTH], 0, sizeof(int) * MAX_LIGHTMAP_WIDTH);
+    numLightmaps++;
 }
 
 /*
@@ -55,36 +57,43 @@ AllocLMBlock
 returns a texture number and the position inside it
 ===============
 */
-qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y) {
-  int i, j;
-  int *allocated = &lightmapHeights[lmIndex * MAX_LIGHTMAP_WIDTH];
-  int bestY;
+qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y)
+{
+    int i, j;
+    int *allocated = &lightmapHeights[lmIndex * MAX_LIGHTMAP_WIDTH];
+    int bestY;
 
-  // Search for the first horizontal run where it fits vertically
-  for (i = 0; i <= LIGHTMAP_WIDTH - w; i++) {
-    bestY = 0;
-    for (j = 0; j < w; j++) {
-      if (allocated[i + j] > bestY) {
-        bestY = allocated[i + j];
-      }
-      if (bestY + h > LIGHTMAP_HEIGHT) {
-        break; // Doesn't fit in this run starting at 'i'
-      }
-    }
-    
-    if (j == w) { // Fits!
-      *x = i;
-      *y = bestY;
-      
-      // Update the heightmap
-      for (j = 0; j < w; j++) {
-        allocated[i + j] = bestY + h;
-      }
-      return qtrue;
-    }
-  }
+    // Search for the first horizontal run where it fits vertically
+    for (i = 0; i <= LIGHTMAP_WIDTH - w; i++)
+    {
+        bestY = 0;
+        for (j = 0; j < w; j++)
+        {
+            if (allocated[i + j] > bestY)
+            {
+                bestY = allocated[i + j];
+            }
+            if (bestY + h > LIGHTMAP_HEIGHT)
+            {
+                break; // Doesn't fit in this run starting at 'i'
+            }
+        }
 
-  return qfalse;
+        if (j == w)
+        { // Fits!
+            *x = i;
+            *y = bestY;
+
+            // Update the heightmap
+            for (j = 0; j < w; j++)
+            {
+                allocated[i + j] = bestY + h;
+            }
+            return qtrue;
+        }
+    }
+
+    return qfalse;
 }
 
 /*
@@ -92,310 +101,346 @@ qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y) {
 AllocateLightmapForMiscModel
 ===================
 */
-void AllocateLightmapForMiscModel(mapDrawSurface_t *ds) {
-  int i, x, y, ssize;
-  float min_s, max_s, min_t, max_t;
-  double area3D = 0, areaUV = 0;
-  float s, t, scale;
-  int w, h;
-  drawVert_t *v0, *v1, *v2;
+void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
+{
+    int i, x, y, ssize;
+    float min_s, max_s, min_t, max_t;
+    double area3D = 0, areaUV = 0;
+    float s, t, scale;
+    int w, h;
+    drawVert_t *v0, *v1, *v2;
 
-  if (ds->numIndexes < 3)
-    return;
+    if (ds->numIndexes < 3)
+        return;
 
-  ssize = ds->samplesize;
+    ssize = ds->samplesize;
 
-  // 1. Initial UV bounds
-  min_s = min_t = 1000000;
-  max_s = max_t = -1000000;
-  for (i = 0; i < ds->numVerts; i++) {
-    s = ds->verts[i].lightmap[0][0];
-    t = ds->verts[i].lightmap[0][1];
-    if (s < min_s)
-      min_s = s;
-    if (s > max_s)
-      max_s = s;
-    if (t < min_t)
-      min_t = t;
-    if (t > max_t)
-      max_t = t;
-  }
-
-  // 2. Area Calculation
-  for (i = 0; i < ds->numIndexes; i += 3) {
-    v0 = &ds->verts[ds->indexes[i]];
-    v1 = &ds->verts[ds->indexes[i + 1]];
-    v2 = &ds->verts[ds->indexes[i + 2]];
-
-    // 3D Area (cross product)
-    vec3_t side1, side2, cross;
-    VectorSubtract(v1->xyz, v0->xyz, side1);
-    VectorSubtract(v2->xyz, v0->xyz, side2);
-    CrossProduct(side1, side2, cross);
-    area3D += 0.5 * VectorLength(cross);
-
-    // UV Area (2D cross product)
-    areaUV +=
-        0.5 *
-        fabs((v1->lightmap[0][0] - v0->lightmap[0][0]) *
-                 (v2->lightmap[0][1] - v0->lightmap[0][1]) -
-             (v2->lightmap[0][0] - v0->lightmap[0][0]) *
-                 (v1->lightmap[0][1] - v0->lightmap[0][1]));
-  }
-
-  if (areaUV < 0.0001) {
-    _printf("WARNING: misc_model surface with degenerate UVs (areaUV: %f)\n",
-            areaUV);
-    return;
-  }
-
-  // 3. Scale Determination
-  // Target density: 1/ssize^2 luxels per square unit.
-  scale = sqrt((area3D / (ssize * ssize)) / areaUV);
-
-  // Safeguard against extreme scaling
-  if (scale < 0.01)
-    scale = 0.01;
-
-  // Enforce dynamic minimum lightmap area
-  float uvWidth = max_s - min_s;
-  float uvHeight = max_t - min_t;
-  float uvArea = uvWidth * uvHeight;
-  if (uvArea > 0.0001f) {
-    float minDimension = 192.0f;
-    float targetArea = minDimension * minDimension;
-    float minScale = sqrt(targetArea / uvArea);
-    if (scale < minScale) {
-        scale = minScale;
+    // 1. Initial UV bounds
+    min_s = min_t = 1000000;
+    max_s = max_t = -1000000;
+    for (i = 0; i < ds->numVerts; i++)
+    {
+        s = ds->verts[i].lightmap[0][0];
+        t = ds->verts[i].lightmap[0][1];
+        if (s < min_s)
+            min_s = s;
+        if (s > max_s)
+            max_s = s;
+        if (t < min_t)
+            min_t = t;
+        if (t > max_t)
+            max_t = t;
     }
-  }
 
-  // Final quality knob adjustment
-  scale *= ds->lightmapScale;
+    // 2. Area Calculation
+    for (i = 0; i < ds->numIndexes; i += 3)
+    {
+        v0 = &ds->verts[ds->indexes[i]];
+        v1 = &ds->verts[ds->indexes[i + 1]];
+        v2 = &ds->verts[ds->indexes[i + 2]];
 
-  // ==========================================================================
-  // UV SNAPPING TO TEXEL GRID
-  // ==========================================================================
-  if (snapUVs) {
-    int W = (int)floor((max_s - min_s) * scale + 0.5f);
-    int H = (int)floor((max_t - min_t) * scale + 0.5f);
-    
-    // Safeguard against collapse
-    if (W < 1) W = 1;
-    if (H < 1) H = 1;
+        // 3D Area (cross product)
+        vec3_t side1, side2, cross;
+        VectorSubtract(v1->xyz, v0->xyz, side1);
+        VectorSubtract(v2->xyz, v0->xyz, side2);
+        CrossProduct(side1, side2, cross);
+        area3D += 0.5 * VectorLength(cross);
 
-    // Use a mandatory 1-pixel gutter on all sides (total +2)
-    // This allows exact integer snapping while respecting bilinear safety.
-    int w_snapped = W + 2;
-    int h_snapped = H + 2;
+        // UV Area (2D cross product)
+        areaUV +=
+            0.5 *
+            fabs((v1->lightmap[0][0] - v0->lightmap[0][0]) *
+                     (v2->lightmap[0][1] - v0->lightmap[0][1]) -
+                 (v2->lightmap[0][0] - v0->lightmap[0][0]) *
+                     (v1->lightmap[0][1] - v0->lightmap[0][1]));
+    }
 
-    // Check if the snapped block fits in the atlas
-    if (w_snapped <= LIGHTMAP_WIDTH && h_snapped <= LIGHTMAP_HEIGHT) {
+    if (areaUV < 0.0001)
+    {
+        _printf("WARNING: misc_model surface with degenerate UVs (areaUV: %f)\n",
+                areaUV);
+        return;
+    }
 
-      // Allocate
-      qboolean allocated_success = qfalse;
-      for (i = 0; i < numLightmaps; i++) {
-        if (AllocLMBlock(i, W + 2, H + 2, &x, &y)) {
-          ds->lightmapNum = i;
-          allocated_success = qtrue;
-          break;
+    // 3. Scale Determination
+    // Target density: 1/ssize^2 luxels per square unit.
+    scale = sqrt((area3D / (ssize * ssize)) / areaUV);
+
+    // Safeguard against extreme scaling
+    if (scale < 0.01)
+        scale = 0.01;
+
+    // Enforce dynamic minimum lightmap area
+    float uvWidth = max_s - min_s;
+    float uvHeight = max_t - min_t;
+    float uvArea = uvWidth * uvHeight;
+    if (uvArea > 0.0001f)
+    {
+        float minDimension = 192.0f;
+        float targetArea = minDimension * minDimension;
+        float minScale = sqrt(targetArea / uvArea);
+        if (scale < minScale)
+        {
+            scale = minScale;
         }
-      }
+    }
 
-      if (!allocated_success) {
-        PrepareNewLightmap();
-        if (AllocLMBlock(numLightmaps - 1, W + 2, H + 2, &x, &y)) {
-            ds->lightmapNum = numLightmaps - 1;
-            allocated_success = qtrue;
+    // Final quality knob adjustment
+    scale *= ds->lightmapScale;
+
+    // ==========================================================================
+    // UV SNAPPING TO TEXEL GRID
+    // ==========================================================================
+    if (snapUVs)
+    {
+        int W = (int)floor((max_s - min_s) * scale + 0.5f);
+        int H = (int)floor((max_t - min_t) * scale + 0.5f);
+
+        // Safeguard against collapse
+        if (W < 1)
+            W = 1;
+        if (H < 1)
+            H = 1;
+
+        // Use a mandatory 1-pixel gutter on all sides (total +2)
+        // This allows exact integer snapping while respecting bilinear safety.
+        int w_snapped = W + 2;
+        int h_snapped = H + 2;
+
+        // Check if the snapped block fits in the atlas
+        if (w_snapped <= LIGHTMAP_WIDTH && h_snapped <= LIGHTMAP_HEIGHT)
+        {
+
+            // Allocate
+            qboolean allocated_success = qfalse;
+            for (i = 0; i < numLightmaps; i++)
+            {
+                if (AllocLMBlock(i, W + 2, H + 2, &x, &y))
+                {
+                    ds->lightmapNum = i;
+                    allocated_success = qtrue;
+                    break;
+                }
+            }
+
+            if (!allocated_success)
+            {
+                PrepareNewLightmap();
+                if (AllocLMBlock(numLightmaps - 1, W + 2, H + 2, &x, &y))
+                {
+                    ds->lightmapNum = numLightmaps - 1;
+                    allocated_success = qtrue;
+                }
+            }
+
+            if (allocated_success)
+            {
+                ds->lightmapWidth = W;
+                ds->lightmapHeight = H;
+                ds->lightmapX = x + 1;
+                ds->lightmapY = y + 1;
+
+                for (i = 0; i < ds->numVerts; i++)
+                {
+                    float s_scaled = (ds->verts[i].lightmap[0][0] - min_s) * scale;
+                    float t_scaled = (ds->verts[i].lightmap[0][1] - min_t) * scale;
+
+                    // Snap to integer (texel edge)
+                    s_scaled = floor(s_scaled + 0.5f);
+                    t_scaled = floor(t_scaled + 0.5f);
+
+                    // Apply +1 offset for the mandatory gutter
+                    ds->verts[i].lightmap[0][0] = (x + 1.0f + s_scaled) / LIGHTMAP_WIDTH;
+                    ds->verts[i].lightmap[0][1] = (y + 1.0f + t_scaled) / LIGHTMAP_HEIGHT;
+                }
+                return; // Done!
+            }
         }
-      }
-
-      if (allocated_success) {
-        ds->lightmapWidth = W;
-        ds->lightmapHeight = H;
-        ds->lightmapX = x + 1;
-        ds->lightmapY = y + 1;
-
-        for (i = 0; i < ds->numVerts; i++) {
-          float s_scaled = (ds->verts[i].lightmap[0][0] - min_s) * scale;
-          float t_scaled = (ds->verts[i].lightmap[0][1] - min_t) * scale;
-          
-          // Snap to integer (texel edge)
-          s_scaled = floor(s_scaled + 0.5f);
-          t_scaled = floor(t_scaled + 0.5f);
-
-          // Apply +1 offset for the mandatory gutter
-          ds->verts[i].lightmap[0][0] = (x + 1.0f + s_scaled) / LIGHTMAP_WIDTH;
-          ds->verts[i].lightmap[0][1] = (y + 1.0f + t_scaled) / LIGHTMAP_HEIGHT;
-        }
-        return; // Done!
-      }
+        // Fallback if allocation failed or too big
+        _printf("WARNING: Snapped UV allocation failed or too large, falling back to standard logic.\n");
     }
-    // Fallback if allocation failed or too big
-    _printf("WARNING: Snapped UV allocation failed or too large, falling back to standard logic.\n");
-  }
 
-  // ==========================================================================
-  // STANDARD (FALLBACK) LOGIC
-  // ==========================================================================
-  // Limit lightmap size and adjust scale proportionally
-  // so no UV coordinates fall outside the allocated block.
-  w = ceil((max_s - min_s) * scale) + 1;
-  h = ceil((max_t - min_t) * scale) + 1;
-
-  if (w > LIGHTMAP_WIDTH - 2 || h > LIGHTMAP_HEIGHT - 2) {
-    float scaleX = scale;
-    float scaleY = scale;
-    
-    if (w > LIGHTMAP_WIDTH - 2) {
-      scaleX = (float)(LIGHTMAP_WIDTH - 3) / (max_s - min_s);
-    }
-    if (h > LIGHTMAP_HEIGHT - 2) {
-      scaleY = (float)(LIGHTMAP_HEIGHT - 3) / (max_t - min_t);
-    }
-    
-    // Use the more restrictive scale to keep aspect ratio
-    scale = (scaleX < scaleY) ? scaleX : scaleY;
-    
+    // ==========================================================================
+    // STANDARD (FALLBACK) LOGIC
+    // ==========================================================================
+    // Limit lightmap size and adjust scale proportionally
+    // so no UV coordinates fall outside the allocated block.
     w = ceil((max_s - min_s) * scale) + 1;
     h = ceil((max_t - min_t) * scale) + 1;
-  }
 
-  if (w < 1)
-    w = 1;
-  if (h < 1)
-    h = 1;
+    if (w > LIGHTMAP_WIDTH - 2 || h > LIGHTMAP_HEIGHT - 2)
+    {
+        float scaleX = scale;
+        float scaleY = scale;
 
-  // 4. Allocation (including 1-texel padding on all sides)
-  qboolean allocated_success = qfalse;
-  for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
-      ds->lightmapNum = i;
-      allocated_success = qtrue;
-      break;
+        if (w > LIGHTMAP_WIDTH - 2)
+        {
+            scaleX = (float)(LIGHTMAP_WIDTH - 3) / (max_s - min_s);
+        }
+        if (h > LIGHTMAP_HEIGHT - 2)
+        {
+            scaleY = (float)(LIGHTMAP_HEIGHT - 3) / (max_t - min_t);
+        }
+
+        // Use the more restrictive scale to keep aspect ratio
+        scale = (scaleX < scaleY) ? scaleX : scaleY;
+
+        w = ceil((max_s - min_s) * scale) + 1;
+        h = ceil((max_t - min_t) * scale) + 1;
     }
-  }
 
-  if (!allocated_success) {
-    PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
-      Error("misc_model: Lightmap allocation failed");
+    if (w < 1)
+        w = 1;
+    if (h < 1)
+        h = 1;
+
+    // 4. Allocation (including 1-texel padding on all sides)
+    qboolean allocated_success = qfalse;
+    for (i = 0; i < numLightmaps; i++)
+    {
+        if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+        {
+            ds->lightmapNum = i;
+            allocated_success = qtrue;
+            break;
+        }
     }
-    ds->lightmapNum = numLightmaps - 1;
-  }
-  ds->lightmapWidth = w;
-  ds->lightmapHeight = h;
-  ds->lightmapX = x + 1;
-  ds->lightmapY = y + 1;
 
-  for (i = 0; i < ds->numVerts; i++) {
-    ds->verts[i].lightmap[0][0] =
-        (x + 1.0f + 0.5f + (ds->verts[i].lightmap[0][0] - min_s) * scale) /
-        LIGHTMAP_WIDTH;
-    ds->verts[i].lightmap[0][1] =
-        (y + 1.0f + 0.5f + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
-        LIGHTMAP_HEIGHT;
-  }
+    if (!allocated_success)
+    {
+        PrepareNewLightmap();
+        if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+        {
+            Error("misc_model: Lightmap allocation failed");
+        }
+        ds->lightmapNum = numLightmaps - 1;
+    }
+    ds->lightmapWidth = w;
+    ds->lightmapHeight = h;
+    ds->lightmapX = x + 1;
+    ds->lightmapY = y + 1;
+
+    for (i = 0; i < ds->numVerts; i++)
+    {
+        ds->verts[i].lightmap[0][0] =
+            (x + 1.0f + 0.5f + (ds->verts[i].lightmap[0][0] - min_s) * scale) /
+            LIGHTMAP_WIDTH;
+        ds->verts[i].lightmap[0][1] =
+            (y + 1.0f + 0.5f + (ds->verts[i].lightmap[0][1] - min_t) * scale) /
+            LIGHTMAP_HEIGHT;
+    }
 }
 
-void AllocateLightmapForPatch(mapDrawSurface_t *ds) {
-  int i, j, k;
-  drawVert_t *verts;
-  int w, h;
-  int x, y;
-  float s, t;
-  mesh_t mesh, *subdividedMesh, *tempMesh, *newmesh;
-  int widthtable[1024], heighttable[1024], ssize;
+void AllocateLightmapForPatch(mapDrawSurface_t *ds)
+{
+    int i, j, k;
+    drawVert_t *verts;
+    int w, h;
+    int x, y;
+    float s, t;
+    mesh_t mesh, *subdividedMesh, *tempMesh, *newmesh;
+    int widthtable[1024], heighttable[1024], ssize;
 
-  verts = ds->verts;
+    verts = ds->verts;
 
-  mesh.width = ds->patchWidth;
-  mesh.height = ds->patchHeight;
-  mesh.verts = verts;
-  newmesh = SubdivideMesh(mesh, 8, 999);
+    mesh.width = ds->patchWidth;
+    mesh.height = ds->patchHeight;
+    mesh.verts = verts;
+    newmesh = SubdivideMesh(mesh, 8, 999);
 
-  PutMeshOnCurve(*newmesh);
-  tempMesh = RemoveLinearMeshColumnsRows(newmesh);
-  FreeMesh(newmesh);
+    PutMeshOnCurve(*newmesh);
+    tempMesh = RemoveLinearMeshColumnsRows(newmesh);
+    FreeMesh(newmesh);
 
-  ssize = ds->samplesize;
+    ssize = ds->samplesize;
 
-  subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 2,
-                                      widthtable, heighttable);
+    subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 2,
+                                        widthtable, heighttable);
 
-  w = subdividedMesh->width;
-  h = subdividedMesh->height;
+    w = subdividedMesh->width;
+    h = subdividedMesh->height;
 
-  FreeMesh(subdividedMesh);
+    FreeMesh(subdividedMesh);
 
-  // allocate the lightmap (including 1-texel padding on all sides)
-  c_exactLightmap += (w + 2) * (h + 2);
+    // allocate the lightmap (including 1-texel padding on all sides)
+    c_exactLightmap += (w + 2) * (h + 2);
 
-  qboolean allocated_patch_success = qfalse;
-  for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
-      ds->lightmapNum = i;
-      allocated_patch_success = qtrue;
-      break;
-    }
-  }
-
-  if (!allocated_patch_success) {
-    PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
-      Error("Entity %i, brush %i: Patch lightmap allocation failed",
-            ds->mapBrush->entitynum, ds->mapBrush->brushnum);
-    }
-    ds->lightmapNum = numLightmaps - 1;
-  }
-
-  // set the lightmap texture coordinates in the drawVerts
-  // we add 1 to x and y to account for the padding gutter
-  ds->lightmapWidth = w;
-  ds->lightmapHeight = h;
-  ds->lightmapX = x + 1;
-  ds->lightmapY = y + 1;
-
-  x = ds->lightmapX;
-  y = ds->lightmapY;
-
-  for (i = 0; i < ds->patchWidth; i++) {
-    int k_w;
-    for (k_w = 0; k_w < w; k_w++) {
-      if (originalWidths[k_w] >= i) {
-        break;
-      }
-    }
-    if (k_w >= w)
-      k_w = w - 1;
-    s = x + k_w + 0.5f;
-    for (j = 0; j < ds->patchHeight; j++) {
-      int k_h;
-      for (k_h = 0; k_h < h; k_h++) {
-        if (originalHeights[k_h] >= j) {
-          break;
+    qboolean allocated_patch_success = qfalse;
+    for (i = 0; i < numLightmaps; i++)
+    {
+        if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+        {
+            ds->lightmapNum = i;
+            allocated_patch_success = qtrue;
+            break;
         }
-      }
-      if (k_h >= h)
-        k_h = h - 1;
-      t = y + k_h + 0.5f;
-      verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
-      verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
     }
-  }
 
-  // precision nudge pass: shift UVs slightly outward to prevent float point inaccuracies
-  for (i = 0; i < ds->patchWidth * ds->patchHeight; i++) {
-    float *uv = verts[i].lightmap[0];
-    if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
-      uv[0] -= UV_PRECISION_NUDGE;
-    if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
-      uv[0] += UV_PRECISION_NUDGE;
-    if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
-      uv[1] -= UV_PRECISION_NUDGE;
-    if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
-      uv[1] += UV_PRECISION_NUDGE;
-  }
+    if (!allocated_patch_success)
+    {
+        PrepareNewLightmap();
+        if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+        {
+            Error("Entity %i, brush %i: Patch lightmap allocation failed",
+                  ds->mapBrush->entitynum, ds->mapBrush->brushnum);
+        }
+        ds->lightmapNum = numLightmaps - 1;
+    }
+
+    // set the lightmap texture coordinates in the drawVerts
+    // we add 1 to x and y to account for the padding gutter
+    ds->lightmapWidth = w;
+    ds->lightmapHeight = h;
+    ds->lightmapX = x + 1;
+    ds->lightmapY = y + 1;
+
+    x = ds->lightmapX;
+    y = ds->lightmapY;
+
+    for (i = 0; i < ds->patchWidth; i++)
+    {
+        int k_w;
+        for (k_w = 0; k_w < w; k_w++)
+        {
+            if (originalWidths[k_w] >= i)
+            {
+                break;
+            }
+        }
+        if (k_w >= w)
+            k_w = w - 1;
+        s = x + k_w + 0.5f;
+        for (j = 0; j < ds->patchHeight; j++)
+        {
+            int k_h;
+            for (k_h = 0; k_h < h; k_h++)
+            {
+                if (originalHeights[k_h] >= j)
+                {
+                    break;
+                }
+            }
+            if (k_h >= h)
+                k_h = h - 1;
+            t = y + k_h + 0.5f;
+            verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
+            verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
+        }
+    }
+
+    // precision nudge pass: shift UVs slightly outward to prevent float point inaccuracies
+    for (i = 0; i < ds->patchWidth * ds->patchHeight; i++)
+    {
+        float *uv = verts[i].lightmap[0];
+        if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
+            uv[0] -= UV_PRECISION_NUDGE;
+        if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
+            uv[0] += UV_PRECISION_NUDGE;
+        if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
+            uv[1] -= UV_PRECISION_NUDGE;
+        if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
+            uv[1] += UV_PRECISION_NUDGE;
+    }
 }
 
 /*
@@ -404,154 +449,176 @@ AllocateLightmapForSurface
 ===================
 */
 // #define	LIGHTMAP_BLOCK	16
-void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
-  vec3_t mins, maxs, size, delta;
-  int i;
-  drawVert_t *verts;
-  int w, h;
-  int x, y, ssize;
-  int axis;
-  vec3_t vecs[2];
-  float s, t;
-  vec3_t origin;
-  plane_t *plane;
-  float d;
-  vec3_t planeNormal;
+void AllocateLightmapForSurface(mapDrawSurface_t *ds)
+{
+    vec3_t mins, maxs, size, delta;
+    int i;
+    drawVert_t *verts;
+    int w, h;
+    int x, y, ssize;
+    int axis;
+    vec3_t vecs[2];
+    float s, t;
+    vec3_t origin;
+    plane_t *plane;
+    float d;
+    vec3_t planeNormal;
 
-  if (ds->patch) {
-    AllocateLightmapForPatch(ds);
-    return;
-  }
-
-  ssize = ds->samplesize;
-
-  plane = &mapplanes[ds->side->planenum];
-
-  // bound the surface
-  ClearBounds(mins, maxs);
-  verts = ds->verts;
-  for (i = 0; i < ds->numVerts; i++) {
-    AddPointToBounds(verts[i].xyz, mins, maxs);
-  }
-
-  // round to the lightmap resolution
-  for (i = 0; i < 3; i++) {
-    mins[i] = ssize * floor(mins[i] / ssize);
-    maxs[i] = ssize * ceil(maxs[i] / ssize);
-    size[i] = (maxs[i] - mins[i]) / ssize + 1;
-  }
-
-  // the two largest axis will be the lightmap size
-  memset(vecs, 0, sizeof(vecs));
-
-  planeNormal[0] = fabs(plane->normal[0]);
-  planeNormal[1] = fabs(plane->normal[1]);
-  planeNormal[2] = fabs(plane->normal[2]);
-
-  if (planeNormal[0] >= planeNormal[1] && planeNormal[0] >= planeNormal[2]) {
-    w = size[1];
-    h = size[2];
-    axis = 0;
-    vecs[0][1] = 1.0 / ssize;
-    vecs[1][2] = 1.0 / ssize;
-  } else if (planeNormal[1] >= planeNormal[0] &&
-             planeNormal[1] >= planeNormal[2]) {
-    w = size[0];
-    h = size[2];
-    axis = 1;
-    vecs[0][0] = 1.0 / ssize;
-    vecs[1][2] = 1.0 / ssize;
-  } else {
-    w = size[0];
-    h = size[1];
-    axis = 2;
-    vecs[0][0] = 1.0 / ssize;
-    vecs[1][1] = 1.0 / ssize;
-  }
-
-  if (!plane->normal[axis]) {
-    Error("Chose a 0 valued axis");
-  }
-
-  if (w > LIGHTMAP_WIDTH - 2) {
-    VectorScale(vecs[0], (float)(LIGHTMAP_WIDTH - 2) / w, vecs[0]);
-    w = LIGHTMAP_WIDTH - 2;
-  }
-
-  if (h > LIGHTMAP_HEIGHT - 2) {
-    VectorScale(vecs[1], (float)(LIGHTMAP_HEIGHT - 2) / h, vecs[1]);
-    h = LIGHTMAP_HEIGHT - 2;
-  }
-
-  // allocate the lightmap (including 1-texel padding on all sides)
-  c_exactLightmap += (w + 2) * (h + 2);
-
-  qboolean allocated_surf_success = qfalse;
-  for (i = 0; i < numLightmaps; i++) {
-    if (AllocLMBlock(i, w + 2, h + 2, &x, &y)) {
-      ds->lightmapNum = i;
-      allocated_surf_success = qtrue;
-      break;
+    if (ds->patch)
+    {
+        AllocateLightmapForPatch(ds);
+        return;
     }
-  }
 
-  if (!allocated_surf_success) {
-    PrepareNewLightmap();
-    if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y)) {
-      Error("Entity %i, brush %i: Surface lightmap allocation failed",
-            ds->mapBrush->entitynum, ds->mapBrush->brushnum);
+    ssize = ds->samplesize;
+
+    plane = &mapplanes[ds->side->planenum];
+
+    // bound the surface
+    ClearBounds(mins, maxs);
+    verts = ds->verts;
+    for (i = 0; i < ds->numVerts; i++)
+    {
+        AddPointToBounds(verts[i].xyz, mins, maxs);
     }
-    ds->lightmapNum = numLightmaps - 1;
-  }
 
-  // set the lightmap texture coordinates in the drawVerts
-  // we add 1 to x and y to account for the padding gutter
-  ds->lightmapWidth = w;
-  ds->lightmapHeight = h;
-  ds->lightmapX = x + 1;
-  ds->lightmapY = y + 1;
+    // round to the lightmap resolution
+    for (i = 0; i < 3; i++)
+    {
+        mins[i] = ssize * floor(mins[i] / ssize);
+        maxs[i] = ssize * ceil(maxs[i] / ssize);
+        size[i] = (maxs[i] - mins[i]) / ssize + 1;
+    }
 
-  x = ds->lightmapX;
-  y = ds->lightmapY;
+    // the two largest axis will be the lightmap size
+    memset(vecs, 0, sizeof(vecs));
 
-  for (i = 0; i < ds->numVerts; i++) {
-    VectorSubtract(verts[i].xyz, mins, delta);
-    s = DotProduct(delta, vecs[0]) + x + 0.5f;
-    t = DotProduct(delta, vecs[1]) + y + 0.5f;
+    planeNormal[0] = fabs(plane->normal[0]);
+    planeNormal[1] = fabs(plane->normal[1]);
+    planeNormal[2] = fabs(plane->normal[2]);
 
-    verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
-    if (s <= (float)x + 0.5001f) verts[i].lightmap[0][0] -= UV_PRECISION_NUDGE;
-    if (s >= (float)(x + w) - 0.5001f) verts[i].lightmap[0][0] += UV_PRECISION_NUDGE;
+    if (planeNormal[0] >= planeNormal[1] && planeNormal[0] >= planeNormal[2])
+    {
+        w = size[1];
+        h = size[2];
+        axis = 0;
+        vecs[0][1] = 1.0 / ssize;
+        vecs[1][2] = 1.0 / ssize;
+    }
+    else if (planeNormal[1] >= planeNormal[0] &&
+             planeNormal[1] >= planeNormal[2])
+    {
+        w = size[0];
+        h = size[2];
+        axis = 1;
+        vecs[0][0] = 1.0 / ssize;
+        vecs[1][2] = 1.0 / ssize;
+    }
+    else
+    {
+        w = size[0];
+        h = size[1];
+        axis = 2;
+        vecs[0][0] = 1.0 / ssize;
+        vecs[1][1] = 1.0 / ssize;
+    }
 
-    verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
-    if (t <= (float)y + 0.5001f) verts[i].lightmap[0][1] -= UV_PRECISION_NUDGE;
-    if (t >= (float)(y + h) - 0.5001f) verts[i].lightmap[0][1] += UV_PRECISION_NUDGE;
-  }
+    if (!plane->normal[axis])
+    {
+        Error("Chose a 0 valued axis");
+    }
 
-  // calculate the world coordinates of the lightmap samples
+    if (w > LIGHTMAP_WIDTH - 2)
+    {
+        VectorScale(vecs[0], (float)(LIGHTMAP_WIDTH - 2) / w, vecs[0]);
+        w = LIGHTMAP_WIDTH - 2;
+    }
 
-  // project mins onto plane to get origin
-  d = DotProduct(mins, plane->normal) - plane->dist;
-  d /= plane->normal[axis];
-  VectorCopy(mins, origin);
-  origin[axis] -= d;
+    if (h > LIGHTMAP_HEIGHT - 2)
+    {
+        VectorScale(vecs[1], (float)(LIGHTMAP_HEIGHT - 2) / h, vecs[1]);
+        h = LIGHTMAP_HEIGHT - 2;
+    }
 
-  // project stepped lightmap blocks and subtract to get planevecs
-  for (i = 0; i < 2; i++) {
-    vec3_t normalized;
-    float len;
+    // allocate the lightmap (including 1-texel padding on all sides)
+    c_exactLightmap += (w + 2) * (h + 2);
 
-    len = VectorNormalize(vecs[i], normalized);
-    VectorScale(normalized, (1.0 / len), vecs[i]);
-    d = DotProduct(vecs[i], plane->normal);
+    qboolean allocated_surf_success = qfalse;
+    for (i = 0; i < numLightmaps; i++)
+    {
+        if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+        {
+            ds->lightmapNum = i;
+            allocated_surf_success = qtrue;
+            break;
+        }
+    }
+
+    if (!allocated_surf_success)
+    {
+        PrepareNewLightmap();
+        if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+        {
+            Error("Entity %i, brush %i: Surface lightmap allocation failed",
+                  ds->mapBrush->entitynum, ds->mapBrush->brushnum);
+        }
+        ds->lightmapNum = numLightmaps - 1;
+    }
+
+    // set the lightmap texture coordinates in the drawVerts
+    // we add 1 to x and y to account for the padding gutter
+    ds->lightmapWidth = w;
+    ds->lightmapHeight = h;
+    ds->lightmapX = x + 1;
+    ds->lightmapY = y + 1;
+
+    x = ds->lightmapX;
+    y = ds->lightmapY;
+
+    for (i = 0; i < ds->numVerts; i++)
+    {
+        VectorSubtract(verts[i].xyz, mins, delta);
+        s = DotProduct(delta, vecs[0]) + x + 0.5f;
+        t = DotProduct(delta, vecs[1]) + y + 0.5f;
+
+        verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
+        if (s <= (float)x + 0.5001f)
+            verts[i].lightmap[0][0] -= UV_PRECISION_NUDGE;
+        if (s >= (float)(x + w) - 0.5001f)
+            verts[i].lightmap[0][0] += UV_PRECISION_NUDGE;
+
+        verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
+        if (t <= (float)y + 0.5001f)
+            verts[i].lightmap[0][1] -= UV_PRECISION_NUDGE;
+        if (t >= (float)(y + h) - 0.5001f)
+            verts[i].lightmap[0][1] += UV_PRECISION_NUDGE;
+    }
+
+    // calculate the world coordinates of the lightmap samples
+
+    // project mins onto plane to get origin
+    d = DotProduct(mins, plane->normal) - plane->dist;
     d /= plane->normal[axis];
-    vecs[i][axis] -= d;
-  }
+    VectorCopy(mins, origin);
+    origin[axis] -= d;
 
-  VectorCopy(origin, ds->lightmapOrigin);
-  VectorCopy(vecs[0], ds->lightmapVecs[0]);
-  VectorCopy(vecs[1], ds->lightmapVecs[1]);
-  VectorCopy(plane->normal, ds->lightmapVecs[2]);
+    // project stepped lightmap blocks and subtract to get planevecs
+    for (i = 0; i < 2; i++)
+    {
+        vec3_t normalized;
+        float len;
+
+        len = VectorNormalize(vecs[i], normalized);
+        VectorScale(normalized, (1.0 / len), vecs[i]);
+        d = DotProduct(vecs[i], plane->normal);
+        d /= plane->normal[axis];
+        vecs[i][axis] -= d;
+    }
+
+    VectorCopy(origin, ds->lightmapOrigin);
+    VectorCopy(vecs[0], ds->lightmapVecs[0]);
+    VectorCopy(vecs[1], ds->lightmapVecs[1]);
+    VectorCopy(plane->normal, ds->lightmapVecs[2]);
 }
 
 /*
@@ -559,99 +626,121 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds) {
 AllocateLightmaps
 ===================
 */
-void AllocateLightmaps(entity_t *e) {
-  int i, j;
-  mapDrawSurface_t *ds;
-  shaderInfo_t *si;
+void AllocateLightmaps(entity_t *e)
+{
+    int i, j;
+    mapDrawSurface_t *ds;
+    shaderInfo_t *si;
 
-  qprintf("--- AllocateLightmaps ---\n");
+    qprintf("--- AllocateLightmaps ---\n");
 
-  if (!lightmapHeights) {
-    lightmapHeights = calloc(MAX_LIGHTMAPS * MAX_LIGHTMAP_WIDTH, sizeof(int));
-    numLightmaps = 0;
-    PrepareNewLightmap(); // Start with the first lightmap
-  }
-
-  // sort all surfaces by shader so common shaders will usually
-  // be in the same lightmap
-  numSortShaders = 0;
-
-  for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
-    ds = &mapDrawSurfs[i];
-    if (!ds->numVerts) {
-      continue; // leftover from a surface subdivision
-    }
-    if (!ds->patch && !ds->miscModel) {
-      VectorCopy(mapplanes[ds->side->planenum].normal, ds->lightmapVecs[2]);
+    if (!lightmapHeights)
+    {
+        lightmapHeights = calloc(MAX_LIGHTMAPS * MAX_LIGHTMAP_WIDTH, sizeof(int));
+        numLightmaps = 0;
+        PrepareNewLightmap(); // Start with the first lightmap
     }
 
-    // search for this shader
-    for (j = 0; j < numSortShaders; j++) {
-      if (ds->shaderInfo == surfsOnShader[j]->shaderInfo) {
-        ds->nextOnShader = surfsOnShader[j];
-        surfsOnShader[j] = ds;
-        break;
-      }
-    }
-    if (j == numSortShaders) {
-      if (numSortShaders >= MAX_MAP_SHADERS) {
-        Error("MAX_MAP_SHADERS");
-      }
-      surfsOnShader[j] = ds;
-      numSortShaders++;
-    }
-  }
-  qprintf("%5i unique shaders\n", numSortShaders);
+    // sort all surfaces by shader so common shaders will usually
+    // be in the same lightmap
+    numSortShaders = 0;
 
-  // for each shader, allocate lightmaps for each surface
-
-  //	numLightmaps = 0;
-  //	PrepareNewLightmap();
-
-  for (i = 0; i < numSortShaders; i++) {
-    si = surfsOnShader[i]->shaderInfo;
-
-    for (ds = surfsOnShader[i]; ds; ds = ds->nextOnShader) {
-      // some surfaces don't need lightmaps allocated for them
-      if (si->surfaceFlags & SURF_NOLIGHTMAP) {
-        ds->lightmapNum = -1;
-        if (ds->miscModel)
-          _printf("TriSoup surface skipped (SURF_NOLIGHTMAP): shader %s\n",
-                  si->shader);
-      } else if (si->surfaceFlags & SURF_POINTLIGHT) {
-        ds->lightmapNum = -3;
-        if (ds->miscModel)
-          _printf("TriSoup surface skipped (SURF_POINTLIGHT): shader %s\n",
-                  si->shader);
-      } else {
-        if (ds->miscModel) {
-          AllocateLightmapForMiscModel(ds);
-        } else {
-          AllocateLightmapForSurface(ds);
+    for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
+    {
+        ds = &mapDrawSurfs[i];
+        if (!ds->numVerts)
+        {
+            continue; // leftover from a surface subdivision
         }
-      }
+        if (!ds->patch && !ds->miscModel)
+        {
+            VectorCopy(mapplanes[ds->side->planenum].normal, ds->lightmapVecs[2]);
+        }
+
+        // search for this shader
+        for (j = 0; j < numSortShaders; j++)
+        {
+            if (ds->shaderInfo == surfsOnShader[j]->shaderInfo)
+            {
+                ds->nextOnShader = surfsOnShader[j];
+                surfsOnShader[j] = ds;
+                break;
+            }
+        }
+        if (j == numSortShaders)
+        {
+            if (numSortShaders >= MAX_MAP_SHADERS)
+            {
+                Error("MAX_MAP_SHADERS");
+            }
+            surfsOnShader[j] = ds;
+            numSortShaders++;
+        }
     }
-  }
+    qprintf("%5i unique shaders\n", numSortShaders);
 
-  // Set numLightBytes so WriteBSPFile will export the lump
-  numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
-  if (numLightBytes > MAX_MAP_LIGHTING) {
-    Error("MAX_MAP_LIGHTING exceeded");
-  }
+    // for each shader, allocate lightmaps for each surface
 
-  _printf("%5i unique shaders\n", numSortShaders);
-  _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
+    //	numLightmaps = 0;
+    //	PrepareNewLightmap();
 
-  // Clear the lightmap buffer
-  memset(lightBytes, 0, numLightBytes);
+    for (i = 0; i < numSortShaders; i++)
+    {
+        si = surfsOnShader[i]->shaderInfo;
 
-  qprintf("%7i exact lightmap texels\n", c_exactLightmap);
-  qprintf("%7i block lightmap texels\n", numLightBytes);
+        for (ds = surfsOnShader[i]; ds; ds = ds->nextOnShader)
+        {
+            // some surfaces don't need lightmaps allocated for them
+            if (si->surfaceFlags & SURF_NOLIGHTMAP)
+            {
+                ds->lightmapNum = -1;
+                if (ds->miscModel)
+                    _printf("TriSoup surface skipped (SURF_NOLIGHTMAP): shader %s\n",
+                            si->shader);
+            }
+            else if (si->surfaceFlags & SURF_POINTLIGHT)
+            {
+                ds->lightmapNum = -3;
+                if (ds->miscModel)
+                    _printf("TriSoup surface skipped (SURF_POINTLIGHT): shader %s\n",
+                            si->shader);
+            }
+            else
+            {
+                if (ds->miscModel)
+                {
+                    AllocateLightmapForMiscModel(ds);
+                }
+                else
+                {
+                    AllocateLightmapForSurface(ds);
+                }
+            }
+        }
+    }
+
+    // Set numLightBytes so WriteBSPFile will export the lump
+    numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
+    if (numLightBytes > MAX_MAP_LIGHTING)
+    {
+        Error("MAX_MAP_LIGHTING exceeded");
+    }
+
+    _printf("%5i unique shaders\n", numSortShaders);
+    _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
+
+    // Clear the lightmap buffer
+    memset(lightBytes, 0, numLightBytes);
+
+    qprintf("%7i exact lightmap texels\n", c_exactLightmap);
+    qprintf("%7i block lightmap texels\n", numLightBytes);
 }
 
-void FreeLightmaps(void) {
-  if (lightmapHeights) {
-    free(lightmapHeights);
-    lightmapHeights = NULL;
-  }
+void FreeLightmaps(void)
+{
+    if (lightmapHeights)
+    {
+        free(lightmapHeights);
+        lightmapHeights = NULL;
+    }
 }

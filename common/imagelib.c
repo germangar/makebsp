@@ -36,49 +36,62 @@ LOAD IMAGE
 ============================================================================
 */
 
-void Q_LoadImage(const char *name, byte **pixels, int *width, int *height) {
-  int x, y, n;
-  char ext[128];
+void Q_LoadImage(const char *name, byte **pixels, int *width, int *height)
+{
+    int x, y, n;
+    char ext[128];
 
-  ExtractFileExtension(name, ext);
-  if (!Q_stricmp(ext, "lbm") || !Q_stricmp(ext, "pcx")) {
-    Error("LoadImage: %s format is no longer supported. Please convert to TGA, PNG, or BMP.", ext);
-  }
+    ExtractFileExtension(name, ext);
+    if (!Q_stricmp(ext, "lbm") || !Q_stricmp(ext, "pcx"))
+    {
+        Error("LoadImage: %s format is no longer supported. Please convert to TGA, PNG, or BMP.", ext);
+    }
 
-  stbi_uc *data = stbi_load(name, &x, &y, &n, 4);
-  if (!data) {
-    Error("Failed to load image: %s (%s)", name, stbi_failure_reason());
-  }
-  if (width) *width = x;
-  if (height) *height = y;
-  *pixels = (byte *)data;
+    stbi_uc *data = stbi_load(name, &x, &y, &n, 4);
+    if (!data)
+    {
+        Error("Failed to load image: %s (%s)", name, stbi_failure_reason());
+    }
+    if (width)
+        *width = x;
+    if (height)
+        *height = y;
+    *pixels = (byte *)data;
 }
 
-void LoadTGA(const char *filename, byte **pixels, int *width, int *height) {
-  Q_LoadImage(filename, pixels, width, height);
+void LoadTGA(const char *filename, byte **pixels, int *width, int *height)
+{
+    Q_LoadImage(filename, pixels, width, height);
 }
 
-void LoadBMP(const char *filename, byte **pixels, int *width, int *height) {
-  Q_LoadImage(filename, pixels, width, height);
+void LoadBMP(const char *filename, byte **pixels, int *width, int *height)
+{
+    Q_LoadImage(filename, pixels, width, height);
 }
 
-void LoadPNG(const char *filename, byte **pixels, int *width, int *height) {
-  Q_LoadImage(filename, pixels, width, height);
+void LoadPNG(const char *filename, byte **pixels, int *width, int *height)
+{
+    Q_LoadImage(filename, pixels, width, height);
 }
 
-void Load32BitImage(const char *name, unsigned **pixels, int *width, int *height) {
-  Q_LoadImage(name, (byte **)pixels, width, height);
+void Load32BitImage(const char *name, unsigned **pixels, int *width, int *height)
+{
+    Q_LoadImage(name, (byte **)pixels, width, height);
 }
 
-void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height) {
-  int x, y, n;
-  stbi_uc *data = stbi_load_from_memory(buffer, buflen, &x, &y, &n, 4);
-  if (!data) {
-    Error("Failed to load image from buffer: %s", stbi_failure_reason());
-  }
-  if (width) *width = x;
-  if (height) *height = y;
-  *pixels = (byte *)data;
+void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height)
+{
+    int x, y, n;
+    stbi_uc *data = stbi_load_from_memory(buffer, buflen, &x, &y, &n, 4);
+    if (!data)
+    {
+        Error("Failed to load image from buffer: %s", stbi_failure_reason());
+    }
+    if (width)
+        *width = x;
+    if (height)
+        *height = y;
+    *pixels = (byte *)data;
 }
 
 /*
@@ -89,35 +102,49 @@ SAVE IMAGE
 ============================================================================
 */
 
-void SaveImage(const char *name, byte *pixels, int width, int height, int components) {
-  char ext[128];
-  ExtractFileExtension(name, ext);
+void SaveImage(const char *name, byte *pixels, int width, int height, int components)
+{
+    char ext[128];
+    ExtractFileExtension(name, ext);
 
-  if (!Q_stricmp(ext, "tga")) {
-    SaveTGA(name, pixels, width, height, components);
-  } else if (!Q_stricmp(ext, "bmp")) {
-    SaveBMP(name, pixels, width, height, components);
-  } else if (!Q_stricmp(ext, "png")) {
-    SavePNG(name, pixels, width, height, components);
-  } else {
-    Error("SaveImage: Unknown extension '%s' for file '%s'", ext, name);
-  }
+    if (!Q_stricmp(ext, "tga"))
+    {
+        SaveTGA(name, pixels, width, height, components);
+    }
+    else if (!Q_stricmp(ext, "bmp"))
+    {
+        SaveBMP(name, pixels, width, height, components);
+    }
+    else if (!Q_stricmp(ext, "png"))
+    {
+        SavePNG(name, pixels, width, height, components);
+    }
+    else
+    {
+        Error("SaveImage: Unknown extension '%s' for file '%s'", ext, name);
+    }
 }
 
-void SaveTGA(const char *filename, byte *pixels, int width, int height, int components) {
-  if (!stbi_write_tga(filename, width, height, components, pixels)) {
-    Error("Failed to write TGA: %s", filename);
-  }
+void SaveTGA(const char *filename, byte *pixels, int width, int height, int components)
+{
+    if (!stbi_write_tga(filename, width, height, components, pixels))
+    {
+        Error("Failed to write TGA: %s", filename);
+    }
 }
 
-void SaveBMP(const char *filename, byte *pixels, int width, int height, int components) {
-  if (!stbi_write_bmp(filename, width, height, components, pixels)) {
-    Error("Failed to write BMP: %s", filename);
-  }
+void SaveBMP(const char *filename, byte *pixels, int width, int height, int components)
+{
+    if (!stbi_write_bmp(filename, width, height, components, pixels))
+    {
+        Error("Failed to write BMP: %s", filename);
+    }
 }
 
-void SavePNG(const char *filename, byte *pixels, int width, int height, int components) {
-  if (!stbi_write_png(filename, width, height, components, pixels, width * components)) {
-    Error("Failed to write PNG: %s", filename);
-  }
+void SavePNG(const char *filename, byte *pixels, int width, int height, int components)
+{
+    if (!stbi_write_png(filename, width, height, components, pixels, width * components))
+    {
+        Error("Failed to write PNG: %s", filename);
+    }
 }

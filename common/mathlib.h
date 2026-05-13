@@ -27,7 +27,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "qtypes.h"
 #include <math.h>
 
-
 #ifdef DOUBLEVEC_T
 typedef double vec_t;
 #else
@@ -60,46 +59,46 @@ extern vec3_t vec3_origin;
 qboolean VectorCompare(const vec3_t v1, const vec3_t v2);
 
 #define DotProduct(x, y) ((x)[0] * (y)[0] + (x)[1] * (y)[1] + (x)[2] * (y)[2])
-#define VectorSubtract(a, b, c)                                                \
-  {                                                                            \
-    (c)[0] = (a)[0] - (b)[0];                                                  \
-    (c)[1] = (a)[1] - (b)[1];                                                  \
-    (c)[2] = (a)[2] - (b)[2];                                                  \
-  }
-#define VectorAdd(a, b, c)                                                     \
-  {                                                                            \
-    (c)[0] = (a)[0] + (b)[0];                                                  \
-    (c)[1] = (a)[1] + (b)[1];                                                  \
-    (c)[2] = (a)[2] + (b)[2];                                                  \
-  }
-#define VectorCopy(a, b)                                                       \
-  {                                                                            \
-    (b)[0] = (a)[0];                                                           \
-    (b)[1] = (a)[1];                                                           \
-    (b)[2] = (a)[2];                                                           \
-  }
-#define VectorScale(a, b, c)                                                   \
-  {                                                                            \
-    (c)[0] = (b) * (a)[0];                                                     \
-    (c)[1] = (b) * (a)[1];                                                     \
-    (c)[2] = (b) * (a)[2];                                                     \
-  }
-#define VectorClear(x)                                                         \
-  {                                                                            \
-    (x)[0] = (x)[1] = (x)[2] = 0;                                              \
-  }
-#define VectorNegate(x)                                                        \
-  {                                                                            \
-    (x)[0] = -(x)[0];                                                          \
-    (x)[1] = -(x)[1];                                                          \
-    (x)[2] = -(x)[2];                                                          \
-  }
-#define VectorSet(v, x, y, z)                                                  \
-  {                                                                            \
-    (v)[0] = (x);                                                              \
-    (v)[1] = (y);                                                              \
-    (v)[2] = (z);                                                              \
-  }
+#define VectorSubtract(a, b, c)   \
+    {                             \
+        (c)[0] = (a)[0] - (b)[0]; \
+        (c)[1] = (a)[1] - (b)[1]; \
+        (c)[2] = (a)[2] - (b)[2]; \
+    }
+#define VectorAdd(a, b, c)        \
+    {                             \
+        (c)[0] = (a)[0] + (b)[0]; \
+        (c)[1] = (a)[1] + (b)[1]; \
+        (c)[2] = (a)[2] + (b)[2]; \
+    }
+#define VectorCopy(a, b) \
+    {                    \
+        (b)[0] = (a)[0]; \
+        (b)[1] = (a)[1]; \
+        (b)[2] = (a)[2]; \
+    }
+#define VectorScale(a, b, c)   \
+    {                          \
+        (c)[0] = (b) * (a)[0]; \
+        (c)[1] = (b) * (a)[1]; \
+        (c)[2] = (b) * (a)[2]; \
+    }
+#define VectorClear(x)                \
+    {                                 \
+        (x)[0] = (x)[1] = (x)[2] = 0; \
+    }
+#define VectorNegate(x)   \
+    {                     \
+        (x)[0] = -(x)[0]; \
+        (x)[1] = -(x)[1]; \
+        (x)[2] = -(x)[2]; \
+    }
+#define VectorSet(v, x, y, z) \
+    {                         \
+        (v)[0] = (x);         \
+        (v)[1] = (y);         \
+        (v)[2] = (z);         \
+    }
 void Vec10Copy(vec_t *in, vec_t *out);
 
 vec_t Q_rint(vec_t in);
@@ -128,12 +127,11 @@ void NormalToLatLong(const vec3_t normal, byte bytes[2]);
 
 int PlaneTypeForNormal(vec3_t normal);
 
-void RotatePointAroundVector( vec3_t dst, const vec3_t dir, const vec3_t point, float degrees );
-
+void RotatePointAroundVector(vec3_t dst, const vec3_t dir, const vec3_t point, float degrees);
 
 // 2D geometric utilities
 qboolean PointInTriangle(float px, float py, float v0[2], float v1[2],
-                        float v2[2]);
+                         float v2[2]);
 float DistanceSqToSegment(float px, float py, float v0[2], float v1[2],
                           float *t);
 

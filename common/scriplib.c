@@ -33,10 +33,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 =============================================================================
 */
 
-typedef struct {
-  char filename[1024];
-  char *buffer, *script_p, *end_p;
-  int line;
+typedef struct
+{
+    char filename[1024];
+    char *buffer, *script_p, *end_p;
+    int line;
 } script_t;
 
 #define MAX_INCLUDES 8
@@ -53,26 +54,30 @@ qboolean tokenready; // only qtrue if UnGetToken was just called
 AddScriptToStack
 ==============
 */
-void AddScriptToStack(const char *filename) {
-  int size;
+void AddScriptToStack(const char *filename)
+{
+    int size;
 
-  script++;
-  if (script == &scriptstack[MAX_INCLUDES])
-    Error("script file exceeded MAX_INCLUDES");
-  strcpy(script->filename, ExpandPath(filename));
+    script++;
+    if (script == &scriptstack[MAX_INCLUDES])
+        Error("script file exceeded MAX_INCLUDES");
+    strcpy(script->filename, ExpandPath(filename));
 
-  if (FileExists(script->filename)) {
-    size = LoadFile(script->filename, (void **)&script->buffer);
-  } else {
-    size = PakLoadAnyFile(filename, (void **)&script->buffer);
-    if (size < 0)
-      Error("Couldn't load %s", filename);
-  }
+    if (FileExists(script->filename))
+    {
+        size = LoadFile(script->filename, (void **)&script->buffer);
+    }
+    else
+    {
+        size = PakLoadAnyFile(filename, (void **)&script->buffer);
+        if (size < 0)
+            Error("Couldn't load %s", filename);
+    }
 
-  script->line = 1;
+    script->line = 1;
 
-  script->script_p = script->buffer;
-  script->end_p = script->buffer + size;
+    script->script_p = script->buffer;
+    script->end_p = script->buffer + size;
 }
 
 /*
@@ -80,12 +85,13 @@ void AddScriptToStack(const char *filename) {
 LoadScriptFile
 ==============
 */
-void LoadScriptFile(const char *filename) {
-  script = scriptstack;
-  AddScriptToStack(filename);
+void LoadScriptFile(const char *filename)
+{
+    script = scriptstack;
+    AddScriptToStack(filename);
 
-  endofscript = qfalse;
-  tokenready = qfalse;
+    endofscript = qfalse;
+    tokenready = qfalse;
 }
 
 /*
@@ -93,20 +99,21 @@ void LoadScriptFile(const char *filename) {
 ParseFromMemory
 ==============
 */
-void ParseFromMemory(char *buffer, int size) {
-  script = scriptstack;
-  script++;
-  if (script == &scriptstack[MAX_INCLUDES])
-    Error("script file exceeded MAX_INCLUDES");
-  strcpy(script->filename, "memory buffer");
+void ParseFromMemory(char *buffer, int size)
+{
+    script = scriptstack;
+    script++;
+    if (script == &scriptstack[MAX_INCLUDES])
+        Error("script file exceeded MAX_INCLUDES");
+    strcpy(script->filename, "memory buffer");
 
-  script->buffer = buffer;
-  script->line = 1;
-  script->script_p = script->buffer;
-  script->end_p = script->buffer + size;
+    script->buffer = buffer;
+    script->line = 1;
+    script->script_p = script->buffer;
+    script->end_p = script->buffer + size;
 
-  endofscript = qfalse;
-  tokenready = qfalse;
+    endofscript = qfalse;
+    tokenready = qfalse;
 }
 
 /*
@@ -125,23 +132,26 @@ could cross a line boundary.
 */
 void UnGetToken(void) { tokenready = qtrue; }
 
-qboolean EndOfScript(qboolean crossline) {
-  if (!crossline)
-    Error("Line %i is incomplete\n", scriptline);
+qboolean EndOfScript(qboolean crossline)
+{
+    if (!crossline)
+        Error("Line %i is incomplete\n", scriptline);
 
-  if (!strcmp(script->filename, "memory buffer")) {
-    endofscript = qtrue;
-    return qfalse;
-  }
+    if (!strcmp(script->filename, "memory buffer"))
+    {
+        endofscript = qtrue;
+        return qfalse;
+    }
 
-  free(script->buffer);
-  if (script == scriptstack + 1) {
-    endofscript = qtrue;
-    return qfalse;
-  }
-  script--;
-  scriptline = script->line;
-  return GetToken(crossline);
+    free(script->buffer);
+    if (script == scriptstack + 1)
+    {
+        endofscript = qtrue;
+        return qfalse;
+    }
+    script--;
+    scriptline = script->line;
+    return GetToken(crossline);
 }
 
 /*
@@ -149,105 +159,119 @@ qboolean EndOfScript(qboolean crossline) {
 GetToken
 ==============
 */
-qboolean GetToken(qboolean crossline) {
-  char *token_p;
+qboolean GetToken(qboolean crossline)
+{
+    char *token_p;
 
-  if (!script) {
-    _printf("GetToken: script is NULL!\n");
-    return qfalse;
-  }
+    if (!script)
+    {
+        _printf("GetToken: script is NULL!\n");
+        return qfalse;
+    }
 
-  if (tokenready) // is a token allready waiting?
-  {
-    tokenready = qfalse;
-    // _printf("GetToken: returning ready token '%s'\n", token);
-    return qtrue;
-  }
+    if (tokenready) // is a token allready waiting?
+    {
+        tokenready = qfalse;
+        // _printf("GetToken: returning ready token '%s'\n", token);
+        return qtrue;
+    }
 
-  if (script->script_p >= script->end_p) {
-    return EndOfScript(crossline);
-  }
-
-  //
-  // skip space
-  //
-skipspace:
-  while (*script->script_p <= 32) {
     if (script->script_p >= script->end_p)
-      return EndOfScript(crossline);
-    if (*script->script_p++ == '\n') {
-      if (!crossline)
-        Error("Line %i is incomplete\n", scriptline);
-      scriptline = script->line++;
-    }
-  }
-
-  if (script->script_p >= script->end_p)
-    return EndOfScript(crossline);
-
-  // ; # // comments
-  if (*script->script_p == ';' || *script->script_p == '#' ||
-      (script->script_p[0] == '/' && script->script_p[1] == '/')) {
-    if (!crossline)
-      Error("Line %i is incomplete\n", scriptline);
-    while (*script->script_p++ != '\n')
-      if (script->script_p >= script->end_p)
+    {
         return EndOfScript(crossline);
-    scriptline = script->line++;
-    goto skipspace;
-  }
+    }
 
-  // /* */ comments
-  if (script->script_p[0] == '/' && script->script_p[1] == '*') {
-    if (!crossline)
-      Error("Line %i is incomplete\n", scriptline);
-    script->script_p += 2;
-    while (script->script_p[0] != '*' && script->script_p[1] != '/') {
-      if (*script->script_p == '\n') {
+    //
+    // skip space
+    //
+skipspace:
+    while (*script->script_p <= 32)
+    {
+        if (script->script_p >= script->end_p)
+            return EndOfScript(crossline);
+        if (*script->script_p++ == '\n')
+        {
+            if (!crossline)
+                Error("Line %i is incomplete\n", scriptline);
+            scriptline = script->line++;
+        }
+    }
+
+    if (script->script_p >= script->end_p)
+        return EndOfScript(crossline);
+
+    // ; # // comments
+    if (*script->script_p == ';' || *script->script_p == '#' ||
+        (script->script_p[0] == '/' && script->script_p[1] == '/'))
+    {
+        if (!crossline)
+            Error("Line %i is incomplete\n", scriptline);
+        while (*script->script_p++ != '\n')
+            if (script->script_p >= script->end_p)
+                return EndOfScript(crossline);
         scriptline = script->line++;
-      }
-      script->script_p++;
-      if (script->script_p >= script->end_p)
-        return EndOfScript(crossline);
-    }
-    script->script_p += 2;
-    goto skipspace;
-  }
-
-  //
-  // copy token
-  //
-  token_p = token;
-
-  if (*script->script_p == '"') {
-    // quoted token
-    script->script_p++;
-    while (*script->script_p != '"') {
-      *token_p++ = *script->script_p++;
-      if (script->script_p == script->end_p)
-        break;
-      if (token_p == &token[MAXTOKEN])
-        Error("Token too large on line %i\n", scriptline);
-    }
-    script->script_p++;
-  } else // regular token
-    while (*script->script_p > 32 && *script->script_p != ';') {
-      *token_p++ = *script->script_p++;
-      if (script->script_p == script->end_p)
-        break;
-      if (token_p == &token[MAXTOKEN])
-        Error("Token too large on line %i\n", scriptline);
+        goto skipspace;
     }
 
-  *token_p = 0;
+    // /* */ comments
+    if (script->script_p[0] == '/' && script->script_p[1] == '*')
+    {
+        if (!crossline)
+            Error("Line %i is incomplete\n", scriptline);
+        script->script_p += 2;
+        while (script->script_p[0] != '*' && script->script_p[1] != '/')
+        {
+            if (*script->script_p == '\n')
+            {
+                scriptline = script->line++;
+            }
+            script->script_p++;
+            if (script->script_p >= script->end_p)
+                return EndOfScript(crossline);
+        }
+        script->script_p += 2;
+        goto skipspace;
+    }
 
-  if (!strcmp(token, "$include")) {
-    GetToken(qfalse);
-    AddScriptToStack(token);
-    return GetToken(crossline);
-  }
+    //
+    // copy token
+    //
+    token_p = token;
 
-  return qtrue;
+    if (*script->script_p == '"')
+    {
+        // quoted token
+        script->script_p++;
+        while (*script->script_p != '"')
+        {
+            *token_p++ = *script->script_p++;
+            if (script->script_p == script->end_p)
+                break;
+            if (token_p == &token[MAXTOKEN])
+                Error("Token too large on line %i\n", scriptline);
+        }
+        script->script_p++;
+    }
+    else // regular token
+        while (*script->script_p > 32 && *script->script_p != ';')
+        {
+            *token_p++ = *script->script_p++;
+            if (script->script_p == script->end_p)
+                break;
+            if (token_p == &token[MAXTOKEN])
+                Error("Token too large on line %i\n", scriptline);
+        }
+
+    *token_p = 0;
+
+    if (!strcmp(token, "$include"))
+    {
+        GetToken(qfalse);
+        AddScriptToStack(token);
+        return GetToken(crossline);
+    }
+
+    return qtrue;
 }
 
 /*
@@ -257,101 +281,121 @@ TokenAvailable
 Returns qtrue if there is another token on the line
 ==============
 */
-qboolean TokenAvailable(void) {
-  int oldLine;
-  qboolean r;
+qboolean TokenAvailable(void)
+{
+    int oldLine;
+    qboolean r;
 
-  oldLine = script->line;
-  r = GetToken(qtrue);
-  if (!r) {
+    oldLine = script->line;
+    r = GetToken(qtrue);
+    if (!r)
+    {
+        return qfalse;
+    }
+    UnGetToken();
+    if (oldLine == script->line)
+    {
+        return qtrue;
+    }
     return qfalse;
-  }
-  UnGetToken();
-  if (oldLine == script->line) {
-    return qtrue;
-  }
-  return qfalse;
 }
 
 //=====================================================================
 
-void MatchToken(char *match) {
-  GetToken(qtrue);
+void MatchToken(char *match)
+{
+    GetToken(qtrue);
 
-  if (strcmp(token, match)) {
-    Error("MatchToken( \"%s\" ) failed at line %i, found '%s'", match,
-          scriptline, token);
-  }
-}
-
-void Parse1DMatrix(int x, vec_t *m) {
-  int i;
-
-  MatchToken("(");
-
-  for (i = 0; i < x; i++) {
-    GetToken(qfalse);
-    m[i] = atof(token);
-  }
-
-  MatchToken(")");
-}
-
-void Parse2DMatrix(int y, int x, vec_t *m) {
-  int i;
-
-  MatchToken("(");
-
-  for (i = 0; i < y; i++) {
-    Parse1DMatrix(x, m + i * x);
-  }
-
-  MatchToken(")");
-}
-
-void Parse3DMatrix(int z, int y, int x, vec_t *m) {
-  int i;
-
-  MatchToken("(");
-
-  for (i = 0; i < z; i++) {
-    Parse2DMatrix(y, x, m + i * x * y);
-  }
-
-  MatchToken(")");
-}
-
-void Write1DMatrix(FILE *f, int x, vec_t *m) {
-  int i;
-
-  fprintf(f, "( ");
-  for (i = 0; i < x; i++) {
-    if (m[i] == (int)m[i]) {
-      fprintf(f, "%i ", (int)m[i]);
-    } else {
-      fprintf(f, "%f ", m[i]);
+    if (strcmp(token, match))
+    {
+        Error("MatchToken( \"%s\" ) failed at line %i, found '%s'", match,
+              scriptline, token);
     }
-  }
-  fprintf(f, ")");
 }
 
-void Write2DMatrix(FILE *f, int y, int x, vec_t *m) {
-  int i;
+void Parse1DMatrix(int x, vec_t *m)
+{
+    int i;
 
-  fprintf(f, "( ");
-  for (i = 0; i < y; i++) {
-    Write1DMatrix(f, x, m + i * x);
-    fprintf(f, " ");
-  }
-  fprintf(f, ")\n");
+    MatchToken("(");
+
+    for (i = 0; i < x; i++)
+    {
+        GetToken(qfalse);
+        m[i] = atof(token);
+    }
+
+    MatchToken(")");
 }
 
-void Write3DMatrix(FILE *f, int z, int y, int x, vec_t *m) {
-  int i;
+void Parse2DMatrix(int y, int x, vec_t *m)
+{
+    int i;
 
-  fprintf(f, "(\n");
-  for (i = 0; i < z; i++) {
-    Write2DMatrix(f, y, x, m + i * (x * y));
-  }
-  fprintf(f, ")\n");
+    MatchToken("(");
+
+    for (i = 0; i < y; i++)
+    {
+        Parse1DMatrix(x, m + i * x);
+    }
+
+    MatchToken(")");
+}
+
+void Parse3DMatrix(int z, int y, int x, vec_t *m)
+{
+    int i;
+
+    MatchToken("(");
+
+    for (i = 0; i < z; i++)
+    {
+        Parse2DMatrix(y, x, m + i * x * y);
+    }
+
+    MatchToken(")");
+}
+
+void Write1DMatrix(FILE *f, int x, vec_t *m)
+{
+    int i;
+
+    fprintf(f, "( ");
+    for (i = 0; i < x; i++)
+    {
+        if (m[i] == (int)m[i])
+        {
+            fprintf(f, "%i ", (int)m[i]);
+        }
+        else
+        {
+            fprintf(f, "%f ", m[i]);
+        }
+    }
+    fprintf(f, ")");
+}
+
+void Write2DMatrix(FILE *f, int y, int x, vec_t *m)
+{
+    int i;
+
+    fprintf(f, "( ");
+    for (i = 0; i < y; i++)
+    {
+        Write1DMatrix(f, x, m + i * x);
+        fprintf(f, " ");
+    }
+    fprintf(f, ")\n");
+}
+
+void Write3DMatrix(FILE *f, int z, int y, int x, vec_t *m)
+{
+    int i;
+
+    fprintf(f, "(\n");
+    for (i = 0; i < z; i++)
+    {
+        Write2DMatrix(f, y, x, m + i * (x * y));
+    }
+    fprintf(f, ")\n");
 }

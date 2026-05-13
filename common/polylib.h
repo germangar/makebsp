@@ -23,14 +23,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define MAX_POINTS_ON_FIXED_WINDING 128
 
-typedef struct {
-  int numpoints;
-  vec3_t points[4]; // variable sized
+typedef struct
+{
+    int numpoints;
+    vec3_t points[4]; // variable sized
 } winding_t;
 
-typedef struct {
-  int numpoints;
-  vec3_t points[MAX_POINTS_ON_FIXED_WINDING];
+typedef struct
+{
+    int numpoints;
+    vec3_t points[MAX_POINTS_ON_FIXED_WINDING];
 } fixedWinding_t;
 
 #define MAX_POINTS_ON_WINDING 64
