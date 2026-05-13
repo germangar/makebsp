@@ -57,3 +57,9 @@ The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-sp
 - **Volumetric RGSS**: Trisoup Anti-Aliasing utilizes an 8-point Volumetric Super-Sampling pattern, querying the 3D spatial hash multiple times per pixel to match the crispness of the world floor's RGSS.
 - **Mathematical Parity**: To unify the "feel" between surface types, Trisoup smoothing uses true 3D Gaussian weights and a radius "cheat factor" (1.25x) to compensate for the volume difference between spherical (3D) and square (2D) kernels.
 - **Multi-threaded Performance**: The per-surface spatial hashes are lock-free and allocated on-the-fly, allowing for perfect parallel scaling and minimal memory usage.
+
+## 9. Cross-Tool Metadata (Sidecar Pipeline)
+Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata between the compiler (q3map.exe) and the lighting tool (light.exe).
+
+- **Mechanism**: q3map serializes per-surface overrides into a lightweight binary array (extraSurface_t) at cache/[mapname].srf, which is then re-loaded by light during surface initialization.
+- **Precedence**: Sidecar data acts as a selective override for global game_t defaults.
