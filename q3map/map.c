@@ -1119,6 +1119,86 @@ void AdjustBrushesForOrigin(entity_t *ent)
 
 /*
 ================
+ProcessFuncLight
+
+Spawns a spotlight for every drawable brush side in the entity
+================
+*/
+void ProcessFuncLight(entity_t *ent)
+{
+    bspbrush_t *b;
+    int s;
+
+    for (b = ent->brushes; b; b = b->next)
+    {
+        for (s = 0; s < b->numsides; s++)
+        {
+            side_t *side = &b->sides[s];
+            if (!side->winding)
+                continue;
+            if (!side->shaderInfo)
+                continue;
+
+            // Visibility filter: skip nodraw, sky, and translucent surfaces
+            if (side->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY))
+                continue;
+            if (side->shaderInfo->contents & CONTENTS_TRANSLUCENT)
+                continue;
+
+            // Calculate center of the face
+            vec3_t center;
+            VectorClear(center);
+            for (int p = 0; p < side->winding->numpoints; p++)
+            {
+                VectorAdd(center, side->winding->points[p], center);
+            }
+            VectorScale(center, 1.0f / side->winding->numpoints, center);
+
+            // Direction (face normal)
+            vec3_t normal;
+            VectorCopy(mapplanes[side->planenum].normal, normal);
+
+            // Nudge light 1.0 units away from the surface
+            vec3_t lightOrigin;
+            VectorMA(center, 1.0f, normal, lightOrigin);
+
+            // Spawn a new light entity
+            if (num_entities == MAX_MAP_ENTITIES)
+                Error("num_entities == MAX_MAP_ENTITIES");
+
+            entity_t *le = &entities[num_entities++];
+            memset(le, 0, sizeof(*le));
+
+            SetKeyValue(le, "classname", "light");
+            char buf[128];
+            sprintf(buf, "%f %f %f", lightOrigin[0], lightOrigin[1], lightOrigin[2]);
+            SetKeyValue(le, "origin", buf);
+            sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
+            SetKeyValue(le, "_dir", buf);
+
+            // Inherit all other keys (color, light, radius, etc) from the func_light
+            for (epair_t *ep = ent->epairs; ep; ep = ep->next)
+            {
+                if (!strcmp(ep->key, "classname") || !strcmp(ep->key, "origin") || !strcmp(ep->key, "model"))
+                    continue;
+                SetKeyValue(le, ep->key, ep->value);
+            }
+
+            // If no color is set, try to derive it from the surface image
+            const char *color = ValueForKey(ent, "_color");
+            if (!color[0])
+                color = ValueForKey(ent, "color");
+
+            if (!color[0])
+            {
+                SetKeyValue(le, "_lightimage", side->shaderInfo->shader);
+            }
+        }
+    }
+}
+
+/*
+================
 ParseMapEntity
 ================
 */
@@ -1227,6 +1307,21 @@ qboolean ParseMapEntity(void)
         }
         MoveBrushesToWorld(mapent);
         num_entities--;
+        return qtrue;
+    }
+
+    // func_light entities spawn a spotlight for every drawable brush side
+    if (!strcmp("func_light", ValueForKey(mapent, "classname")))
+    {
+        entity_t temp;
+
+        // Copy the entity and decrement num_entities so that the generated
+        // lights overwrite the func_light slot in the global entities array.
+        temp = *mapent;
+        num_entities--;
+
+        ProcessFuncLight(&temp);
+        MoveBrushesToWorld(&temp);
         return qtrue;
     }
 

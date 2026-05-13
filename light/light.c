@@ -22,6 +22,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // light.c
 
 #include "light.h"
+
+#define DEFAULT_SPOTLIGHT_DISTANCE 64.0f
 #include "radiosity.h"
 #include "../common/imagelib.h"
 #ifdef _WIN32
@@ -628,7 +630,27 @@ void CreateEntityLights(void)
             ColorNormalize(dl->color, dl->color);
         }
         else
-            dl->color[0] = dl->color[1] = dl->color[2] = 1.0;
+        {
+            // If no color key, check for _lightimage
+            const char *lightimage = ValueForKey(e, "_lightimage");
+            if (lightimage[0])
+            {
+                shaderInfo_t *si = ShaderInfoForShader(lightimage);
+                if (si)
+                {
+                    VectorCopy(si->averageColor, dl->color);
+                    ColorNormalize(dl->color, dl->color);
+                }
+                else
+                {
+                    dl->color[0] = dl->color[1] = dl->color[2] = 1.0;
+                }
+            }
+            else
+            {
+                dl->color[0] = dl->color[1] = dl->color[2] = 1.0;
+            }
+        }
 
         intensity = intensity * pointScale;
         dl->photons = intensity;
@@ -664,6 +686,34 @@ void CreateEntityLights(void)
                     dist = 64;
                 }
                 dl->radiusByDist = (radius + 16) / dist;
+                dl->type = emit_spotlight;
+            }
+        }
+        else
+        {
+            const char *dirStr = ValueForKey(e, "_dir");
+            const char *anglesStr = ValueForKey(e, "_angles");
+            if (dirStr[0] || anglesStr[0])
+            {
+                float radius = FloatForKey(e, "radius");
+                if (!radius) radius = 64;
+
+                if (dirStr[0])
+                {
+                    GetVectorForKey(e, "_dir", dl->normal);
+                }
+                else
+                {
+                    vec3_t angles;
+                    GetVectorForKey(e, "_angles", angles);
+                    float yaw = angles[1] * (Q_PI / 180.0f);
+                    float pitch = angles[0] * (Q_PI / 180.0f);
+                    dl->normal[0] = cos(yaw) * cos(pitch);
+                    dl->normal[1] = sin(yaw) * cos(pitch);
+                    dl->normal[2] = -sin(pitch);
+                }
+                VectorNormalize(dl->normal, dl->normal);
+                dl->radiusByDist = (radius + 16) / DEFAULT_SPOTLIGHT_DISTANCE;
                 dl->type = emit_spotlight;
             }
         }
