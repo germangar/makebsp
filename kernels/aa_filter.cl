@@ -40,8 +40,9 @@ __kernel void aa_filter(
     __global const int              *pixelToX,
     __global const int              *pixelToY,
     __global const float            *pattern,
+    __global const float            *smoothingRadii,
     int   numSamples,
-    float radius)
+    float upscale)
 {
     int tid = get_global_id(0);
 
@@ -55,13 +56,20 @@ __kernel void aa_filter(
     }
     int   lx       = pixelToX[atlasIdx];
     int   ly       = pixelToY[atlasIdx];
+    float localRadius = smoothingRadii[sIdx] * upscale;
+    if (localRadius <= 0.0f) {
+        atlasOut[atlasIdx*3+0] = atlasIn[atlasIdx*3+0];
+        atlasOut[atlasIdx*3+1] = atlasIn[atlasIdx*3+1];
+        atlasOut[atlasIdx*3+2] = atlasIn[atlasIdx*3+2];
+        return;
+    }
 
     float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
     int   cnt  = 0;
 
     for (int k = 0; k < numSamples; k++) {
-        float px = (float)lx + 0.5f + pattern[k*2+0] * radius;
-        float py = (float)ly + 0.5f + pattern[k*2+1] * radius;
+        float px = (float)lx + 0.5f + pattern[k*2+0] * localRadius;
+        float py = (float)ly + 0.5f + pattern[k*2+1] * localRadius;
 
         float r, g, b;
         if (gpu_get_filtered_texel(sIdx, px, py,

@@ -286,6 +286,12 @@ void PatchMapDrawSurfs(entity_t *e) {
         ds->samplesize = ent_sample;
       }
     }
+
+    const char *rad_str = ValueForKey(e, "smoothingradius");
+    if (!rad_str[0]) rad_str = ValueForKey(e, "_smoothingradius");
+    if (rad_str[0]) {
+      ds->smoothingRadius = atof(rad_str);
+    }
   }
 
   qprintf("%5i patches\n", patchCount);

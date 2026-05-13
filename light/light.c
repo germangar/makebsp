@@ -675,6 +675,7 @@ void BuildLocalSurfaces(void) {
 
   for (i = 0; i < numDrawSurfaces; i++) {
     dsurface_t *ds = &drawSurfaces[i];
+    localSurfaces[i].smoothingRadius = -1.0f;
     
     // 1. Compute geometric bounds
     ClearBounds(mins, maxs);
@@ -714,11 +715,18 @@ void BuildLocalSurfaces(void) {
   StripExtension(mapName);
   LoadSurfaceExtraFile(mapName);
 
-  // 4. Initialize per-surface radiosity intervals
+  // 4. Initialize per-surface radiosity intervals and smoothing radius
   extern int rad_interval;
   for (i = 0; i < numDrawSurfaces; i++) {
     if (localSurfaces[i].radInterval < 1) {
         localSurfaces[i].radInterval = rad_interval;
+    }
+    if (localSurfaces[i].smoothingRadius < 0.0f) {
+        localSurfaces[i].smoothingRadius = game->defaultSmoothRadius;
+    }
+    // Clamp to non-negative
+    if (localSurfaces[i].smoothingRadius < 0.0f) {
+        localSurfaces[i].smoothingRadius = 0.0f;
     }
   }
 }

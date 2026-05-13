@@ -166,6 +166,7 @@ typedef struct drawsurf_s {
   int samplesize;
   float lightmapScale;
   radFillMode_t radFillMode;
+  float smoothingRadius;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s {

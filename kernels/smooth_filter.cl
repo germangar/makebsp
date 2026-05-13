@@ -37,8 +37,8 @@ __kernel void smooth_filter(
     __global const int              *pixelToSurface,
     __global const int              *pixelToX,
     __global const int              *pixelToY,
-    __global const float            *gaussWeights,
-    int kernelRadius)
+    __global const float            *smoothingRadii,
+    float upscale)
 {
     int tid = get_global_id(0);
 
@@ -53,11 +53,24 @@ __kernel void smooth_filter(
     int   lx       = pixelToX[atlasIdx];
     int   ly       = pixelToY[atlasIdx];
 
-    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumW = 0.0f;
-    int   diam = 2 * kernelRadius + 1;
+    float localRadius = smoothingRadii[sIdx];
+    if (localRadius <= 0.0f) {
+        atlasOut[atlasIdx*3+0] = atlasIn[atlasIdx*3+0];
+        atlasOut[atlasIdx*3+1] = atlasIn[atlasIdx*3+1];
+        atlasOut[atlasIdx*3+2] = atlasIn[atlasIdx*3+2];
+        return;
+    }
 
-    for (int dj = -kernelRadius; dj <= kernelRadius; dj++) {
-        for (int di = -kernelRadius; di <= kernelRadius; di++) {
+    float sigma = localRadius * upscale / 3.0f;
+    if (sigma < 0.5f * upscale) sigma = 0.5f * upscale;
+    float tS2 = 2.0f * sigma * sigma;
+    int kR = (int)ceil(localRadius * upscale);
+    if (kR > 16 * (int)upscale) kR = 16 * (int)upscale;
+
+    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f, sumW = 0.0f;
+
+    for (int dj = -kR; dj <= kR; dj++) {
+        for (int di = -kR; di <= kR; di++) {
             float px = (float)(lx + di) + 0.5f;
             float py = (float)(ly + dj) + 0.5f;
 
@@ -66,8 +79,7 @@ __kernel void smooth_filter(
                                         surfaces, partnerData, partnerOffsets,
                                         atlasIn, mask,
                                         &r, &g, &b)) {
-                int   wi = (dj + kernelRadius) * diam + (di + kernelRadius);
-                float w  = gaussWeights[wi];
+                float w = exp(-(float)(di*di + dj*dj) / tS2);
                 sumR += w * r;
                 sumG += w * g;
                 sumB += w * b;

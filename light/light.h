@@ -87,6 +87,7 @@ typedef struct
 
 	/* Per-texel lookup tables (all indexed by flat atlas pixel)   */
 	cl_mem validList;	   /* int[numValid] — valid texel indices */
+	cl_mem radiiBuf;	   /* float[numPlanarSurfaces] */
 	cl_mem pixelToSurface; /* int[totalPixels] -> surface index  */
 	cl_mem pixelToX;	   /* int[totalPixels] -> local x        */
 	cl_mem pixelToY;	   /* int[totalPixels] -> local y        */
@@ -251,6 +252,7 @@ typedef struct
 	// sidecar data
 	radFillMode_t radFillMode;
 	int radInterval;
+	float smoothingRadius;
 
 } localSurface_t;
 

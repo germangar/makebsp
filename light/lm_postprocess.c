@@ -1,4 +1,4 @@
-﻿#include "light.h"
+#include "light.h"
 #include <omp.h>
 #include <math.h>
 #include <stdlib.h>
@@ -30,6 +30,7 @@ typedef struct { vec3_t pos; vec3_t normal; qboolean valid; } pixelCache_t;
 typedef struct {
 	int surfaceNum; vec3_t origin; vec3_t vecs[2]; float invMagSq[2]; int width, height; int lmNum; int lmOffset[2];
 	vec3_t normal; float dist; int surfaceFlags; int contentFlags; int numPartners; int *partners;
+	float smoothingRadius;
 } planarInfo_t;
 
 static planarInfo_t *planarSurfaces = NULL;
@@ -83,6 +84,7 @@ void BuildPlanarSurfaceIndex(void) {
 		p->lmOffset[0] = ds->lightmapOffset[0][0]; p->lmOffset[1] = ds->lightmapOffset[0][1];
 		CrossProduct(p->vecs[0], p->vecs[1], p->normal); VectorNormalize(p->normal, p->normal); p->dist = DotProduct(p->origin, p->normal);
 		p->surfaceFlags = dshaders[ds->shaderNum].surfaceFlags; p->contentFlags = dshaders[ds->shaderNum].contentFlags;
+		p->smoothingRadius = localSurfaces[i].smoothingRadius;
 		p->numPartners = 0; p->partners = NULL;
 	}
 	if (numPlanarSurfaces == 0) return;
@@ -223,37 +225,41 @@ void GpuLightmapState_Upload(void) {
         for(y=0;y<sH;y++) for(x=0;x<sW;x++) { int p=(lm*H+oY+y)*W+oX+x, p1=(lm*LIGHTMAP_HEIGHT+(oY+y)/scale)*LIGHTMAP_WIDTH+(oX+x)/scale; if(lightAlphaMask[p1]==0)continue; pS[p]=s; pX[p]=x; pY[p]=y; vL[nV++]=p; }
     }
     st->numValid=nV; st->validList=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nV*sizeof(int), vL, &err);
+    float *radii = malloc(numPlanarSurfaces * sizeof(float));
+    for (s = 0; s < numPlanarSurfaces; s++) radii[s] = planarSurfaces[s].smoothingRadius;
+    st->radiiBuf = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, numPlanarSurfaces * sizeof(float), radii, &err);
+    free(radii);
     st->pixelToSurface=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pS, &err);
     st->pixelToX=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pX, &err);
     st->pixelToY=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pY, &err);
     free(pS); free(pX); free(pY); free(vL);
 }
 
-static void RunGpuAAKernel(float *pattern, int numSamples, float radius) {
+static void RunGpuAAKernel(float *pattern, int numSamples) {
     GpuLightmapState *st = &g_gpuLM; cl_int err; static cl_program prog = NULL;
     if (!prog) { prog = BuildOpenCLProgramWithCommon("aa_filter.cl", ""); if (!prog) return; }
     cl_kernel kernel = clCreateKernel(prog, "aa_filter", &err);
     cl_mem src = st->pingIsA?st->atlasA:st->atlasB, dst = st->pingIsA?st->atlasB:st->atlasA, patB=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (size_t)numSamples*2*sizeof(float), pattern, &err);
     int a=0; clSetKernelArg(kernel,a++,sizeof(cl_mem),&src); clSetKernelArg(kernel,a++,sizeof(cl_mem),&dst); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->maskBuf); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->surfacesBuf);
     clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->partnerData); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->partnerOffsets); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->validList); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->pixelToSurface);
-    clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->pixelToX); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->pixelToY); clSetKernelArg(kernel,a++,sizeof(cl_mem),&patB);
-    float sR=radius*st->upscale; clSetKernelArg(kernel,a++,sizeof(int),&numSamples); clSetKernelArg(kernel,a++,sizeof(float),&sR);
+    clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->pixelToX); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->pixelToY); clSetKernelArg(kernel,a++,sizeof(cl_mem),&patB); clSetKernelArg(kernel,a++,sizeof(cl_mem),&st->radiiBuf);
+    float uS=(float)st->upscale; clSetKernelArg(kernel,a++,sizeof(int),&numSamples); clSetKernelArg(kernel,a++,sizeof(float),&uS);
     size_t gS=(size_t)st->numValid; clEnqueueNDRangeKernel(g_clQueue, kernel, 1, NULL, &gS, NULL, 0, NULL, NULL); clFinish(g_clQueue); st->pingIsA^=1; clReleaseMemObject(patB); clReleaseKernel(kernel);
 }
 
-static void RunGpuSmoothKernel(int kernelRadius, float sigma) {
-    GpuLightmapState *st = &g_gpuLM; cl_int err; int diam=2*kernelRadius+1, wC=diam*diam; float *w=malloc(wC*sizeof(float)), tS2=2*sigma*sigma, wS=0;
-    for(int j=-kernelRadius;j<=kernelRadius;j++) for(int i=-kernelRadius;i<=kernelRadius;i++) { float v=expf(-(float)(i*i+j*j)/tS2); w[(j+kernelRadius)*diam+(i+kernelRadius)]=v; wS+=v; }
-    for(int i=0;i<wC;i++) w[i]/=wS; static cl_program prog=NULL; if(!prog) { prog=BuildOpenCLProgramWithCommon("smooth_filter.cl", ""); if(!prog){free(w);return;} }
-    cl_kernel k=clCreateKernel(prog, "smooth_filter", &err); cl_mem src=st->pingIsA?st->atlasA:st->atlasB, dst=st->pingIsA?st->atlasB:st->atlasA, wB=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, wC*sizeof(float), w, &err); free(w);
+static void RunGpuSmoothKernel(void) {
+    GpuLightmapState *st = &g_gpuLM; cl_int err;
+    static cl_program prog=NULL; if(!prog) { prog=BuildOpenCLProgramWithCommon("smooth_filter.cl", ""); if(!prog) return; }
+    cl_kernel k=clCreateKernel(prog, "smooth_filter", &err); cl_mem src=st->pingIsA?st->atlasA:st->atlasB, dst=st->pingIsA?st->atlasB:st->atlasA;
     int a=0; clSetKernelArg(k,a++,sizeof(cl_mem),&src); clSetKernelArg(k,a++,sizeof(cl_mem),&dst); clSetKernelArg(k,a++,sizeof(cl_mem),&st->maskBuf); clSetKernelArg(k,a++,sizeof(cl_mem),&st->surfacesBuf);
     clSetKernelArg(k,a++,sizeof(cl_mem),&st->partnerData); clSetKernelArg(k,a++,sizeof(cl_mem),&st->partnerOffsets); clSetKernelArg(k,a++,sizeof(cl_mem),&st->validList); clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToSurface);
-    clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToX); clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToY); clSetKernelArg(k,a++,sizeof(cl_mem),&wB); clSetKernelArg(k,a++,sizeof(int),&kernelRadius);
-    size_t gS=(size_t)st->numValid; clEnqueueNDRangeKernel(g_clQueue, k, 1, NULL, &gS, NULL, 0, NULL, NULL); clFinish(g_clQueue); st->pingIsA^=1; clReleaseMemObject(wB); clReleaseKernel(k);
+    clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToX); clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToY); clSetKernelArg(k,a++,sizeof(cl_mem),&st->radiiBuf);
+    float uS=(float)st->upscale; clSetKernelArg(k,a++,sizeof(float),&uS);
+    size_t gS=(size_t)st->numValid; clEnqueueNDRangeKernel(g_clQueue, k, 1, NULL, &gS, NULL, 0, NULL, NULL); clFinish(g_clQueue); st->pingIsA^=1; clReleaseKernel(k);
 }
 
-void AntiAliasLightmapsGPU(int p) { float r=lightmapSmoothRadius>0?lightmapSmoothRadius:1.0f; float pat[16]; for(int i=0;i<8;i++){pat[i*2]=ssPattern8[i][0];pat[i*2+1]=ssPattern8[i][1];} for(int i=0;i<p;i++) RunGpuAAKernel(pat, 8, r); }
-void SmoothLightmapsGPU(float r) { int s=g_gpuLM.upscale; float sig=r*s/3.0f; if(sig<0.5f*s)sig=0.5f*s; int kR=(int)ceilf(r*s); if(kR>16*s)kR=16*s; RunGpuSmoothKernel(kR, sig); }
+void AntiAliasLightmapsGPU(int p) { float pat[16]; for(int i=0;i<8;i++){pat[i*2]=ssPattern8[i][0];pat[i*2+1]=ssPattern8[i][1];} for(int i=0;i<p;i++) RunGpuAAKernel(pat, 8); }
+void SmoothLightmapsGPU(void) { RunGpuSmoothKernel(); }
 
 static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const float *tF, int aaP, int smP) {
     dsurface_t *ds=&drawSurfaces[planarSurfaces[sIdx].surfaceNum]; int W=ds->lightmapWidth, H=ds->lightmapHeight; if(W<=0||H<=0)return; int W2=W*2, H2=H*2;
@@ -415,7 +421,7 @@ void PostProcessLightmaps(void) {
         AntiAliasLightmapsGPU(lightmapAA);
         if(lightmapSmoothPasses>0){
             _printf("  Smoothing surfaces (%d passes): ", lightmapSmoothPasses);
-            for(int i=1;i<=lightmapSmoothPasses;i++){ _printf("%d ",i); SmoothLightmapsGPU(lightmapSmoothRadius); }
+            for(int i=1;i<=lightmapSmoothPasses;i++){ _printf("%d ",i); SmoothLightmapsGPU(); }
             _printf("Done\n");
         }
         GpuLightmapState_Download(); GpuLightmapState_Free();
@@ -425,7 +431,10 @@ void PostProcessLightmaps(void) {
             _printf("  High-Fidelity Filtering: "); int prg=0;
             #pragma omp parallel for schedule(dynamic,1)
             for(int s=0;s<numPlanarSurfaces;s++) {
-                FilterPlanarSurfaceHighFidelityCPU(s,lightmapSmoothRadius,lightFloats,lightmapAA,lightmapSmoothPasses);
+                float r = planarSurfaces[s].smoothingRadius;
+                if (r > 0.0f) {
+                    FilterPlanarSurfaceHighFidelityCPU(s,r,lightFloats,lightmapAA,lightmapSmoothPasses);
+                }
                 int c;
                 #pragma omp atomic capture
                 c=++prg;
@@ -439,13 +448,19 @@ void PostProcessLightmaps(void) {
         memcpy(tF,lightFloats,(size_t)numLightBytes*4); int prg=0;
         if(useOpenCL) {
             for(int s=0;s<numDrawSurfaces;s++){
-                ProcessTrisoupVolumetricGPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
+                float r = localSurfaces[s].smoothingRadius;
+                if (r > 0.0f) {
+                    ProcessTrisoupVolumetricGPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
+                }
                 int c=++prg; if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
         } else {
             #pragma omp parallel for schedule(dynamic,1)
             for(int s=0;s<numDrawSurfaces;s++){
-                ProcessTrisoupVolumetricCPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
+                float r = localSurfaces[s].smoothingRadius;
+                if (r > 0.0f) {
+                    ProcessTrisoupVolumetricCPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
+                }
                 int c;
                 #pragma omp atomic capture
                 c=++prg;

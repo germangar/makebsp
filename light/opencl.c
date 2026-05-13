@@ -219,6 +219,7 @@ void GpuLightmapState_Free(void) {
     REL(s->partnerData);
     REL(s->partnerOffsets);
     REL(s->validList);
+    REL(s->radiiBuf);
     REL(s->pixelToSurface);
     REL(s->pixelToX);
     REL(s->pixelToY);

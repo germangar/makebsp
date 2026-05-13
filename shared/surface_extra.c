@@ -33,12 +33,15 @@ void WriteSurfaceExtraFile(const char *path) {
     }
 
     for (i = 0; i < numMapDrawSurfs; i++) {
-        if (mapDrawSurfs[i].radFillMode != RAD_FILL_DEFAULT) {
+        if (mapDrawSurfs[i].radFillMode != RAD_FILL_DEFAULT || mapDrawSurfs[i].smoothingRadius >= 0.0f) {
             fprintf(f, "surface %d {\n", i);
             if (mapDrawSurfs[i].radFillMode == RAD_FILL_VOXEL) {
                 fprintf(f, "\trad_fill voxel\n");
             } else if (mapDrawSurfs[i].radFillMode == RAD_FILL_BILINEAR) {
                 fprintf(f, "\trad_fill bilinear\n");
+            }
+            if (mapDrawSurfs[i].smoothingRadius >= 0.0f) {
+                fprintf(f, "\tsmoothing_radius %f\n", mapDrawSurfs[i].smoothingRadius);
             }
             fprintf(f, "}\n\n");
         }
@@ -93,6 +96,9 @@ void LoadSurfaceExtraFile(const char *path) {
                     } else if (strcmp(token, "bilinear") == 0) {
                         localSurfaces[surfaceNum].radFillMode = RAD_FILL_BILINEAR;
                     }
+                } else if (strcmp(token, "smoothing_radius") == 0) {
+                    GetToken(qfalse);
+                    localSurfaces[surfaceNum].smoothingRadius = atof(token);
                 }
             }
         }

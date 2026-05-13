@@ -49,6 +49,7 @@ mapDrawSurface_t *AllocDrawSurf(void) {
   numMapDrawSurfs++;
 
   ds->samplesize = samplesize;
+  ds->smoothingRadius = -1.0f;
 
   return ds;
 }
@@ -93,6 +94,14 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w) {
   // Brushes strictly follow the Shader/Global hierarchy for samplesize.
   // Manual entity-level overrides are no longer supported.
   ds->lightmapScale = 1.0f;
+  
+  // Resolve smoothing radius
+  entity_t *e = &entities[b->entitynum];
+  const char *radiusStr = ValueForKey(e, "smoothingradius");
+  if (!radiusStr[0]) radiusStr = ValueForKey(e, "_smoothingradius");
+  if (radiusStr[0]) {
+    ds->smoothingRadius = atof(radiusStr);
+  }
 
   ds->numVerts = w->numpoints;
   ds->verts = malloc(ds->numVerts * sizeof(*ds->verts));

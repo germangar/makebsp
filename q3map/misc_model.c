@@ -603,6 +603,14 @@ void LoadTriangleModels(void) {
         }
       }
 
+      // smoothing_radius override
+      float smoothingRadius = -1.0f;
+      const char *radStr = ValueForKey(entity, "smoothingradius");
+      if (!radStr[0]) radStr = ValueForKey(entity, "_smoothingradius");
+      if (radStr[0]) {
+        smoothingRadius = atof(radStr);
+      }
+
       inst->numDrawSurfs = 0;
       inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
       if (!inst->drawSurfs) {
@@ -752,6 +760,7 @@ void LoadTriangleModels(void) {
           memset(ds, 0, sizeof(*ds));
           ds->miscModel = qtrue;
           ds->radFillMode = radFillMode;
+          ds->smoothingRadius = smoothingRadius;
           ds->planeNum = -1;
           ds->shaderInfo = si;
           ds->lightmapNum = -1;
