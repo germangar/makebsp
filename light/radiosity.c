@@ -401,7 +401,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     for (int ly = 0; ly < ds->lightmapHeight; ly += surf_rad_interval) {
         for (int lx = 0; lx < ds->lightmapWidth; lx += surf_rad_interval) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
-            if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
+            
+            // Skip if masked, unless it's a triangle soup (which we might unmask)
+            if (lightAlphaMask && !lightAlphaMask[k_dst]) {
+                if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+            }
 
             vec3_t dst;
             float st_x = (float)lx + 0.5f;
@@ -426,6 +430,14 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                     st[1] = (float)ds->lightmapOffset[0][1] + st_y;
                     if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
                 }
+                
+                // Unmask if it was masked
+                if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
+                    if (!PointInSolid(dst)) {
+                        lightAlphaMask[k_dst] = ds->surfaceType;
+                    }
+                }
+
                 VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
                 VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
             } else if (ds->surfaceType == MST_PATCH) {
@@ -616,6 +628,7 @@ static void RadiosityVoxelize(void) {
                     int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
 
                     if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
+                        if (lightAlphaMask && !lightAlphaMask[pIdx]) continue;
                         if (radiosityFloats[pIdx * 3] == 0 && radiosityFloats[pIdx * 3 + 1] == 0 && radiosityFloats[pIdx * 3 + 2] == 0) continue;
                         
                         vec3_t pos, normal;
@@ -832,6 +845,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
                 if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempBuffer[k_temp])) {
                     filled[k_temp] = 1;
+                    // Unmask if it was masked
+                    if (lightAlphaMask && lightAlphaMask[pIdx] == 0) {
+                        lightAlphaMask[pIdx] = ds->surfaceType;
+                    }
                 }
             }
 
@@ -850,6 +867,13 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                             if (filled[kn] == 1) { // Borrow from original geometric hits
                                 if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempBuffer[k_temp])) {
                                     filled[k_temp] = 2; // Dilated
+                                    // Unmask if it was masked
+                                    int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+                                    if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
+                                        if (!PointInSolid(pointPos[kn])) {
+                                            lightAlphaMask[k_dst] = ds->surfaceType;
+                                        }
+                                    }
                                     goto next_p;
                                 }
                             }
@@ -869,7 +893,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             int k_temp = ly * ds->lightmapWidth + lx;
             
-            if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
+            // Skip if masked, unless it's a triangle soup (which we might unmask)
+            if (lightAlphaMask && !lightAlphaMask[k_dst]) {
+                if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+            }
 
             // Resolve the per-texel normal for this pixel.
             vec3_t texelNormal;
@@ -902,7 +929,14 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
             VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
 
-            RadiosityVoxelSample(pos, normal, tempBuffer[k_temp]);
+            if (RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
+                // Unmask if it was masked
+                if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
+                    if (!PointInSolid(pos) && !PointInTrisoup(pos, normal)) {
+                        lightAlphaMask[k_dst] = ds->surfaceType;
+                    }
+                }
+            }
         }
     }
 
