@@ -919,7 +919,6 @@ void LoadTriangleModels(void)
 
                     mapDrawSurface_t *ds = AllocDrawSurf();
                     inst->drawSurfs[inst->numDrawSurfs++] = ds;
-                    memset(ds, 0, sizeof(*ds));
                     ds->miscModel = qtrue;
                     ds->smoothingRadius = smoothingRadius;
                     ds->planeNum = -1;

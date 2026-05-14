@@ -1320,13 +1320,24 @@ qboolean ParseMapEntity(void)
     {
         entity_t temp;
 
-        // Copy the entity and decrement num_entities so that the generated
-        // lights overwrite the func_light slot in the global entities array.
-        temp = *mapent;
-        num_entities--;
+        if (!strcmp("surface", ValueForKey(mapent, "type")) || 
+            !strcmp("surfacelight", ValueForKey(mapent, "type"))) 
+        {
+            MoveBrushesToWorld(mapent);
+            // We do NOT decrement num_entities here. 
+            // This keeps the entity index valid so that DrawSurfaceForSide can 
+            // resolve the sidecar overrides before the entity is stripped from the BSP.
+        } 
+        else 
+        {
+            // Copy the entity and decrement num_entities so that the generated
+            // lights overwrite the func_light slot in the global entities array.
+            temp = *mapent;
+            num_entities--;
 
-        ProcessFuncLight(&temp);
-        MoveBrushesToWorld(&temp);
+            ProcessFuncLight(&temp);
+            MoveBrushesToWorld(&temp);
+        }
         return qtrue;
     }
 

@@ -249,7 +249,7 @@ typedef struct
 
 	// sidecar data
 	float smoothingRadius;
-
+    shaderInfo_t *si_override;
 } localSurface_t;
 
 extern localSurface_t *localSurfaces;

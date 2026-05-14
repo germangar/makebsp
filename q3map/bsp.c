@@ -485,8 +485,6 @@ static void WriteSurfaceExtraFile(const char *path)
     char srfPath[1024];
     char baseName[256];
     FILE *f;
-    int i;
-    extraSurface_t *extra;
 
     ExtractFileBase(path, baseName);
     sprintf(srfPath, "cache/%s.srf", baseName);
@@ -499,16 +497,9 @@ static void WriteSurfaceExtraFile(const char *path)
         return;
     }
 
-    extra = malloc(sizeof(extraSurface_t) * numMapDrawSurfs);
-    for (i = 0; i < numMapDrawSurfs; i++)
-    {
-        extra[i].smoothingRadius = mapDrawSurfs[i].smoothingRadius;
-    }
-
-    fwrite(&numMapDrawSurfs, sizeof(int), 1, f);
-    fwrite(extra, sizeof(extraSurface_t), numMapDrawSurfs, f);
+    fwrite(&numDrawSurfaces, sizeof(int), 1, f);
+    fwrite(drawExtraSurfaces, sizeof(extraSurface_t), numDrawSurfaces, f);
     fclose(f);
-    free(extra);
 }
 
 int main(int argc, char **argv)

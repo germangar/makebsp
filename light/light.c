@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "light.h"
 #include "radiosity.h"
 #include "../common/imagelib.h"
+#include <string.h>
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
 #endif
@@ -296,8 +297,14 @@ void CreateSurfaceLights(void)
     {
         // see if this surface is light emiting
         ds = &drawSurfaces[i];
+        localSurface_t *localSurface = &localSurfaces[i];
 
-        ls = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+        if (localSurface->si_override) {
+            ls = localSurface->si_override;
+        } else {
+            ls = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+        }
+
         if (ls->value == 0)
         {
             continue;
@@ -911,14 +918,43 @@ void BuildLocalSurfaces(void)
     extern int rad_interval;
     for (i = 0; i < numDrawSurfaces; i++)
     {
+        dsurface_t *ds = &drawSurfaces[i];
         localSurfaces[i].radInterval = rad_interval;
         localSurfaces[i].smoothingRadius = game->defaultSmoothRadius;
+        localSurfaces[i].si_override = NULL;
 
         // Apply sidecar if present
         if (extra && i < numExtra)
         {
+            qboolean shaderOverride = qfalse;
+
             if (extra[i].smoothingRadius >= 0.0f) {
                 localSurfaces[i].smoothingRadius = extra[i].smoothingRadius;
+            }
+            if (extra[i].lightValue >= 0.0f || extra[i].backsplashFraction >= 0.0f || extra[i].lightSubdivide >= 0.0f) {
+                shaderOverride = qtrue;
+            }
+            if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
+                shaderOverride = qtrue;
+            }
+
+            if (shaderOverride)
+            {
+                localSurfaces[i].si_override = malloc(sizeof(shaderInfo_t));
+                memcpy(localSurfaces[i].si_override, ShaderInfoForShader(dshaders[ds->shaderNum].shader), sizeof(shaderInfo_t));
+
+                if (extra[i].lightValue >= 0.0f) {
+                    localSurfaces[i].si_override->value = extra[i].lightValue;
+                }
+                if (extra[i].backsplashFraction >= 0.0f) {
+                    localSurfaces[i].si_override->backsplashFraction = extra[i].backsplashFraction;
+                }
+                if (extra[i].lightSubdivide >= 0.0f) {
+                    localSurfaces[i].si_override->lightSubdivide = extra[i].lightSubdivide;
+                }
+                if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f) {
+                    VectorCopy(extra[i].lightColor, localSurfaces[i].si_override->color);
+                }
             }
         }
     }
@@ -1299,5 +1335,7 @@ void LightMain(void)
     {
         if (localSurfaces[i].patchMesh)
             FreeMesh(localSurfaces[i].patchMesh);
+        if (localSurfaces[i].si_override)
+            free(localSurfaces[i].si_override);
     }
 }

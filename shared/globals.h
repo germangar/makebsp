@@ -6,6 +6,10 @@
 
 typedef struct {
     float smoothingRadius;
+    float lightValue;
+    vec3_t lightColor;
+    float backsplashFraction;
+    float lightSubdivide;
 } extraSurface_t;
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;

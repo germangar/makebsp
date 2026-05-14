@@ -171,6 +171,10 @@ typedef struct drawsurf_s
     int samplesize;
     float lightmapScale;
     float smoothingRadius;
+    float lightValue;
+    vec3_t lightColor;
+    float backsplashFraction;
+    float lightSubdivide;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s
@@ -513,6 +517,7 @@ const char *CategoryString(modelCategory_t cat);
 
 extern mapDrawSurface_t mapDrawSurfs[MAX_MAP_DRAW_SURFS];
 extern int numMapDrawSurfs;
+extern extraSurface_t drawExtraSurfaces[MAX_MAP_DRAW_SURFS_LIMIT];
 
 mapDrawSurface_t *AllocDrawSurf(void);
 winding_t *WindingFromDrawSurf(mapDrawSurface_t *ds);

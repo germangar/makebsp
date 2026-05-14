@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 mapDrawSurface_t mapDrawSurfs[MAX_MAP_DRAW_SURFS];
 int numMapDrawSurfs;
+extraSurface_t drawExtraSurfaces[MAX_MAP_DRAW_SURFS_LIMIT];
 
 /*
 =============================================================================
@@ -50,8 +51,14 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds = &mapDrawSurfs[numMapDrawSurfs];
     numMapDrawSurfs++;
 
+    memset(ds, 0, sizeof(*ds));
+
     ds->samplesize = samplesize;
     ds->smoothingRadius = -1.0f;
+    ds->lightValue = -1.0f;
+    VectorSet(ds->lightColor, -1.0f, -1.0f, -1.0f);
+    ds->backsplashFraction = -1.0f;
+    ds->lightSubdivide = -1.0f;
 
     return ds;
 }
@@ -64,6 +71,60 @@ DrawSurfaceForSide
 #define SNAP_FLOAT_TO_INT 8
 #define SNAP_INT_TO_FLOAT (1.0 / SNAP_FLOAT_TO_INT)
 
+/*
+=================
+ResolveSurfaceExtraProperties
+=================
+*/
+static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
+{
+    // Resolve smoothing radius
+    const char *radiusStr = ValueForKey(e, "smoothingradius");
+    if (!radiusStr[0])
+        radiusStr = ValueForKey(e, "_smoothingradius");
+    if (radiusStr[0])
+        ds->smoothingRadius = atof(radiusStr);
+
+    // Resolve lighting overrides (func_light support)
+    // We inherit emission overrides if the entity is a func_light or a light.
+    // In some versions of the compiler, func_light is converted to a light entity
+    // at parsing time while keeping its brushes, so we must support both.
+    const char *classname = ValueForKey(e, "classname");
+    if (!Q_stricmp(classname, "func_light") || !Q_stricmp(classname, "light"))
+    {
+        // Only inherit emission overrides if explicitly marked as a surface light.
+        // For spotlights (type "spot" or default), these keys are for the spawned point lights.
+        const char *type = ValueForKey(e, "type");
+        if (!Q_stricmp(type, "surface") || !Q_stricmp(type, "surfacelight"))
+        {
+            const char *lightStr = ValueForKey(e, "light");
+            if (lightStr[0])
+                ds->lightValue = atof(lightStr);
+
+            const char *colorStr = ValueForKey(e, "_color");
+            if (!colorStr[0])
+                colorStr = ValueForKey(e, "color");
+            if (colorStr[0])
+                sscanf(colorStr, "%f %f %f", &ds->lightColor[0], &ds->lightColor[1], &ds->lightColor[2]);
+
+            const char *bsStr = ValueForKey(e, "backsplash");
+            if (bsStr[0])
+                ds->backsplashFraction = atof(bsStr) * 0.01f; // Convert percentage to fraction
+
+            const char *subdivideStr = ValueForKey(e, "_subdivide");
+            if (!subdivideStr[0])
+                subdivideStr = ValueForKey(e, "subdivide");
+            if (subdivideStr[0])
+                ds->lightSubdivide = atof(subdivideStr);
+        }
+    }
+}
+
+/*
+=================
+DrawSurfaceForSide
+=================
+*/
 mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
 {
     mapDrawSurface_t *ds;
@@ -100,15 +161,9 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     // Manual entity-level overrides are no longer supported.
     ds->lightmapScale = 1.0f;
 
-    // Resolve smoothing radius
-    entity_t *e = &entities[b->entitynum];
-    const char *radiusStr = ValueForKey(e, "smoothingradius");
-    if (!radiusStr[0])
-        radiusStr = ValueForKey(e, "_smoothingradius");
-    if (radiusStr[0])
-    {
-        ds->smoothingRadius = atof(radiusStr);
-    }
+    // Resolve sidecar properties from parent entity
+    ResolveSurfaceExtraProperties(ds, &entities[b->entitynum]);
+
     ds->numVerts = w->numpoints;
     ds->verts = malloc(ds->numVerts * sizeof(*ds->verts));
     memset(ds->verts, 0, ds->numVerts * sizeof(*ds->verts));
@@ -1264,6 +1319,13 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     {
         ds->side->surfaceNum = numDrawSurfaces;
     }
+    
+    drawExtraSurfaces[numDrawSurfaces].smoothingRadius = ds->smoothingRadius;
+    drawExtraSurfaces[numDrawSurfaces].lightValue = ds->lightValue;
+    VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
+    drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
+    drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+
     numDrawSurfaces++;
 
     out->surfaceType = MST_PLANAR;
@@ -1335,6 +1397,13 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
         Error("MAX_MAP_DRAW_SURFS_LIMIT");
     }
     out = &drawSurfaces[numDrawSurfaces];
+
+    drawExtraSurfaces[numDrawSurfaces].smoothingRadius = ds->smoothingRadius;
+    drawExtraSurfaces[numDrawSurfaces].lightValue = ds->lightValue;
+    VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
+    drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
+    drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+
     numDrawSurfaces++;
 
     out->surfaceType = MST_PATCH;
@@ -1415,6 +1484,13 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
         Error("MAX_MAP_DRAW_SURFS_LIMIT");
     }
     out = &drawSurfaces[numDrawSurfaces];
+
+    drawExtraSurfaces[numDrawSurfaces].smoothingRadius = ds->smoothingRadius;
+    drawExtraSurfaces[numDrawSurfaces].lightValue = ds->lightValue;
+    VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
+    drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
+    drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+
     numDrawSurfaces++;
 
     out->surfaceType = MST_FLARE;
@@ -1459,6 +1535,13 @@ void EmitModelSurf(mapDrawSurface_t *ds)
         Error("MAX_MAP_DRAW_SURFS_LIMIT");
     }
     out = &drawSurfaces[numDrawSurfaces];
+
+    drawExtraSurfaces[numDrawSurfaces].smoothingRadius = ds->smoothingRadius;
+    drawExtraSurfaces[numDrawSurfaces].lightValue = ds->lightValue;
+    VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
+    drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
+    drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+
     numDrawSurfaces++;
 
     out->surfaceType = MST_TRIANGLE_SOUP;
