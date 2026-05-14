@@ -21,8 +21,6 @@ bspGridPoint32_t *gridData32 = NULL;
 float maxLightIntensity = 0.0f;
 static tonemap_t tonemapMode;
 
-#define HOTSPOT_TAME_FACTOR 1.05f
-
 /*
 ===============================================================================
 DOWNSCALE LIGHTMAP IMAGES (Experimental).

@@ -22,8 +22,6 @@ static int lightmapSmoothPasses;
 
 #define FILTER_UPSCALE 1
 #define TRISOUP_SMOOTH_CHEAT(A) ((A) + (useOpenCL ? 1.0f : 1.5f))
-#define AA_ANGLE_MATCH_DEGREES 30.0f
-#define MAX_KERNEL_RADIUS 16
 
 typedef struct { vec3_t pos; vec3_t normal; qboolean valid; } pixelCache_t;
 

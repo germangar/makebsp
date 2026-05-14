@@ -22,13 +22,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // light.c
 
 #include "light.h"
-
-#define DEFAULT_SPOTLIGHT_DISTANCE 64.0f
 #include "radiosity.h"
 #include "../common/imagelib.h"
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
 #endif
+
+#define DEFAULT_SPOTLIGHT_DISTANCE 64.0f
 
 ssMode_t superSampleMode = SUPERSAMPLE_NONE;
 
@@ -604,6 +604,7 @@ void CreateEntityLights(void)
         memset(dl, 0, sizeof(*dl));
         dl->next = lights;
         lights = dl;
+        dl->coneSoftness = 1.0f;
 
         spawnflags = FloatForKey(e, "spawnflags");
         if (spawnflags & 1)
@@ -655,16 +656,24 @@ void CreateEntityLights(void)
         intensity = intensity * pointScale;
         dl->photons = intensity;
 
+        dl->coneSoftness = FloatForKey(e, "_softness");
+        if (!dl->coneSoftness)
+            dl->coneSoftness = FloatForKey(e, "softness");
+        if (dl->coneSoftness < 0)
+            dl->coneSoftness = 0;
+        else if (!ValueForKey(e, "_softness")[0] && !ValueForKey(e, "softness")[0])
+            dl->coneSoftness = 1.0f; // Default if both keys missing
+
         dl->type = emit_point;
 
-        // lights with a target will be spotlights
+        // spotlights
         target = ValueForKey(e, "target");
+        const char *dirStr = ValueForKey(e, "_dir");
+        const char *anglesStr = ValueForKey(e, "_angles");
+        qboolean isSpotlight = qfalse;
 
         if (target[0])
         {
-            float radius;
-            float dist;
-
             e2 = FindTargetEntity(target);
             if (!e2)
             {
@@ -675,47 +684,41 @@ void CreateEntityLights(void)
             {
                 GetVectorForKey(e2, "origin", dest);
                 VectorSubtract(dest, dl->origin, dl->normal);
-                dist = VectorNormalize(dl->normal, dl->normal);
-                radius = FloatForKey(e, "radius");
-                if (!radius)
+                if (VectorNormalize(dl->normal, dl->normal) > 0)
                 {
-                    radius = 64;
+                    isSpotlight = qtrue;
                 }
-                if (!dist)
-                {
-                    dist = 64;
-                }
-                dl->radiusByDist = (radius + 16) / dist;
-                dl->type = emit_spotlight;
             }
         }
-        else
+        else if (dirStr[0])
         {
-            const char *dirStr = ValueForKey(e, "_dir");
-            const char *anglesStr = ValueForKey(e, "_angles");
-            if (dirStr[0] || anglesStr[0])
+            GetVectorForKey(e, "_dir", dl->normal);
+            if (VectorNormalize(dl->normal, dl->normal) > 0)
             {
-                float radius = FloatForKey(e, "radius");
-                if (!radius) radius = 64;
-
-                if (dirStr[0])
-                {
-                    GetVectorForKey(e, "_dir", dl->normal);
-                }
-                else
-                {
-                    vec3_t angles;
-                    GetVectorForKey(e, "_angles", angles);
-                    float yaw = angles[1] * (Q_PI / 180.0f);
-                    float pitch = angles[0] * (Q_PI / 180.0f);
-                    dl->normal[0] = cos(yaw) * cos(pitch);
-                    dl->normal[1] = sin(yaw) * cos(pitch);
-                    dl->normal[2] = -sin(pitch);
-                }
-                VectorNormalize(dl->normal, dl->normal);
-                dl->radiusByDist = (radius + 16) / DEFAULT_SPOTLIGHT_DISTANCE;
-                dl->type = emit_spotlight;
+                isSpotlight = qtrue;
             }
+        }
+        else if (anglesStr[0])
+        {
+            vec3_t angles;
+            GetVectorForKey(e, "_angles", angles);
+            float yaw = angles[1] * (Q_PI / 180.0f);
+            float pitch = angles[0] * (Q_PI / 180.0f);
+            dl->normal[0] = cos(yaw) * cos(pitch);
+            dl->normal[1] = sin(yaw) * cos(pitch);
+            dl->normal[2] = -sin(pitch);
+            VectorNormalize(dl->normal, dl->normal);
+            isSpotlight = qtrue;
+        }
+
+        if (isSpotlight)
+        {
+            float radius = FloatForKey(e, "radius");
+            if (!radius)
+                radius = 64;
+
+            dl->radiusByDist = (radius + ((SPOTLIGHT_SOFTNESS_RANGE * 0.5f) * dl->coneSoftness)) / DEFAULT_SPOTLIGHT_DISTANCE;
+            dl->type = emit_spotlight;
         }
         dl->reach = CalculateLightReach(0, dl->photons, MIN_LIGHT_ADD, dl->linearLight);
     }

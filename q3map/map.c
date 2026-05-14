@@ -1121,7 +1121,7 @@ void AdjustBrushesForOrigin(entity_t *ent)
 ================
 ProcessFuncLight
 
-Spawns a spotlight for every drawable brush side in the entity
+Creates lights from brushes
 ================
 */
 void ProcessFuncLight(entity_t *ent)
@@ -1158,9 +1158,15 @@ void ProcessFuncLight(entity_t *ent)
             vec3_t normal;
             VectorCopy(mapplanes[side->planenum].normal, normal);
 
-            // Nudge light 1.0 units away from the surface
+            // Nudge light away from the surface
+            float nudge = FloatForKey(ent, "_nudge");
+            if (!nudge)
+                nudge = FloatForKey(ent, "nudge");
+            if (!nudge && !ValueForKey(ent, "_nudge")[0] && !ValueForKey(ent, "nudge")[0])
+                nudge = 1.0f; // Default
+
             vec3_t lightOrigin;
-            VectorMA(center, 1.0f, normal, lightOrigin);
+            VectorMA(center, nudge, normal, lightOrigin);
 
             // Spawn a new light entity
             if (num_entities == MAX_MAP_ENTITIES)
@@ -1189,8 +1195,7 @@ void ProcessFuncLight(entity_t *ent)
             if (!color[0])
                 color = ValueForKey(ent, "color");
 
-            if (!color[0])
-            {
+            if (!color[0]) {
                 SetKeyValue(le, "_lightimage", side->shaderInfo->shader);
             }
         }

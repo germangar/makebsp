@@ -740,6 +740,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 
         if (light->type == emit_spotlight)
         {
+            float softness;
+            float coneScale;
+            float safetyFloor;
             float distByNormal;
             float sampleRadius;
             vec3_t pointAtDist;
@@ -760,9 +763,26 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             {
                 return qfalse;
             }
-            if (sampleRadius > radiusAtDist - 32)
+
+            if (light->coneSoftness > 0.0f)
             {
-                angle *= (radiusAtDist - sampleRadius) / 32.0;
+                softness = SPOTLIGHT_SOFTNESS_RANGE * light->coneSoftness;
+                if (softness < 0.01f)
+                    softness = 0.01f;
+
+                coneScale = (radiusAtDist - sampleRadius) / softness;
+
+                // Safety Floor: ensure peak intensity at center doesn't drop below 20%
+                // of what a standard linear cone would provide at that radius.
+                safetyFloor = 0.05f * (radiusAtDist - sampleRadius) / radiusAtDist;
+
+                if (coneScale < safetyFloor)
+                    coneScale = safetyFloor;
+
+                if (coneScale > 1.0f)
+                    coneScale = 1.0f;
+
+                angle *= coneScale;
             }
         }
 
@@ -1007,7 +1027,7 @@ void TraceLtm(int num)
     vec3_t **color = NULL;
     vec3_t *color_data = NULL;
     mesh_t *mesh = NULL;
-    int sampleWidth, sampleHeight, ssize;
+    int sampleWidth, sampleHeight;
     int extW, extH;
     vec3_t lightmapOrigin, lightmapVecs[2];
     int surfWeight;
@@ -1122,9 +1142,6 @@ void TraceLtm(int num)
 
     int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
     int use_upscale = upscale;
-    ssize = samplesize;
-    if (si->lightmapSampleSize)
-        ssize = si->lightmapSampleSize;
 
     tw->patchshadows = patchshadows;
     tw->forceFrontOnly = qtrue;

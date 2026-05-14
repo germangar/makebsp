@@ -109,8 +109,7 @@ void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
 #define SAMPLE_NUDGE 0.25f
-#define SELF_SHADOW_EPSILON 1.25f
-#define JITTER_NUDGE 4.0f // actually 1/JITTER_NUDGE
+#define SPOTLIGHT_SOFTNESS_RANGE 128.0f
 
 /* These values have been manually calibrated.
 If the distance falloff calculation changes they would need to be recalibrated */
@@ -127,8 +126,6 @@ typedef enum
 	emit_spotlight,
 	emit_sun
 } emittype_t;
-
-#define MAX_LIGHT_EDGES 8
 
 /*
 ================
@@ -200,6 +197,7 @@ typedef struct light_s
 	int style;
 	vec3_t color;
 	float radiusByDist; // for spotlights
+	float coneSoftness; // scalar for edge transition
 
 	qboolean twosided; // fog lights both sides
 
