@@ -719,6 +719,26 @@ void CreateEntityLights(void)
 
             dl->radiusByDist = (radius + ((SPOTLIGHT_SOFTNESS_RANGE * 0.5f) * dl->coneSoftness)) / DEFAULT_SPOTLIGHT_DISTANCE;
             dl->type = emit_spotlight;
+
+            // Backlight / Backsplash implementation
+            float bsIntensity = 0.0f;
+            const char *bsStr = ValueForKey(e, "backsplash");
+            
+            if (bsStr[0])
+                bsIntensity = atof(bsStr);
+
+            if (bsIntensity > 0)
+            {
+                light_t *bl = malloc(sizeof(*bl));
+                memcpy(bl, dl, sizeof(*bl)); // Inherit color, style, flags, etc.
+                bl->next = lights;
+                lights = bl;
+
+                bl->photons = bsIntensity * pointScale;
+                VectorMA(dl->origin, 3.0f, dl->normal, bl->origin);
+                bl->type = emit_point;
+                bl->reach = CalculateLightReach(0, bl->photons, MIN_LIGHT_ADD, bl->linearLight);
+            }
         }
         dl->reach = CalculateLightReach(0, dl->photons, MIN_LIGHT_ADD, dl->linearLight);
     }
