@@ -521,6 +521,11 @@ int main(int argc, char **argv)
         Bspinfo(argc - 2, argv + 2);
         return 0;
     }
+    if (!strcmp(argv[1], "-exportmodels"))
+    {
+        ExportModels(argc - 2, argv + 2);
+        return 0;
+    }
     if (!strcmp(argv[1], "-vis"))
     {
         VisMain(argc - 1, argv + 1);

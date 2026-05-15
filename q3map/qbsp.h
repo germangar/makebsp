@@ -275,6 +275,8 @@ vec_t BrushVolume(bspbrush_t *brush);
 void WriteBspBrushMap(char *name, bspbrush_t *list);
 void AddBevelsToBrush(bspbrush_t *b);
 
+void ExportModels(int count, char **fileNames);
+
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);
 
