@@ -488,21 +488,27 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         if (cosDst <= 0.0f) continue;
 
                         float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
-                        float formFactor = (em->area * cosEmit * cosDst) / (M_PI * distClamped * distClamped);
+                        float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
-                        if (dist < rad_depth_min) formFactor *= rad_depth_intensity;
+                        if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
                         else if (dist < rad_depth_max) {
                             float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                            formFactor *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                            formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
                         }
-                        if (formFactor > 1.0f) formFactor = 1.0f;
+                        if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
                         
                         // Precise intensity cull: check if brightest color component * formFactor < threshold
                         float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
-                        if (formFactor * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
+                        if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
 
                         if (!RadVisCheck(dst, em->center)) continue;
-                        VectorMA(accum, formFactor, em->color, accum);
+                        
+                        contribution_t cont;
+                        VectorCopy(rayDir, cont.dir);
+                        VectorScale(em->color, formFactorBase, cont.irradiance);
+                        cont.angle = cosDst;
+                        cont.isGlow = qfalse;
+                        AccumulateContribution(accum, &cont, dstNormal);
                     }
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
@@ -560,10 +566,12 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         if (!RadVisCheck(dst, em->center)) continue;
 
-                        float formFactor = formFactorBase * cosDst;
-                        for (int c = 0; c < 3; c++) {
-                            accum[c] += formFactor * em->color[c];
-                        }
+                        contribution_t cont;
+                        VectorCopy(rayDir, cont.dir);
+                        VectorScale(em->color, formFactorBase, cont.irradiance);
+                        cont.angle = cosDst;
+                        cont.isGlow = qfalse;
+                        AccumulateContribution(accum, &cont, dstNormal);
                     }
                 }
 

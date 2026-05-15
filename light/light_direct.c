@@ -494,9 +494,10 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
         }
 
         VectorCopy(sunDirection, out->dir);
-        out->color[0] = trace.filter[0] * sunLight[0];
-        out->color[1] = trace.filter[1] * sunLight[1];
-        out->color[2] = trace.filter[2] * sunLight[2];
+        out->irradiance[0] = trace.filter[0] * sunLight[0];
+        out->irradiance[1] = trace.filter[1] * sunLight[1];
+        out->irradiance[2] = trace.filter[2] * sunLight[2];
+        out->isGlow = qfalse;
 
         return qtrue;
     }
@@ -546,7 +547,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
     if (SunToPoint(origin, tw, out, applyColorFilter))
     {
-        VectorScale(out->color, angle, out->color);
+        out->angle = angle;
         return qtrue;
     }
 
@@ -558,14 +559,14 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 AccumulateContribution
 ========================
 */
-void AccumulateContribution(vec3_t color, contribution_t *cont, const vec3_t normal)
+void AccumulateContribution(vec3_t color, const contribution_t *cont, const vec3_t normal)
 {
     if (!color)
         return;
 
-    color[0] += cont->color[0];
-    color[1] += cont->color[1];
-    color[2] += cont->color[2];
+    color[0] += cont->irradiance[0] * cont->angle;
+    color[1] += cont->irradiance[1] * cont->angle;
+    color[2] += cont->irradiance[2] * cont->angle;
 }
 
 /*
@@ -667,6 +668,10 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             return qfalse;
         }
 
+        float formFactorBase;
+        float outAngle;
+        qboolean outIsGlow = qfalse;
+
         if (normal)
         {
             float dot = DotProduct(normal, out->dir);
@@ -699,18 +704,32 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 
                 if (glowFactor > 0.0f)
                 {
-                    angle *= glowFactor;
+                    formFactorBase = angle * glowFactor;
+                    outAngle = 1.0f;
+                    outIsGlow = qtrue;
                 }
                 else
                 {
                     return qfalse;
                 }
             }
+            else
+            {
+                formFactorBase = angle / receiveAngle;
+                outAngle = receiveAngle;
+            }
+        }
+        else
+        {
+            formFactorBase = angle;
+            outAngle = 1.0f;
         }
 
-        out->color[0] = light->emitColor[0] * angle * trace.filter[0];
-        out->color[1] = light->emitColor[1] * angle * trace.filter[1];
-        out->color[2] = light->emitColor[2] * angle * trace.filter[2];
+        out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
+        out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
+        out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
+        out->angle = outAngle;
+        out->isGlow = outIsGlow;
         return qtrue;
     }
 
@@ -728,11 +747,14 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             dist = 16;
         }
 
+        float surfaceAngle = 1.0f;
+        float coneScale = 1.0f;
+
         // surface falloff
         if (normal)
         {
-            angle = CalculateFalloff(DotProduct(normal, out->dir));
-            if (angle <= 0)
+            surfaceAngle = CalculateFalloff(DotProduct(normal, out->dir));
+            if (surfaceAngle <= 0)
             {
                 return qfalse;
             }
@@ -741,7 +763,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         if (light->type == emit_spotlight)
         {
             float softness;
-            float coneScale;
             float safetyFloor;
             float distByNormal;
             float sampleRadius;
@@ -781,21 +802,22 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 
                 if (coneScale > 1.0f)
                     coneScale = 1.0f;
-
-                angle *= coneScale;
             }
         }
 
         if (light->linearLight)
         {
-            add = angle * light->photons * 0.000125f - dist;
+            add = coneScale * light->photons * 0.000125f - dist;
             if (add < 0)
                 return qfalse;
         }
         else
         {
-            add = (light->photons / (dist * dist)) * angle;
+            add = (light->photons / (dist * dist)) * coneScale;
         }
+
+        out->angle = surfaceAngle;
+        out->isGlow = qfalse;
     }
     else
     {
@@ -814,9 +836,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qfalse;
     }
 
-    out->color[0] = add * light->color[0] * trace.filter[0];
-    out->color[1] = add * light->color[1] * trace.filter[1];
-    out->color[2] = add * light->color[2] * trace.filter[2];
+    out->irradiance[0] = add * light->color[0] * trace.filter[0];
+    out->irradiance[1] = add * light->color[1] * trace.filter[1];
+    out->irradiance[2] = add * light->color[2] * trace.filter[2];
 
     return qtrue;
 }
@@ -841,11 +863,13 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
     if (ambientColor[0] > 0 || ambientColor[1] > 0 || ambientColor[2] > 0)
     {
         contribution_t amb;
-        VectorClear(amb.color);
+        VectorClear(amb.irradiance);
         VectorCopy(normal, amb.dir);
-        amb.color[0] = ambientColor[0];
-        amb.color[1] = ambientColor[1];
-        amb.color[2] = ambientColor[2];
+        amb.irradiance[0] = ambientColor[0];
+        amb.irradiance[1] = ambientColor[1];
+        amb.irradiance[2] = ambientColor[2];
+        amb.angle = 1.0f;
+        amb.isGlow = qtrue;
         AccumulateContribution(color, &amb, normal);
     }
 
@@ -1577,7 +1601,9 @@ void TraceGrid(int num)
     {
         if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw))
         {
-            float addSize = VectorLength(contributions[numCon].color);
+            vec3_t tempColor;
+            VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
+            float addSize = VectorLength(tempColor);
             VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
             numCon++;
             if (numCon >= MAX_CONTRIBUTIONS)
@@ -1587,7 +1613,10 @@ void TraceGrid(int num)
 
     if (SunToPoint(origin, tw, &contributions[numCon], qtrue))
     {
-        float addSize = VectorLength(contributions[numCon].color);
+        contributions[numCon].angle = 1.0f; // SunToPoint doesn't set angle, default to 1
+        vec3_t tempColor;
+        VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
+        float addSize = VectorLength(tempColor);
         VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
         numCon++;
     }
@@ -1599,10 +1628,12 @@ void TraceGrid(int num)
     for (i = 0; i < numCon; i++)
     {
         float d;
+        vec3_t tempColor;
+        VectorScale(contributions[i].irradiance, contributions[i].angle, tempColor);
         d = CalculateFalloff(DotProduct(contributions[i].dir, summedDir));
-        VectorMA(directedColor, d, contributions[i].color, directedColor);
+        VectorMA(directedColor, d, tempColor, directedColor);
         d = 0.25 * (1.0 - d);
-        VectorMA(color, d, contributions[i].color, color);
+        VectorMA(color, d, tempColor, color);
     }
 
     VectorMA(color, 0.25, directedColor, color);

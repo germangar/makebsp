@@ -6,7 +6,9 @@
 
 typedef struct {
   vec3_t dir;
-  vec3_t color;
+  vec3_t irradiance;
+  float angle;
+  qboolean isGlow;
 } contribution_t;
 
 // High-precision vertex for internal lighting
@@ -49,7 +51,7 @@ typedef struct {
 // Voxel Cache Service
 void VoxelCache_BakeAll(void);
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints);
-void AccumulateContribution(vec3_t color, contribution_t *cont, const vec3_t normal);
+void AccumulateContribution(vec3_t color, const contribution_t *cont, const vec3_t normal);
 extern bspGridPoint32_t *gridData32;
 
 extern float maxLightIntensity;
