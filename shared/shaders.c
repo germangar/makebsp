@@ -35,8 +35,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../libs/pakstuff.h"
 #endif
 
-// 5% backsplash by default
-#define DEFAULT_BACKSPLASH_FRACTION 0.05
+// Default backsplash is disabled unless explicitly requested
+#define DEFAULT_BACKSPLASH_FRACTION 0.0
 #define DEFAULT_BACKSPLASH_DISTANCE 24
 
 #define MAX_SURFACE_INFO 4096
