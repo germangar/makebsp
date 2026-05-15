@@ -582,13 +582,11 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
     if (angle < 0.0f) angle = 0.0f;
 
     // Step 1: Calculate Target Radiance
-    float wCurrent = DotProduct(normal, dir);
-    if (wCurrent < 0.01f) wCurrent = 0.01f;
-
+    // color is now in pure physical radiance space (deferred w division)
     vec3_t currentRadiance, addedRadiance, targetRadiance;
     for (i = 0; i < 3; i++)
     {
-        currentRadiance[i] = color[i] * wCurrent;
+        currentRadiance[i] = color[i];
         addedRadiance[i] = I[i] * angle;
         targetRadiance[i] = currentRadiance[i] + addedRadiance[i];
     }
@@ -657,9 +655,9 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
         if (w < 0.01f) w = 0.01f;
     }
 
-    // Step 5: Commit
+    // Step 5: Commit (store pure radiance, w division deferred to DownConvert)
     for (i = 0; i < 3; i++)
-        color[i] = targetRadiance[i] / w;
+        color[i] = targetRadiance[i];
 
     VectorCopy(dirNew, dir);
     VectorCopy(energyNew, energy);
@@ -1346,12 +1344,16 @@ void TraceLtm(int num)
     vec3_t **deluxe = NULL;
     vec3_t *lmenergy_data = NULL;
     vec3_t **lmenergy = NULL;
+    vec3_t *normalArray_data = NULL;
+    vec3_t **normalArray = NULL;
     if (deluxeFloats)
     {
         deluxe_data = malloc(extW * extH * sizeof(vec3_t));
         deluxe = malloc(extW * sizeof(vec3_t *));
         lmenergy_data = malloc(extW * extH * sizeof(vec3_t));
         lmenergy = malloc(extW * sizeof(vec3_t *));
+        normalArray_data = malloc(extW * extH * sizeof(vec3_t));
+        normalArray = malloc(extW * sizeof(vec3_t *));
     }
 
     if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data)
@@ -1380,6 +1382,7 @@ void TraceLtm(int num)
     {
         memset(deluxe_data, 0, extW * extH * sizeof(vec3_t));
         memset(lmenergy_data, 0, extW * extH * sizeof(vec3_t));
+        memset(normalArray_data, 0, extW * extH * sizeof(vec3_t));
     }
 
     for (i = 0; i < extW; i++)
@@ -1391,6 +1394,7 @@ void TraceLtm(int num)
         {
             deluxe[i] = deluxe_data + i * extH;
             lmenergy[i] = lmenergy_data + i * extH;
+            normalArray[i] = normalArray_data + i * extH;
         }
     }
 
@@ -1431,12 +1435,13 @@ void TraceLtm(int num)
 
             float jitterRadius = doSS ? game->defaultSmoothRadius : 0.0f;
             vec3_t accumColor;
-            vec3_t accumDir, accumEnergy;
+            vec3_t accumDir, accumEnergy, accumNormal;
             int hitCount;
 
             VectorClear(accumColor);
             VectorClear(accumDir);
             VectorClear(accumEnergy);
+            VectorClear(accumNormal);
             hitCount = 0;
             int ss, k;
 
@@ -1511,6 +1516,7 @@ void TraceLtm(int num)
                     VectorAdd(accumColor, subColor, accumColor);
                     VectorAdd(accumDir, subDir, accumDir);
                     VectorAdd(accumEnergy, subEnergy, accumEnergy);
+                    VectorAdd(accumNormal, normal, accumNormal);
                 }
                 else
                 {
@@ -1534,6 +1540,9 @@ void TraceLtm(int num)
                     VectorScale(accumDir, invHits, avgDir);
                     VectorNormalize(avgDir, deluxe[i][j]);
                     VectorScale(accumEnergy, invHits, lmenergy[i][j]);
+                    vec3_t avgNrm;
+                    VectorScale(accumNormal, invHits, avgNrm);
+                    VectorNormalize(avgNrm, normalArray[i][j]);
                 }
             }
             else
@@ -1583,6 +1592,7 @@ void TraceLtm(int num)
                     {
                         VectorCopy(deluxe[bestX][bestY], deluxe[i][j]);
                         VectorCopy(lmenergy[bestX][bestY], lmenergy[i][j]);
+                        VectorCopy(normalArray[bestX][bestY], normalArray[i][j]);
                     }
                     sampleHit[i][j] = qtrue;
                 }
@@ -1593,6 +1603,7 @@ void TraceLtm(int num)
                     {
                         VectorClear(deluxe[i][j]);
                         VectorClear(lmenergy[i][j]);
+                        VectorClear(normalArray[i][j]);
                     }
                     sampleHit[i][j] = qfalse;
                 }
@@ -1610,6 +1621,7 @@ void TraceLtm(int num)
                 {
                     VectorCopy(deluxe[i + currentGutter][j + currentGutter], deluxe[i][j]);
                     VectorCopy(lmenergy[i + currentGutter][j + currentGutter], lmenergy[i][j]);
+                    VectorCopy(normalArray[i + currentGutter][j + currentGutter], normalArray[i][j]);
                 }
             }
         }
@@ -1674,6 +1686,8 @@ void TraceLtm(int num)
                 {
                     // Copy direction ONLY — no color, no sampleHit, no alphamask
                     VectorCopy(deluxe[bestNX][bestNY], deluxe[i][j]);
+                    if (normalArray)
+                        VectorCopy(normalArray[bestNX][bestNY], normalArray[i][j]);
                 }
             }
         }
@@ -1711,6 +1725,10 @@ void TraceLtm(int num)
                         {
                             VectorCopy(lmenergy[i][j], &energyFloats[k * 3]);
                         }
+                        if (normalFloats && normalArray)
+                        {
+                            VectorCopy(normalArray[i][j], &normalFloats[k * 3]);
+                        }
                     }
                 }
             }
@@ -1739,6 +1757,8 @@ void TraceLtm(int num)
     if (deluxe_data) free(deluxe_data);
     if (lmenergy) free(lmenergy);
     if (lmenergy_data) free(lmenergy_data);
+    if (normalArray) free(normalArray);
+    if (normalArray_data) free(normalArray_data);
     free(localLights);
     ThreadCompletedWeighted(surfWeight);
 }

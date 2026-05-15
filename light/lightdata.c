@@ -13,6 +13,7 @@ drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
 float *deluxeFloats = NULL;
 float *energyFloats = NULL;
+float *normalFloats = NULL;
 int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
@@ -38,8 +39,11 @@ static void DilateLightmapAtlas(int width, int passes)
     float *temp = malloc(numLightBytes * sizeof(float));
     byte *tempMask = malloc(numLMs * width * width);
     float *tempDeluxe = NULL;
+    float *tempNormal = NULL;
     if (deluxeFloats)
         tempDeluxe = malloc(numLightBytes * sizeof(float));
+    if (normalFloats)
+        tempNormal = malloc(numLightBytes * sizeof(float));
 
     _printf("Dilating lightmaps (%d passes)...\n", passes);
 
@@ -49,6 +53,8 @@ static void DilateLightmapAtlas(int width, int passes)
         memcpy(tempMask, lightAlphaMask, numLMs * width * width);
         if (deluxeFloats)
             memcpy(tempDeluxe, deluxeFloats, numLightBytes * sizeof(float));
+        if (normalFloats)
+            memcpy(tempNormal, normalFloats, numLightBytes * sizeof(float));
 
         for (s = 0; s < numDrawSurfaces; s++)
         {
@@ -92,6 +98,8 @@ static void DilateLightmapAtlas(int width, int passes)
                     float litSum[3] = {0, 0, 0}, litWeight = 0;
                     float deluxeSum[3] = {0, 0, 0};
                     float deluxeLitSum[3] = {0, 0, 0};
+                    float normalSum[3] = {0, 0, 0};
+                    float normalLitSum[3] = {0, 0, 0};
 
                     for (j = -1; j <= 1; j++)
                     {
@@ -112,10 +120,12 @@ static void DilateLightmapAtlas(int width, int passes)
                                     {
                                         VectorAdd(litSum, &temp[nidx * 3], litSum);
                                         if (tempDeluxe) VectorAdd(deluxeLitSum, &tempDeluxe[nidx * 3], deluxeLitSum);
+                                        if (tempNormal) VectorAdd(normalLitSum, &tempNormal[nidx * 3], normalLitSum);
                                         litWeight += 1.0f;
                                     }
                                     VectorAdd(sum, &temp[nidx * 3], sum);
                                     if (tempDeluxe) VectorAdd(deluxeSum, &tempDeluxe[nidx * 3], deluxeSum);
+                                    if (tempNormal) VectorAdd(normalSum, &tempNormal[nidx * 3], normalSum);
                                     weight += 1.0f;
                                 }
                             }
@@ -132,6 +142,13 @@ static void DilateLightmapAtlas(int width, int passes)
                             if (VectorNormalize(avgDir, avgDir) > 0)
                                 VectorCopy(avgDir, &deluxeFloats[idx * 3]);
                         }
+                        if (normalFloats)
+                        {
+                            vec3_t avgNrm;
+                            VectorScale(normalLitSum, 1.0f / litWeight, avgNrm);
+                            if (VectorNormalize(avgNrm, avgNrm) > 0)
+                                VectorCopy(avgNrm, &normalFloats[idx * 3]);
+                        }
                     }
                     else if (weight > 0)
                     {
@@ -144,6 +161,13 @@ static void DilateLightmapAtlas(int width, int passes)
                             if (VectorNormalize(avgDir, avgDir) > 0)
                                 VectorCopy(avgDir, &deluxeFloats[idx * 3]);
                         }
+                        if (normalFloats)
+                        {
+                            vec3_t avgNrm;
+                            VectorScale(normalSum, 1.0f / weight, avgNrm);
+                            if (VectorNormalize(avgNrm, avgNrm) > 0)
+                                VectorCopy(avgNrm, &normalFloats[idx * 3]);
+                        }
                     }
                 }
             }
@@ -153,6 +177,8 @@ static void DilateLightmapAtlas(int width, int passes)
     free(tempMask);
     if (tempDeluxe)
         free(tempDeluxe);
+    if (tempNormal)
+        free(tempNormal);
 }
 
 static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, int oldW, float *newFloats, byte *newMask, int newW)
@@ -526,6 +552,13 @@ static void UpConvertLightmaps(void)
         if (!energyFloats)
             Error("UpConvert: malloc energyFloats failed");
         memset(energyFloats, 0, numLightBytes * sizeof(float));
+
+        if (normalFloats)
+            free(normalFloats);
+        normalFloats = malloc(numLightBytes * sizeof(float));
+        if (!normalFloats)
+            Error("UpConvert: malloc normalFloats failed");
+        memset(normalFloats, 0, numLightBytes * sizeof(float));
     }
 }
 
@@ -708,6 +741,26 @@ void DownConvertLightingData(void)
 
     DilateLightmapAtlas(game->lightmapSize, 2);
 
+    // Deferred Deluxe Division: convert lightFloats from Radiance to Radiance/w
+    if (deluxeFloats && normalFloats)
+    {
+        int totalPixels = numLightBytes / 3;
+        for (int idx = 0; idx < totalPixels; idx++)
+        {
+            if (lightAlphaMask && !lightAlphaMask[idx])
+                continue;
+            vec3_t n;
+            VectorCopy(&normalFloats[idx * 3], n);
+            if (VectorLength(n) < 0.001f)
+                continue;
+            float w = DotProduct(n, &deluxeFloats[idx * 3]);
+            if (w < 0.01f) w = 0.01f;
+            lightFloats[idx * 3 + 0] /= w;
+            lightFloats[idx * 3 + 1] /= w;
+            lightFloats[idx * 3 + 2] /= w;
+        }
+    }
+
     if (game->hdr == HDR_8BIT)
     {
         const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
@@ -790,6 +843,11 @@ void FreeRadiosityFloats(void)
     {
         free(energyFloats);
         energyFloats = NULL;
+    }
+    if (normalFloats)
+    {
+        free(normalFloats);
+        normalFloats = NULL;
     }
 }
 

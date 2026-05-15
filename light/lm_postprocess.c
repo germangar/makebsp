@@ -1,4 +1,4 @@
-#include "light.h"
+﻿#include "light.h"
 #include <omp.h>
 #include <math.h>
 #include <stdlib.h>
@@ -35,7 +35,7 @@ static planarInfo_t *planarSurfaces = NULL;
 static int numPlanarSurfaces = 0;
 static int *planarSortIndex = NULL;
 
-typedef struct aaTexel_s { vec3_t pos; vec3_t normal; vec3_t color; float density; struct aaTexel_s *next; } aaTexel_t;
+typedef struct aaTexel_s { vec3_t pos; vec3_t normal; vec3_t color; vec3_t dir; vec3_t nrm; float density; struct aaTexel_s *next; } aaTexel_t;
 
 #define POS_TO_INT(p) ((int)roundf((p) * 128.0f))
 typedef struct { int v[2][3]; } edge_t;
@@ -203,6 +203,58 @@ void GpuLightmapState_Upload(void) {
     st->atlasB=clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tA, &err);
     st->maskBuf=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, mB, tM, &err);
     if (scale>1) { free(tA); free(tM); }
+
+    // Upload deluxe directions and surface normals (same upscale logic, guarded by deluxeFloats)
+    if (deluxeFloats) {
+        float *tdA = deluxeFloats;
+        float *tnA = normalFloats;
+        if (scale > 1) {
+            tdA = malloc(aB);
+            if (tnA) tnA = malloc(aB);
+            int nL=totalP1x/(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT), W=LIGHTMAP_WIDTH, H=LIGHTMAP_HEIGHT, Ws=W*scale, Hs=H*scale;
+            #pragma omp parallel for schedule(static)
+            for (int m=0; m<nL; m++) for (int ys=0; ys<Hs; ys++) for (int xs=0; xs<Ws; xs++) {
+                int ps=(m*Hs+ys)*Ws+xs;
+                float fx=((float)xs+0.5f)/scale-0.5f, fy=((float)ys+0.5f)/scale-0.5f;
+                int ix0=(int)floorf(fx), iy0=(int)floorf(fy); float tx=fx-ix0, ty=fy-iy0;
+                int ix1=max(0,min(W-1,ix0+1)), iy1=max(0,min(H-1,iy0+1)); ix0=max(0,min(W-1,ix0)); iy0=max(0,min(H-1,iy0));
+                int i00=(m*H+iy0)*W+ix0, i10=(m*H+iy0)*W+ix1, i01=(m*H+iy1)*W+ix0, i11=(m*H+iy1)*W+ix1;
+                float w00=(1-tx)*(1-ty), w10=tx*(1-ty), w01=(1-tx)*ty, w11=tx*ty;
+                if (lightAlphaMask[i00]==0) w00=0; if (lightAlphaMask[i10]==0) w10=0;
+                if (lightAlphaMask[i01]==0) w01=0; if (lightAlphaMask[i11]==0) w11=0;
+                float sW=w00+w10+w01+w11;
+                if (sW>0.01f) {
+                    float iW=1.0f/sW;
+                    float ddx=(w00*deluxeFloats[i00*3]+w10*deluxeFloats[i10*3]+w01*deluxeFloats[i01*3]+w11*deluxeFloats[i11*3])*iW;
+                    float ddy=(w00*deluxeFloats[i00*3+1]+w10*deluxeFloats[i10*3+1]+w01*deluxeFloats[i01*3+1]+w11*deluxeFloats[i11*3+1])*iW;
+                    float ddz=(w00*deluxeFloats[i00*3+2]+w10*deluxeFloats[i10*3+2]+w01*deluxeFloats[i01*3+2]+w11*deluxeFloats[i11*3+2])*iW;
+                    float dlen=sqrtf(ddx*ddx+ddy*ddy+ddz*ddz);
+                    if (dlen>0.001f) { tdA[ps*3]=ddx/dlen; tdA[ps*3+1]=ddy/dlen; tdA[ps*3+2]=ddz/dlen; }
+                    else { tdA[ps*3]=deluxeFloats[i00*3]; tdA[ps*3+1]=deluxeFloats[i00*3+1]; tdA[ps*3+2]=deluxeFloats[i00*3+2]; }
+                    if (normalFloats && tnA) {
+                        float nnx=(w00*normalFloats[i00*3]+w10*normalFloats[i10*3]+w01*normalFloats[i01*3]+w11*normalFloats[i11*3])*iW;
+                        float nny=(w00*normalFloats[i00*3+1]+w10*normalFloats[i10*3+1]+w01*normalFloats[i01*3+1]+w11*normalFloats[i11*3+1])*iW;
+                        float nnz=(w00*normalFloats[i00*3+2]+w10*normalFloats[i10*3+2]+w01*normalFloats[i01*3+2]+w11*normalFloats[i11*3+2])*iW;
+                        float nlen=sqrtf(nnx*nnx+nny*nny+nnz*nnz);
+                        if (nlen>0.001f) { tnA[ps*3]=nnx/nlen; tnA[ps*3+1]=nny/nlen; tnA[ps*3+2]=nnz/nlen; }
+                        else { tnA[ps*3]=normalFloats[i00*3]; tnA[ps*3+1]=normalFloats[i00*3+1]; tnA[ps*3+2]=normalFloats[i00*3+2]; }
+                    }
+                } else {
+                    int in=(lightAlphaMask[i00]!=0)?i00:(lightAlphaMask[i10]!=0?i10:(lightAlphaMask[i01]!=0?i01:i11));
+                    tdA[ps*3]=deluxeFloats[in*3]; tdA[ps*3+1]=deluxeFloats[in*3+1]; tdA[ps*3+2]=deluxeFloats[in*3+2];
+                    if (normalFloats && tnA) { tnA[ps*3]=normalFloats[in*3]; tnA[ps*3+1]=normalFloats[in*3+1]; tnA[ps*3+2]=normalFloats[in*3+2]; }
+                }
+            }
+        }
+        st->deluxeA = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tdA, &err);
+        st->deluxeB = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tdA, &err);
+        if (normalFloats && tnA) {
+            st->normalA = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tnA, &err);
+            st->normalB = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tnA, &err);
+        }
+        if (scale>1) { free(tdA); if (tnA && tnA != normalFloats) free(tnA); }
+    }
+
     GpuPlanarSurface_t *cPs = malloc(numPlanarSurfaces*sizeof(GpuPlanarSurface_t)); int tL=0; float fS=scale, sh=(0.5f/fS)-0.5f;
     for (s=0; s<numPlanarSurfaces; s++) {
         planarInfo_t *p=&planarSurfaces[s]; GpuPlanarSurface_t *g=&cPs[s];
@@ -248,43 +300,131 @@ static void RunGpuAAKernel(float *pattern, int numSamples) {
 static void RunGpuSmoothKernel(void) {
     GpuLightmapState *st = &g_gpuLM; cl_int err;
     static cl_program prog=NULL; if(!prog) { prog=BuildOpenCLProgramWithCommon("smooth_filter.cl", ""); if(!prog) return; }
-    cl_kernel k=clCreateKernel(prog, "smooth_filter", &err); cl_mem src=st->pingIsA?st->atlasA:st->atlasB, dst=st->pingIsA?st->atlasB:st->atlasA;
+    cl_kernel k=clCreateKernel(prog, "smooth_filter", &err);
+    cl_mem src=st->pingIsA?st->atlasA:st->atlasB, dst=st->pingIsA?st->atlasB:st->atlasA;
+    cl_mem dSrc=st->pingIsA?st->deluxeA:st->deluxeB, dDst=st->pingIsA?st->deluxeB:st->deluxeA;
+    cl_mem nSrc=st->pingIsA?st->normalA:st->normalB, nDst=st->pingIsA?st->normalB:st->normalA;
     int a=0; clSetKernelArg(k,a++,sizeof(cl_mem),&src); clSetKernelArg(k,a++,sizeof(cl_mem),&dst); clSetKernelArg(k,a++,sizeof(cl_mem),&st->maskBuf); clSetKernelArg(k,a++,sizeof(cl_mem),&st->surfacesBuf);
     clSetKernelArg(k,a++,sizeof(cl_mem),&st->partnerData); clSetKernelArg(k,a++,sizeof(cl_mem),&st->partnerOffsets); clSetKernelArg(k,a++,sizeof(cl_mem),&st->validList); clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToSurface);
     clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToX); clSetKernelArg(k,a++,sizeof(cl_mem),&st->pixelToY); clSetKernelArg(k,a++,sizeof(cl_mem),&st->radiiBuf);
     float uS=(float)st->upscale; clSetKernelArg(k,a++,sizeof(float),&uS);
+    // Deluxe/normal direction smoothing buffers (NULL-safe: kernel checks internally)
+    clSetKernelArg(k,a++,sizeof(cl_mem),&dSrc); clSetKernelArg(k,a++,sizeof(cl_mem),&dDst);
+    clSetKernelArg(k,a++,sizeof(cl_mem),&nSrc); clSetKernelArg(k,a++,sizeof(cl_mem),&nDst);
     size_t gS=(size_t)st->numValid; clEnqueueNDRangeKernel(g_clQueue, k, 1, NULL, &gS, NULL, 0, NULL, NULL); clFinish(g_clQueue); st->pingIsA^=1; clReleaseKernel(k);
 }
+
 
 void AntiAliasLightmapsGPU(int p) { float pat[16]; for(int i=0;i<8;i++){pat[i*2]=ssPattern8[i][0];pat[i*2+1]=ssPattern8[i][1];} for(int i=0;i<p;i++) RunGpuAAKernel(pat, 8); }
 void SmoothLightmapsGPU(void) { RunGpuSmoothKernel(); }
 
 static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const float *tF, int aaP, int smP) {
     dsurface_t *ds=&drawSurfaces[planarSurfaces[sIdx].surfaceNum]; int W=ds->lightmapWidth, H=ds->lightmapHeight; if(W<=0||H<=0)return; int W2=W*2, H2=H*2;
-    float *g2=malloc(W2*H2*3*sizeof(float)), *b2=malloc(W2*H2*3*sizeof(float)); byte *m2=malloc(W2*H2), *bm2=malloc(W2*H2); if(!g2||!b2||!m2||!bm2){if(g2)free(g2);if(b2)free(b2);if(m2)free(m2);if(bm2)free(bm2);return;}
-    for(int Y=0;Y<H2;Y++) for(int X=0;X<W2;X++) { float px=(X+0.5f)*0.5f, py=(Y+0.5f)*0.5f, col[3]; if(GetFilteredTexel(sIdx,px,py,col,tF)){m2[Y*W2+X]=ds->surfaceType;VectorCopy(col,&g2[(Y*W2+X)*3]);} else{m2[Y*W2+X]=0;VectorClear(&g2[(Y*W2+X)*3]);} }
+    float *g2=malloc(W2*H2*3*sizeof(float)), *b2=malloc(W2*H2*3*sizeof(float)); byte *m2=malloc(W2*H2), *bm2=malloc(W2*H2);
+    float *g2dir = deluxeFloats ? malloc(W2*H2*3*sizeof(float)) : NULL; float *b2dir = deluxeFloats ? malloc(W2*H2*3*sizeof(float)) : NULL;
+    float *g2nrm = normalFloats ? malloc(W2*H2*3*sizeof(float)) : NULL; float *b2nrm = normalFloats ? malloc(W2*H2*3*sizeof(float)) : NULL;
+    if(!g2||!b2||!m2||!bm2){if(g2)free(g2);if(b2)free(b2);if(m2)free(m2);if(bm2)free(bm2);if(g2dir)free(g2dir);if(b2dir)free(b2dir);if(g2nrm)free(g2nrm);if(b2nrm)free(b2nrm);return;}
+    for(int Y=0;Y<H2;Y++) for(int X=0;X<W2;X++) { 
+        float px=(X+0.5f)*0.5f, py=(Y+0.5f)*0.5f, col[3], dir[3], nrm[3]; 
+        if(GetFilteredTexel(sIdx,px,py,col,tF)){
+            m2[Y*W2+X]=ds->surfaceType;VectorCopy(col,&g2[(Y*W2+X)*3]);
+            if (deluxeFloats) {
+                if(GetFilteredTexel(sIdx,px,py,dir,deluxeFloats)) { VectorCopy(dir,&g2dir[(Y*W2+X)*3]); } else { VectorClear(&g2dir[(Y*W2+X)*3]); }
+            }
+            if (normalFloats) {
+                if(GetFilteredTexel(sIdx,px,py,nrm,normalFloats)) { VectorCopy(nrm,&g2nrm[(Y*W2+X)*3]); } else { VectorClear(&g2nrm[(Y*W2+X)*3]); }
+            }
+        } else {
+            m2[Y*W2+X]=0;VectorClear(&g2[(Y*W2+X)*3]);
+            if (deluxeFloats) VectorClear(&g2dir[(Y*W2+X)*3]);
+            if (normalFloats) VectorClear(&g2nrm[(Y*W2+X)*3]);
+        } 
+    }
     int totP=aaP+smP; float sig=radius*2/3.0f; if(sig<1)sig=1; int kR=min(32,(int)ceilf(radius*2)); float gK[65][65], gKS=0;
     for(int j=-kR;j<=kR;j++) for(int i=-kR;i<=kR;i++) { gK[j+kR][i+kR]=expf(-(float)(i*i+j*j)/(2*sig*sig)); gKS+=gK[j+kR][i+kR]; }
     for(int j=0;j<=kR*2;j++) for(int i=0;i<=kR*2;i++) gK[j][i]/=gKS;
     for(int pass=0;pass<totP;pass++) {
         qboolean isAA=(pass<aaP); for(int Y=0;Y<H2;Y++) for(int X=0;X<W2;X++) {
-            if(m2[Y*W2+X]==0){bm2[Y*W2+X]=0;continue;} float sC[3]={0,0,0}, sW=0;
-            if(isAA) for(int k=0;k<8;k++) { float px=X+ssPattern8[k][0]*radius*2, py=Y+ssPattern8[k][1]*radius*2; int ix=(int)roundf(px), iy=(int)roundf(py);
-                if(ix>=0&&ix<W2&&iy>=0&&iy<H2 && m2[iy*W2+ix]!=0) { VectorAdd(sC,&g2[(iy*W2+ix)*3],sC); sW+=1; }
-                else { float sX=(px+0.5f)*0.5f, sY=(py+0.5f)*0.5f, c[3]; if(GetFilteredTexel(sIdx,sX,sY,c,tF)){VectorAdd(sC,c,sC);sW+=1;} }
-            } else for(int j=-kR;j<=kR;j++) for(int i=-kR;i<=kR;i++) { float w=gK[j+kR][i+kR]; int ix=X+i, iy=Y+j;
-                if(ix>=0&&ix<W2&&iy>=0&&iy<H2 && m2[iy*W2+ix]!=0) { VectorMA(sC,w,&g2[(iy*W2+ix)*3],sC); sW+=w; }
-                else { float sX=(ix+0.5f)*0.5f, sY=(iy+0.5f)*0.5f, c[3]; if(GetFilteredTexel(sIdx,sX,sY,c,tF)){VectorMA(sC,w,c,sC);sW+=w;} }
+            if(m2[Y*W2+X]==0){bm2[Y*W2+X]=0;continue;} float sC[3]={0,0,0}, sD[3]={0,0,0}, sN[3]={0,0,0}, sW=0, sDW=0;
+            if(isAA) for(int k=0;k<8;k++) { 
+                float px=X+ssPattern8[k][0]*radius*2, py=Y+ssPattern8[k][1]*radius*2; int ix=(int)roundf(px), iy=(int)roundf(py);
+                if(ix>=0&&ix<W2&&iy>=0&&iy<H2 && m2[iy*W2+ix]!=0) { 
+                    VectorAdd(sC,&g2[(iy*W2+ix)*3],sC); sW+=1; 
+                    float lum = 0.2126f * g2[(iy*W2+ix)*3] + 0.7152f * g2[(iy*W2+ix)*3+1] + 0.0722f * g2[(iy*W2+ix)*3+2];
+                    if (deluxeFloats) VectorMA(sD, lum, &g2dir[(iy*W2+ix)*3], sD);
+                    if (normalFloats) VectorMA(sN, lum, &g2nrm[(iy*W2+ix)*3], sN);
+                    sDW += lum;
+                } else { 
+                    float sX=(px+0.5f)*0.5f, sY=(py+0.5f)*0.5f, c[3], d[3], n[3]; 
+                    if(GetFilteredTexel(sIdx,sX,sY,c,tF)){
+                        VectorAdd(sC,c,sC); sW+=1;
+                        float lum = 0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2];
+                        if (deluxeFloats && GetFilteredTexel(sIdx,sX,sY,d,deluxeFloats)) VectorMA(sD, lum, d, sD);
+                        if (normalFloats && GetFilteredTexel(sIdx,sX,sY,n,normalFloats)) VectorMA(sN, lum, n, sN);
+                        sDW += lum;
+                    } 
+                }
+            } else for(int j=-kR;j<=kR;j++) for(int i=-kR;i<=kR;i++) { 
+                float w=gK[j+kR][i+kR]; int ix=X+i, iy=Y+j;
+                if(ix>=0&&ix<W2&&iy>=0&&iy<H2 && m2[iy*W2+ix]!=0) { 
+                    VectorMA(sC,w,&g2[(iy*W2+ix)*3],sC); sW+=w; 
+                    float lum = 0.2126f * g2[(iy*W2+ix)*3] + 0.7152f * g2[(iy*W2+ix)*3+1] + 0.0722f * g2[(iy*W2+ix)*3+2];
+                    if (deluxeFloats) VectorMA(sD, w*lum, &g2dir[(iy*W2+ix)*3], sD);
+                    if (normalFloats) VectorMA(sN, w*lum, &g2nrm[(iy*W2+ix)*3], sN);
+                    sDW += w*lum;
+                } else { 
+                    float sX=(ix+0.5f)*0.5f, sY=(iy+0.5f)*0.5f, c[3], d[3], n[3]; 
+                    if(GetFilteredTexel(sIdx,sX,sY,c,tF)){
+                        VectorMA(sC,w,c,sC); sW+=w;
+                        float lum = 0.2126f * c[0] + 0.7152f * c[1] + 0.0722f * c[2];
+                        if (deluxeFloats && GetFilteredTexel(sIdx,sX,sY,d,deluxeFloats)) VectorMA(sD, w*lum, d, sD);
+                        if (normalFloats && GetFilteredTexel(sIdx,sX,sY,n,normalFloats)) VectorMA(sN, w*lum, n, sN);
+                        sDW += w*lum;
+                    } 
+                }
             }
-            if(sW>0.0001f){bm2[Y*W2+X]=ds->surfaceType;VectorScale(sC,1/sW,&b2[(Y*W2+X)*3]);} else bm2[Y*W2+X]=0;
+            if(sW>0.0001f){
+                bm2[Y*W2+X]=ds->surfaceType;VectorScale(sC,1/sW,&b2[(Y*W2+X)*3]);
+                if (deluxeFloats) {
+                    if (sDW>0.0001f && VectorLength(sD)>0.001f) { VectorNormalize(sD, &b2dir[(Y*W2+X)*3]); }
+                    else { VectorCopy(&g2dir[(Y*W2+X)*3], &b2dir[(Y*W2+X)*3]); }
+                }
+                if (normalFloats) {
+                    if (sDW>0.0001f && VectorLength(sN)>0.001f) { VectorNormalize(sN, &b2nrm[(Y*W2+X)*3]); }
+                    else { VectorCopy(&g2nrm[(Y*W2+X)*3], &b2nrm[(Y*W2+X)*3]); }
+                }
+            } else bm2[Y*W2+X]=0;
         }
         memcpy(g2,b2,W2*H2*3*sizeof(float)); memcpy(m2,bm2,W2*H2);
+        if (deluxeFloats) memcpy(g2dir,b2dir,W2*H2*3*sizeof(float));
+        if (normalFloats) memcpy(g2nrm,b2nrm,W2*H2*3*sizeof(float));
     }
-    for(int y=0;y<H;y++) for(int x=0;x<W;x++) { int p=(ds->lightmapNum[0]*LIGHTMAP_HEIGHT+ds->lightmapOffset[0][1]+y)*LIGHTMAP_WIDTH+ds->lightmapOffset[0][0]+x; if(lightAlphaMask[p]!=ds->surfaceType)continue;
-        float sC[3]={0,0,0}, sW=0; for(int dy=0;dy<2;dy++) for(int dx=0;dx<2;dx++) { int X=x*2+dx, Y=y*2+dy; if(m2[Y*W2+X]!=0){VectorAdd(sC,&g2[(Y*W2+X)*3],sC);sW+=1;} }
-        if(sW>0.01f) VectorScale(sC,1/sW,&lightFloats[p*3]);
+    for(int y=0;y<H;y++) for(int x=0;x<W;x++) { 
+        int p=(ds->lightmapNum[0]*LIGHTMAP_HEIGHT+ds->lightmapOffset[0][1]+y)*LIGHTMAP_WIDTH+ds->lightmapOffset[0][0]+x; if(lightAlphaMask[p]!=ds->surfaceType)continue;
+        float sC[3]={0,0,0}, sD[3]={0,0,0}, sN[3]={0,0,0}, sW=0, sDW=0; 
+        for(int dy=0;dy<2;dy++) for(int dx=0;dx<2;dx++) { 
+            int X=x*2+dx, Y=y*2+dy; 
+            if(m2[Y*W2+X]!=0){
+                VectorAdd(sC,&g2[(Y*W2+X)*3],sC); sW+=1;
+                float lum = 0.2126f * g2[(Y*W2+X)*3] + 0.7152f * g2[(Y*W2+X)*3+1] + 0.0722f * g2[(Y*W2+X)*3+2];
+                if (deluxeFloats) VectorMA(sD, lum, &g2dir[(Y*W2+X)*3], sD);
+                if (normalFloats) VectorMA(sN, lum, &g2nrm[(Y*W2+X)*3], sN);
+                sDW += lum;
+            } 
+        }
+        if(sW>0.01f) {
+            VectorScale(sC,1/sW,&lightFloats[p*3]);
+            if (deluxeFloats) {
+                if (sDW>0.0001f && VectorLength(sD)>0.001f) { VectorNormalize(sD, &deluxeFloats[p*3]); }
+            }
+            if (normalFloats) {
+                if (sDW>0.0001f && VectorLength(sN)>0.001f) { VectorNormalize(sN, &normalFloats[p*3]); }
+            }
+        }
     }
     free(g2); free(m2); free(b2); free(bm2);
+    if (g2dir) free(g2dir); if (b2dir) free(b2dir);
+    if (g2nrm) free(g2nrm); if (b2nrm) free(b2nrm);
 }
 
 static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses) {
@@ -295,7 +435,12 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     int N = nP, nS = (aaPasses > 0) ? 8 : 1; ThreadLock(); _printf("."); fflush(stdout); ThreadUnlock();
     float *tP=malloc(N*3*4), *tN=malloc(N*3*4), *tC=malloc(N*3*4); int *vL=malloc(N*4), *tX=malloc(N*4), *tY=malloc(N*4);
     float *jP=malloc((size_t)N*nS*3*4), *jN=malloc((size_t)N*nS*3*4); byte *jV=malloc((size_t)N*nS);
-    if (!tP||!tN||!tC||!vL||!tX||!tY||!jP||!jN||!jV) { free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP); return; }
+    float *tD=deluxeFloats?malloc(N*3*4):NULL, *tNr=normalFloats?malloc(N*3*4):NULL;
+    if (!tP||!tN||!tC||!vL||!tX||!tY||!jP||!jN||!jV) { 
+        free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP);
+        if(tD)free(tD);if(tNr)free(tNr);
+        return; 
+    }
     memset(jV, 0, (size_t)N*nS); vec3_t gMin={99999,99999,99999}, gMax={-99999,-99999,-99999};
     for (int i=0; i<N; i++) {
         int p = cP[i].pixelIndex; vL[i]=p; int lL=p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT); tX[i]=lL%LIGHTMAP_WIDTH-ds->lightmapOffset[0][0]; tY[i]=lL/LIGHTMAP_WIDTH-ds->lightmapOffset[0][1];
@@ -316,7 +461,11 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     int gD[3]; for(int k=0;k<3;k++){ gD[k]=(int)ceilf((gMax[k]-gMin[k])/vS); if(gD[k]<1)gD[k]=1; }
     size_t nB=(size_t)gD[0]*gD[1]*gD[2], gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2];
     int *bC=calloc(nB, 4), *bS=malloc(nB*4), *sT=malloc(N*4), *wP=malloc(nB*4);
-    if (!bC||!bS||!sT||!wP) { free(bC);free(bS);free(sT);free(wP);free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP); return; }
+    if (!bC||!bS||!sT||!wP) { 
+        free(bC);free(bS);free(sT);free(wP);free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP); 
+        if(tD)free(tD);if(tNr)free(tNr);
+        return; 
+    }
     for (int i=0; i<N; i++) { int v[3]; for(int k=0;k<3;k++) v[k]=(int)((tP[i*3+k]-gMin[k])/vS); if(v[0]>=0&&v[0]<gD[0]&&v[1]>=0&&v[1]<gD[1]&&v[2]>=0&&v[2]<gD[2]) bC[(size_t)v[0]*gS1+v[1]*gS2+v[2]]++; }
     bS[0]=0; for(size_t i=1;i<nB;i++) bS[i]=bS[i-1]+bC[i-1]; memcpy(wP, bS, nB*4);
     for (int i=0; i<N; i++) { int v[3]; for(int k=0;k<3;k++) v[k]=(int)((tP[i*3+k]-gMin[k])/vS); if(v[0]>=0&&v[0]<gD[0]&&v[1]>=0&&v[1]<gD[1]&&v[2]>=0&&v[2]<gD[2]) sT[wP[(size_t)v[0]*gS1+v[1]*gS2+v[2]]++]=i; }
@@ -334,33 +483,63 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
             cl_mem bbC=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,bBy,bC,&err);
             cl_mem bsT=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,sT,&err);
             cl_mem bOut=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,lightFloats,&err);
+            cl_mem bOutD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,deluxeFloats,&err):NULL;
+            cl_mem bOutN=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,normalFloats,&err):NULL;
             cl_mem bvL=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,vL,&err);
             cl_mem btC=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err);
+            cl_mem btD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err):NULL;
+            cl_mem btNr=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err):NULL;
             cl_mem bDen=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,(size_t)N*4,NULL,&err);
+            
             for (int p=0; p<aaPasses+smoothPasses; p++) {
-                int smp=(p<aaPasses)?8:1; for(int i=0;i<N;i++) VectorCopy(&lightFloats[vL[i]*3],&tC[i*3]);
+                int smp=(p<aaPasses)?8:1; 
+                for(int i=0;i<N;i++) { 
+                    VectorCopy(&lightFloats[vL[i]*3],&tC[i*3]); 
+                    if(deluxeFloats) VectorCopy(&deluxeFloats[vL[i]*3],&tD[i*3]);
+                    if(normalFloats) VectorCopy(&normalFloats[vL[i]*3],&tNr[i*3]);
+                }
                 clEnqueueWriteBuffer(g_clQueue,btC,CL_TRUE,0,nf3,tC,0,NULL,NULL);
+                if(deluxeFloats) clEnqueueWriteBuffer(g_clQueue,btD,CL_TRUE,0,nf3,tD,0,NULL,NULL);
+                if(normalFloats) clEnqueueWriteBuffer(g_clQueue,btNr,CL_TRUE,0,nf3,tNr,0,NULL,NULL);
+                
                 int da=0; clSetKernelArg(dK,da++,sizeof(cl_mem),&btP); clSetKernelArg(dK,da++,sizeof(cl_mem),&btN); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbS); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbC);
                 clSetKernelArg(dK,da++,sizeof(cl_mem),&bsT); clSetKernelArg(dK,da++,sizeof(cl_mem),&bDen); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gMin[k]);
                 clSetKernelArg(dK,da++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gD[k]); clSetKernelArg(dK,da++,4,&mDSq); clSetKernelArg(dK,da++,4,&tS2);
                 float aM=AA_ANGLE_MATCH_COS; clSetKernelArg(dK,da++,4,&aM); clSetKernelArg(dK,da++,4,&N);
                 size_t gS=(size_t)N; clEnqueueNDRangeKernel(g_clQueue,dK,1,NULL,&gS,NULL,0,NULL,NULL); clFinish(g_clQueue);
+                
                 int fa=0; clSetKernelArg(fK,fa++,sizeof(cl_mem),&btP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btN); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjN);
                 clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjV); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bDen); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbS);
                 clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bsT); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOut); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bvL);
                 for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gMin[k]); clSetKernelArg(fK,fa++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gD[k]);
                 clSetKernelArg(fK,fa++,4,&mDSq); clSetKernelArg(fK,fa++,4,&tS2); clSetKernelArg(fK,fa++,4,&aM); clSetKernelArg(fK,fa++,4,&smp); clSetKernelArg(fK,fa++,4,&N);
+                // Extra args for directions
+                cl_mem dNULL=NULL;
+                if(deluxeFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btD); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutD);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
+                if(normalFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btNr);clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutN);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
+                
                 clEnqueueNDRangeKernel(g_clQueue,fK,1,NULL,&gS,NULL,0,NULL,NULL); clFinish(g_clQueue);
-                if (p<aaPasses+smoothPasses-1) clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,aBy,lightFloats,0,NULL,NULL);
+                
+                if (p<aaPasses+smoothPasses-1) {
+                    clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,aBy,lightFloats,0,NULL,NULL);
+                    if(deluxeFloats) clEnqueueReadBuffer(g_clQueue,bOutD,CL_TRUE,0,aBy,deluxeFloats,0,NULL,NULL);
+                    if(normalFloats) clEnqueueReadBuffer(g_clQueue,bOutN,CL_TRUE,0,aBy,normalFloats,0,NULL,NULL);
+                }
             }
             clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,aBy,lightFloats,0,NULL,NULL);
+            if(deluxeFloats) clEnqueueReadBuffer(g_clQueue,bOutD,CL_TRUE,0,aBy,deluxeFloats,0,NULL,NULL);
+            if(normalFloats) clEnqueueReadBuffer(g_clQueue,bOutN,CL_TRUE,0,aBy,normalFloats,0,NULL,NULL);
+            
             clReleaseMemObject(btP); clReleaseMemObject(btN); clReleaseMemObject(bjP); clReleaseMemObject(bjN); clReleaseMemObject(bjV);
             clReleaseMemObject(bbS); clReleaseMemObject(bbC); clReleaseMemObject(bsT); clReleaseMemObject(bOut); clReleaseMemObject(bvL); clReleaseMemObject(btC); clReleaseMemObject(bDen);
+            if(bOutD)clReleaseMemObject(bOutD); if(bOutN)clReleaseMemObject(bOutN);
+            if(btD)clReleaseMemObject(btD); if(btNr)clReleaseMemObject(btNr);
             clReleaseKernel(fK); clReleaseKernel(dK);
         }
         clReleaseProgram(prog);
     }
     free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(bC);free(bS);free(sT);free(wP);free(cP);
+    if(tD)free(tD);if(tNr)free(tNr);
 }
 static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, int aaP, int smP) {
     dsurface_t *ds=&drawSurfaces[surfIdx]; if(ds->lightmapNum[0]<0||ds->surfaceType!=MST_TRIANGLE_SOUP)return;
@@ -371,7 +550,13 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
     for(int k=0;k<3;k++){gMin[k]-=vS;gMax[k]+=vS;} int gD[3]; for(int k=0;k<3;k++){gD[k]=(int)ceilf((gMax[k]-gMin[k])/vS);if(gD[k]<1)gD[k]=1;}
     const size_t gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2], nB=(size_t)gD[0]*gD[1]*gD[2]; aaTexel_t **fG=calloc(nB,sizeof(aaTexel_t*)), *pool=malloc(nP*sizeof(aaTexel_t));
     for(int i=0;i<nP;i++) { int v[3]; qboolean b=qtrue; for(int k=0;k<3;k++){ v[k]=(int)((cP[i].pos[k]-gMin[k])/vS); if(v[k]<0||v[k]>=gD[k])b=qfalse; }
-        if(b){ aaTexel_t *nT=&pool[i]; VectorCopy(cP[i].pos,nT->pos); VectorCopy(cP[i].normal,nT->normal); int p=cP[i].pixelIndex; VectorCopy(&tF[p*3],nT->color); size_t c=(size_t)v[0]*gS1+v[1]*gS2+v[2]; nT->next=fG[c]; fG[c]=nT; }
+        if(b){ 
+            aaTexel_t *nT=&pool[i]; VectorCopy(cP[i].pos,nT->pos); VectorCopy(cP[i].normal,nT->normal); 
+            int p=cP[i].pixelIndex; VectorCopy(&tF[p*3],nT->color); 
+            if (deluxeFloats) { VectorCopy(&deluxeFloats[p*3], nT->dir); } else { VectorClear(nT->dir); }
+            if (normalFloats) { VectorCopy(&normalFloats[p*3], nT->nrm); } else { VectorClear(nT->nrm); }
+            size_t c=(size_t)v[0]*gS1+v[1]*gS2+v[2]; nT->next=fG[c]; fG[c]=nT; 
+        }
     }
     for(int pass=0;pass<aaP+smP;pass++) {
         qboolean isAA=(pass<aaP); for(int i=0;i<nP;i++) {
@@ -388,24 +573,47 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
             } pool[i].density=(lD>0.0001f)?lD:1.0f;
         }
         for(int i=0;i<nP;i++) {
-            int p=cP[i].pixelIndex; const int nS=isAA?8:1; vec3_t fC={0,0,0}; float fW=0;
+            int p=cP[i].pixelIndex; const int nS=isAA?8:1; vec3_t fC={0,0,0}, fD={0,0,0}, fN={0,0,0}; float fW=0, fDW=0;
             for(int k=0;k<nS;k++) {
                 vec3_t o, n; if(isAA) { float st[2]={(float)ds->lightmapOffset[0][0]+(p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT))%LIGHTMAP_WIDTH-ds->lightmapOffset[0][0]+0.5f+ssPattern8[k][0]*radius, (float)ds->lightmapOffset[0][1]+(p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT))/LIGHTMAP_WIDTH-ds->lightmapOffset[0][1]+0.5f+ssPattern8[k][1]*radius}; if(!TriSoupSamplePoint(ds,st,o,n))continue; }
                 else { VectorCopy(cP[i].pos,o); VectorCopy(cP[i].normal,n); }
-                int v[3]; for(int m=0;m<3;m++) v[m]=(int)((o[m]-gMin[m])/vS); vec3_t tC={0,0,0}; float tW=0;
+                int v[3]; for(int m=0;m<3;m++) v[m]=(int)((o[m]-gMin[m])/vS); vec3_t tC={0,0,0}, tD={0,0,0}, tN={0,0,0}; float tW=0, tDW=0;
                 for(int dx=-1;dx<=1;dx++) for(int dy=-1;dy<=1;dy++) for(int dz=-1;dz<=1;dz++) {
                     int nx=v[0]+dx, ny=v[1]+dy, nz=v[2]+dz; if(nx>=0&&nx<gD[0]&&ny>=0&&ny<gD[1]&&nz>=0&&nz<gD[2]) {
                         aaTexel_t *c=fG[(size_t)nx*gS1+ny*gS2+nz]; while(c) {
                             vec3_t d; VectorSubtract(o,c->pos,d); float dSq=DotProduct(d,d); if(dSq<mDSq) {
                                 float dot=DotProduct(n,c->normal), aW=clamp((dot-AA_ANGLE_MATCH_COS)/(1-AA_ANGLE_MATCH_COS),0.0f,1.0f);
-                                if(aW>0) { float wN=(expf(-dSq/tS2)*aW)/c->density; VectorMA(tC,wN,c->color,tC); tW+=wN; }
+                                if(aW>0) { 
+                                    float wN=(expf(-dSq/tS2)*aW)/c->density; 
+                                    VectorMA(tC,wN,c->color,tC); tW+=wN; 
+                                    float lum=0.2126f*c->color[0] + 0.7152f*c->color[1] + 0.0722f*c->color[2];
+                                    if (deluxeFloats) VectorMA(tD,wN*lum,c->dir,tD);
+                                    if (normalFloats) VectorMA(tN,wN*lum,c->nrm,tN);
+                                    tDW+=wN*lum;
+                                }
                             } c=c->next;
                         }
                     }
-                } if(tW>0.0001f){ VectorMA(fC,1/tW,tC,fC); fW+=1; }
-            } if(fW>0.0001f) VectorScale(fC,1/fW,&lightFloats[p*3]);
+                } 
+                if(tW>0.0001f){ 
+                    VectorMA(fC,1/tW,tC,fC); fW+=1; 
+                    if (deluxeFloats) { if (tDW>0.0001f && VectorLength(tD)>0.001f) { vec3_t nD; VectorNormalize(tD,nD); VectorAdd(fD,nD,fD); } else { VectorAdd(fD,pool[i].dir,fD); } }
+                    if (normalFloats) { if (tDW>0.0001f && VectorLength(tN)>0.001f) { vec3_t nN; VectorNormalize(tN,nN); VectorAdd(fN,nN,fN); } else { VectorAdd(fN,pool[i].nrm,fN); } }
+                    fDW+=1;
+                }
+            } 
+            if(fW>0.0001f) {
+                VectorScale(fC,1/fW,&lightFloats[p*3]);
+                if (deluxeFloats) { if (fDW>0.0001f && VectorLength(fD)>0.001f) { VectorNormalize(fD,&deluxeFloats[p*3]); } }
+                if (normalFloats) { if (fDW>0.0001f && VectorLength(fN)>0.001f) { VectorNormalize(fN,&normalFloats[p*3]); } }
+            }
         }
-        if(pass<aaP+smP-1) for(int i=0;i<nP;i++){ int p=cP[i].pixelIndex; VectorCopy(&lightFloats[p*3],pool[i].color); }
+        if(pass<aaP+smP-1) for(int i=0;i<nP;i++){ 
+            int p=cP[i].pixelIndex; 
+            VectorCopy(&lightFloats[p*3],pool[i].color); 
+            if (deluxeFloats) VectorCopy(&deluxeFloats[p*3],pool[i].dir);
+            if (normalFloats) VectorCopy(&normalFloats[p*3],pool[i].nrm);
+        }
     }
     free(pool); free(fG); free(cP);
 }

@@ -214,6 +214,10 @@ void GpuLightmapState_Free(void) {
 #define REL(b) if (b) { clReleaseMemObject(b); b = NULL; }
     REL(s->atlasA);
     REL(s->atlasB);
+    REL(s->deluxeA);
+    REL(s->deluxeB);
+    REL(s->normalA);
+    REL(s->normalB);
     REL(s->maskBuf);
     REL(s->surfacesBuf);
     REL(s->partnerData);
@@ -240,23 +244,35 @@ Reads back the current output atlas buffer into lightFloats.
 */
 void GpuLightmapState_Download(void) {
     GpuLightmapState *s = &g_gpuLM;
-    cl_mem src = s->pingIsA ? s->atlasA : s->atlasB;
+    cl_mem src      = s->pingIsA ? s->atlasA  : s->atlasB;
+    cl_mem deluxeSrc = s->pingIsA ? s->deluxeA : s->deluxeB;
+    cl_mem normalSrc = s->pingIsA ? s->normalA : s->normalB;
     size_t atlasBytes = (size_t)s->totalAtlasPixels * 3 * sizeof(float);
     size_t maskBytes  = (size_t)s->totalAtlasPixels * sizeof(byte);
 
     if (s->upscale <= 1) {
-        clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, atlasBytes, lightFloats, 0, NULL, NULL);
+        clEnqueueReadBuffer(g_clQueue, src,       CL_TRUE, 0, atlasBytes, lightFloats,  0, NULL, NULL);
+        if (deluxeFloats && deluxeSrc)
+            clEnqueueReadBuffer(g_clQueue, deluxeSrc, CL_TRUE, 0, atlasBytes, deluxeFloats, 0, NULL, NULL);
+        if (normalFloats && normalSrc)
+            clEnqueueReadBuffer(g_clQueue, normalSrc, CL_TRUE, 0, atlasBytes, normalFloats, 0, NULL, NULL);
     } else {
         /* Downscale 2x2 -> 1x with mask weights */
-        float *temp2x = malloc(atlasBytes);
-        byte  *mask2x = malloc(maskBytes);
+        float *temp2x  = malloc(atlasBytes);
+        float *dtemp2x = (deluxeFloats && deluxeSrc) ? malloc(atlasBytes) : NULL;
+        float *ntemp2x = (normalFloats && normalSrc) ? malloc(atlasBytes) : NULL;
+        byte  *mask2x  = malloc(maskBytes);
         if (!temp2x || !mask2x) {
-            if (temp2x) free(temp2x);
-            if (mask2x) free(mask2x);
+            if (temp2x)  free(temp2x);
+            if (dtemp2x) free(dtemp2x);
+            if (ntemp2x) free(ntemp2x);
+            if (mask2x)  free(mask2x);
             return;
         }
 
-        clEnqueueReadBuffer(g_clQueue, src, CL_TRUE, 0, atlasBytes, temp2x, 0, NULL, NULL);
+        clEnqueueReadBuffer(g_clQueue, src,       CL_TRUE, 0, atlasBytes, temp2x, 0, NULL, NULL);
+        if (dtemp2x) clEnqueueReadBuffer(g_clQueue, deluxeSrc, CL_TRUE, 0, atlasBytes, dtemp2x, 0, NULL, NULL);
+        if (ntemp2x) clEnqueueReadBuffer(g_clQueue, normalSrc, CL_TRUE, 0, atlasBytes, ntemp2x, 0, NULL, NULL);
         clEnqueueReadBuffer(g_clQueue, s->maskBuf, CL_TRUE, 0, maskBytes, mask2x, 0, NULL, NULL);
 
         int scale = s->upscale;
@@ -272,28 +288,46 @@ void GpuLightmapState_Download(void) {
                     if (lightAlphaMask[p1] == 0) continue;
 
                     int p2 = (m * H2 + y * scale) * W2 + x * scale;
-                    float sum[3] = {0,0,0}, sumW = 0.0f;
-                    
+                    float sum[3] = {0,0,0};
+                    float dsum[3] = {0,0,0};
+                    float nsum[3] = {0,0,0};
+                    float sumW = 0.0f;
+
                     for (int dy = 0; dy < scale; dy++) {
                         for (int dx = 0; dx < scale; dx++) {
                             int pa = p2 + dy * W2 + dx;
                             if (mask2x[pa] != 0) {
                                 float *smp = &temp2x[pa * 3];
                                 sum[0] += smp[0]; sum[1] += smp[1]; sum[2] += smp[2];
+                                if (dtemp2x) { dsum[0]+=dtemp2x[pa*3]; dsum[1]+=dtemp2x[pa*3+1]; dsum[2]+=dtemp2x[pa*3+2]; }
+                                if (ntemp2x) { nsum[0]+=ntemp2x[pa*3]; nsum[1]+=ntemp2x[pa*3+1]; nsum[2]+=ntemp2x[pa*3+2]; }
                                 sumW += 1.0f;
                             }
                         }
                     }
-                    
+
                     if (sumW > 0.01f) {
-                        lightFloats[p1 * 3 + 0] = sum[0] / sumW;
-                        lightFloats[p1 * 3 + 1] = sum[1] / sumW;
-                        lightFloats[p1 * 3 + 2] = sum[2] / sumW;
+                        float invW = 1.0f / sumW;
+                        lightFloats[p1*3+0] = sum[0]*invW;
+                        lightFloats[p1*3+1] = sum[1]*invW;
+                        lightFloats[p1*3+2] = sum[2]*invW;
+                        if (dtemp2x && deluxeFloats) {
+                            float dx = dsum[0]*invW, dy = dsum[1]*invW, dz = dsum[2]*invW;
+                            float dlen = sqrtf(dx*dx+dy*dy+dz*dz);
+                            if (dlen > 0.001f) { deluxeFloats[p1*3+0]=dx/dlen; deluxeFloats[p1*3+1]=dy/dlen; deluxeFloats[p1*3+2]=dz/dlen; }
+                        }
+                        if (ntemp2x && normalFloats) {
+                            float nx = nsum[0]*invW, ny = nsum[1]*invW, nz = nsum[2]*invW;
+                            float nlen = sqrtf(nx*nx+ny*ny+nz*nz);
+                            if (nlen > 0.001f) { normalFloats[p1*3+0]=nx/nlen; normalFloats[p1*3+1]=ny/nlen; normalFloats[p1*3+2]=nz/nlen; }
+                        }
                     }
                 }
             }
         }
         free(temp2x);
+        if (dtemp2x) free(dtemp2x);
+        if (ntemp2x) free(ntemp2x);
         free(mask2x);
     }
 }

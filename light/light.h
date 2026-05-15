@@ -74,6 +74,14 @@ typedef struct
 	cl_mem atlasA;
 	cl_mem atlasB;
 
+	/* Ping-pong deluxe direction buffers (float RGB, same layout) */
+	cl_mem deluxeA;
+	cl_mem deluxeB;
+
+	/* Ping-pong surface normal buffers (float RGB, same layout)   */
+	cl_mem normalA;
+	cl_mem normalB;
+
 	/* Alpha validity mask (uchar, 0 = invalid texel)              */
 	cl_mem maskBuf;
 

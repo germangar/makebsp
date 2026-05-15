@@ -39,6 +39,7 @@ extern drawVert32_t *internalDrawVerts;
 extern float *lightFloats;
 extern float *deluxeFloats;
 extern float *energyFloats;
+extern float *normalFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
 extern byte *lightAlphaMask;

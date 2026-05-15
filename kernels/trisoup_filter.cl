@@ -104,7 +104,11 @@ __kernel void trisoup_filter(
     float twoSigmaSq,
     float angleMatchCos,
     int   numSamples,
-    int   N)
+    int   N,
+    __global const float *texelDir,
+    __global       float *outputDir,
+    __global const float *texelNrm,
+    __global       float *outputNrm)
 {
     int tid = get_global_id(0);
     if (tid >= N) return;
@@ -113,7 +117,9 @@ __kernel void trisoup_filter(
     int gStride2 = gridDimZ;
 
     float finalR = 0.0f, finalG = 0.0f, finalB = 0.0f;
-    float finalWeight = 0.0f;
+    float finalDx = 0.0f, finalDy = 0.0f, finalDz = 0.0f;
+    float finalNx = 0.0f, finalNy = 0.0f, finalNz = 0.0f;
+    float finalWeight = 0.0f, finalDWeight = 0.0f;
 
     for (int k = 0; k < numSamples; k++) {
         int sIdx = tid * numSamples + k;
@@ -131,7 +137,9 @@ __kernel void trisoup_filter(
         int vz = (int)((oz - gridMinZ) / voxelSize);
 
         float totalR = 0.0f, totalG = 0.0f, totalB = 0.0f;
-        float totalWeight = 0.0f;
+        float totalDx = 0.0f, totalDy = 0.0f, totalDz = 0.0f;
+        float totalNx = 0.0f, totalNy = 0.0f, totalNz = 0.0f;
+        float totalWeight = 0.0f, totalDWeight = 0.0f;
 
         for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
@@ -165,11 +173,30 @@ __kernel void trisoup_filter(
                 
                 // DENSITY NORMALIZATION
                 float w_norm = w / density[other];
+                
+                float cR = texelColor[other * 3 + 0];
+                float cG = texelColor[other * 3 + 1];
+                float cB = texelColor[other * 3 + 2];
 
-                totalR += texelColor[other * 3 + 0] * w_norm;
-                totalG += texelColor[other * 3 + 1] * w_norm;
-                totalB += texelColor[other * 3 + 2] * w_norm;
+                totalR += cR * w_norm;
+                totalG += cG * w_norm;
+                totalB += cB * w_norm;
                 totalWeight += w_norm;
+                
+                float lum = 0.2126f * cR + 0.7152f * cG + 0.0722f * cB;
+                float dw = w_norm * lum;
+                
+                if (texelDir) {
+                    totalDx += texelDir[other * 3 + 0] * dw;
+                    totalDy += texelDir[other * 3 + 1] * dw;
+                    totalDz += texelDir[other * 3 + 2] * dw;
+                }
+                if (texelNrm) {
+                    totalNx += texelNrm[other * 3 + 0] * dw;
+                    totalNy += texelNrm[other * 3 + 1] * dw;
+                    totalNz += texelNrm[other * 3 + 2] * dw;
+                }
+                totalDWeight += dw;
             }
         }}}
 
@@ -178,6 +205,22 @@ __kernel void trisoup_filter(
             finalG += totalG / totalWeight;
             finalB += totalB / totalWeight;
             finalWeight += 1.0f;
+            
+            if (texelDir) {
+                if (totalDWeight > 0.0001f) {
+                    float len = sqrt(totalDx*totalDx + totalDy*totalDy + totalDz*totalDz);
+                    if (len > 0.001f) { finalDx += totalDx/len; finalDy += totalDy/len; finalDz += totalDz/len; }
+                    else { finalDx += texelDir[tid * 3 + 0]; finalDy += texelDir[tid * 3 + 1]; finalDz += texelDir[tid * 3 + 2]; }
+                }
+            }
+            if (texelNrm) {
+                if (totalDWeight > 0.0001f) {
+                    float len = sqrt(totalNx*totalNx + totalNy*totalNy + totalNz*totalNz);
+                    if (len > 0.001f) { finalNx += totalNx/len; finalNy += totalNy/len; finalNz += totalNz/len; }
+                    else { finalNx += texelNrm[tid * 3 + 0]; finalNy += texelNrm[tid * 3 + 1]; finalNz += texelNrm[tid * 3 + 2]; }
+                }
+            }
+            finalDWeight += 1.0f;
         }
     }
 
@@ -186,5 +229,26 @@ __kernel void trisoup_filter(
         output[atlasIdx + 0] = finalR / finalWeight;
         output[atlasIdx + 1] = finalG / finalWeight;
         output[atlasIdx + 2] = finalB / finalWeight;
+        
+        if (texelDir && outputDir) {
+            if (finalDWeight > 0.0001f) {
+                float len = sqrt(finalDx*finalDx + finalDy*finalDy + finalDz*finalDz);
+                if (len > 0.001f) {
+                    outputDir[atlasIdx + 0] = finalDx / len;
+                    outputDir[atlasIdx + 1] = finalDy / len;
+                    outputDir[atlasIdx + 2] = finalDz / len;
+                }
+            }
+        }
+        if (texelNrm && outputNrm) {
+            if (finalDWeight > 0.0001f) {
+                float len = sqrt(finalNx*finalNx + finalNy*finalNy + finalNz*finalNz);
+                if (len > 0.001f) {
+                    outputNrm[atlasIdx + 0] = finalNx / len;
+                    outputNrm[atlasIdx + 1] = finalNy / len;
+                    outputNrm[atlasIdx + 2] = finalNz / len;
+                }
+            }
+        }
     }
 }
