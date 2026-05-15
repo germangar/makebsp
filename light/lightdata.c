@@ -12,6 +12,7 @@
 drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
 float *deluxeFloats = NULL;
+float *energyFloats = NULL;
 int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
@@ -36,6 +37,9 @@ static void DilateLightmapAtlas(int width, int passes)
     int numLMs = (numLightBytes / 3) / (width * width);
     float *temp = malloc(numLightBytes * sizeof(float));
     byte *tempMask = malloc(numLMs * width * width);
+    float *tempDeluxe = NULL;
+    if (deluxeFloats)
+        tempDeluxe = malloc(numLightBytes * sizeof(float));
 
     _printf("Dilating lightmaps (%d passes)...\n", passes);
 
@@ -43,6 +47,8 @@ static void DilateLightmapAtlas(int width, int passes)
     {
         memcpy(temp, lightFloats, numLightBytes * sizeof(float));
         memcpy(tempMask, lightAlphaMask, numLMs * width * width);
+        if (deluxeFloats)
+            memcpy(tempDeluxe, deluxeFloats, numLightBytes * sizeof(float));
 
         for (s = 0; s < numDrawSurfaces; s++)
         {
@@ -84,6 +90,8 @@ static void DilateLightmapAtlas(int width, int passes)
 
                     float sum[3] = {0, 0, 0}, weight = 0;
                     float litSum[3] = {0, 0, 0}, litWeight = 0;
+                    float deluxeSum[3] = {0, 0, 0};
+                    float deluxeLitSum[3] = {0, 0, 0};
 
                     for (j = -1; j <= 1; j++)
                     {
@@ -103,9 +111,11 @@ static void DilateLightmapAtlas(int width, int passes)
                                     if (nEnergy > 0.0001f)
                                     {
                                         VectorAdd(litSum, &temp[nidx * 3], litSum);
+                                        if (tempDeluxe) VectorAdd(deluxeLitSum, &tempDeluxe[nidx * 3], deluxeLitSum);
                                         litWeight += 1.0f;
                                     }
                                     VectorAdd(sum, &temp[nidx * 3], sum);
+                                    if (tempDeluxe) VectorAdd(deluxeSum, &tempDeluxe[nidx * 3], deluxeSum);
                                     weight += 1.0f;
                                 }
                             }
@@ -115,11 +125,25 @@ static void DilateLightmapAtlas(int width, int passes)
                     {
                         VectorScale(litSum, 1.0f / litWeight, &lightFloats[idx * 3]);
                         lightAlphaMask[idx] = 1;
+                        if (deluxeFloats)
+                        {
+                            vec3_t avgDir;
+                            VectorScale(deluxeLitSum, 1.0f / litWeight, avgDir);
+                            if (VectorNormalize(avgDir, avgDir) > 0)
+                                VectorCopy(avgDir, &deluxeFloats[idx * 3]);
+                        }
                     }
                     else if (weight > 0)
                     {
                         VectorScale(sum, 1.0f / weight, &lightFloats[idx * 3]);
                         lightAlphaMask[idx] = 1;
+                        if (deluxeFloats)
+                        {
+                            vec3_t avgDir;
+                            VectorScale(deluxeSum, 1.0f / weight, avgDir);
+                            if (VectorNormalize(avgDir, avgDir) > 0)
+                                VectorCopy(avgDir, &deluxeFloats[idx * 3]);
+                        }
                     }
                 }
             }
@@ -127,6 +151,8 @@ static void DilateLightmapAtlas(int width, int passes)
     }
     free(temp);
     free(tempMask);
+    if (tempDeluxe)
+        free(tempDeluxe);
 }
 
 static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, int oldW, float *newFloats, byte *newMask, int newW)
@@ -493,6 +519,13 @@ static void UpConvertLightmaps(void)
             Error("UpConvert: malloc lightSurfaceIndex failed");
         for (int i = 0; i < numLightBytes / 3; i++)
             lightSurfaceIndex[i] = -1;
+
+        if (energyFloats)
+            free(energyFloats);
+        energyFloats = malloc(numLightBytes * sizeof(float));
+        if (!energyFloats)
+            Error("UpConvert: malloc energyFloats failed");
+        memset(energyFloats, 0, numLightBytes * sizeof(float));
     }
 }
 
@@ -752,6 +785,11 @@ void FreeRadiosityFloats(void)
     {
         free(lightSurfaceIndex);
         lightSurfaceIndex = NULL;
+    }
+    if (energyFloats)
+    {
+        free(energyFloats);
+        energyFloats = NULL;
     }
 }
 

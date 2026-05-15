@@ -508,7 +508,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         VectorScale(em->color, formFactorBase, cont.irradiance);
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, &cont, dstNormal);
+                        AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
                     }
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
@@ -571,7 +571,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         VectorScale(em->color, formFactorBase, cont.irradiance);
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, &cont, dstNormal);
+                        AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
                     }
                 }
 

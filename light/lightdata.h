@@ -38,6 +38,7 @@ typedef struct {
 extern drawVert32_t *internalDrawVerts;
 extern float *lightFloats;
 extern float *deluxeFloats;
+extern float *energyFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
 extern byte *lightAlphaMask;
@@ -51,7 +52,7 @@ typedef struct {
 // Voxel Cache Service
 void VoxelCache_BakeAll(void);
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints);
-void AccumulateContribution(vec3_t color, const contribution_t *cont, const vec3_t normal);
+void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal);
 extern bspGridPoint32_t *gridData32;
 
 extern float maxLightIntensity;
