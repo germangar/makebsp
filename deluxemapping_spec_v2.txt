@@ -151,3 +151,7 @@ When radiosity is re-enabled, the `cosDst` (receiver cosine) term in the radiosi
 Currently out of scope (V2 focuses on front-facing lights only). When re-enabled:
 - **General Softbias (Method 1):** Reflect the light direction across the tangent plane if it is behind the surface.
 - **Surface Light Glow (Method 3):** For "glow" emitters (lava, slime), blend the direction toward the Surface Normal as it moves from 90° to 180° behind the surface. Add an `isGlow` flag to `contribution_t` to signal the accumulator to skip vector blending and default to the Normal.
+
+### A.4 Luminance Weighting Correction
+**Discovery during Phase 1:** During initial testing of the V2 vector blending (Step 2), it was discovered that blending opposing light vectors using the accumulated *stored* color (`radiance / w`) vs the raw incoming `Irradiance` (lacking the angle factor) resulted in incorrect weighting.
+**The Fix:** Directional blending weights must be calculated from the true physical radiance space, using the `currentRadiance` and `addedRadiance` arrays computed in Step 1. This guarantees that the final blended direction is accurately weighted by the true mathematical fraction of physical energy each light contributes to the texel.

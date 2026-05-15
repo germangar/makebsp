@@ -594,8 +594,8 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
     }
 
     // Step 2: Vector Blending (Luminance-weighted)
-    float lumCurrent = color[0] * 0.299f + color[1] * 0.587f + color[2] * 0.114f;
-    float lumAdded = I[0] * 0.299f + I[1] * 0.587f + I[2] * 0.114f;
+    float lumCurrent = currentRadiance[0] * 0.299f + currentRadiance[1] * 0.587f + currentRadiance[2] * 0.114f;
+    float lumAdded = addedRadiance[0] * 0.299f + addedRadiance[1] * 0.587f + addedRadiance[2] * 0.114f;
 
     vec3_t vNew;
     if (cont->isGlow)
