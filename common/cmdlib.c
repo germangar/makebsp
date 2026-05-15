@@ -1219,3 +1219,80 @@ void Sys_ListFiles(const char *directory, const char *extension,
     closedir(dir);
 #endif
 }
+
+/*
+================
+ParseColor
+
+Parses a color string into a vec3_t.
+Supports hex colors starting with '#' (e.g., "#FFFFFF")
+and RGB colors in "R G B" format (0.0-1.0 or 0-255 scale).
+Defaults to white (1, 1, 1) on invalid input.
+================
+*/
+void ParseColor(const char *str, vec3_t color)
+{
+    int r, g, b;
+    float fr, fg, fb;
+    qboolean forceNormalize = qfalse;
+
+    if (!str || !str[0])
+    {
+        VectorSet(color, 1.0f, 1.0f, 1.0f);
+        return;
+    }
+
+    // Hex color: #RRGGBB
+    if (str[0] == '#')
+    {
+        if (sscanf(str + 1, "%02x%02x%02x", &r, &g, &b) == 3)
+        {
+            fr = (float)r;
+            fg = (float)g;
+            fb = (float)b;
+            forceNormalize = qtrue;
+        }
+        else
+        {
+            VectorSet(color, 1.0f, 1.0f, 1.0f);
+            return;
+        }
+    }
+    else
+    {
+        // RGB color: "R G B"
+        if (sscanf(str, "%f %f %f", &fr, &fg, &fb) != 3)
+        {
+            VectorSet(color, 1.0f, 1.0f, 1.0f);
+            return;
+        }
+    }
+
+    // If any component is > 1.0001, or if it was a hex color, assume 0-255 scale and normalize
+    if (forceNormalize || fr > 1.0001f || fg > 1.0001f || fb > 1.0001f)
+    {
+        if (fr < 0.0f) fr = 0.0f; else if (fr > 255.0f) fr = 255.0f;
+        if (fg < 0.0f) fg = 0.0f; else if (fg > 255.0f) fg = 255.0f;
+        if (fb < 0.0f) fb = 0.0f; else if (fb > 255.0f) fb = 255.0f;
+
+        color[0] = fr / 255.0f;
+        color[1] = fg / 255.0f;
+        color[2] = fb / 255.0f;
+    }
+    else
+    {
+        // Otherwise assume 0-1 scale and just copy
+        color[0] = fr;
+        color[1] = fg;
+        color[2] = fb;
+    }
+
+    // Clamp channels to [0.0, 1.0] to handle edge cases or overflow
+    for (int i = 0; i < 3; i++)
+    {
+        if (color[i] < 0.0f)
+            color[i] = 0.0f;
+        else if (color[i] > 1.0f)
+            color[i] = 1.0f;
+    }
+}

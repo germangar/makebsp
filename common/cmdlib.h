@@ -50,6 +50,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 #include "qtypes.h"
+#include "mathlib.h"
 
 #define MAX_OS_PATH 1024
 #define MEM_BLOCKSIZE 4096
@@ -109,6 +110,7 @@ void ExtractFileBase(const char *path, char *dest);
 void ExtractFileExtension(const char *path, char *dest);
 
 int ParseNum(const char *str);
+void ParseColor(const char *str, vec3_t color);
 
 short BigShort(short l);
 short LittleShort(short l);
