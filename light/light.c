@@ -322,39 +322,9 @@ void CreateSurfaceLights(void)
 
         c_lightSurfaces++;
 
-        // an autosprite shader will become
-        // a point light instead of an area light
+        // an autosprite shader will not create any lights
         if (ls->autosprite)
         {
-            if (ds->numVerts == 4)
-            {
-                dv = &drawVerts[ds->firstVert];
-                VectorAdd(dv[0].xyz, dv[1].xyz, origin);
-                VectorAdd(dv[2].xyz, origin, origin);
-                VectorAdd(dv[3].xyz, origin, origin);
-                VectorScale(origin, 0.25, origin);
-            }
-            else
-            {
-                _printf("WARNING: surface at (%i %i %i) has autosprite shader but %i "
-                        "verts\n",
-                        (int)drawVerts[ds->firstVert].xyz[0],
-                        (int)drawVerts[ds->firstVert].xyz[1],
-                        (int)drawVerts[ds->firstVert].xyz[2],
-                        ds->numVerts);
-                continue;
-            }
-
-            numPointLights++;
-            dl = malloc(sizeof(*dl));
-            memset(dl, 0, sizeof(*dl));
-            dl->next = lights;
-            lights = dl;
-
-            VectorCopy(origin, dl->origin);
-            VectorCopy(ls->color, dl->color);
-            dl->photons = ls->value * pointScale;
-            dl->type = emit_point;
             continue;
         }
 

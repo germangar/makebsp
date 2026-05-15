@@ -1128,6 +1128,11 @@ void ProcessFuncLight(entity_t *ent)
 {
     bspbrush_t *b;
     int s;
+    const char *type = ValueForKey(ent, "type");
+    qboolean isPoint = qfalse;
+
+    if (!strcmp(type, "point") || !strcmp(type, "pointlight"))
+        isPoint = qtrue;
 
     for (b = ent->brushes; b; b = b->next)
     {
@@ -1139,10 +1144,8 @@ void ProcessFuncLight(entity_t *ent)
             if (!side->shaderInfo)
                 continue;
 
-            // Visibility filter: skip nodraw, sky, and translucent surfaces
+            // Visibility filter: skip nodraw and sky surfaces
             if (side->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY))
-                continue;
-            if (side->shaderInfo->contents & CONTENTS_TRANSLUCENT)
                 continue;
 
             // Calculate center of the face
@@ -1162,8 +1165,14 @@ void ProcessFuncLight(entity_t *ent)
             float nudge = FloatForKey(ent, "_nudge");
             if (!nudge)
                 nudge = FloatForKey(ent, "nudge");
+
             if (!nudge && !ValueForKey(ent, "_nudge")[0] && !ValueForKey(ent, "nudge")[0])
-                nudge = 1.0f; // Default
+            {
+                if (isPoint)
+                    nudge = 0.01f;
+                else
+                    nudge = 1.0f;
+            }
 
             vec3_t lightOrigin;
             VectorMA(center, nudge, normal, lightOrigin);
@@ -1179,8 +1188,13 @@ void ProcessFuncLight(entity_t *ent)
             char buf[128];
             sprintf(buf, "%f %f %f", lightOrigin[0], lightOrigin[1], lightOrigin[2]);
             SetKeyValue(le, "origin", buf);
-            sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
-            SetKeyValue(le, "_dir", buf);
+
+            // Spotlights get a direction, point lights don't
+            if (!isPoint)
+            {
+                sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
+                SetKeyValue(le, "_dir", buf);
+            }
 
             // Inherit all other keys (color, light, radius, etc) from the func_light
             for (epair_t *ep = ent->epairs; ep; ep = ep->next)
