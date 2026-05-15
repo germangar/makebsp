@@ -1,0 +1,153 @@
+# Technical Specification: Deluxe Mapping V2 (Iterative Approach)
+# Document Type: Implementation Scheme
+# Project: makebsp (Modernized BSP Toolchain)
+
+## 1. Core Philosophy & Goals
+The previous implementation used 6 buffers and suffered from "light rims" (bloom artifacts) caused by delayed resolution of opposing lights. When opposing lights canceled out the lateral direction, the falloff cosine changed, causing the stored irradiance to explode to compensate.
+
+**V2 Goals:**
+1. **Reduce Memory Footprint**: Consolidate from 6 buffers down to a maximum of 3.
+2. **Iterative Resolution**: Resolve the vector math *during* accumulation for each light, rather than waiting for a final pass.
+3. **Prevent Bloom (Rims)**: Actively monitor how the direction vector affects the in-game angle falloff, and adjust the vector or color on-the-fly to prevent explosive values that cause interpolation artifacts.
+4. **Scope**: Focused exclusively on front-facing light contributions (ignoring backface/softbias complexities for now).
+
+---
+
+## 2. Phase 0: Pre-Implementation Refactoring
+Before implementing any deluxe mapping math, the basic lighting pipeline must be cleanly decoupled so that `AccumulateContribution` receives pure, unscaled energy data.
+
+**The Issue**: Currently, `LightContributionToPoint` and `SunToPlane` calculate the angle falloff (cosine) and immediately bake it into the final output color, permanently destroying the raw Irradiance value before it reaches the accumulator.
+
+**The Refactor**:
+1. Update `contribution_t` (in `lightdata.h`) to separate the raw energy from the angle falloff:
+```c
+typedef struct {
+  vec3_t dir;
+  vec3_t irradiance; // The pure energy (distance-attenuated, shadow-filtered, but NO cosine angle falloff)
+  float angle;       // The receiver cosine falloff (dot(N, L))
+} contribution_t;
+```
+2. Update `LightContributionToPoint` and `SunToPlane` to populate `out->irradiance` and `out->angle` independently, instead of pre-multiplying them into a single `color` vector.
+3. Update standard lighting in `AccumulateContribution` to perform the multiplication natively: `color[i] += cont->irradiance[i] * cont->angle;`
+
+This single refactoring step ensures the deluxe math has perfect, isolated access to the $I$ and $angle$ variables without any complex `if (deluxe)` tracking upstream.
+
+---
+
+## 3. Buffer Architecture (3 Arrays)
+We will maintain only 3 high-precision float32 arrays during the lighting pass:
+
+1. `lightFloats[3]` (RGB): The running **Baked Color**. This is the value that will actually go into the lightmap texture.
+2. `deluxeFloats[3]` (XYZ): The running **Dominant Direction** (normalized).
+3. `energyFloats[3]` (RGB): The running **Scalar Energy** ($E$). The pure sum of irradiance, used exclusively as a physical ceiling/sanity check.
+
+---
+
+## 3. Iterative Contribution Scheme
+
+### Initialization (Zero-State)
+Before any lights hit a texel, its state must be explicitly initialized to prevent division-by-zero or NaNs during the first contribution:
+*   `Color = (0, 0, 0)`
+*   `Dir = Normal` (The geometric/vertex normal of the surface)
+*   `Energy = (0, 0, 0)`
+
+For a texel with Normal $N$, current state `(Color, Dir, Energy)`, and an incoming light with Irradiance $I$ and Direction $L$:
+
+### Step 1: Calculate Target Radiance
+We determine exactly how much actual illumination (Radiance) the texel should exhibit in-game after this light is added.
+*   `CurrentRadiance = Color * max(0.01, dot(N, Dir))`
+*   `AddedRadiance = I * max(0, dot(N, L))`
+*   `TargetRadiance = CurrentRadiance + AddedRadiance`
+
+### Step 2: Vector Subtraction Check & Blending
+Because `Color` and `I` are RGB vectors, but `Dir` and `L` are single XYZ spatial vectors, we must use **Luminance** (grayscale intensity) to weight the directional pull.
+*   `Weight_current = Luminance(Color)` (e.g., $R \times 0.299 + G \times 0.587 + B \times 0.114$)
+*   `Weight_added = Luminance(I)`
+*   **Vector Sum**: `V_new = (Weight_current * Dir) + (Weight_added * L)`
+*   *Analysis*: If `dot(Dir, L) < 0`, the lights are opposing. The length of `V_new` will shrink compared to the total scalar energy.
+*   **Tentative Direction**: `Dir_new = normalize(V_new)`
+
+### Step 3: In-Game Falloff Verification
+We must verify if our new direction `Dir_new` will produce the correct angle falloff in-game without requiring a massive, bloom-causing color value.
+
+Because we have **one direction but three color channels**, the comparison is made using **Luminance** to produce a single scalar decision — consistent with how the direction blend was weighted in Step 2.
+*   Calculate the new in-game falloff: `w = dot(N, Dir_new)`
+*   `LumTarget = Luminance(TargetRadiance)`
+*   `LumEnergy_new = Luminance(Energy + I)`
+*   The cap is violated if `LumTarget / max(0.01, w) > LumEnergy_new`
+*   Update Energy: `Energy_new = Energy + I`
+
+### Step 4: Adjustment & Correction (Bending Algorithm)
+If the cap is violated, `Dir_new` is too tangential for the accumulated energy. We must bend it toward the Normal to increase `w` until the cap is satisfied.
+
+**Target cosine**: We need `w_needed = LumTarget / LumEnergy_new`. As long as `w_needed <= 1.0`, a valid corrected direction exists.
+
+**Bending via Binary Search** (simple, ~8 iterations):
+```
+t_lo = 0.0,  t_hi = 1.0
+Repeat 8 times:
+    t_mid = (t_lo + t_hi) / 2
+    Dir_candidate = normalize(lerp(Dir_new, N, t_mid))
+    w_candidate   = dot(N, Dir_candidate)
+    if w_candidate < w_needed: t_lo = t_mid
+    else:                       t_hi = t_mid
+Dir_new = normalize(lerp(Dir_new, N, t_hi))
+w = dot(N, Dir_new)
+```
+*Note: as `t` goes from 0 → 1, `w` moves monotonically from its original value → 1.0, so binary search always converges.*
+
+With the corrected `Dir_new` and `w`, recalculate the final baked color per channel:
+*   `RequiredColor = TargetRadiance / max(w, 0.01)` (per RGB channel, using the corrected `w`)
+
+### Step 5: Commit Contribution
+Once the direction is verified and (if necessary) corrected, we commit the new state:
+*   `Color = RequiredColor`
+*   `Dir = Dir_new`
+*   `Energy = Energy_new`
+
+---
+
+## 5. Architectural Isolation & Code Integrity
+A critical requirement for V2 is minimizing the spread of `if (deluxe)` conditionals throughout the codebase. The standard lighting pipeline (calculating raw light contribution and falloff) must remain pure and untouched.
+
+**Centralized Accumulation:**
+*   All of the vector blending, falloff verification, and color adjustments described above must happen **inside** the `AccumulateContribution` function.
+*   To facilitate this, the `contribution_t` structure (or the function signature of `AccumulateContribution`) will be slightly expanded to pass the necessary read-only data (e.g., `dir` and raw `irradiance` / angle) into the accumulator.
+*   `LightContributionToPoint` and `SunToPoint` will simply populate this structure and pass it along, remaining ignorant of deluxe mapping logic.
+
+By isolating the logic inside the accumulator, we preserve the integrity of the basic lighting code while gaining the advanced iterative deluxe resolution.
+
+---
+
+## 6. Why This Solves the Rim Artifact
+In V1, two grazing lights would sum to a tiny radiance, but their tangential directions would result in an extremely grazing dominant direction. The math would then store the maximum possible energy in the texel. When bilinearly filtered by the GPU next to a normal texel, this massive energy would bleed over and multiply with a less-grazing normal, causing a bright rim.
+
+(Note: The separate shadow direction-filling pass from V1 was successful in preventing bilinear rims specifically around shadow edges and will be retained as-is).
+
+In V2, by calculating the `RequiredColor` iteratively and forcing it to stay below the physical `Energy` ceiling (by bending the vector towards the normal), we guarantee that no texel will ever store an artificially inflated color value. The color map stays smooth, and the GPU filtering behaves predictably.
+
+---
+
+## Appendix A: Post-Implementation Improvements
+Items deferred from V2 scope. To be considered once direct lighting is stable and artifact-free.
+
+### A.1 Per-Channel Energy Cap (Upgrade to Luminance Cap)
+**Current V2 approach:** The bending correction uses a single Luminance comparison (`LumTarget / LumEnergy`) to decide how much to bend the direction vector.
+
+**The Edge Case:** With two opposing, fully-saturated complementary colored lights (e.g., a strong Red light from one side and a strong Cyan light from the other), each individual channel may independently exceed its energy cap even when the total luminance is balanced. The Luminance cap will miss this, and a faint colored halo could appear.
+
+**The Upgrade:** Replace `w_needed = LumTarget / LumEnergy` with:
+```
+w_needed = max( R_target/R_energy, G_target/G_energy, B_target/B_energy )
+```
+This guarantees no individual channel ever exceeds its physical energy cap.
+
+**Why deferred:** Exotic scenario unlikely to appear in real maps. Luminance is consistent with the Step 2 weighting model. Upgrade only if colored halos are observed during testing.
+
+### A.2 Radiosity Integration
+When radiosity is re-enabled, the `cosDst` (receiver cosine) term in the radiosity integration phase must be stripped out, mirroring the Phase 0 refactoring done for direct lights. Bounced light must also be stored as Irradiance to avoid the double-dipping problem on deluxe-mapped surfaces.
+
+### A.3 Backface / Softbias Directions
+Currently out of scope (V2 focuses on front-facing lights only). When re-enabled:
+- **General Softbias (Method 1):** Reflect the light direction across the tangent plane if it is behind the surface.
+- **Surface Light Glow (Method 3):** For "glow" emitters (lava, slime), blend the direction toward the Surface Normal as it moves from 90° to 180° behind the surface. Add an `isGlow` flag to `contribution_t` to signal the accumulator to skip vector blending and default to the Normal.
