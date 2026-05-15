@@ -105,7 +105,7 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             if (!colorStr[0])
                 colorStr = ValueForKey(e, "color");
             if (colorStr[0])
-                sscanf(colorStr, "%f %f %f", &ds->lightColor[0], &ds->lightColor[1], &ds->lightColor[2]);
+                ParseColor(colorStr, ds->lightColor);
 
             const char *bsStr = ValueForKey(e, "backsplash");
             if (bsStr[0])

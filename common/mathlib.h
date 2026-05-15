@@ -114,7 +114,7 @@ void VectorMA(const vec3_t va, double scale, const vec3_t vb, vec3_t vc);
 
 void CrossProduct(const vec3_t v1, const vec3_t v2, vec3_t cross);
 vec_t VectorNormalize(const vec3_t in, vec3_t out);
-vec_t ColorNormalize(const vec3_t in, vec3_t out);
+
 void VectorInverse(vec3_t v);
 
 void ClearBounds(vec3_t mins, vec3_t maxs);

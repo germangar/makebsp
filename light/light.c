@@ -556,12 +556,11 @@ void CreateEntityLights(void)
             _color = ValueForKey(e, "_color");
             if (_color && _color[0])
             {
-                sscanf(_color, "%f %f %f", &sunLight[0], &sunLight[1], &sunLight[2]);
+                ParseColor(_color, sunLight);
 
-                // If the mapper provided a separate 'light' key, we treat _color as a normalized multiplier
+                // If the mapper provided a separate 'light' key, we treat sunLight as a normalized multiplier
                 if (intensity > 0)
                 {
-                    ColorNormalize(sunLight, sunLight);
                     VectorScale(sunLight, intensity, sunLight);
                 }
             }
@@ -604,8 +603,7 @@ void CreateEntityLights(void)
         _color = ValueForKey(e, "_color");
         if (_color && _color[0])
         {
-            sscanf(_color, "%f %f %f", &dl->color[0], &dl->color[1], &dl->color[2]);
-            ColorNormalize(dl->color, dl->color);
+            ParseColor(_color, dl->color);
         }
         else
         {
@@ -616,8 +614,7 @@ void CreateEntityLights(void)
                 shaderInfo_t *si = ShaderInfoForShader(lightimage);
                 if (si)
                 {
-                    VectorCopy(si->averageColor, dl->color);
-                    ColorNormalize(dl->color, dl->color);
+                    VectorScale(si->averageColor, 1.0f / 255.0f, dl->color);
                 }
                 else
                 {
@@ -1194,7 +1191,16 @@ void LightMain(void)
     _printf("--- LightMain ---\n");
 
     // find the optional world ambient
-    GetVectorForKey(&entities[0], "_color", ambientColor);
+    const char *_color = ValueForKey(&entities[0], "_color");
+    if (_color[0])
+    {
+        ParseColor(_color, ambientColor);
+    }
+    else
+    {
+        VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
+    }
+
     f = FloatForKey(&entities[0], "ambient");
     VectorScale(ambientColor, f, ambientColor);
 

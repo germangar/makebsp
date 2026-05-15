@@ -66,6 +66,7 @@ typedef struct shaderInfo_s
                                    // above exist
     vec3_t color;                  // colorNormalized
     vec3_t averageColor;
+    qboolean colorOverride;        // true if color was manually specified in shader
 
     int width, height;
     byte *pixels;

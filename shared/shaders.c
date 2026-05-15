@@ -234,8 +234,14 @@ loadTga:
         color[2] += si->pixels[i * 4 + 2];
         color[3] += si->pixels[i * 4 + 3];
     }
-    ColorNormalize(color, si->color);
     VectorScale(color, 1.0 / count, si->averageColor);
+    if (!si->colorOverride)
+    {
+        for (i = 0; i < 3; i++)
+        {
+            si->color[i] = si->averageColor[i] / 255.0f;
+        }
+    }
 }
 
 /*
@@ -271,6 +277,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
+    si->colorOverride = qfalse;
 
     return si;
 }
@@ -426,6 +433,36 @@ static void ParseShaderFile(const char *filename)
                 continue;
             }
 
+            // q3map_lightRGB <red> <green> <blue>
+            if (!Q_stricmp(token, "q3map_lightRGB") || !Q_stricmp(token, "q3map_lightColor"))
+            {
+                GetToken(qfalse);
+                if (token[0] == '#')
+                {
+                    ParseColor(token, si->color);
+                }
+                else
+                {
+                    float c[3];
+                    c[0] = atof(token);
+                    GetToken(qfalse);
+                    c[1] = atof(token);
+                    GetToken(qfalse);
+                    c[2] = atof(token);
+
+                    if (c[0] > 1.0001f || c[1] > 1.0001f || c[2] > 1.0001f)
+                    {
+                        VectorScale(c, 1.0f / 255.0f, si->color);
+                    }
+                    else
+                    {
+                        VectorCopy(c, si->color);
+                    }
+                }
+                si->colorOverride = qtrue;
+                continue;
+            }
+
             // q3map_surfacelight_glow <value>
             if (!Q_stricmp(token, "q3map_surfacelight_glow"))
             {
@@ -558,6 +595,12 @@ static void ParseShaderFile(const char *filename)
                 si->sunLight[1] = atof(token);
                 GetToken(qfalse);
                 si->sunLight[2] = atof(token);
+
+                // Detect if the color was provided in 0-255 scale
+                if (si->sunLight[0] > 1.0001f || si->sunLight[1] > 1.0001f || si->sunLight[2] > 1.0001f)
+                {
+                    VectorScale(si->sunLight, 1.0f / 255.0f, si->sunLight);
+                }
 
                 VectorNormalize(si->sunLight, si->sunLight);
 
