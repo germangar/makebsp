@@ -546,7 +546,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
                         VectorScale(em->color, formFactorBase, cont.irradiance);
-                        cont.angle = cosDst;
+                        cont.angle = game->deluxeMap ? 1.0f : cosDst;
                         cont.isGlow = qfalse;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }
@@ -616,7 +616,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
                         VectorScale(em->color, formFactorBase, cont.irradiance);
-                        cont.angle = cosDst;
+                        cont.angle = game->deluxeMap ? 1.0f : cosDst;
                         cont.isGlow = qfalse;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }

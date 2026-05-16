@@ -43,7 +43,7 @@ We will maintain only 3 high-precision float32 arrays during the lighting pass:
 
 ---
 
-## 3. Iterative Contribution Scheme
+## 4. Iterative Contribution Scheme
 
 ### Initialization (Zero-State)
 Before any lights hit a texel, its state must be explicitly initialized to prevent division-by-zero or NaNs during the first contribution:
@@ -94,7 +94,6 @@ Repeat 8 times:
 Dir_new = normalize(lerp(Dir_new, N, t_hi))
 w = dot(N, Dir_new)
 ```
-*Note: as `t` goes from 0 → 1, `w` moves monotonically from its original value → 1.0, so binary search always converges.*
 
 With the corrected `Dir_new` and `w`, recalculate the final baked color per channel:
 *   `RequiredColor = TargetRadiance / max(w, 0.01)` (per RGB channel, using the corrected `w`)
@@ -107,51 +106,95 @@ Once the direction is verified and (if necessary) corrected, we commit the new s
 
 ---
 
-## 5. Architectural Isolation & Code Integrity
-A critical requirement for V2 is minimizing the spread of `if (deluxe)` conditionals throughout the codebase. The standard lighting pipeline (calculating raw light contribution and falloff) must remain pure and untouched.
+## 5. Architectural Isolation (`MergeAccumulatedState`)
+A critical requirement for V2 is minimizing the spread of complex math throughout the codebase. 
 
-**Centralized Accumulation:**
-*   All of the vector blending, falloff verification, and color adjustments described above must happen **inside** the `AccumulateContribution` function.
-*   To facilitate this, the `contribution_t` structure (or the function signature of `AccumulateContribution`) will be slightly expanded to pass the necessary read-only data (e.g., `dir` and raw `irradiance` / angle) into the accumulator.
-*   `LightContributionToPoint` and `SunToPoint` will simply populate this structure and pass it along, remaining ignorant of deluxe mapping logic.
-
-By isolating the logic inside the accumulator, we preserve the integrity of the basic lighting code while gaining the advanced iterative deluxe resolution.
+**Centralized Merging:**
+All vector blending, falloff verification, and bending happens inside a dedicated `MergeAccumulatedState` function. Both `AccumulateContribution` (for direct lights) and `RadiosityMerge` (for indirect lights) call this exact same function, guaranteeing mathematical parity across all light sources.
 
 ---
 
-## 6. Why This Solves the Rim Artifact
-In V1, two grazing lights would sum to a tiny radiance, but their tangential directions would result in an extremely grazing dominant direction. The math would then store the maximum possible energy in the texel. When bilinearly filtered by the GPU next to a normal texel, this massive energy would bleed over and multiply with a less-grazing normal, causing a bright rim.
+## 6. Radiosity Integration
+To incorporate global illumination into the V2 architecture without introducing artifacts, the radiosity pipeline must handle high-precision direction and energy buffers identically to direct light.
 
-(Note: The separate shadow direction-filling pass from V1 was successful in preventing bilinear rims specifically around shadow edges and will be retained as-is).
+### 6.1 Buffer Plumping and State Tracking
+The 4-phase radiosity pipeline (Emit, Integrate, Voxelize, Reconstruct) tracks two new multi-pass accumulators:
+*   `accumRadiosityDeluxeSum[3]`: The luminance-weighted sum of direction vectors across all passes.
+*   `accumRadiosityEnergyFloats[3]`: The simple additive sum of physical energy across all passes.
+
+During integration, internal state variables (`accumDeluxe`, `accumEnergy`) are initialized per-texel (inside the sampling loop for TriSoup, before the loop for Planar) to `dstNormal` and `(0,0,0)` respectively, and passed to `AccumulateContribution`.
+
+### 6.2 Voxel Splatting (Phase 2.5)
+TriSoup indirect light is shared via a sparse 3D voxel grid. The data must survive spatial blending:
+*   **Energy**: Additive sum (`curr->energySum += incomingEnergy`).
+*   **Direction**: Luminance-weighted sum:
+    ```c
+    float lum = color[0]*0.299f + color[1]*0.587f + color[2]*0.114f;
+    curr->weightedDeluxeSum += lum * incomingDir;
+    ```
+*   **Reconstruction**: `VectorNormalize(weightedDeluxeSum)` recovers the average direction.
+
+### 6.3 Skipping Angular Falloff (Anti-Double-Lambert)
+In Deluxe mode, the receiver's geometric angular falloff (`cosDst`) is completely skipped during `RadiosityIntegrateOneSurface`. 
+*   **Standard Math**: `cont.angle = cosDst;`
+*   **Deluxe Math**: `cont.angle = 1.0f;`
+The energy is stored at full irradiance because the in-game rendering shader will apply the normal-mapped dot product later. This avoids "Double Lambert" attenuation and prevents bounced light from feeling unnaturally weak at grazing angles. Note: The geometric occlusion guard `if (cosDst <= 0.0f) continue;` remains strictly enforced to prevent light leaking through the back of surfaces.
+
+### 6.4 Single Attenuation Fix (Multi-Pass Stability)
+The system inherently stores attenuated bounce energy. A critical double-attenuation bug was fixed in `RadiosityEmit`:
+*   **Pass 1**: Emitters are built from raw `lightFloats`.
+    ```c
+    VectorScale(src, rad_bounce_scale, em->color);
+    em->color *= albedo;
+    ```
+*   **Pass 2+**: Emitters are built from `radiosityFloats` (which already underwent the Pass 1 attenuation).
+    ```c
+    VectorCopy(src, em->color); // Skipping bounce_scale and albedo multiplication
+    ```
+Without this bypass for passes >1, the bounce energy decays at an accelerated `(scale * albedo)^N` rate per pass, causing vectors to instantly vanish below the `MIN_DELUXE_ENERGY` stability thresholds.
+
+### 6.5 The Final Merge (Phase 4)
+The final pass blends the accumulated bounce data into the main lightmap using `MergeAccumulatedState`.
+*   The raw `radiosityFloats` serve as the `addColor` parameter.
+*   `accumRadiosityEnergyFloats` serves as the `addEnergy` parameter.
+*   The `radDir` is extracted via `VectorNormalize(accumRadiosityDeluxeSum)`. If this sum is degenerate (<0.0001f), the surface normal is passed instead.
+
+---
+
+## 7. Stability & Artifact Prevention (Post-Radiosity)
+
+### Global Dilation & Persistence Threshold
+Instead of dilating directions per-surface during the direct light pass, a global `DilateDeluxeDirections` pass occurs *after* radiosity integration but *before* 2D smoothing.
+*   This ensures shadowed texels inherit directions from the **combined light field** (Direct + Indirect), giving them the most physically accurate bounce direction.
+*   **Stability Threshold (`MIN_DELUXE_ENERGY = 0.001f`)**: Texels with a total energy below this threshold are considered "empty" and will inherit directions from brighter, stable neighbors. Furthermore, `MergeAccumulatedState` refuses to let incoming light shift a texel's direction if the combined energy is below this threshold. This prevents tiny, visually insignificant "jitter" rays from destroying high-quality dilated vectors.
+
+### Angle Floor (-deluxe_minangle)
+To prevent extreme specular streaks and bump-mapping artifacts, a configurable angle floor ensures light vectors never become completely parallel to the surface.
+*   Implemented as a compiler switch (`-deluxe_minangle <degrees>`, default 40º).
+*   During `MergeAccumulatedState`, if the vector's dot product falls below `sin(minAngle)`, the binary search forcefully bends the vector "up" toward the normal until it satisfies the minimum angle.
+*   Because V2 is Radiance-Preserving, this angle change does not alter the baked brightness; it only "stiffens" the specular/normal response for a cleaner, more stylized look.
+
+---
+
+## 8. Why This Solves the Rim Artifact
+In V1, two grazing lights would sum to a tiny radiance, but their tangential directions would result in an extremely grazing dominant direction. The math would then store the maximum possible energy in the texel. When bilinearly filtered by the GPU next to a normal texel, this massive energy would bleed over and multiply with a less-grazing normal, causing a bright rim.
 
 In V2, by calculating the `RequiredColor` iteratively and forcing it to stay below the physical `Energy` ceiling (by bending the vector towards the normal), we guarantee that no texel will ever store an artificially inflated color value. The color map stays smooth, and the GPU filtering behaves predictably.
 
 ---
 
 ## Appendix A: Post-Implementation Improvements
-Items deferred from V2 scope. To be considered once direct lighting is stable and artifact-free.
 
 ### A.1 Per-Channel Energy Cap (Upgrade to Luminance Cap)
 **Current V2 approach:** The bending correction uses a single Luminance comparison (`LumTarget / LumEnergy`) to decide how much to bend the direction vector.
+**The Edge Case:** With two opposing, fully-saturated complementary colored lights, each individual channel may independently exceed its energy cap even when the total luminance is balanced.
+**The Upgrade:** Replace `w_needed = LumTarget / LumEnergy` with `w_needed = max( R_target/R_energy, G_target/G_energy, B_target/B_energy )`.
 
-**The Edge Case:** With two opposing, fully-saturated complementary colored lights (e.g., a strong Red light from one side and a strong Cyan light from the other), each individual channel may independently exceed its energy cap even when the total luminance is balanced. The Luminance cap will miss this, and a faint colored halo could appear.
-
-**The Upgrade:** Replace `w_needed = LumTarget / LumEnergy` with:
-```
-w_needed = max( R_target/R_energy, G_target/G_energy, B_target/B_energy )
-```
-This guarantees no individual channel ever exceeds its physical energy cap.
-
-**Why deferred:** Exotic scenario unlikely to appear in real maps. Luminance is consistent with the Step 2 weighting model. Upgrade only if colored halos are observed during testing.
-
-### A.2 Radiosity Integration
-When radiosity is re-enabled, the `cosDst` (receiver cosine) term in the radiosity integration phase must be stripped out, mirroring the Phase 0 refactoring done for direct lights. Bounced light must also be stored as Irradiance to avoid the double-dipping problem on deluxe-mapped surfaces.
-
-### A.3 Backface / Softbias Directions
+### A.2 Backface / Softbias Directions
 Currently out of scope (V2 focuses on front-facing lights only). When re-enabled:
 - **General Softbias (Method 1):** Reflect the light direction across the tangent plane if it is behind the surface.
-- **Surface Light Glow (Method 3):** For "glow" emitters (lava, slime), blend the direction toward the Surface Normal as it moves from 90° to 180° behind the surface. Add an `isGlow` flag to `contribution_t` to signal the accumulator to skip vector blending and default to the Normal.
+- **Surface Light Glow (Method 3):** For "glow" emitters (lava, slime), blend the direction toward the Surface Normal as it moves from 90° to 180° behind the surface.
 
-### A.4 Luminance Weighting Correction
+### A.3 Luminance Weighting Correction
 **Discovery during Phase 1:** During initial testing of the V2 vector blending (Step 2), it was discovered that blending opposing light vectors using the accumulated *stored* color (`radiance / w`) vs the raw incoming `Irradiance` (lacking the angle factor) resulted in incorrect weighting.
-**The Fix:** Directional blending weights must be calculated from the true physical radiance space, using the `currentRadiance` and `addedRadiance` arrays computed in Step 1. This guarantees that the final blended direction is accurately weighted by the true mathematical fraction of physical energy each light contributes to the texel.
+**The Fix:** Directional blending weights must be calculated from the true physical radiance space. This guarantees that the final blended direction is accurately weighted by the true mathematical fraction of physical energy each light contributes to the texel.
