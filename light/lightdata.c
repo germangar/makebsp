@@ -17,6 +17,10 @@ float *normalFloats = NULL;
 int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
+float *radiosityDeluxeFloats = NULL;
+float *radiosityEnergyFloats = NULL;
+float *accumRadiosityDeluxeSum = NULL;
+float *accumRadiosityEnergyFloats = NULL;
 byte *lightAlphaMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
@@ -800,24 +804,45 @@ void AllocateRadiosityFloats(void)
         return;
     }
 
-    if (radiosityFloats)
-        free(radiosityFloats);
-    if (accumRadiosityFloats)
-        free(accumRadiosityFloats);
+    if (radiosityFloats) free(radiosityFloats);
+    if (accumRadiosityFloats) free(accumRadiosityFloats);
+    if (radiosityDeluxeFloats) free(radiosityDeluxeFloats);
+    if (radiosityEnergyFloats) free(radiosityEnergyFloats);
+    if (accumRadiosityDeluxeSum) free(accumRadiosityDeluxeSum);
+    if (accumRadiosityEnergyFloats) free(accumRadiosityEnergyFloats);
 
     radiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!radiosityFloats)
         Error("AllocateRadiosityFloats: malloc failed (radiosity). numLightBytes: %d", numLightBytes);
-
     memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
     accumRadiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!accumRadiosityFloats)
         Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+    if (game->deluxeMap)
+    {
+        radiosityDeluxeFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        if (!radiosityDeluxeFloats) Error("AllocateRadiosityFloats: malloc failed (radiosityDeluxe).");
+        memset(radiosityDeluxeFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+        radiosityEnergyFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        if (!radiosityEnergyFloats) Error("AllocateRadiosityFloats: malloc failed (radiosityEnergy).");
+        memset(radiosityEnergyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+        accumRadiosityDeluxeSum = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        if (!accumRadiosityDeluxeSum) Error("AllocateRadiosityFloats: malloc failed (accumRadiosityDeluxe).");
+        memset(accumRadiosityDeluxeSum, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+        accumRadiosityEnergyFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        if (!accumRadiosityEnergyFloats) Error("AllocateRadiosityFloats: malloc failed (accumRadiosityEnergy).");
+        memset(accumRadiosityEnergyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+    }
+
     {
         int pixels = numLightBytes / 3;
-        float megabytes = (float)(pixels * sizeof(vec3_t) * 2) / (1024.0f * 1024.0f);
+        float megabytes = (float)(pixels * sizeof(vec3_t) * (game->deluxeMap ? 6 : 2)) / (1024.0f * 1024.0f);
         _printf("  AllocateRadiosityFloats: %d pixels allocated (%.1f MB)\n", pixels, megabytes);
     }
 }
@@ -833,6 +858,26 @@ void FreeRadiosityFloats(void)
     {
         free(accumRadiosityFloats);
         accumRadiosityFloats = NULL;
+    }
+    if (radiosityDeluxeFloats)
+    {
+        free(radiosityDeluxeFloats);
+        radiosityDeluxeFloats = NULL;
+    }
+    if (radiosityEnergyFloats)
+    {
+        free(radiosityEnergyFloats);
+        radiosityEnergyFloats = NULL;
+    }
+    if (accumRadiosityDeluxeSum)
+    {
+        free(accumRadiosityDeluxeSum);
+        accumRadiosityDeluxeSum = NULL;
+    }
+    if (accumRadiosityEnergyFloats)
+    {
+        free(accumRadiosityEnergyFloats);
+        accumRadiosityEnergyFloats = NULL;
     }
     if (lightSurfaceIndex)
     {

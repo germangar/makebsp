@@ -1305,6 +1305,8 @@ void LightMain(void)
         ExportAlphaMask("vis_alpha_");
     }
 
+    DilateDeluxeDirections();
+
     PostProcessLightmaps();
 
     for (int i = 0; i < numDrawSurfaces; i++)

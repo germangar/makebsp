@@ -124,6 +124,7 @@ If the distance falloff calculation changes they would need to be recalibrated *
 #define MIN_LIGHT_ADD 0.1f
 #define MIN_RADIOSITY_EMITTER_ADD 0.0002f
 #define MIN_RADIOSITY_EMITTER_GROUP_ADD MIN_RADIOSITY_EMITTER_ADD
+#define MIN_DELUXE_ENERGY 0.001f
 
 #define UPSCALE_FACTOR 2
 #define GUTTER 1
@@ -346,6 +347,7 @@ extern qboolean patchshadows;
 
 int CompareSurfaces(const void *a, const void *b);
 void LightWorld(void);
+void DilateDeluxeDirections(void);
 void TraceLtm(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,

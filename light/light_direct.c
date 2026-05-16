@@ -559,35 +559,16 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 AccumulateContribution
 ========================
 */
-void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal)
+void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
+                           const vec3_t addColor, const vec3_t addDir,
+                           const vec3_t addEnergy, const vec3_t normal)
 {
-    if (!color)
-        return;
-
-    // Standard path: no deluxe data, just accumulate color
-    if (!dir || !energy)
-    {
-        color[0] += cont->irradiance[0] * cont->angle;
-        color[1] += cont->irradiance[1] * cont->angle;
-        color[2] += cont->irradiance[2] * cont->angle;
-        return;
-    }
-
-    // --- V2 Deluxe Iterative Algorithm ---
     int i;
-    vec3_t I; // raw irradiance
-    VectorCopy(cont->irradiance, I);
-
-    float angle = cont->angle;
-    if (angle < 0.0f) angle = 0.0f;
-
-    // Step 1: Calculate Target Radiance
-    // color is now in pure physical radiance space (deferred w division)
     vec3_t currentRadiance, addedRadiance, targetRadiance;
     for (i = 0; i < 3; i++)
     {
         currentRadiance[i] = color[i];
-        addedRadiance[i] = I[i] * angle;
+        addedRadiance[i] = addColor[i];
         targetRadiance[i] = currentRadiance[i] + addedRadiance[i];
     }
 
@@ -596,22 +577,24 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
     float lumAdded = addedRadiance[0] * 0.299f + addedRadiance[1] * 0.587f + addedRadiance[2] * 0.114f;
 
     vec3_t vNew;
-    if (cont->isGlow)
+    for (i = 0; i < 3; i++)
+        vNew[i] = lumCurrent * dir[i] + lumAdded * addDir[i];
+
+    vec3_t dirNew;
+    // Persistence Check: Only allow the direction to shift if the total energy 
+    // is above the stability threshold. If it's too dim, we keep the previous 
+    // direction (which might be a dilated vector or the normal) to prevent 
+    // unstable "jitter" or the loss of high-quality dilated vectors.
+    if (lumCurrent + lumAdded > MIN_DELUXE_ENERGY)
     {
-        // Glow contributions use the surface normal as their direction
-        for (i = 0; i < 3; i++)
-            vNew[i] = lumCurrent * dir[i] + lumAdded * normal[i];
+        if (VectorNormalize(vNew, dirNew) < 0.0001f)
+        {
+            VectorCopy(normal, dirNew);
+        }
     }
     else
     {
-        for (i = 0; i < 3; i++)
-            vNew[i] = lumCurrent * dir[i] + lumAdded * cont->dir[i];
-    }
-
-    vec3_t dirNew;
-    if (VectorNormalize(vNew, dirNew) < 0.0001f)
-    {
-        VectorCopy(normal, dirNew);
+        VectorCopy(dir, dirNew);
     }
 
     // Step 3: In-Game Falloff Verification
@@ -622,11 +605,11 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
 
     vec3_t energyNew;
     for (i = 0; i < 3; i++)
-        energyNew[i] = energy[i] + I[i];
+        energyNew[i] = energy[i] + addEnergy[i];
     float lumEnergyNew = energyNew[0] * 0.299f + energyNew[1] * 0.587f + energyNew[2] * 0.114f;
 
     // Step 4: Bending (if cap violated)
-    if (lumEnergyNew > 0.001f && (lumTarget / w) > lumEnergyNew)
+    if (lumEnergyNew > MIN_DELUXE_ENERGY && (lumTarget / w) > lumEnergyNew)
     {
         float wNeeded = lumTarget / lumEnergyNew;
         if (wNeeded > 1.0f) wNeeded = 1.0f;
@@ -661,6 +644,41 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
 
     VectorCopy(dirNew, dir);
     VectorCopy(energyNew, energy);
+}
+
+void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal)
+{
+    if (!color)
+        return;
+
+    // Standard path: no deluxe data, just accumulate color
+    if (!dir || !energy)
+    {
+        color[0] += cont->irradiance[0] * cont->angle;
+        color[1] += cont->irradiance[1] * cont->angle;
+        color[2] += cont->irradiance[2] * cont->angle;
+        return;
+    }
+
+    // --- V2 Deluxe Iterative Algorithm ---
+    vec3_t addColor, addDir, addEnergy;
+    
+    float angle = cont->angle;
+    if (angle < 0.0f) angle = 0.0f;
+
+    addColor[0] = cont->irradiance[0] * angle;
+    addColor[1] = cont->irradiance[1] * angle;
+    addColor[2] = cont->irradiance[2] * angle;
+
+    if (cont->isGlow) {
+        VectorCopy(normal, addDir);
+    } else {
+        VectorCopy(cont->dir, addDir);
+    }
+
+    VectorCopy(cont->irradiance, addEnergy);
+
+    MergeAccumulatedState(color, dir, energy, addColor, addDir, addEnergy, normal);
 }
 
 /*
@@ -1649,50 +1667,7 @@ void TraceLtm(int num)
         }
     }
 
-    // Shadow direction-filling pass: dilate directions into fully shadowed texels
-    if (deluxe)
-    {
-        for (i = 0; i < ds->lightmapWidth; i++)
-        {
-            for (j = 0; j < ds->lightmapHeight; j++)
-            {
-                float intensity = color[i][j][0] + color[i][j][1] + color[i][j][2];
-                if (intensity > 0.001f)
-                    continue; // texel is lit, skip
-
-                // Search 3x3 neighborhood for brightest lit neighbor
-                float bestIntensity = 0.0f;
-                int bestNX = -1, bestNY = -1;
-                for (int di = -1; di <= 1; di++)
-                {
-                    for (int dj = -1; dj <= 1; dj++)
-                    {
-                        if (di == 0 && dj == 0) continue;
-                        int ni = i + di;
-                        int nj = j + dj;
-                        if (ni < 0 || ni >= ds->lightmapWidth || nj < 0 || nj >= ds->lightmapHeight)
-                            continue;
-                        float nIntensity = color[ni][nj][0] + color[ni][nj][1] + color[ni][nj][2];
-                        if (nIntensity > bestIntensity)
-                        {
-                            bestIntensity = nIntensity;
-                            bestNX = ni;
-                            bestNY = nj;
-                        }
-                    }
-                }
-
-                if (bestNX >= 0)
-                {
-                    // Copy direction ONLY — no color, no sampleHit, no alphamask
-                    VectorCopy(deluxe[bestNX][bestNY], deluxe[i][j]);
-                    if (normalArray)
-                        VectorCopy(normalArray[bestNX][bestNY], normalArray[i][j]);
-                }
-            }
-        }
-    }
-
+    // Copy result back to global buffers
     for (i = 0; i < ds->lightmapWidth; i++)
     {
         for (j = 0; j < ds->lightmapHeight; j++)
@@ -1930,4 +1905,83 @@ void LightWorld(void)
     _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
 
     free(surfaceWorkOrder);
+}
+
+void DilateDeluxeDirections(void)
+{
+    if (!deluxeFloats || !lightFloats)
+        return;
+
+    _printf("--- DilateDeluxeDirections ---\n");
+
+    // Perform 2 passes of dilation to ensure directions spread deep into shadows
+    for (int pass = 0; pass < 2; pass++)
+    {
+        #pragma omp parallel for schedule(dynamic)
+        for (int s = 0; s < numDrawSurfaces; s++)
+        {
+            dsurface_t *ds = &drawSurfaces[s];
+            if (ds->lightmapNum[0] < 0)
+                continue;
+
+            for (int i = 0; i < ds->lightmapWidth; i++)
+            {
+                for (int j = 0; j < ds->lightmapHeight; j++)
+                {
+                    int k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j) * LIGHTMAP_WIDTH +
+                            ds->lightmapOffset[0][0] + i;
+                    
+                float intensity = 0.0f;
+                if (energyFloats) {
+                    intensity = energyFloats[k * 3 + 0] + energyFloats[k * 3 + 1] + energyFloats[k * 3 + 2];
+                } else {
+                    intensity = lightFloats[k * 3 + 0] + lightFloats[k * 3 + 1] + lightFloats[k * 3 + 2];
+                }
+
+                // Treat as black/target for dilation if intensity is practically zero
+                if (intensity > 0.0001f)
+                    continue;
+
+                float bestIntensity = 0.0f;
+                int bestK = -1;
+
+                for (int di = -1; di <= 1; di++)
+                {
+                    for (int dj = -1; dj <= 1; dj++)
+                    {
+                        if (di == 0 && dj == 0) continue;
+                        int ni = i + di;
+                        int nj = j + dj;
+                        if (ni < 0 || ni >= ds->lightmapWidth || nj < 0 || nj >= ds->lightmapHeight)
+                            continue;
+
+                        int nk = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + nj) * LIGHTMAP_WIDTH +
+                                 ds->lightmapOffset[0][0] + ni;
+                        
+                        float nIntensity = 0.0f;
+                        if (energyFloats) {
+                            nIntensity = energyFloats[nk * 3 + 0] + energyFloats[nk * 3 + 1] + energyFloats[nk * 3 + 2];
+                        } else {
+                            nIntensity = lightFloats[nk * 3 + 0] + lightFloats[nk * 3 + 1] + lightFloats[nk * 3 + 2];
+                        }
+
+                        if (nIntensity > bestIntensity)
+                        {
+                            bestIntensity = nIntensity;
+                            bestK = nk;
+                        }
+                    }
+                }
+
+                // Borrow if we found a neighbor with any energy
+                if (bestK >= 0 && bestIntensity > 0.0001f)
+                {
+                    VectorCopy(&deluxeFloats[bestK * 3], &deluxeFloats[k * 3]);
+                    if (normalFloats)
+                        VectorCopy(&normalFloats[bestK * 3], &normalFloats[k * 3]);
+                }
+                }
+            }
+        }
+    }
 }

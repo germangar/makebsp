@@ -64,6 +64,8 @@ typedef struct radVoxel_s {
     vec3_t color;
     vec3_t normal;
     float weight;
+    vec3_t energySum;
+    vec3_t weightedDeluxeSum;
     struct radVoxel_s *next;
 } radVoxel_t;
 
@@ -99,7 +101,7 @@ static void RadiosityVoxelReset(void) {
     g_radVoxels = calloc(numHeads, sizeof(radVoxel_t));
 }
 
-static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_t color) {
+static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_t color, const vec3_t dir, const vec3_t energy) {
     int v[3];
     for (int i = 0; i < 3; i++) {
         v[i] = (int)((pos[i] - g_radVoxelMins[i]) / rad_voxel_size);
@@ -118,6 +120,19 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
         VectorCopy(color, head->color);
         VectorCopy(normal, head->normal);
         head->weight = 1.0f;
+        if (dir) {
+            float lum = color[0]*0.299f + color[1]*0.587f + color[2]*0.114f;
+            head->weightedDeluxeSum[0] = lum * dir[0];
+            head->weightedDeluxeSum[1] = lum * dir[1];
+            head->weightedDeluxeSum[2] = lum * dir[2];
+        } else {
+            VectorClear(head->weightedDeluxeSum);
+        }
+        if (energy) {
+            VectorCopy(energy, head->energySum);
+        } else {
+            VectorClear(head->energySum);
+        }
         head->next = NULL;
         return;
     }
@@ -128,6 +143,15 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
         if (DotProduct(curr->normal, normal) > rad_angle_match_cos) {
             VectorAdd(curr->color, color, curr->color);
             VectorAdd(curr->normal, normal, curr->normal);
+            if (dir) {
+                float lum = color[0]*0.299f + color[1]*0.587f + color[2]*0.114f;
+                curr->weightedDeluxeSum[0] += lum * dir[0];
+                curr->weightedDeluxeSum[1] += lum * dir[1];
+                curr->weightedDeluxeSum[2] += lum * dir[2];
+            }
+            if (energy) {
+                VectorAdd(curr->energySum, energy, curr->energySum);
+            }
             curr->weight += 1.0f;
             return;
         }
@@ -140,6 +164,19 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
     VectorCopy(color, newV->color);
     VectorCopy(normal, newV->normal);
     newV->weight = 1.0f;
+    if (dir) {
+        float lum = color[0]*0.299f + color[1]*0.587f + color[2]*0.114f;
+        newV->weightedDeluxeSum[0] = lum * dir[0];
+        newV->weightedDeluxeSum[1] = lum * dir[1];
+        newV->weightedDeluxeSum[2] = lum * dir[2];
+    } else {
+        VectorClear(newV->weightedDeluxeSum);
+    }
+    if (energy) {
+        VectorCopy(energy, newV->energySum);
+    } else {
+        VectorClear(newV->energySum);
+    }
     newV->next = NULL;
     curr->next = newV;
 }
@@ -203,7 +240,7 @@ static int        g_numEmitters  = 0;
 
 extern float      *accumRadiosityFloats;
 
-static void RadiosityEmit(const float *srcBuffer) {
+static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
     int             i, k, lx, ly;
     int             capacity = 4096;
 
@@ -458,6 +495,9 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
             // ---------------------------------------------------------------
             if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                 float accum[3] = {0, 0, 0};
+                float accumDeluxe[3], accumEnergy[3];
+                VectorCopy(dstNormal, accumDeluxe);
+                VectorClear(accumEnergy);
                 for (int s = 0; s < numDrawSurfaces; s++) {
                     if (localSurfaces[s].emitterCount == 0) continue;
 
@@ -508,12 +548,16 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         VectorScale(em->color, formFactorBase, cont.irradiance);
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
+                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
+                    if (game->deluxeMap) {
+                        VectorCopy(accumDeluxe, &radiosityDeluxeFloats[k_dst * 3]);
+                        VectorCopy(accumEnergy, &radiosityEnergyFloats[k_dst * 3]);
+                    }
                     ThreadUnlock();
                 }
             } else {
@@ -521,6 +565,9 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                 // Planar / Patch: irradiance vector path.
                 // ---------------------------------------------------------------
                 float accum[3] = {0,0,0};
+                float accumDeluxe[3], accumEnergy[3];
+                VectorCopy(dstNormal, accumDeluxe);
+                VectorClear(accumEnergy);
 
                 for (int s = 0; s < numDrawSurfaces; s++) {
                     if (localSurfaces[s].emitterCount == 0) continue;
@@ -571,13 +618,17 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         VectorScale(em->color, formFactorBase, cont.irradiance);
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
+                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }
                 }
 
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
+                    if (game->deluxeMap) {
+                        VectorCopy(accumDeluxe, &radiosityDeluxeFloats[k_dst * 3]);
+                        VectorCopy(accumEnergy, &radiosityEnergyFloats[k_dst * 3]);
+                    }
                     ThreadUnlock();
                 }
             }
@@ -642,7 +693,7 @@ static void RadiosityVoxelize(void) {
                         VectorCopy(points[i].pos, pos);
                         VectorCopy(points[i].normal, normal);
                         VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
-                        RadiosityVoxelAdd(pos, normal, &radiosityFloats[pIdx * 3]);
+                        RadiosityVoxelAdd(pos, normal, &radiosityFloats[pIdx * 3], game->deluxeMap ? &radiosityDeluxeFloats[pIdx * 3] : NULL, game->deluxeMap ? &radiosityEnergyFloats[pIdx * 3] : NULL);
                     }
                 }
                 free(points);
@@ -674,7 +725,7 @@ static void RadiosityVoxelize(void) {
                     VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
                     VectorCopy(surfNormal, normal);
                 }
-                RadiosityVoxelAdd(pos, normal, &radiosityFloats[k_dst * 3]);
+                RadiosityVoxelAdd(pos, normal, &radiosityFloats[k_dst * 3], game->deluxeMap ? &radiosityDeluxeFloats[k_dst * 3] : NULL, game->deluxeMap ? &radiosityEnergyFloats[k_dst * 3] : NULL);
             }
         }
         
@@ -704,7 +755,7 @@ static void RadiosityVoxelize(void) {
 // ---------------------------------------------------------------------------
 
 // Helper: Bilinearly interpolate from the sparse grid
-static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, int surf_rad_interval, const vec3_t normal, vec3_t outColor) {
+static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, int surf_rad_interval, const vec3_t normal, vec3_t outColor, vec3_t outDir, vec3_t outEnergy) {
     int x0 = (lx / surf_rad_interval) * surf_rad_interval;
     int x1 = x0 + surf_rad_interval;
     int y0 = (ly / surf_rad_interval) * surf_rad_interval;
@@ -730,10 +781,34 @@ static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, int surf_rad
         float row1 = radiosityFloats[idx01 + c] * (1.0f - fx) + radiosityFloats[idx11 + c] * fx;
         outColor[c] = row0 * (1.0f - fy) + row1 * fy;
     }
+
+    if (outDir) {
+        float lum00 = radiosityFloats[idx00]*0.299f + radiosityFloats[idx00+1]*0.587f + radiosityFloats[idx00+2]*0.114f;
+        float lum10 = radiosityFloats[idx10]*0.299f + radiosityFloats[idx10+1]*0.587f + radiosityFloats[idx10+2]*0.114f;
+        float lum01 = radiosityFloats[idx01]*0.299f + radiosityFloats[idx01+1]*0.587f + radiosityFloats[idx01+2]*0.114f;
+        float lum11 = radiosityFloats[idx11]*0.299f + radiosityFloats[idx11+1]*0.587f + radiosityFloats[idx11+2]*0.114f;
+        vec3_t tempDir;
+        for (int c = 0; c < 3; c++) {
+            float row0 = (radiosityDeluxeFloats[idx00 + c] * lum00) * (1.0f - fx) + (radiosityDeluxeFloats[idx10 + c] * lum10) * fx;
+            float row1 = (radiosityDeluxeFloats[idx01 + c] * lum01) * (1.0f - fx) + (radiosityDeluxeFloats[idx11 + c] * lum11) * fx;
+            tempDir[c] = row0 * (1.0f - fy) + row1 * fy;
+        }
+        if (VectorNormalize(tempDir, outDir) < 0.0001f) {
+            VectorCopy(normal, outDir);
+        }
+    }
+
+    if (outEnergy) {
+        for (int c = 0; c < 3; c++) {
+            float row0 = radiosityEnergyFloats[idx00 + c] * (1.0f - fx) + radiosityEnergyFloats[idx10 + c] * fx;
+            float row1 = radiosityEnergyFloats[idx01 + c] * (1.0f - fx) + radiosityEnergyFloats[idx11 + c] * fx;
+            outEnergy[c] = row0 * (1.0f - fy) + row1 * fy;
+        }
+    }
 }
 
 
-static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t outColor) {
+static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3_t outColor, vec3_t outDir, vec3_t outEnergy) {
     int v[3];
     for (int i = 0; i < 3; i++) {
         v[i] = (int)((pos[i] - g_radVoxelMins[i]) / rad_voxel_size);
@@ -741,6 +816,8 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
     }
 
     vec3_t totalColor = {0,0,0};
+    vec3_t totalDeluxe = {0,0,0};
+    vec3_t totalEnergy = {0,0,0};
     float totalWeight = 0.0f;
 
     for (int dx = -1; dx <= 1; dx++) {
@@ -772,6 +849,8 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
                         float d = VectorLength(delta);
                         float w = (1.0f / (d + 1.0f)) * dot;
                         VectorMA(totalColor, w, curr->color, totalColor);
+                        if (outDir) VectorMA(totalDeluxe, w, curr->weightedDeluxeSum, totalDeluxe);
+                        if (outEnergy) VectorMA(totalEnergy, w, curr->energySum, totalEnergy);
                         totalWeight += w;
                     }
                     curr = curr->next;
@@ -784,6 +863,16 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
     if (totalWeight < 0.0001f) return qfalse;
 
     VectorScale(totalColor, 1.0f / totalWeight, outColor);
+    if (outDir) {
+        if (VectorNormalize(totalDeluxe, outDir) < 0.0001f) {
+            VectorCopy(normal, outDir);
+        }
+    }
+    if (outEnergy) {
+        // energySum was already a total across the voxel bucket. We use a weighted average 
+        // to approximate the spatial distribution similar to color.
+        VectorScale(totalEnergy, 1.0f / totalWeight, outEnergy);
+    }
     return qtrue;
 }
 
@@ -809,19 +898,31 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
         return;
     }
 
-    vec3_t *tempBuffer = malloc(numPixels * sizeof(vec3_t));
+    vec3_t *tempColor = malloc(numPixels * sizeof(vec3_t));
+    vec3_t *tempDeluxe = NULL;
+    vec3_t *tempEnergy = NULL;
+    if (game->deluxeMap) {
+        tempDeluxe = malloc(numPixels * sizeof(vec3_t));
+        tempEnergy = malloc(numPixels * sizeof(vec3_t));
+    }
     
-    if (!tempBuffer) {
-        
+    if (!tempColor || (game->deluxeMap && (!tempDeluxe || !tempEnergy))) {
+        if (tempColor) free(tempColor);
+        if (tempDeluxe) free(tempDeluxe);
+        if (tempEnergy) free(tempEnergy);
         return;
     }
 
-    // Initialize tempBuffer with existing values for all surfaces
+    // Initialize temp buffers with existing values for all surfaces
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             int k_temp = ly * ds->lightmapWidth + lx;
-            VectorCopy(&radiosityFloats[k_dst * 3], tempBuffer[k_temp]);
+            VectorCopy(&radiosityFloats[k_dst * 3], tempColor[k_temp]);
+            if (game->deluxeMap) {
+                VectorCopy(&radiosityDeluxeFloats[k_dst * 3], tempDeluxe[k_temp]);
+                VectorCopy(&radiosityEnergyFloats[k_dst * 3], tempEnergy[k_temp]);
+            }
         }
     }
 
@@ -850,7 +951,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 VectorCopy(points[i].normal, pointNorm[k_temp]);
                 VectorAdd(pointPos[k_temp], localSurfaces[surfIdx].entityOrigin, pointPos[k_temp]);
 
-                if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempBuffer[k_temp])) {
+                if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
                     filled[k_temp] = 1;
                     // Unmask if it was masked
                     if (lightAlphaMask && lightAlphaMask[pIdx] == 0) {
@@ -872,7 +973,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                             if (nx < 0 || nx >= ds->lightmapWidth || ny < 0 || ny >= ds->lightmapHeight) continue;
                             int kn = ny * ds->lightmapWidth + nx;
                             if (filled[kn] == 1) { // Borrow from original geometric hits
-                                if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempBuffer[k_temp])) {
+                                if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
                                     filled[k_temp] = 2; // Dilated
                                     // Unmask if it was masked
                                     int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
@@ -919,11 +1020,11 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
             if (ds->surfaceType != MST_TRIANGLE_SOUP) {
                 if (ds->surfaceType == MST_PATCH) {
-                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempBuffer[k_temp]);
+                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL);
                 } else if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
                     continue; // Planar: sparse-grid pixels are already exact, keep them.
                 } else {
-                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempBuffer[k_temp]);
+                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL);
                 }
                 continue;
             }
@@ -936,7 +1037,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
             VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
 
-            if (RadiosityVoxelSample(pos, normal, tempBuffer[k_temp])) {
+            if (RadiosityVoxelSample(pos, normal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
                 // Unmask if it was masked
                 if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
                     if (!PointInSolid(pos)) {
@@ -955,13 +1056,19 @@ flush:
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             int k_temp = ly * ds->lightmapWidth + lx;
-            VectorCopy(tempBuffer[k_temp], &radiosityFloats[k_dst * 3]);
+            VectorCopy(tempColor[k_temp], &radiosityFloats[k_dst * 3]);
+            if (game->deluxeMap) {
+                VectorCopy(tempDeluxe[k_temp], &radiosityDeluxeFloats[k_dst * 3]);
+                VectorCopy(tempEnergy[k_temp], &radiosityEnergyFloats[k_dst * 3]);
+            }
         }
     }
 
 
 
-    free(tempBuffer);
+    free(tempColor);
+    if (tempDeluxe) free(tempDeluxe);
+    if (tempEnergy) free(tempEnergy);
     
 }
 
@@ -977,7 +1084,20 @@ static void RadiosityMerge(const float *srcBuffer) {
     int total = numLightBytes / 3;
     for (int i = 0; i < total; i++) {
         if (lightAlphaMask && !lightAlphaMask[i]) continue;
-        VectorAdd(lightFloats + i * 3, srcBuffer + i * 3, lightFloats + i * 3);
+        
+        if (game->deluxeMap) {
+            vec3_t radDir;
+            if (VectorNormalize(&accumRadiosityDeluxeSum[i*3], radDir) < 0.0001f) {
+                VectorCopy(&normalFloats[i*3], radDir);
+            }
+            MergeAccumulatedState(
+                &lightFloats[i * 3], &deluxeFloats[i * 3], &energyFloats[i * 3],
+                &srcBuffer[i * 3], radDir, &accumRadiosityEnergyFloats[i * 3],
+                &normalFloats[i * 3]
+            );
+        } else {
+            VectorAdd(lightFloats + i * 3, srcBuffer + i * 3, lightFloats + i * 3);
+        }
     }
 }
 
@@ -1011,9 +1131,13 @@ void LightRadiosity(void) {
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
         _printf("  [emit]   ");
-        RadiosityEmit(emitSource);
+        RadiosityEmit(emitSource, pnum == 1);
 
         memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+        if (game->deluxeMap) {
+            memset(radiosityDeluxeFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+            memset(radiosityEnergyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+        }
         _printf("  [integrate]  ");
         fflush(stdout);
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
@@ -1027,7 +1151,20 @@ void LightRadiosity(void) {
         RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityReconstructThread);
         _printf("done\n");
 
-        for (int i = 0; i < numLightBytes / 3; i++) VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);
+        if (game->deluxeMap) {
+            for (int i = 0; i < numLightBytes / 3; i++) {
+                if (lightAlphaMask && !lightAlphaMask[i]) continue;
+                VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);
+                
+                float lum = radiosityFloats[i*3]*0.299f + radiosityFloats[i*3+1]*0.587f + radiosityFloats[i*3+2]*0.114f;
+                accumRadiosityDeluxeSum[i*3+0] += lum * radiosityDeluxeFloats[i*3+0];
+                accumRadiosityDeluxeSum[i*3+1] += lum * radiosityDeluxeFloats[i*3+1];
+                accumRadiosityDeluxeSum[i*3+2] += lum * radiosityDeluxeFloats[i*3+2];
+                VectorAdd(&accumRadiosityEnergyFloats[i*3], &radiosityEnergyFloats[i*3], &accumRadiosityEnergyFloats[i*3]);
+            }
+        } else {
+            for (int i = 0; i < numLightBytes / 3; i++) VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);
+        }
         free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
