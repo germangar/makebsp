@@ -638,6 +638,40 @@ void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
         if (w < 0.01f) w = 0.01f;
     }
 
+    // Step 4.5: Angle Floor (if enabled)
+    if (game->deluxeMinAngle > 0.0f)
+    {
+        // deluxeMinAngle is the angle TO THE SURFACE.
+        // The angle to the normal is 90 - deluxeMinAngle.
+        // cos(90 - A) = sin(A).
+        float minCos = sin(game->deluxeMinAngle * (M_PI / 180.0f));
+        if (w < minCos)
+        {
+            float wNeeded = minCos;
+            float tLo = 0.0f, tHi = 1.0f;
+            for (int iter = 0; iter < 8; iter++)
+            {
+                float tMid = (tLo + tHi) * 0.5f;
+                vec3_t candidate;
+                for (i = 0; i < 3; i++)
+                    candidate[i] = dirNew[i] * (1.0f - tMid) + normal[i] * tMid;
+                VectorNormalize(candidate, candidate);
+                float wCandidate = DotProduct(normal, candidate);
+                if (wCandidate < wNeeded)
+                    tLo = tMid;
+                else
+                    tHi = tMid;
+            }
+
+            // Final corrected direction for angle floor
+            for (i = 0; i < 3; i++)
+                dirNew[i] = dirNew[i] * (1.0f - tHi) + normal[i] * tHi;
+            VectorNormalize(dirNew, dirNew);
+            w = DotProduct(normal, dirNew);
+            if (w < 0.01f) w = 0.01f;
+        }
+    }
+
     // Step 5: Commit (store pure radiance, w division deferred to DownConvert)
     for (i = 0; i < 3; i++)
         color[i] = targetRadiance[i];

@@ -41,6 +41,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		FALLOFF_LAMBERT, // falloff
 		FALLOFF_LAMBERT, // sunFalloff
 		qtrue,      // deluxeMap
+		40.0f,      // deluxeMinAngle
 		qtrue,      // forceUVGen
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses
@@ -73,6 +74,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		FALLOFF_LAMBERT, // falloff
 		FALLOFF_LAMBERT, // sunFalloff
 		qfalse,     // deluxeMap
+		40.0f,      // deluxeMinAngle
 		qtrue,      // forceUVGen
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses

@@ -160,6 +160,12 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe requires 1 or 0");
             game->deluxeMap = atoi(argv[++i]) ? qtrue : qfalse;
             _printf("Deluxemaps %s via command line override\n", game->deluxeMap ? "enabled" : "disabled");
+        } else if (!strcmp(argv[i], "-deluxe_minangle")) {
+            if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe_minangle requires an angle in degrees");
+            game->deluxeMinAngle = atof(argv[++i]);
+            if (game->deluxeMinAngle < 0.0f) game->deluxeMinAngle = 0.0f;
+            if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
+            _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
         } else if (!strcmp(argv[i], "-supersampling")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
             int mode = atoi(argv[i + 1]);
