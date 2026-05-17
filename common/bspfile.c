@@ -99,7 +99,7 @@ int numbrushsides;
 dbrushside_t dbrushsides[MAX_MAP_BRUSHSIDES];
 
 int numLightBytes;
-byte lightBytes[MAX_MAP_LIGHTING];
+byte *lightBytes = NULL;
 
 int numGridPoints;
 bspGridPoint_t gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];
@@ -344,7 +344,20 @@ void LoadBSPFile(const char *filename)
     numDrawIndexes = CopyLump(header, LUMP_DRAWINDEXES, drawIndexes, sizeof(drawIndexes[0]));
 
     numVisBytes = CopyLump(header, LUMP_VISIBILITY, visBytes, 1);
-    numLightBytes = CopyLump(header, LUMP_LIGHTMAPS, lightBytes, 1);
+    
+    numLightBytes = CopyLump(header, LUMP_LIGHTMAPS, NULL, 1);
+    if (numLightBytes)
+    {
+        if (lightBytes) free(lightBytes);
+        lightBytes = malloc(numLightBytes);
+        if (!lightBytes) Error("Failed to allocate %d bytes for lightBytes", numLightBytes);
+        CopyLump(header, LUMP_LIGHTMAPS, lightBytes, 1);
+    }
+    else
+    {
+        if (lightBytes) { free(lightBytes); lightBytes = NULL; }
+    }
+
     entdatasize = CopyLump(header, LUMP_ENTITIES, dentdata, 1);
 
     free(header); // everything has been copied out

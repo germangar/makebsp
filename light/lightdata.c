@@ -569,6 +569,16 @@ static void UpConvertLightmaps(void)
 void UpConvertLightingData(void)
 {
     _printf("--- UpConvertLightingData ---\n");
+
+    // The 8-bit lightmap data loaded from the BSP is completely unused
+    // by the light compiler (which computes everything from scratch).
+    // Free it now to save RAM during the heavy lighting and radiosity passes.
+    if (lightBytes)
+    {
+        free(lightBytes);
+        lightBytes = NULL;
+    }
+
     UpConvertDrawVerts();
     UpConvertLightmaps();
     CheckGridData32();
@@ -637,12 +647,14 @@ static void DownConvertDeluxeMaps(void)
 
     _printf("DownConvert: %d DeluxeMap pixels (interleaving as stride 2 for QFusion)\n", totalPixels);
 
-    // Safety check: numLightBytes * 2 must not exceed MAX_MAP_LIGHTING
-    if (numLightBytes * 2 > MAX_MAP_LIGHTING)
+    // Dynamically reallocate lightBytes to double its size for the deluxe layer
+    byte *newLightBytes = realloc(lightBytes, numLightBytes * 2);
+    if (!newLightBytes)
     {
-        _printf("WARNING: DownConvertDeluxeMaps: Total lighting data exceeds MAX_MAP_LIGHTING! Skipping deluxeMap layer.\n");
+        _printf("WARNING: DownConvertDeluxeMaps: Failed to reallocate %d bytes! Skipping deluxeMap layer.\n", numLightBytes * 2);
         return;
     }
+    lightBytes = newLightBytes;
 
     // Step 1: Interleave. Move standard lightmaps to EVEN slots
     for (lm = numLMs - 1; lm >= 0; lm--)
@@ -788,12 +800,36 @@ void DownConvertLightingData(void)
         }
     }
 
+    if (!lightBytes)
+    {
+        lightBytes = malloc(numLightBytes);
+        if (!lightBytes && numLightBytes > 0)
+        {
+            Error("Failed to allocate %d bytes for lightBytes during DownConvert", numLightBytes);
+        }
+        if (lightBytes)
+        {
+            memset(lightBytes, 0, numLightBytes);
+        }
+    }
+
     DownConvertDrawVerts(scale, (game->hdr == HDR_8BIT));
     DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
     DownConvertDeluxeMaps();
     DownConvertGrid(scale, (game->hdr == HDR_8BIT));
 
     _printf("DownConvert: Done\n");
+
+    // Meticulous cleanup: free all high-precision processing buffers now that 
+    // the data has been successfully down-converted to 8-bit for export.
+    if (internalDrawVerts) { free(internalDrawVerts); internalDrawVerts = NULL; }
+    if (lightFloats)       { free(lightFloats);       lightFloats = NULL; }
+    if (deluxeFloats)      { free(deluxeFloats);      deluxeFloats = NULL; }
+    if (energyFloats)      { free(energyFloats);      energyFloats = NULL; }
+    if (normalFloats)      { free(normalFloats);      normalFloats = NULL; }
+    if (lightAlphaMask)    { free(lightAlphaMask);    lightAlphaMask = NULL; }
+    if (lightSurfaceIndex) { free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
+    if (gridData32)        { free(gridData32);        gridData32 = NULL; }
 }
 
 void AllocateRadiosityFloats(void)
@@ -878,21 +914,6 @@ void FreeRadiosityFloats(void)
     {
         free(accumRadiosityEnergyFloats);
         accumRadiosityEnergyFloats = NULL;
-    }
-    if (lightSurfaceIndex)
-    {
-        free(lightSurfaceIndex);
-        lightSurfaceIndex = NULL;
-    }
-    if (energyFloats)
-    {
-        free(energyFloats);
-        energyFloats = NULL;
-    }
-    if (normalFloats)
-    {
-        free(normalFloats);
-        normalFloats = NULL;
     }
 }
 

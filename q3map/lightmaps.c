@@ -721,16 +721,19 @@ void AllocateLightmaps(entity_t *e)
 
     // Set numLightBytes so WriteBSPFile will export the lump
     numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
-    if (numLightBytes > MAX_MAP_LIGHTING)
+
+    if (lightBytes) free(lightBytes);
+    lightBytes = malloc(numLightBytes);
+    if (!lightBytes && numLightBytes > 0)
     {
-        Error("MAX_MAP_LIGHTING exceeded");
+        Error("Failed to allocate %d bytes for lightBytes", numLightBytes);
     }
 
     _printf("%5i unique shaders\n", numSortShaders);
     _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
 
     // Clear the lightmap buffer
-    memset(lightBytes, 0, numLightBytes);
+    if (lightBytes) memset(lightBytes, 0, numLightBytes);
 
     qprintf("%7i exact lightmap texels\n", c_exactLightmap);
     qprintf("%7i block lightmap texels\n", numLightBytes);

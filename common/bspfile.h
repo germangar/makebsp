@@ -60,7 +60,7 @@ extern int numbrushsides;
 extern dbrushside_t dbrushsides[MAX_MAP_BRUSHSIDES];
 
 extern int numLightBytes;
-extern byte lightBytes[MAX_MAP_LIGHTING];
+extern byte *lightBytes;
 
 extern int numGridPoints;
 extern bspGridPoint_t gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];

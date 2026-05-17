@@ -1234,10 +1234,6 @@ void LightMain(void)
 
         count++;
         numLightBytes = count * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
-        if (numLightBytes > MAX_MAP_LIGHTING)
-        {
-            Error("MAX_MAP_LIGHTING exceeded");
-        }
 
         _printf("%5i drawSurfaces\n", numDrawSurfaces);
         _printf("%5i lightmaps\n", count);
