@@ -40,14 +40,14 @@ static void DilateLightmapAtlas(int width, int passes)
 {
     int i, j, p, s;
     int numLMs = (numLightBytes / 3) / (width * width);
-    float *temp = malloc(numLightBytes * sizeof(float));
-    byte *tempMask = malloc(numLMs * width * width);
+    float *temp = Q_Alloc(numLightBytes * sizeof(float));
+    byte *tempMask = Q_Alloc(numLMs * width * width);
     float *tempDeluxe = NULL;
     float *tempNormal = NULL;
     if (deluxeFloats)
-        tempDeluxe = malloc(numLightBytes * sizeof(float));
+        tempDeluxe = Q_Alloc(numLightBytes * sizeof(float));
     if (normalFloats)
-        tempNormal = malloc(numLightBytes * sizeof(float));
+        tempNormal = Q_Alloc(numLightBytes * sizeof(float));
 
     _printf("Dilating lightmaps (%d passes)...\n", passes);
 
@@ -177,12 +177,12 @@ static void DilateLightmapAtlas(int width, int passes)
             }
         }
     }
-    free(temp);
-    free(tempMask);
+    Q_Free(temp);
+    Q_Free(tempMask);
     if (tempDeluxe)
-        free(tempDeluxe);
+        Q_Free(tempDeluxe);
     if (tempNormal)
-        free(tempNormal);
+        Q_Free(tempNormal);
 }
 
 static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, int oldW, float *newFloats, byte *newMask, int newW)
@@ -269,9 +269,12 @@ void DownscaleLightmaps(int oldW, int newW)
 
     _printf("--- DownscaleLightmaps (PER-SURFACE) (%dx%d -> %dx%d) ---\n", oldW, oldW, newW, newW);
 
-    float *newFloats = calloc(newTotalPixels * 3, sizeof(float));
-    float *newDeluxe = deluxeFloats ? calloc(newTotalPixels * 3, sizeof(float)) : NULL;
-    byte *newMask = calloc(newTotalPixels, sizeof(byte));
+    float *newFloats = Q_Alloc(newTotalPixels * 3 * sizeof(float));
+    if (newFloats) memset(newFloats, 0, newTotalPixels * 3 * sizeof(float));
+    float *newDeluxe = deluxeFloats ? Q_Alloc(newTotalPixels * 3 * sizeof(float)) : NULL;
+    if (newDeluxe) memset(newDeluxe, 0, newTotalPixels * 3 * sizeof(float));
+    byte *newMask = Q_Alloc(newTotalPixels * sizeof(byte));
+    if (newMask) memset(newMask, 0, newTotalPixels * sizeof(byte));
 
     for (i = 0; i < numDrawSurfaces; i++)
     {
@@ -296,14 +299,14 @@ void DownscaleLightmaps(int oldW, int newW)
         }
     }
 
-    free(lightFloats);
-    free(lightAlphaMask);
+    Q_Free(lightFloats);
+    Q_Free(lightAlphaMask);
     lightFloats = newFloats;
     lightAlphaMask = newMask;
 
     if (deluxeFloats)
     {
-        free(deluxeFloats);
+        Q_Free(deluxeFloats);
         deluxeFloats = newDeluxe;
     }
 
@@ -474,8 +477,15 @@ void ScanLightmapIntensity(void)
 void CheckGridData32(void)
 {
     if (gridData32)
-        free(gridData32);
-    gridData32 = malloc(numGridPoints * sizeof(bspGridPoint32_t));
+        Q_Free(gridData32);
+    
+    if (numGridPoints <= 0)
+    {
+        gridData32 = NULL;
+        return;
+    }
+
+    gridData32 = Q_Alloc(numGridPoints * sizeof(bspGridPoint32_t));
     if (!gridData32)
         Error("CheckGridData32: malloc failed");
     memset(gridData32, 0, numGridPoints * sizeof(bspGridPoint32_t));
@@ -491,8 +501,8 @@ static void UpConvertDrawVerts(void)
 {
     int i, j, k;
     if (internalDrawVerts)
-        free(internalDrawVerts);
-    internalDrawVerts = malloc(MAX_MAP_DRAW_VERTS * sizeof(drawVert32_t));
+        Q_Free(internalDrawVerts);
+    internalDrawVerts = Q_Alloc(MAX_MAP_DRAW_VERTS * sizeof(drawVert32_t));
     if (!internalDrawVerts)
         Error("UpConvertDrawVerts: malloc failed");
     memset(internalDrawVerts, 0, MAX_MAP_DRAW_VERTS * sizeof(drawVert32_t));
@@ -517,16 +527,16 @@ static void UpConvertDrawVerts(void)
 static void UpConvertLightmaps(void)
 {
     if (lightFloats)
-        free(lightFloats);
+        Q_Free(lightFloats);
     _printf("UpConvert: Allocating %d pixel buffers for lightmaps...\n", numLightBytes / 3);
-    lightFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+    lightFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!lightFloats)
         Error("UpConvertLightmaps: malloc failed");
     memset(lightFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
     if (!lightAlphaMask)
     {
-        lightAlphaMask = malloc((numLightBytes / 3) * sizeof(byte));
+        lightAlphaMask = Q_Alloc((numLightBytes / 3) * sizeof(byte));
         if (!lightAlphaMask)
             Error("UpConvert: malloc lightAlphaMask failed");
         memset(lightAlphaMask, 0, (numLightBytes / 3) * sizeof(byte));
@@ -535,31 +545,31 @@ static void UpConvertLightmaps(void)
     if (game->deluxeMap)
     {
         if (deluxeFloats)
-            free(deluxeFloats);
+            Q_Free(deluxeFloats);
         if (lightSurfaceIndex)
-            free(lightSurfaceIndex);
+            Q_Free(lightSurfaceIndex);
         _printf("UpConvert: Allocating deluxeMap buffers...\n");
-        deluxeFloats = malloc(numLightBytes * sizeof(float));
+        deluxeFloats = Q_Alloc(numLightBytes * sizeof(float));
         if (!deluxeFloats)
             Error("UpConvert: malloc deluxeFloats failed");
         memset(deluxeFloats, 0, numLightBytes * sizeof(float));
 
-        lightSurfaceIndex = malloc((numLightBytes / 3) * sizeof(int));
+        lightSurfaceIndex = Q_Alloc((numLightBytes / 3) * sizeof(int));
         if (!lightSurfaceIndex)
             Error("UpConvert: malloc lightSurfaceIndex failed");
         for (int i = 0; i < numLightBytes / 3; i++)
             lightSurfaceIndex[i] = -1;
 
         if (energyFloats)
-            free(energyFloats);
-        energyFloats = malloc(numLightBytes * sizeof(float));
+            Q_Free(energyFloats);
+        energyFloats = Q_Alloc(numLightBytes * sizeof(float));
         if (!energyFloats)
             Error("UpConvert: malloc energyFloats failed");
         memset(energyFloats, 0, numLightBytes * sizeof(float));
 
         if (normalFloats)
-            free(normalFloats);
-        normalFloats = malloc(numLightBytes * sizeof(float));
+            Q_Free(normalFloats);
+        normalFloats = Q_Alloc(numLightBytes * sizeof(float));
         if (!normalFloats)
             Error("UpConvert: malloc normalFloats failed");
         memset(normalFloats, 0, numLightBytes * sizeof(float));
@@ -575,7 +585,7 @@ void UpConvertLightingData(void)
     // Free it now to save RAM during the heavy lighting and radiosity passes.
     if (lightBytes)
     {
-        free(lightBytes);
+        Q_Free(lightBytes);
         lightBytes = NULL;
     }
 
@@ -802,7 +812,7 @@ void DownConvertLightingData(void)
 
     if (!lightBytes)
     {
-        lightBytes = malloc(numLightBytes);
+        lightBytes = Q_Alloc(numLightBytes);
         if (!lightBytes && numLightBytes > 0)
         {
             Error("Failed to allocate %d bytes for lightBytes during DownConvert", numLightBytes);
@@ -822,14 +832,14 @@ void DownConvertLightingData(void)
 
     // Meticulous cleanup: free all high-precision processing buffers now that 
     // the data has been successfully down-converted to 8-bit for export.
-    if (internalDrawVerts) { free(internalDrawVerts); internalDrawVerts = NULL; }
-    if (lightFloats)       { free(lightFloats);       lightFloats = NULL; }
-    if (deluxeFloats)      { free(deluxeFloats);      deluxeFloats = NULL; }
-    if (energyFloats)      { free(energyFloats);      energyFloats = NULL; }
-    if (normalFloats)      { free(normalFloats);      normalFloats = NULL; }
-    if (lightAlphaMask)    { free(lightAlphaMask);    lightAlphaMask = NULL; }
-    if (lightSurfaceIndex) { free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
-    if (gridData32)        { free(gridData32);        gridData32 = NULL; }
+    if (internalDrawVerts) { Q_Free(internalDrawVerts); internalDrawVerts = NULL; }
+    if (lightFloats)       { Q_Free(lightFloats);       lightFloats = NULL; }
+    if (deluxeFloats)      { Q_Free(deluxeFloats);      deluxeFloats = NULL; }
+    if (energyFloats)      { Q_Free(energyFloats);      energyFloats = NULL; }
+    if (normalFloats)      { Q_Free(normalFloats);      normalFloats = NULL; }
+    if (lightAlphaMask)    { Q_Free(lightAlphaMask);    lightAlphaMask = NULL; }
+    if (lightSurfaceIndex) { Q_Free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
+    if (gridData32)        { Q_Free(gridData32);        gridData32 = NULL; }
 }
 
 void AllocateRadiosityFloats(void)
@@ -840,38 +850,38 @@ void AllocateRadiosityFloats(void)
         return;
     }
 
-    if (radiosityFloats) free(radiosityFloats);
-    if (accumRadiosityFloats) free(accumRadiosityFloats);
-    if (radiosityDeluxeFloats) free(radiosityDeluxeFloats);
-    if (radiosityEnergyFloats) free(radiosityEnergyFloats);
-    if (accumRadiosityDeluxeSum) free(accumRadiosityDeluxeSum);
-    if (accumRadiosityEnergyFloats) free(accumRadiosityEnergyFloats);
+    if (radiosityFloats) Q_Free(radiosityFloats);
+    if (accumRadiosityFloats) Q_Free(accumRadiosityFloats);
+    if (radiosityDeluxeFloats) Q_Free(radiosityDeluxeFloats);
+    if (radiosityEnergyFloats) Q_Free(radiosityEnergyFloats);
+    if (accumRadiosityDeluxeSum) Q_Free(accumRadiosityDeluxeSum);
+    if (accumRadiosityEnergyFloats) Q_Free(accumRadiosityEnergyFloats);
 
-    radiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+    radiosityFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!radiosityFloats)
         Error("AllocateRadiosityFloats: malloc failed (radiosity). numLightBytes: %d", numLightBytes);
     memset(radiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-    accumRadiosityFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+    accumRadiosityFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!accumRadiosityFloats)
         Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
     if (game->deluxeMap)
     {
-        radiosityDeluxeFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        radiosityDeluxeFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
         if (!radiosityDeluxeFloats) Error("AllocateRadiosityFloats: malloc failed (radiosityDeluxe).");
         memset(radiosityDeluxeFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-        radiosityEnergyFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        radiosityEnergyFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
         if (!radiosityEnergyFloats) Error("AllocateRadiosityFloats: malloc failed (radiosityEnergy).");
         memset(radiosityEnergyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-        accumRadiosityDeluxeSum = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        accumRadiosityDeluxeSum = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
         if (!accumRadiosityDeluxeSum) Error("AllocateRadiosityFloats: malloc failed (accumRadiosityDeluxe).");
         memset(accumRadiosityDeluxeSum, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-        accumRadiosityEnergyFloats = malloc((numLightBytes / 3) * sizeof(vec3_t));
+        accumRadiosityEnergyFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
         if (!accumRadiosityEnergyFloats) Error("AllocateRadiosityFloats: malloc failed (accumRadiosityEnergy).");
         memset(accumRadiosityEnergyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
     }
@@ -887,32 +897,32 @@ void FreeRadiosityFloats(void)
 {
     if (radiosityFloats)
     {
-        free(radiosityFloats);
+        Q_Free(radiosityFloats);
         radiosityFloats = NULL;
     }
     if (accumRadiosityFloats)
     {
-        free(accumRadiosityFloats);
+        Q_Free(accumRadiosityFloats);
         accumRadiosityFloats = NULL;
     }
     if (radiosityDeluxeFloats)
     {
-        free(radiosityDeluxeFloats);
+        Q_Free(radiosityDeluxeFloats);
         radiosityDeluxeFloats = NULL;
     }
     if (radiosityEnergyFloats)
     {
-        free(radiosityEnergyFloats);
+        Q_Free(radiosityEnergyFloats);
         radiosityEnergyFloats = NULL;
     }
     if (accumRadiosityDeluxeSum)
     {
-        free(accumRadiosityDeluxeSum);
+        Q_Free(accumRadiosityDeluxeSum);
         accumRadiosityDeluxeSum = NULL;
     }
     if (accumRadiosityEnergyFloats)
     {
-        free(accumRadiosityEnergyFloats);
+        Q_Free(accumRadiosityEnergyFloats);
         accumRadiosityEnergyFloats = NULL;
     }
 }
@@ -1098,7 +1108,7 @@ void VoxelCache_BakeAll(void)
 
         if (validCount > 0)
         {
-            voxelPoint_t *points = malloc(validCount * sizeof(voxelPoint_t));
+            voxelPoint_t *points = Q_Alloc(validCount * sizeof(voxelPoint_t));
             int outIdx = 0;
             for (int j = 0; j < W * H; j++)
             {
@@ -1120,10 +1130,10 @@ void VoxelCache_BakeAll(void)
                 fclose(f);
                 numBaked++;
             }
-            free(points);
+            Q_Free(points);
         }
-        free(grid);
-        free(gridValid);
+        Q_Free(grid);
+        Q_Free(gridValid);
 
 #pragma omp critical
         {
@@ -1164,7 +1174,7 @@ voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
         return NULL;
     }
 
-    voxelPoint_t *points = malloc(numPoints * sizeof(voxelPoint_t));
+    voxelPoint_t *points = Q_Alloc(numPoints * sizeof(voxelPoint_t));
     if (!points)
     {
         fclose(f);
@@ -1173,7 +1183,7 @@ voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
 
     if (fread(points, sizeof(voxelPoint_t), numPoints, f) != numPoints)
     {
-        free(points);
+        Q_Free(points);
         fclose(f);
         return NULL;
     }

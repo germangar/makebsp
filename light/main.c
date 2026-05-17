@@ -260,6 +260,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-fast")) {
             g_fast = qtrue;
             _printf("Optimized voxelization mode (FAST) enabled\n");
+        } else if (!strcmp(argv[i], "-lowmem")) {
+            g_lowmem = qtrue;
+            _printf("Low-memory mode enabled (using memory-mapped files)\n");
         } else {
             break;
         }

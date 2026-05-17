@@ -1138,11 +1138,11 @@ mesh_t *LinearSubdivideMesh(mesh_t *in)
     mesh_t *out;
     drawVert_t *v1, *v2, *vout;
 
-    out = malloc(sizeof(*out));
+    out = Q_Alloc(sizeof(*out));
 
     out->width = in->width * 2;
     out->height = in->height;
-    out->verts = malloc(out->width * out->height * sizeof(*out->verts));
+    out->verts = Q_Alloc(out->width * out->height * sizeof(*out->verts));
     for (j = 0; j < in->height; j++)
     {
         out->verts[j * out->width + 0] = in->verts[j * in->width + 0];
@@ -1212,7 +1212,7 @@ void TraceLtm(int num)
     int numLocalLights = 0;
     float wrapThreshold = 0.0f;
 
-    tw = malloc(sizeof(traceWork_t));
+    tw = Q_Alloc(sizeof(traceWork_t));
     if (!tw)
         Error("Failed to allocate TraceLtm memory (traceWork_t)");
     memset(tw, 0, sizeof(traceWork_t));
@@ -1225,7 +1225,7 @@ void TraceLtm(int num)
     surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
 
     // Build local light list for this surface
-    localLights = malloc(numLights * sizeof(light_t *));
+    localLights = Q_Alloc(numLights * sizeof(light_t *));
     numLocalLights = 0;
 
     if (falloffSoftBias > 0.0f && falloffSoftBias < 1.0f)
@@ -1384,12 +1384,12 @@ void TraceLtm(int num)
     extW = sampleWidth;
     extH = sampleHeight;
 
-    occluded = malloc(extW * sizeof(byte *));
-    occluded_data = malloc(extW * extH * sizeof(byte));
-    color = malloc(extW * sizeof(vec3_t *));
-    color_data = malloc(extW * extH * sizeof(vec3_t));
-    byte *sampleHit_data = malloc(extW * extH * sizeof(byte));
-    byte **sampleHit = malloc(extW * sizeof(byte *));
+    occluded = Q_Alloc(extW * sizeof(byte *));
+    occluded_data = Q_Alloc(extW * extH * sizeof(byte));
+    color = Q_Alloc(extW * sizeof(vec3_t *));
+    color_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+    byte *sampleHit_data = Q_Alloc(extW * extH * sizeof(byte));
+    byte **sampleHit = Q_Alloc(extW * sizeof(byte *));
 
     // Deluxe arrays (direction + energy per texel)
     vec3_t *deluxe_data = NULL;
@@ -1400,12 +1400,12 @@ void TraceLtm(int num)
     vec3_t **normalArray = NULL;
     if (deluxeFloats)
     {
-        deluxe_data = malloc(extW * extH * sizeof(vec3_t));
-        deluxe = malloc(extW * sizeof(vec3_t *));
-        lmenergy_data = malloc(extW * extH * sizeof(vec3_t));
-        lmenergy = malloc(extW * sizeof(vec3_t *));
-        normalArray_data = malloc(extW * extH * sizeof(vec3_t));
-        normalArray = malloc(extW * sizeof(vec3_t *));
+        deluxe_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+        deluxe = Q_Alloc(extW * sizeof(vec3_t *));
+        lmenergy_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+        lmenergy = Q_Alloc(extW * sizeof(vec3_t *));
+        normalArray_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+        normalArray = Q_Alloc(extW * sizeof(vec3_t *));
     }
 
     if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data)
@@ -1788,7 +1788,7 @@ void TraceGrid(int num)
     int i;
     traceWork_t *tw;
 
-    tw = malloc(sizeof(traceWork_t));
+    tw = Q_Alloc(sizeof(traceWork_t));
     if (!tw)
         Error("Failed to allocate traceWork_t");
     memset(tw, 0, sizeof(traceWork_t));
@@ -1905,7 +1905,7 @@ void LightWorld(void)
     int i;
     long long totalLuxels = 0;
 
-    surfaceWorkOrder = malloc(numDrawSurfaces * sizeof(int));
+    surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
     {
         surfaceWorkOrder[i] = i;

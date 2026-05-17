@@ -84,11 +84,11 @@ static void RadiosityVoxelReset(void) {
             radVoxel_t *curr = g_radVoxels[i].next;
             while (curr) {
                 radVoxel_t *next = curr->next;
-                free(curr);
+                Q_Free(curr);
                 curr = next;
             }
         }
-        free(g_radVoxels);
+        Q_Free(g_radVoxels);
     }
 
     for (int i = 0; i < 3; i++) {
@@ -160,7 +160,7 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
     }
 
     // 3. Create new normal-specific bucket if no match found
-    radVoxel_t *newV = malloc(sizeof(radVoxel_t));
+    radVoxel_t *newV = Q_Alloc(sizeof(radVoxel_t));
     VectorCopy(color, newV->color);
     VectorCopy(normal, newV->normal);
     newV->weight = 1.0f;
@@ -246,7 +246,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
 
 
     g_numEmitters = 0;
-    g_emitters    = malloc(sizeof(emitter_t) * capacity);
+    g_emitters    = Q_Alloc(sizeof(emitter_t) * capacity);
 
     if (!g_emitters)
         Error("RadiosityEmit: malloc failed");
@@ -635,7 +635,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         }
     }
     
-    if (points) free(points);
+    if (points) Q_Free(points);
 }
 
 
@@ -696,7 +696,7 @@ static void RadiosityVoxelize(void) {
                         RadiosityVoxelAdd(pos, normal, &radiosityFloats[pIdx * 3], game->deluxeMap ? &radiosityDeluxeFloats[pIdx * 3] : NULL, game->deluxeMap ? &radiosityEnergyFloats[pIdx * 3] : NULL);
                     }
                 }
-                free(points);
+                Q_Free(points);
                 
                 continue;
             }
@@ -898,18 +898,18 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
         return;
     }
 
-    vec3_t *tempColor = malloc(numPixels * sizeof(vec3_t));
+    vec3_t *tempColor = Q_Alloc(numPixels * sizeof(vec3_t));
     vec3_t *tempDeluxe = NULL;
     vec3_t *tempEnergy = NULL;
     if (game->deluxeMap) {
-        tempDeluxe = malloc(numPixels * sizeof(vec3_t));
-        tempEnergy = malloc(numPixels * sizeof(vec3_t));
+        tempDeluxe = Q_Alloc(numPixels * sizeof(vec3_t));
+        tempEnergy = Q_Alloc(numPixels * sizeof(vec3_t));
     }
     
     if (!tempColor || (game->deluxeMap && (!tempDeluxe || !tempEnergy))) {
-        if (tempColor) free(tempColor);
-        if (tempDeluxe) free(tempDeluxe);
-        if (tempEnergy) free(tempEnergy);
+        if (tempColor) Q_Free(tempColor);
+        if (tempDeluxe) Q_Free(tempDeluxe);
+        if (tempEnergy) Q_Free(tempEnergy);
         return;
     }
 
@@ -934,8 +934,8 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
         voxelPoint_t *points = VoxelCache_Load(surfIdx, &numPoints);
         if (points) {
             byte *filled = calloc(numPixels, 1);
-            vec3_t *pointPos = malloc(numPixels * sizeof(vec3_t));
-            vec3_t *pointNorm = malloc(numPixels * sizeof(vec3_t));
+            vec3_t *pointPos = Q_Alloc(numPixels * sizeof(vec3_t));
+            vec3_t *pointNorm = Q_Alloc(numPixels * sizeof(vec3_t));
 
             // Step 1: Exact hits via Voxel Cache
             for (int i = 0; i < numPoints; i++) {
@@ -991,7 +991,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                 }
             }
 
-            free(filled); free(pointPos); free(pointNorm); free(points);
+            Q_Free(filled); Q_Free(pointPos); Q_Free(pointNorm); Q_Free(points);
             goto flush; // Skip manual rasterization loop
         }
     }
@@ -1066,9 +1066,9 @@ flush:
 
 
 
-    free(tempColor);
-    if (tempDeluxe) free(tempDeluxe);
-    if (tempEnergy) free(tempEnergy);
+    Q_Free(tempColor);
+    if (tempDeluxe) Q_Free(tempDeluxe);
+    if (tempEnergy) Q_Free(tempEnergy);
     
 }
 
@@ -1165,7 +1165,7 @@ void LightRadiosity(void) {
         } else {
             for (int i = 0; i < numLightBytes / 3; i++) VectorAdd(accumRadiosityFloats + i * 3, radiosityFloats + i * 3, accumRadiosityFloats + i * 3);
         }
-        free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
+        Q_Free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
 

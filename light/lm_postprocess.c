@@ -55,10 +55,10 @@ static int CompareEdges(const void *a, const void *b) {
 
 void BuildPlanarSurfaceIndex(void) {
 	int i, j, k;
-	if (planarSurfaces) { for (i=0; i<numPlanarSurfaces; i++) if (planarSurfaces[i].partners) free(planarSurfaces[i].partners); free(planarSurfaces); }
-	if (planarSortIndex) free(planarSortIndex); numPlanarSurfaces = 0;
-	planarSurfaces = malloc(numDrawSurfaces * sizeof(planarInfo_t));
-	planarSortIndex = malloc(numDrawSurfaces * sizeof(int));
+	if (planarSurfaces) { for (i=0; i<numPlanarSurfaces; i++) if (planarSurfaces[i].partners) Q_Free(planarSurfaces[i].partners); Q_Free(planarSurfaces); }
+	if (planarSortIndex) Q_Free(planarSortIndex); numPlanarSurfaces = 0;
+	planarSurfaces = Q_Alloc(numDrawSurfaces * sizeof(planarInfo_t));
+	planarSortIndex = Q_Alloc(numDrawSurfaces * sizeof(int));
 	for (i=0; i<numDrawSurfaces; i++) {
 		dsurface_t *ds = &drawSurfaces[i]; if (ds->lightmapNum[0] < 0) continue;
 		if (ds->surfaceType != MST_PLANAR && ds->surfaceType != MST_PATCH) continue;
@@ -86,7 +86,7 @@ void BuildPlanarSurfaceIndex(void) {
 		p->numPartners = 0; p->partners = NULL;
 	}
 	if (numPlanarSurfaces == 0) return;
-	edgeRef_t *allEdges = malloc(numDrawIndexes * sizeof(edgeRef_t)); int numEdges = 0;
+	edgeRef_t *allEdges = Q_Alloc(numDrawIndexes * sizeof(edgeRef_t)); int numEdges = 0;
 	for (i=0; i<numPlanarSurfaces; i++) {
 		dsurface_t *ds = &drawSurfaces[planarSurfaces[i].surfaceNum];
 		for (j=0; j<ds->numIndexes; j+=3) for (k=0; k<3; k++) {
@@ -113,12 +113,12 @@ void BuildPlanarSurfaceIndex(void) {
 		}
 		i=next;
 	}
-	free(allEdges); qsort(planarSortIndex, numPlanarSurfaces, sizeof(int), ComparePlanarInfo);
+	Q_Free(allEdges); qsort(planarSortIndex, numPlanarSurfaces, sizeof(int), ComparePlanarInfo);
 }
 
 void FreePlanarSurfaceIndex(void) {
-	if (planarSurfaces) { for (int i=0; i<numPlanarSurfaces; i++) if (planarSurfaces[i].partners) free(planarSurfaces[i].partners); free(planarSurfaces); }
-	if (planarSortIndex) free(planarSortIndex); planarSurfaces=NULL; planarSortIndex=NULL; numPlanarSurfaces=0;
+	if (planarSurfaces) { for (int i=0; i<numPlanarSurfaces; i++) if (planarSurfaces[i].partners) Q_Free(planarSurfaces[i].partners); Q_Free(planarSurfaces); }
+	if (planarSortIndex) Q_Free(planarSortIndex); planarSurfaces=NULL; planarSortIndex=NULL; numPlanarSurfaces=0;
 }
 
 qboolean SampleLightmapWorldBilinear(int srcIdx, const vec3_t pos, const vec3_t normal, float *out, const float *buf) {
@@ -178,7 +178,7 @@ void GpuLightmapState_Upload(void) {
     float *tA = lightFloats; byte *tM = lightAlphaMask;
     if (scale > 1) {
         if (verbose) _printf("  Upscaling atlas to 2x...\n");
-        tA = malloc(aB); tM = malloc(mB); int nL=totalP1x/(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT), W=LIGHTMAP_WIDTH, H=LIGHTMAP_HEIGHT, Ws=W*scale, Hs=H*scale;
+        tA = Q_Alloc(aB); tM = Q_Alloc(mB); int nL=totalP1x/(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT), W=LIGHTMAP_WIDTH, H=LIGHTMAP_HEIGHT, Ws=W*scale, Hs=H*scale;
         #pragma omp parallel for schedule(static)
         for (int m=0; m<nL; m++) for (int ys=0; ys<Hs; ys++) for (int xs=0; xs<Ws; xs++) {
             int ps=(m*Hs+ys)*Ws+xs; float fx=((float)xs+0.5f)/scale-0.5f, fy=((float)ys+0.5f)/scale-0.5f; int ix0=(int)floorf(fx), iy0=(int)floorf(fy); float tx=fx-ix0, ty=fy-iy0;
@@ -202,15 +202,15 @@ void GpuLightmapState_Upload(void) {
     st->atlasA=clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tA, &err);
     st->atlasB=clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tA, &err);
     st->maskBuf=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, mB, tM, &err);
-    if (scale>1) { free(tA); free(tM); }
+    if (scale>1) { Q_Free(tA); Q_Free(tM); }
 
     // Upload deluxe directions and surface normals (same upscale logic, guarded by deluxeFloats)
     if (deluxeFloats) {
         float *tdA = deluxeFloats;
         float *tnA = normalFloats;
         if (scale > 1) {
-            tdA = malloc(aB);
-            if (tnA) tnA = malloc(aB);
+            tdA = Q_Alloc(aB);
+            if (tnA) tnA = Q_Alloc(aB);
             int nL=totalP1x/(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT), W=LIGHTMAP_WIDTH, H=LIGHTMAP_HEIGHT, Ws=W*scale, Hs=H*scale;
             #pragma omp parallel for schedule(static)
             for (int m=0; m<nL; m++) for (int ys=0; ys<Hs; ys++) for (int xs=0; xs<Ws; xs++) {
@@ -252,10 +252,10 @@ void GpuLightmapState_Upload(void) {
             st->normalA = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tnA, &err);
             st->normalB = clCreateBuffer(g_clContext, CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR, aB, tnA, &err);
         }
-        if (scale>1) { free(tdA); if (tnA && tnA != normalFloats) free(tnA); }
+        if (scale>1) { Q_Free(tdA); if (tnA && tnA != normalFloats) Q_Free(tnA); }
     }
 
-    GpuPlanarSurface_t *cPs = malloc(numPlanarSurfaces*sizeof(GpuPlanarSurface_t)); int tL=0; float fS=scale, sh=(0.5f/fS)-0.5f;
+    GpuPlanarSurface_t *cPs = Q_Alloc(numPlanarSurfaces*sizeof(GpuPlanarSurface_t)); int tL=0; float fS=scale, sh=(0.5f/fS)-0.5f;
     for (s=0; s<numPlanarSurfaces; s++) {
         planarInfo_t *p=&planarSurfaces[s]; GpuPlanarSurface_t *g=&cPs[s];
         g->originX=p->origin[0]+sh*p->vecs[0][0]+sh*p->vecs[1][0]; g->originY=p->origin[1]+sh*p->vecs[0][1]+sh*p->vecs[1][1]; g->originZ=p->origin[2]+sh*p->vecs[0][2]+sh*p->vecs[1][2];
@@ -263,26 +263,26 @@ void GpuLightmapState_Upload(void) {
         g->invMagSq0=p->invMagSq[0]*fS*fS; g->invMagSq1=p->invMagSq[1]*fS*fS; g->width=p->width*scale; g->height=p->height*scale; g->lmNum=p->lmNum; g->lmOffX=p->lmOffset[0]*scale; g->lmOffY=p->lmOffset[1]*scale;
         tL+=p->numPartners;
     }
-    st->surfacesBuf=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, numPlanarSurfaces*sizeof(GpuPlanarSurface_t), cPs, &err); free(cPs);
-    int *off=malloc((numPlanarSurfaces+1)*sizeof(int)), *dat=malloc((tL>0?tL:1)*sizeof(int)); off[0]=0;
+    st->surfacesBuf=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, numPlanarSurfaces*sizeof(GpuPlanarSurface_t), cPs, &err); Q_Free(cPs);
+    int *off=Q_Alloc((numPlanarSurfaces+1)*sizeof(int)), *dat=Q_Alloc((tL>0?tL:1)*sizeof(int)); off[0]=0;
     for(s=0;s<numPlanarSurfaces;s++) { int b=off[s]; for(int i=0;i<planarSurfaces[s].numPartners;i++) dat[b+i]=planarSurfaces[s].partners[i]; off[s+1]=b+planarSurfaces[s].numPartners; }
     st->partnerOffsets=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (numPlanarSurfaces+1)*sizeof(int), off, &err);
-    st->partnerData=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (tL>0?tL:1)*sizeof(int), dat, &err); free(off); free(dat);
-    int *pS=malloc(totalP*sizeof(int)), *pX=malloc(totalP*sizeof(int)), *pY=malloc(totalP*sizeof(int)), *vL=malloc(totalP*sizeof(int));
+    st->partnerData=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, (tL>0?tL:1)*sizeof(int), dat, &err); Q_Free(off); Q_Free(dat);
+    int *pS=Q_Alloc(totalP*sizeof(int)), *pX=Q_Alloc(totalP*sizeof(int)), *pY=Q_Alloc(totalP*sizeof(int)), *vL=Q_Alloc(totalP*sizeof(int));
     memset(pS, -1, totalP*sizeof(int)); int nV=0; int W=LIGHTMAP_WIDTH*scale, H=LIGHTMAP_HEIGHT*scale;
     for (s=0; s<numPlanarSurfaces; s++) {
         dsurface_t *ds=&drawSurfaces[planarSurfaces[s].surfaceNum]; int lm=ds->lightmapNum[0], sW=ds->lightmapWidth*scale, sH=ds->lightmapHeight*scale, oX=ds->lightmapOffset[0][0]*scale, oY=ds->lightmapOffset[0][1]*scale;
         for(y=0;y<sH;y++) for(x=0;x<sW;x++) { int p=(lm*H+oY+y)*W+oX+x, p1=(lm*LIGHTMAP_HEIGHT+(oY+y)/scale)*LIGHTMAP_WIDTH+(oX+x)/scale; if(lightAlphaMask[p1]==0)continue; pS[p]=s; pX[p]=x; pY[p]=y; vL[nV++]=p; }
     }
     st->numValid=nV; st->validList=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nV*sizeof(int), vL, &err);
-    float *radii = malloc(numPlanarSurfaces * sizeof(float));
+    float *radii = Q_Alloc(numPlanarSurfaces * sizeof(float));
     for (s = 0; s < numPlanarSurfaces; s++) radii[s] = planarSurfaces[s].smoothingRadius;
     st->radiiBuf = clCreateBuffer(g_clContext, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, numPlanarSurfaces * sizeof(float), radii, &err);
-    free(radii);
+    Q_Free(radii);
     st->pixelToSurface=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pS, &err);
     st->pixelToX=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pX, &err);
     st->pixelToY=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, totalP*sizeof(int), pY, &err);
-    free(pS); free(pX); free(pY); free(vL);
+    Q_Free(pS); Q_Free(pX); Q_Free(pY); Q_Free(vL);
 }
 
 static void RunGpuAAKernel(float *pattern, int numSamples) {
@@ -320,10 +320,10 @@ void SmoothLightmapsGPU(void) { RunGpuSmoothKernel(); }
 
 static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const float *tF, int aaP, int smP) {
     dsurface_t *ds=&drawSurfaces[planarSurfaces[sIdx].surfaceNum]; int W=ds->lightmapWidth, H=ds->lightmapHeight; if(W<=0||H<=0)return; int W2=W*2, H2=H*2;
-    float *g2=malloc(W2*H2*3*sizeof(float)), *b2=malloc(W2*H2*3*sizeof(float)); byte *m2=malloc(W2*H2), *bm2=malloc(W2*H2);
-    float *g2dir = deluxeFloats ? malloc(W2*H2*3*sizeof(float)) : NULL; float *b2dir = deluxeFloats ? malloc(W2*H2*3*sizeof(float)) : NULL;
-    float *g2nrm = normalFloats ? malloc(W2*H2*3*sizeof(float)) : NULL; float *b2nrm = normalFloats ? malloc(W2*H2*3*sizeof(float)) : NULL;
-    if(!g2||!b2||!m2||!bm2){if(g2)free(g2);if(b2)free(b2);if(m2)free(m2);if(bm2)free(bm2);if(g2dir)free(g2dir);if(b2dir)free(b2dir);if(g2nrm)free(g2nrm);if(b2nrm)free(b2nrm);return;}
+    float *g2=Q_Alloc(W2*H2*3*sizeof(float)), *b2=Q_Alloc(W2*H2*3*sizeof(float)); byte *m2=Q_Alloc(W2*H2), *bm2=Q_Alloc(W2*H2);
+    float *g2dir = deluxeFloats ? Q_Alloc(W2*H2*3*sizeof(float)) : NULL; float *b2dir = deluxeFloats ? Q_Alloc(W2*H2*3*sizeof(float)) : NULL;
+    float *g2nrm = normalFloats ? Q_Alloc(W2*H2*3*sizeof(float)) : NULL; float *b2nrm = normalFloats ? Q_Alloc(W2*H2*3*sizeof(float)) : NULL;
+    if(!g2||!b2||!m2||!bm2){if(g2)Q_Free(g2);if(b2)Q_Free(b2);if(m2)Q_Free(m2);if(bm2)Q_Free(bm2);if(g2dir)Q_Free(g2dir);if(b2dir)Q_Free(b2dir);if(g2nrm)Q_Free(g2nrm);if(b2nrm)Q_Free(b2nrm);return;}
     for(int Y=0;Y<H2;Y++) for(int X=0;X<W2;X++) { 
         float px=(X+0.5f)*0.5f, py=(Y+0.5f)*0.5f, col[3], dir[3], nrm[3]; 
         if(GetFilteredTexel(sIdx,px,py,col,tF)){
@@ -422,23 +422,23 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
             }
         }
     }
-    free(g2); free(m2); free(b2); free(bm2);
-    if (g2dir) free(g2dir); if (b2dir) free(b2dir);
-    if (g2nrm) free(g2nrm); if (b2nrm) free(b2nrm);
+    Q_Free(g2); Q_Free(m2); Q_Free(b2); Q_Free(bm2);
+    if (g2dir) Q_Free(g2dir); if (b2dir) Q_Free(b2dir);
+    if (g2nrm) Q_Free(g2nrm); if (b2nrm) Q_Free(b2nrm);
 }
 
 static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses) {
     dsurface_t *ds = &drawSurfaces[surfIdx]; if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return; if (aaPasses <= 0 && smoothPasses <= 0) return;
     float tS = GetSurfaceTexelSize(ds), eR = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius, sR = eR * tS; if (sR < 0.1f) return;
     float vS = sR, mDSq = sR*sR, sig = sR/3.0f, tS2 = 2*sig*sig; if (sig < 0.1f) sig = 0.1f;
-    int nP = 0; voxelPoint_t *cP = VoxelCache_Load(surfIdx, &nP); if (!cP || nP == 0) { if (cP) free(cP); return; }
+    int nP = 0; voxelPoint_t *cP = VoxelCache_Load(surfIdx, &nP); if (!cP || nP == 0) { if (cP) Q_Free(cP); return; }
     int N = nP, nS = (aaPasses > 0) ? 8 : 1; ThreadLock(); _printf("."); fflush(stdout); ThreadUnlock();
-    float *tP=malloc(N*3*4), *tN=malloc(N*3*4), *tC=malloc(N*3*4); int *vL=malloc(N*4), *tX=malloc(N*4), *tY=malloc(N*4);
-    float *jP=malloc((size_t)N*nS*3*4), *jN=malloc((size_t)N*nS*3*4); byte *jV=malloc((size_t)N*nS);
-    float *tD=deluxeFloats?malloc(N*3*4):NULL, *tNr=normalFloats?malloc(N*3*4):NULL;
+    float *tP=Q_Alloc(N*3*4), *tN=Q_Alloc(N*3*4), *tC=Q_Alloc(N*3*4); int *vL=Q_Alloc(N*4), *tX=Q_Alloc(N*4), *tY=Q_Alloc(N*4);
+    float *jP=Q_Alloc((size_t)N*nS*3*4), *jN=Q_Alloc((size_t)N*nS*3*4); byte *jV=Q_Alloc((size_t)N*nS);
+    float *tD=deluxeFloats?Q_Alloc(N*3*4):NULL, *tNr=normalFloats?Q_Alloc(N*3*4):NULL;
     if (!tP||!tN||!tC||!vL||!tX||!tY||!jP||!jN||!jV) { 
-        free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP);
-        if(tD)free(tD);if(tNr)free(tNr);
+        Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV);Q_Free(cP);
+        if(tD)Q_Free(tD);if(tNr)Q_Free(tNr);
         return; 
     }
     memset(jV, 0, (size_t)N*nS); vec3_t gMin={99999,99999,99999}, gMax={-99999,-99999,-99999};
@@ -460,10 +460,10 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     if (vS<1.0f) vS=1.0f; if (mR/vS>128.0f) vS=mR/128.0f;
     int gD[3]; for(int k=0;k<3;k++){ gD[k]=(int)ceilf((gMax[k]-gMin[k])/vS); if(gD[k]<1)gD[k]=1; }
     size_t nB=(size_t)gD[0]*gD[1]*gD[2], gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2];
-    int *bC=calloc(nB, 4), *bS=malloc(nB*4), *sT=malloc(N*4), *wP=malloc(nB*4);
+    int *bC=calloc(nB, 4), *bS=Q_Alloc(nB*4), *sT=Q_Alloc(N*4), *wP=Q_Alloc(nB*4);
     if (!bC||!bS||!sT||!wP) { 
-        free(bC);free(bS);free(sT);free(wP);free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(cP); 
-        if(tD)free(tD);if(tNr)free(tNr);
+        Q_Free(bC);Q_Free(bS);Q_Free(sT);Q_Free(wP);Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV);Q_Free(cP); 
+        if(tD)Q_Free(tD);if(tNr)Q_Free(tNr);
         return; 
     }
     for (int i=0; i<N; i++) { int v[3]; for(int k=0;k<3;k++) v[k]=(int)((tP[i*3+k]-gMin[k])/vS); if(v[0]>=0&&v[0]<gD[0]&&v[1]>=0&&v[1]<gD[1]&&v[2]>=0&&v[2]<gD[2]) bC[(size_t)v[0]*gS1+v[1]*gS2+v[2]]++; }
@@ -538,17 +538,17 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
         }
         clReleaseProgram(prog);
     }
-    free(tP);free(tN);free(tC);free(vL);free(tX);free(tY);free(jP);free(jN);free(jV);free(bC);free(bS);free(sT);free(wP);free(cP);
-    if(tD)free(tD);if(tNr)free(tNr);
+    Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV);Q_Free(bC);Q_Free(bS);Q_Free(sT);Q_Free(wP);Q_Free(cP);
+    if(tD)Q_Free(tD);if(tNr)Q_Free(tNr);
 }
 static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, int aaP, int smP) {
     dsurface_t *ds=&drawSurfaces[surfIdx]; if(ds->lightmapNum[0]<0||ds->surfaceType!=MST_TRIANGLE_SOUP)return;
     float tS=GetSurfaceTexelSize(ds), eR=(smP>0)?TRISOUP_SMOOTH_CHEAT(radius):radius, sR=eR*tS; if(sR<0.1f)return;
     float vS=sR, mDSq=sR*sR, sig=sR/3.0f, tS2=2*sig*sig; if(sig<0.1f)sig=0.1f;
-    int nP=0; voxelPoint_t *cP=VoxelCache_Load(surfIdx,&nP); if(!cP||nP==0){if(cP)free(cP);return;}
+    int nP=0; voxelPoint_t *cP=VoxelCache_Load(surfIdx,&nP); if(!cP||nP==0){if(cP)Q_Free(cP);return;}
     vec3_t gMin={99999,99999,99999}, gMax={-99999,-99999,-99999}; for(int i=0;i<nP;i++) for(int k=0;k<3;k++) { gMin[k]=min(gMin[k],cP[i].pos[k]); gMax[k]=max(gMax[k],cP[i].pos[k]); }
     for(int k=0;k<3;k++){gMin[k]-=vS;gMax[k]+=vS;} int gD[3]; for(int k=0;k<3;k++){gD[k]=(int)ceilf((gMax[k]-gMin[k])/vS);if(gD[k]<1)gD[k]=1;}
-    const size_t gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2], nB=(size_t)gD[0]*gD[1]*gD[2]; aaTexel_t **fG=calloc(nB,sizeof(aaTexel_t*)), *pool=malloc(nP*sizeof(aaTexel_t));
+    const size_t gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2], nB=(size_t)gD[0]*gD[1]*gD[2]; aaTexel_t **fG=calloc(nB,sizeof(aaTexel_t*)), *pool=Q_Alloc(nP*sizeof(aaTexel_t));
     for(int i=0;i<nP;i++) { int v[3]; qboolean b=qtrue; for(int k=0;k<3;k++){ v[k]=(int)((cP[i].pos[k]-gMin[k])/vS); if(v[k]<0||v[k]>=gD[k])b=qfalse; }
         if(b){ 
             aaTexel_t *nT=&pool[i]; VectorCopy(cP[i].pos,nT->pos); VectorCopy(cP[i].normal,nT->normal); 
@@ -615,7 +615,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
             if (normalFloats) VectorCopy(&normalFloats[p*3],pool[i].nrm);
         }
     }
-    free(pool); free(fG); free(cP);
+    Q_Free(pool); Q_Free(fG); Q_Free(cP);
 }
 
 void PostProcessLightmaps(void) {
@@ -650,7 +650,7 @@ void PostProcessLightmaps(void) {
         }
     }
     if (lightmapAA>0 || lightmapSmoothPasses>0) {
-        float r=lightmapSmoothRadius; _printf("  Volumetric Filtering: "); float *tF=malloc((size_t)numLightBytes*4);
+        float r=lightmapSmoothRadius; _printf("  Volumetric Filtering: "); float *tF=Q_Alloc((size_t)numLightBytes*4);
         memcpy(tF,lightFloats,(size_t)numLightBytes*4); int prg=0;
         if(useOpenCL) {
             for(int s=0;s<numDrawSurfaces;s++){
@@ -673,7 +673,7 @@ void PostProcessLightmaps(void) {
                 if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
         }
-        free(tF); _printf("Done\n");
+        Q_Free(tF); _printf("Done\n");
     }
     _printf("  Total filtering time: %.2f seconds\n", I_FloatTime()-start); FreePlanarSurfaceIndex();
 }

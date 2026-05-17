@@ -722,8 +722,8 @@ void AllocateLightmaps(entity_t *e)
     // Set numLightBytes so WriteBSPFile will export the lump
     numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
 
-    if (lightBytes) free(lightBytes);
-    lightBytes = malloc(numLightBytes);
+    if (lightBytes) Q_Free(lightBytes);
+    lightBytes = Q_Alloc(numLightBytes);
     if (!lightBytes && numLightBytes > 0)
     {
         Error("Failed to allocate %d bytes for lightBytes", numLightBytes);

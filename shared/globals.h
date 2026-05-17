@@ -73,6 +73,7 @@ typedef struct {
 extern float falloffSoftBias;
 extern float sunSoftBias;
 extern vec3_t blockSize;
+extern qboolean g_lowmem;
 
 #define MAX_GAMES 128
 extern int numGames;

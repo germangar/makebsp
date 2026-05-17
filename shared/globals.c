@@ -15,6 +15,7 @@ float falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 float sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
 
 vec3_t blockSize = {1024, 1024, 1024};
+qboolean g_lowmem = qfalse;
 
 game_t gameTemplates[MAX_GAMES] = {
 	{

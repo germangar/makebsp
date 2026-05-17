@@ -367,12 +367,141 @@ char *ExpandPathAndArchive(const char *path)
     return expanded;
 }
 
-char *copystring(const char *s)
+void *copystring(const char *s)
 {
     char *b;
     b = malloc(strlen(s) + 1);
     strcpy(b, s);
     return b;
+}
+
+/*
+================
+MEMORY MAPPING WRAPPERS (Low-Memory Mode)
+================
+*/
+
+extern qboolean g_lowmem;
+
+#ifdef _WIN32
+typedef struct {
+    void *ptr;
+    HANDLE hFile;
+    HANDLE hMap;
+} memmap_t;
+
+#define MAX_MEMMAPS 1024
+static memmap_t memmaps[MAX_MEMMAPS];
+static int numMemmaps = 0;
+#endif
+
+void *Q_Alloc(size_t size) {
+    if (size == 0) return NULL;
+
+#ifdef _WIN32
+    if (g_lowmem) {
+        if (numMemmaps >= MAX_MEMMAPS) {
+            Error("Q_Alloc: MAX_MEMMAPS exceeded");
+        }
+
+        // Create a temporary file for the mapping
+        char tempPath[MAX_PATH];
+        char tempFile[MAX_PATH];
+        if (!GetTempPath(MAX_PATH, tempPath)) {
+            Error("Q_Alloc: GetTempPath failed");
+        }
+        if (!GetTempFileName(tempPath, "makebsp", 0, tempFile)) {
+            Error("Q_Alloc: GetTempFileName failed");
+        }
+
+        // Open with FILE_FLAG_DELETE_ON_CLOSE so it's nuked when handles are closed
+        HANDLE hFile = CreateFile(tempFile, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+        if (hFile == INVALID_HANDLE_VALUE) {
+            Error("Q_Alloc: CreateFile failed for %s", tempFile);
+        }
+
+        ULARGE_INTEGER liSize;
+        liSize.QuadPart = size;
+
+        HANDLE hMap = CreateFileMapping(hFile, NULL, PAGE_READWRITE, liSize.HighPart, liSize.LowPart, NULL);
+        if (hMap == NULL) {
+            CloseHandle(hFile);
+            Error("Q_Alloc: CreateFileMapping failed for size %zu (Error: %d)", size, (int)GetLastError());
+        }
+
+        void *ptr = MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, size);
+        if (ptr == NULL) {
+            CloseHandle(hMap);
+            CloseHandle(hFile);
+            Error("Q_Alloc: MapViewOfFile failed for size %zu (Error: %d)", size, (int)GetLastError());
+        }
+
+        if (verbose) {
+            _printf("Q_Alloc: Memory-mapped %zu bytes to %s\n", size, tempFile);
+        }
+
+        memmaps[numMemmaps].ptr = ptr;
+        memmaps[numMemmaps].hFile = hFile;
+        memmaps[numMemmaps].hMap = hMap;
+        numMemmaps++;
+
+        return ptr;
+    }
+#endif
+
+    void *ptr = malloc(size);
+    if (!ptr) {
+        Error("Q_Alloc: malloc failed for size %zu", size);
+    }
+    return ptr;
+}
+
+void Q_Free(void *ptr) {
+    if (ptr == NULL) return;
+
+#ifdef _WIN32
+    for (int i = 0; i < numMemmaps; i++) {
+        if (memmaps[i].ptr == ptr) {
+            UnmapViewOfFile(ptr);
+            CloseHandle(memmaps[i].hMap);
+            CloseHandle(memmaps[i].hFile);
+            
+            // Swap with last element to keep array dense
+            memmaps[i] = memmaps[numMemmaps - 1];
+            numMemmaps--;
+            return;
+        }
+    }
+#endif
+
+    free(ptr);
+}
+
+void *Q_Realloc(void *ptr, size_t oldSize, size_t newSize) {
+    if (ptr == NULL) return Q_Alloc(newSize);
+    if (newSize == 0) {
+        Q_Free(ptr);
+        return NULL;
+    }
+
+#ifdef _WIN32
+    // Check if this was a mapped pointer
+    for (int i = 0; i < numMemmaps; i++) {
+        if (memmaps[i].ptr == ptr) {
+            void *newPtr = Q_Alloc(newSize);
+            size_t copySize = (oldSize < newSize) ? oldSize : newSize;
+            memcpy(newPtr, ptr, copySize);
+            Q_Free(ptr);
+            return newPtr;
+        }
+    }
+#endif
+
+    void *newPtr = realloc(ptr, newSize);
+    if (!newPtr) {
+        Error("Q_Realloc: realloc failed for size %zu", newSize);
+    }
+    return newPtr;
 }
 
 /*

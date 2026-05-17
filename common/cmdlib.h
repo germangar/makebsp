@@ -124,7 +124,11 @@ char *COM_Parse(char *data);
 extern char com_token[1024];
 extern qboolean com_eof;
 
-char *copystring(const char *s);
+void *copystring(const char *s);
+
+void *Q_Alloc(size_t size);
+void *Q_Realloc(void *ptr, size_t oldSize, size_t newSize);
+void Q_Free(void *ptr);
 
 void CRC_Init(unsigned short *crcvalue);
 void CRC_ProcessByte(unsigned short *crcvalue, byte data);

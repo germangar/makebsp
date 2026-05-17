@@ -348,14 +348,14 @@ void LoadBSPFile(const char *filename)
     numLightBytes = CopyLump(header, LUMP_LIGHTMAPS, NULL, 1);
     if (numLightBytes)
     {
-        if (lightBytes) free(lightBytes);
-        lightBytes = malloc(numLightBytes);
+        if (lightBytes) Q_Free(lightBytes);
+        lightBytes = Q_Alloc(numLightBytes);
         if (!lightBytes) Error("Failed to allocate %d bytes for lightBytes", numLightBytes);
         CopyLump(header, LUMP_LIGHTMAPS, lightBytes, 1);
     }
     else
     {
-        if (lightBytes) { free(lightBytes); lightBytes = NULL; }
+        if (lightBytes) { Q_Free(lightBytes); lightBytes = NULL; }
     }
 
     entdatasize = CopyLump(header, LUMP_ENTITIES, dentdata, 1);
