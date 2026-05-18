@@ -30,7 +30,7 @@ The project implements a custom three-phase radiosity system:
 
 ### Core Concepts
 - **Surface types**: There are 3 surface types which are treated diferently MST_PLANAR (always planar surfaces from brushes), MST_PATCH (bezier curve surfaces), MST_TRIANGLE_SOUP (triangle meshes from 3D models).
-- **UV map coordinates**: MST_PLANAR UV coordinates are rectangles and adjust to texel centers. MST_PATCH coordinates fall on texel edges. MST_TRIANGLE_SOUP coordinates adhere to texel edges as close as they can, since they are not rectangles.
+- **UV map coordinates**: MST_PLANAR UV coordinates are rectangles and adjust to texel centers. MST_PATCH coordinates fall on texel centers too. MST_TRIANGLE_SOUP coordinates adhere to texel edges as close as they can, since they are not rectangles.
 - **Sparse Sampling**: To optimize performance, the system can sample emitters at a configurable interval (Sparse Grid) and then interpolate the results across the full lightmap.
 - **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
 

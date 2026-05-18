@@ -41,6 +41,25 @@ static float rad_angle_match_cos = 0.5f;
 // Prevents the emitter from self-shadowing via Embree.
 #define RAD_ORIGIN_NUDGE        1.5f
 
+#define RAD_BORDER_WIDTH 2
+
+// Helper: Is this pixel in the 1:1 evaluated border zone?
+static qboolean IsBorderPixel(int lx, int ly, int w, int h) {
+    if (g_fast) return qfalse; // Preserve original uniform path when -fast is enabled
+    int border = RAD_BORDER_WIDTH;
+    if (w <= 2 * border || h <= 2 * border) return qtrue; // Small surface fallback
+    return (lx < border || lx >= w - border || 
+            ly < border || ly >= h - border);
+}
+
+// Helper: Is this pixel an aligned interior sparse sample?
+static qboolean IsInteriorSparsePixel(int lx, int ly, int interval) {
+    int border = g_fast ? 0 : RAD_BORDER_WIDTH;
+    int int_x = lx - border;
+    int int_y = ly - border;
+    return (int_x % interval == 0 && int_y % interval == 0);
+}
+
 // light.h/c exports
 
 
@@ -330,8 +349,18 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
             if (albedo[k] < 0.0f) albedo[k] = 0.0f;
         }
 
-        for (ly = 0; ly < ds->lightmapHeight; ly += rad_interval) {
-            for (lx = 0; lx < ds->lightmapWidth; lx += rad_interval) {
+        int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? rad_interval : 1;
+
+        for (ly = 0; ly < ds->lightmapHeight; ly += step) {
+            for (lx = 0; lx < ds->lightmapWidth; lx += step) {
+                qboolean is_border = qfalse;
+                if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+                    is_border = IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight);
+                    if (!is_border && !IsInteriorSparsePixel(lx, ly, rad_interval)) {
+                        continue;
+                    }
+                }
+
                 int k_lm = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
                 float *src = (float *)&srcBuffer[k_lm * 3];
 
@@ -345,8 +374,15 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
 
                 emitter_t *em = &g_emitters[g_numEmitters++];
 
-                float st_x = (float)lx + (float)rad_interval * 0.5f;
-                float st_y = (float)ly + (float)rad_interval * 0.5f;
+                float st_x = (float)lx;
+                float st_y = (float)ly;
+                if (ds->surfaceType == MST_TRIANGLE_SOUP || !is_border) {
+                    st_x += (float)rad_interval * 0.5f;
+                    st_y += (float)rad_interval * 0.5f;
+                } else {
+                    st_x += 0.5f;
+                    st_y += 0.5f;
+                }
 
                 if (ds->surfaceType == MST_TRIANGLE_SOUP) {
                     float st[2];
@@ -376,7 +412,11 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                     VectorCopy(surfNormal, em->normal);
                 }
                 
-                em->area = luxelArea * (float)(rad_interval * rad_interval);
+                if (ds->surfaceType == MST_TRIANGLE_SOUP || !is_border) {
+                    em->area = luxelArea * (float)(rad_interval * rad_interval);
+                } else {
+                    em->area = luxelArea * 1.0f;
+                }
                 VectorScale(src, rad_bounce_scale, em->color);
                 for (k = 0; k < 3; k++) em->color[k] *= albedo[k];
 
@@ -434,8 +474,17 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
-    for (int ly = 0; ly < ds->lightmapHeight; ly += surf_rad_interval) {
-        for (int lx = 0; lx < ds->lightmapWidth; lx += surf_rad_interval) {
+    int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
+
+    for (int ly = 0; ly < ds->lightmapHeight; ly += step) {
+        for (int lx = 0; lx < ds->lightmapWidth; lx += step) {
+            if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+                if (!IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight) && 
+                    !IsInteriorSparsePixel(lx, ly, surf_rad_interval)) {
+                    continue;
+                }
+            }
+
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             
             // Skip if masked, unless it's a triangle soup (which we might unmask)
@@ -702,8 +751,17 @@ static void RadiosityVoxelize(void) {
             }
         }
 
-        for (int ly = 0; ly < ds->lightmapHeight; ly += surf_rad_interval) {
-            for (int lx = 0; lx < ds->lightmapWidth; lx += surf_rad_interval) {
+        int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
+
+        for (int ly = 0; ly < ds->lightmapHeight; ly += step) {
+            for (int lx = 0; lx < ds->lightmapWidth; lx += step) {
+                if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+                    if (!IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight) && 
+                        !IsInteriorSparsePixel(lx, ly, surf_rad_interval)) {
+                        continue;
+                    }
+                }
+
                 int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
                 if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
@@ -756,16 +814,22 @@ static void RadiosityVoxelize(void) {
 
 // Helper: Bilinearly interpolate from the sparse grid
 static void RadiosityBilinearSample(dsurface_t *ds, int lx, int ly, int surf_rad_interval, const vec3_t normal, vec3_t outColor, vec3_t outDir, vec3_t outEnergy) {
-    int x0 = (lx / surf_rad_interval) * surf_rad_interval;
+    int border = g_fast ? 0 : RAD_BORDER_WIDTH;
+    int w = ds->lightmapWidth;
+    int h = ds->lightmapHeight;
+
+    int x0 = border + ((lx - border) / surf_rad_interval) * surf_rad_interval;
     int x1 = x0 + surf_rad_interval;
-    int y0 = (ly / surf_rad_interval) * surf_rad_interval;
+    if (x1 >= w) x1 = w - 1;
+    if (x0 < 0) x0 = 0;
+
+    int y0 = border + ((ly - border) / surf_rad_interval) * surf_rad_interval;
     int y1 = y0 + surf_rad_interval;
+    if (y1 >= h) y1 = h - 1;
+    if (y0 < 0) y0 = 0;
 
-    if (x1 >= ds->lightmapWidth)  x1 = x0;
-    if (y1 >= ds->lightmapHeight) y1 = y0;
-
-    float fx = (float)(lx - x0) / (float)surf_rad_interval;
-    float fy = (float)(ly - y0) / (float)surf_rad_interval;
+    float fx = (x1 == x0) ? 0.0f : (float)(lx - x0) / (float)(x1 - x0);
+    float fy = (y1 == y0) ? 0.0f : (float)(ly - y0) / (float)(y1 - y0);
 
     int k00 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x0);
     int k10 = ((ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y0) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + x1);
@@ -1019,13 +1083,11 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             }
 
             if (ds->surfaceType != MST_TRIANGLE_SOUP) {
-                if (ds->surfaceType == MST_PATCH) {
-                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL);
-                } else if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
-                    continue; // Planar: sparse-grid pixels are already exact, keep them.
-                } else {
-                    RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL);
+                if (IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight) || 
+                    IsInteriorSparsePixel(lx, ly, surf_rad_interval)) {
+                    continue; // Already evaluated at exact resolution, keep it.
                 }
+                RadiosityBilinearSample(ds, lx, ly, surf_rad_interval, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL);
                 continue;
             }
 
@@ -1125,9 +1187,16 @@ void LightRadiosity(void) {
     AllocateRadiosityFloats();
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
+    float saved_depth_intensity = rad_depth_intensity;
+
     for (int pnum = 1; pnum <= radiosityPasses; pnum++) {
         double passStart = I_FloatTime();
         _printf("Pass %d/%d:\n", pnum, radiosityPasses);
+
+        // AO Proximity-Fade Strategy: Keep AO on Pass 1 for sharp direct crevice shadows,
+        // but bypass on Pass 2+ to let diffuse multi-bounce light naturally wash out
+        // the corner crevices and prevent dark seams.
+        rad_depth_intensity = (pnum == 1) ? saved_depth_intensity : 1.0f;
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
         _printf("  [emit]   ");
@@ -1168,6 +1237,8 @@ void LightRadiosity(void) {
         Q_Free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
+
+    rad_depth_intensity = saved_depth_intensity;
 
     _printf("--- Radiosity Merge ---\n");
     RadiosityMerge(accumRadiosityFloats);
