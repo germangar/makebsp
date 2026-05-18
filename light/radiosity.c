@@ -39,7 +39,9 @@ static float rad_angle_match_cos = 0.5f;
 
 // Amount to nudge the emitter origin off the surface along its normal.
 // Prevents the emitter from self-shadowing via Embree.
-#define RAD_ORIGIN_NUDGE        1.5f
+#define RAD_ORIGIN_NUDGE        0.25f
+
+#define TRISOUP_AO_CHEAT        0.5f
 
 #define RAD_BORDER_WIDTH 2
 
@@ -419,6 +421,19 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                     em->area = luxelArea * 1.0f;
                 }
                 VectorScale(src, rad_bounce_scale, em->color);
+                
+                // If deluxe mapping is active, apply the receiver-side falloff correction.
+                // When deluxe mapping is off, the srcBuffer already contains the fully attenuated color, so we skip it.
+                if (game->deluxeMap) {
+                    float *prevDir = isFirstPass ? &deluxeFloats[k_lm * 3] : &radiosityDeluxeFloats[k_lm * 3];
+                    float prevCos = DotProduct(em->normal, prevDir);
+                    if (prevCos < 0.0f) prevCos = 0.0f;
+                    else if (prevCos > 1.0f) prevCos = 1.0f;
+
+                    // Attenuate the physical emitter color
+                    VectorScale(em->color, prevCos, em->color);
+                }
+
                 for (k = 0; k < 3; k++) em->color[k] *= albedo[k];
 
                 totalArea += em->area;
@@ -579,7 +594,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                        float distClamped = dist < rad_depth_min ? rad_depth_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
                         float factor = 1.0f - rad_depth_intensity;
@@ -656,9 +671,9 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
+                        float distClamped = dist < rad_depth_min ? rad_depth_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                        float factor = 1.0f - rad_depth_intensity;
+                        float factor = 1.0f - (rad_depth_intensity * TRISOUP_AO_CHEAT);
                         if (dist < rad_depth_min) formFactorBase *= factor;
                         else if (dist < rad_depth_max) {
                             float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
