@@ -278,7 +278,6 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
         if (ds->lightmapWidth <= 0 || ds->lightmapHeight <= 0) continue;
         if (si->surfaceFlags & SURF_SKY) continue;
         
-        int surf_rad_interval = localSurfaces[i].radInterval;
 
         localSurfaces[i].emitterStart = g_numEmitters;
         float maxIntensity = 0;
@@ -292,8 +291,10 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = localSurfaces[i].patchMesh;
         } else if (ds->surfaceType == MST_PLANAR) {
-            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
-            VectorNormalize(surfNormal, surfNormal);
+            VectorCopy(ds->lightmapVecs[2], surfNormal);
+            if (VectorNormalize(surfNormal, surfNormal) < 0.0001f) {
+                VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+            }
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         } else {
@@ -459,8 +460,10 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
     if (ds->surfaceType == MST_PATCH) {
         patchMesh = localSurfaces[surfIdx].patchMesh;
     } else if (ds->surfaceType == MST_PLANAR) {
-        CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], dstNormal);
-        if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
+        VectorCopy(ds->lightmapVecs[2], dstNormal);
+        if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) {
+            VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
+        }
         VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
         VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
     } else {
@@ -714,8 +717,10 @@ static void RadiosityVoxelize(void) {
         if (ds->surfaceType == MST_PATCH) {
             patchMesh = localSurfaces[s].patchMesh;
         } else if (ds->surfaceType == MST_PLANAR) {
-            CrossProduct(ds->lightmapVecs[0], ds->lightmapVecs[1], surfNormal);
-            if (VectorNormalize(surfNormal, surfNormal) < 0.0001f) VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+            VectorCopy(ds->lightmapVecs[2], surfNormal);
+            if (VectorNormalize(surfNormal, surfNormal) < 0.0001f) {
+                VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
+            }
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         } else if (ds->numVerts > 0) {
