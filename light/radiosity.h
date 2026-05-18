@@ -27,6 +27,7 @@ extern float rad_depth_intensity;
 extern int   rad_interval;
 extern float rad_voxel_size;
 extern float rad_angle_match; // Angle in degrees
+extern qboolean rad_deluxe_anglefalloff;
 
 void LightRadiosity(void);
 

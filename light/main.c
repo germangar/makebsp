@@ -36,6 +36,7 @@ extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
+qboolean rad_deluxe_anglefalloff = qfalse;
 
 int main(int argc, char **argv) {
     int i;
@@ -242,6 +243,9 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
             rad_angle_match = (float)atof(argv[i + 1]);
             i++;
+        } else if (!strcmp(argv[i], "-rad_deluxe_anglefalloff")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_deluxe_anglefalloff requires 1 or 0");
+            rad_deluxe_anglefalloff = atoi(argv[++i]) ? qtrue : qfalse;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
@@ -313,7 +317,8 @@ int main(int argc, char **argv) {
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
                 "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
-                "   rad_depthintensity <F>= set min bounce carryover (0.0 to 1.0) for creases\n"
+                "   rad_depthintensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
+                "   rad_deluxe_anglefalloff <0|1>= set to 1 to re-enable angle falloff when deluxe mapping is enabled (default: 0)\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
@@ -366,7 +371,7 @@ int main(int argc, char **argv) {
 
 
     _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", game->defaultSmoothPasses, game->defaultSmoothRadius, game->antialiasingPasses);
-    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
+    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f), Deluxe Angle Falloff: %s\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio, rad_deluxe_anglefalloff ? "enabled" : "disabled");
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";

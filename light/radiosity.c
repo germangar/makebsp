@@ -582,10 +582,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
-                        if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
+                        float factor = 1.0f - rad_depth_intensity;
+                        if (dist < rad_depth_min) formFactorBase *= factor;
                         else if (dist < rad_depth_max) {
                             float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                            formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                            formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
                         
@@ -597,8 +598,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
-                        VectorScale(em->color, formFactorBase, cont.irradiance);
-                        cont.angle = game->deluxeMap ? 1.0f : cosDst;
+                        if (game->deluxeMap && !rad_deluxe_anglefalloff) {
+                            float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
+                            VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
+                        } else {
+                            VectorScale(em->color, formFactorBase, cont.irradiance);
+                        }
+                        cont.angle = cosDst;
                         cont.isGlow = qfalse;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }
@@ -652,10 +658,11 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         float distClamped = dist < rad_depth_max ? rad_depth_max : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                        if (dist < rad_depth_min) formFactorBase *= rad_depth_intensity;
+                        float factor = 1.0f - rad_depth_intensity;
+                        if (dist < rad_depth_min) formFactorBase *= factor;
                         else if (dist < rad_depth_max) {
                             float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
-                            formFactorBase *= rad_depth_intensity + (1.0f - rad_depth_intensity) * lerp;
+                            formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
                         
@@ -667,8 +674,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
-                        VectorScale(em->color, formFactorBase, cont.irradiance);
-                        cont.angle = game->deluxeMap ? 1.0f : cosDst;
+                        if (game->deluxeMap && !rad_deluxe_anglefalloff) {
+                            float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
+                            VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
+                        } else {
+                            VectorScale(em->color, formFactorBase, cont.irradiance);
+                        }
+                        cont.angle = cosDst;
                         cont.isGlow = qfalse;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
                     }
@@ -1201,7 +1213,7 @@ void LightRadiosity(void) {
         // AO Proximity-Fade Strategy: Keep AO on Pass 1 for sharp direct crevice shadows,
         // but bypass on Pass 2+ to let diffuse multi-bounce light naturally wash out
         // the corner crevices and prevent dark seams.
-        rad_depth_intensity = (pnum == 1) ? saved_depth_intensity : 1.0f;
+        rad_depth_intensity = (pnum == 1) ? saved_depth_intensity : 0.0f;
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
         _printf("  [emit]   ");

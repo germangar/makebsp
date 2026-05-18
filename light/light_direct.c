@@ -1012,20 +1012,6 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
     if (energy)
         VectorClear(energy);
 
-    // Handle ambient as the first contribution
-    if (ambientColor[0] > 0 || ambientColor[1] > 0 || ambientColor[2] > 0)
-    {
-        contribution_t amb;
-        VectorClear(amb.irradiance);
-        VectorCopy(normal, amb.dir);
-        amb.irradiance[0] = ambientColor[0];
-        amb.irradiance[1] = ambientColor[1];
-        amb.irradiance[2] = ambientColor[2];
-        amb.angle = 1.0f;
-        amb.isGlow = qtrue;
-        AccumulateContribution(color, dir, energy, &amb, normal);
-    }
-
     // trace directly to the sun FIRST among all actual light sources
     if (testOcclusion || forceSunLight)
     {
@@ -1842,7 +1828,7 @@ void TraceGrid(int num)
         }
     }
 
-    VectorClear(summedDir);
+    VectorSet(summedDir, 0.0f, 0.0f, -0.000001f);
     numCon = 0;
     for (light = lights; light; light = light->next)
     {
@@ -1869,8 +1855,8 @@ void TraceGrid(int num)
     }
 
     VectorNormalize(summedDir, summedDir);
-    VectorCopy(ambientColor, color);
-    VectorClear(directedColor);
+    VectorSet(color, 0.000001f, 0.000001f, 0.000001f);
+    VectorSet(directedColor, 0.000001f, 0.000001f, 0.000001f);
 
     for (i = 0; i < numCon; i++)
     {
