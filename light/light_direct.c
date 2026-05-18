@@ -1026,6 +1026,15 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
         AccumulateContribution(color, dir, energy, &amb, normal);
     }
 
+    // trace directly to the sun FIRST among all actual light sources
+    if (testOcclusion || forceSunLight)
+    {
+        if (SunToPlane(origin, normal, &cont, applyColorFilter, tw))
+        {
+            AccumulateContribution(color, dir, energy, &cont, normal);
+        }
+    }
+
     if (lightList)
     {
         for (i = 0; i < numLights; i++)
@@ -1045,15 +1054,6 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
             {
                 AccumulateContribution(color, dir, energy, &cont, normal);
             }
-        }
-    }
-
-    // trace directly to the sun
-    if (testOcclusion || forceSunLight)
-    {
-        if (SunToPlane(origin, normal, &cont, applyColorFilter, tw))
-        {
-            AccumulateContribution(color, dir, energy, &cont, normal);
         }
     }
 }
