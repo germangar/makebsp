@@ -732,7 +732,11 @@ void LoadTriangleModels(void)
 
             // smoothing_radius override
             float smoothingRadius = -1.0f;
-            const char *radStr = ValueForKey(entity, "smoothingradius");
+            const char *radStr = ValueForKey(entity, "smoothradius");
+            if (!radStr[0])
+                radStr = ValueForKey(entity, "_smoothradius");
+            if (!radStr[0])
+                radStr = ValueForKey(entity, "smoothingradius");
             if (!radStr[0])
                 radStr = ValueForKey(entity, "_smoothingradius");
             if (radStr[0])

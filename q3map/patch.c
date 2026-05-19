@@ -326,7 +326,11 @@ void PatchMapDrawSurfs(entity_t *e)
             }
         }
 
-        const char *rad_str = ValueForKey(e, "smoothingradius");
+        const char *rad_str = ValueForKey(e, "smoothradius");
+        if (!rad_str[0])
+            rad_str = ValueForKey(e, "_smoothradius");
+        if (!rad_str[0])
+            rad_str = ValueForKey(e, "smoothingradius");
         if (!rad_str[0])
             rad_str = ValueForKey(e, "_smoothingradius");
         if (rad_str[0])

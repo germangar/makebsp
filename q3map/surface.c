@@ -79,7 +79,11 @@ ResolveSurfaceExtraProperties
 static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
 {
     // Resolve smoothing radius
-    const char *radiusStr = ValueForKey(e, "smoothingradius");
+    const char *radiusStr = ValueForKey(e, "smoothradius");
+    if (!radiusStr[0])
+        radiusStr = ValueForKey(e, "_smoothradius");
+    if (!radiusStr[0])
+        radiusStr = ValueForKey(e, "smoothingradius");
     if (!radiusStr[0])
         radiusStr = ValueForKey(e, "_smoothingradius");
     if (radiusStr[0])

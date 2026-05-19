@@ -61,6 +61,8 @@ infoParm_t infoParms[] = {
     {"nodrop", 1, 0, CONTENTS_NODROP}, // don't drop items or leave bodies
                                        // (death fog, lava, etc)
     {"nonsolid", 1, SURF_NONSOLID, 0}, // clears the solid flag
+    {"nosolid", 1, SURF_NONSOLID, 0},  // alias for nonsolid
+
 
     // utility relevant attributes
     {"origin", 1, 0, CONTENTS_ORIGIN},     // center of rotating brushes
