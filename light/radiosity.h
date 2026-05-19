@@ -15,19 +15,18 @@ Call LightRadiosity() AFTER LightMain() and BEFORE SmoothLightmaps().
 */
 
 // Tuning parameters (managed via main.c CLI)
-#define RAD_DEPTH_MIN_DEFAULT 8.0f
-#define RAD_DEPTH_MAX_DEFAULT 24.0f
-#define RAD_DEPTH_INTENSITY_DEFAULT 0.5f
+#define RAD_AO_MIN_DEFAULT 0.0f
+#define RAD_AO_MAX_DEFAULT 32.0f
+#define RAD_AO_INTENSITY_DEFAULT 0.5f
 
 
 extern float rad_min_energy;
-extern float rad_depth_min;
-extern float rad_depth_max;
-extern float rad_depth_intensity;
+extern float rad_ao_min;
+extern float rad_ao_max;
+extern float rad_ao_intensity;
 extern int   rad_interval;
 extern float rad_voxel_size;
 extern float rad_angle_match; // Angle in degrees
-extern qboolean rad_deluxe_anglefalloff;
 
 void LightRadiosity(void);
 

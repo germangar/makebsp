@@ -29,9 +29,9 @@ Architecture:
 static float rad_bounce_scale;    // Energy per bounce (conserved)
 static float rad_color_ratio;     // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
-float rad_depth_min     = RAD_DEPTH_MIN_DEFAULT;
-float rad_depth_max     = RAD_DEPTH_MAX_DEFAULT;
-float rad_depth_intensity = RAD_DEPTH_INTENSITY_DEFAULT;
+float rad_ao_min        = RAD_AO_MIN_DEFAULT;
+float rad_ao_max        = RAD_AO_MAX_DEFAULT;
+float rad_ao_intensity  = RAD_AO_INTENSITY_DEFAULT;
 int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
 float rad_voxel_size    = 0.0f;   // Adaptive default: samplesize * rad_interval
 float rad_angle_match   = 60.0f;  // Angle in degrees (Default: 60)
@@ -40,8 +40,6 @@ static float rad_angle_match_cos = 0.5f;
 // Amount to nudge the emitter origin off the surface along its normal.
 // Prevents the emitter from self-shadowing via Embree.
 #define RAD_ORIGIN_NUDGE        0.25f
-
-#define TRISOUP_AO_CHEAT        0.5f
 
 #define RAD_BORDER_WIDTH 2
 
@@ -594,13 +592,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_depth_min ? rad_depth_min : dist;
+                        float distClamped = dist < rad_ao_min ? rad_ao_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
-                        float factor = 1.0f - rad_depth_intensity;
-                        if (dist < rad_depth_min) formFactorBase *= factor;
-                        else if (dist < rad_depth_max) {
-                            float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                        float factor = 1.0f - rad_ao_intensity;
+                        if (dist < rad_ao_min) formFactorBase *= factor;
+                        else if (dist < rad_ao_max) {
+                            float lerp = (dist - rad_ao_min) / (rad_ao_max - rad_ao_min);
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
@@ -613,7 +611,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
-                        if (game->deluxeMap && !rad_deluxe_anglefalloff) {
+                        if (game->deluxeMap) {
                             float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
                             VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
                         } else {
@@ -671,12 +669,12 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_depth_min ? rad_depth_min : dist;
+                        float distClamped = dist < rad_ao_min ? rad_ao_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                        float factor = 1.0f - (rad_depth_intensity * TRISOUP_AO_CHEAT);
-                        if (dist < rad_depth_min) formFactorBase *= factor;
-                        else if (dist < rad_depth_max) {
-                            float lerp = (dist - rad_depth_min) / (rad_depth_max - rad_depth_min);
+                        float factor = 1.0f - rad_ao_intensity;
+                        if (dist < rad_ao_min) formFactorBase *= factor;
+                        else if (dist < rad_ao_max) {
+                            float lerp = (dist - rad_ao_min) / (rad_ao_max - rad_ao_min);
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
@@ -689,7 +687,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
                         contribution_t cont;
                         VectorCopy(rayDir, cont.dir);
-                        if (game->deluxeMap && !rad_deluxe_anglefalloff) {
+                        if (game->deluxeMap) {
                             float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
                             VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
                         } else {
@@ -1219,7 +1217,7 @@ void LightRadiosity(void) {
     AllocateRadiosityFloats();
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-    float saved_depth_intensity = rad_depth_intensity;
+    float saved_ao_intensity = rad_ao_intensity;
 
     for (int pnum = 1; pnum <= radiosityPasses; pnum++) {
         double passStart = I_FloatTime();
@@ -1228,7 +1226,7 @@ void LightRadiosity(void) {
         // AO Proximity-Fade Strategy: Keep AO on Pass 1 for sharp direct crevice shadows,
         // but bypass on Pass 2+ to let diffuse multi-bounce light naturally wash out
         // the corner crevices and prevent dark seams.
-        rad_depth_intensity = (pnum == 1) ? saved_depth_intensity : 0.0f;
+        rad_ao_intensity = (pnum == 1) ? saved_ao_intensity : 0.0f;
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
         _printf("  [emit]   ");
@@ -1270,7 +1268,7 @@ void LightRadiosity(void) {
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
 
-    rad_depth_intensity = saved_depth_intensity;
+    rad_ao_intensity = saved_ao_intensity;
 
     _printf("--- Radiosity Merge ---\n");
     RadiosityMerge(accumRadiosityFloats);

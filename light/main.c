@@ -36,7 +36,6 @@ extern qboolean upscale;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
-qboolean rad_deluxe_anglefalloff = qfalse;
 
 int main(int argc, char **argv) {
     int i;
@@ -203,13 +202,13 @@ int main(int argc, char **argv) {
             if (game->radiosityPasses < 0)
                 game->radiosityPasses = 0;
             i++;
-        } else if (!strcmp(argv[i], "-rad_depthmin")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmin requires a numeric value");
-            rad_depth_min = (float)atof(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-rad_ao_min")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_min requires a numeric value");
+            rad_ao_min = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_depthmax")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthmax requires a numeric value");
-            rad_depth_max = (float)atof(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-rad_ao_max")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_max requires a numeric value");
+            rad_ao_max = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_min_energy")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_min_energy requires a numeric value");
@@ -228,11 +227,11 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_intensity requires a numeric value");
             game->radiosityIntensity = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_depthintensity")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_depthintensity requires a numeric value");
-            rad_depth_intensity = (float)atof(argv[i + 1]);
-            if (rad_depth_intensity < 0.0f) rad_depth_intensity = 0.0f;
-            if (rad_depth_intensity > 1.0f) rad_depth_intensity = 1.0f;
+        } else if (!strcmp(argv[i], "-rad_ao_intensity")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_intensity requires a numeric value");
+            rad_ao_intensity = (float)atof(argv[i + 1]);
+            if (rad_ao_intensity < 0.0f) rad_ao_intensity = 0.0f;
+            if (rad_ao_intensity > 1.0f) rad_ao_intensity = 1.0f;
             i++;
         } else if (!strcmp(argv[i], "-rad_voxelsize")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_voxelsize requires a numeric value");
@@ -243,9 +242,6 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
             rad_angle_match = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_deluxe_anglefalloff")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_deluxe_anglefalloff requires 1 or 0");
-            rad_deluxe_anglefalloff = atoi(argv[++i]) ? qtrue : qfalse;
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
@@ -309,16 +305,15 @@ int main(int argc, char **argv) {
                 "                     1 = super-sampling EVERYTHING\n"
                 "                     2 = super-sampling models only\n"
                 "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
-                "   rad_depthmin <F> = set inner distance limit for radiosity plateau\n"
-                "   rad_depthmax <F> = set outer distance limit for radiosity gradient\n"
+                "   rad_ao_min <F>   = set inner distance limit for radiosity plateau\n"
+                "   rad_ao_max <F>   = set outer distance limit for radiosity gradient\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
                 "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
-                "   rad_depthintensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
-                "   rad_deluxe_anglefalloff <0|1>= set to 1 to re-enable angle falloff when deluxe mapping is enabled (default: 0)\n"
+                "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
@@ -371,7 +366,7 @@ int main(int argc, char **argv) {
 
 
     _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", game->defaultSmoothPasses, game->defaultSmoothRadius, game->antialiasingPasses);
-    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f), Deluxe Angle Falloff: %s\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio, rad_deluxe_anglefalloff ? "enabled" : "disabled");
+    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
         const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";

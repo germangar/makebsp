@@ -28,7 +28,7 @@ if ($LASTEXITCODE -eq 0) {
     # Run the map and show relevant optimization stats
     ./q3map.exe -v -samplesize 16 maps/modeltest.map
     Write-Host ""
-    Write-Host "[3/3] Running light -radiosity 1 -v maps/modeltest.bsp..." -ForegroundColor Cyan
+    Write-Host "[3/3] Running light -radiosity 0 -v maps/modeltest.bsp..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     ./light.exe -smooth 1 -radiosity 0 -v maps/modeltest.bsp
 } else {
