@@ -280,6 +280,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
     si->colorOverride = qfalse;
+    si->hasVertexColor = qfalse;
+    VectorClear(si->vertexColor);
 
     return si;
 }
@@ -462,6 +464,36 @@ static void ParseShaderFile(const char *filename)
                     }
                 }
                 si->colorOverride = qtrue;
+                continue;
+            }
+
+            // q3map_vertexcolor <red> <green> <blue>
+            if (!Q_stricmp(token, "q3map_vertexcolor"))
+            {
+                GetToken(qfalse);
+                if (token[0] == '#')
+                {
+                    ParseColor(token, si->vertexColor);
+                }
+                else
+                {
+                    float c[3];
+                    c[0] = atof(token);
+                    GetToken(qfalse);
+                    c[1] = atof(token);
+                    GetToken(qfalse);
+                    c[2] = atof(token);
+
+                    if (c[0] > 1.0001f || c[1] > 1.0001f || c[2] > 1.0001f)
+                    {
+                        VectorScale(c, 1.0f / 255.0f, si->vertexColor);
+                    }
+                    else
+                    {
+                        VectorCopy(c, si->vertexColor);
+                    }
+                }
+                si->hasVertexColor = qtrue;
                 continue;
             }
 

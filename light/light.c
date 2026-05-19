@@ -942,6 +942,28 @@ void BuildLocalSurfaces(void)
                 }
             }
         }
+
+        // Resolve vertex color override: shader is the base, entity key wins.
+        {
+            shaderInfo_t *si = localSurfaces[i].si_override ? localSurfaces[i].si_override : ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+            if (si && si->hasVertexColor)
+            {
+                localSurfaces[i].hasVertexColor = qtrue;
+                VectorCopy(si->vertexColor, localSurfaces[i].vertexColor);
+            }
+            else
+            {
+                localSurfaces[i].hasVertexColor = qfalse;
+                VectorClear(localSurfaces[i].vertexColor);
+            }
+
+            // Entity-level 'vertexcolor' key (func_group / misc_model) overrides the shader.
+            if (extra && i < numExtra && extra[i].hasVertexColor)
+            {
+                localSurfaces[i].hasVertexColor = qtrue;
+                VectorCopy(extra[i].vertexColor, localSurfaces[i].vertexColor);
+            }
+        }
     }
     if (extra) free(extra);
 }

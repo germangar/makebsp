@@ -122,6 +122,13 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
                 ds->lightSubdivide = atof(subdivideStr);
         }
     }
+    // New: vertexcolor handling for func_group / misc_model
+    const char *vcolStr = ValueForKey(e, "vertexcolor");
+    if (vcolStr[0])
+    {
+        ds->hasVertexColor = 1;
+        ParseColor(vcolStr, ds->vertexColor);
+    }
 }
 
 /*
@@ -1329,6 +1336,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
 
     numDrawSurfaces++;
 
@@ -1407,6 +1416,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
 
     numDrawSurfaces++;
 
@@ -1494,6 +1505,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
 
     numDrawSurfaces++;
 
@@ -1545,6 +1558,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
+    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
 
     numDrawSurfaces++;
 

@@ -200,9 +200,8 @@ skipspace:
     if (script->script_p >= script->end_p)
         return EndOfScript(crossline);
 
-    // ; # // comments
-    if (*script->script_p == ';' || *script->script_p == '#' ||
-        (script->script_p[0] == '/' && script->script_p[1] == '/'))
+    // // comments
+    if (script->script_p[0] == '/' && script->script_p[1] == '/')
     {
         if (!crossline)
             Error("Line %i is incomplete\n", scriptline);

@@ -259,6 +259,10 @@ typedef struct
 	// sidecar data
 	float smoothingRadius;
     shaderInfo_t *si_override;
+
+    // vertex color override
+    qboolean hasVertexColor;
+    vec3_t vertexColor;
 } localSurface_t;
 
 extern localSurface_t *localSurfaces;

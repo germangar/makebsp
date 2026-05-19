@@ -744,6 +744,17 @@ void LoadTriangleModels(void)
                 smoothingRadius = atof(radStr);
             }
 
+            // vertexcolor override for all surfaces of this model instance
+            int hasVertexColor = 0;
+            vec3_t vertexColor;
+            VectorClear(vertexColor);
+            const char *vcolStr = ValueForKey(entity, "vertexcolor");
+            if (vcolStr[0])
+            {
+                hasVertexColor = 1;
+                ParseColor(vcolStr, vertexColor);
+            }
+
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)
@@ -925,6 +936,9 @@ void LoadTriangleModels(void)
                     inst->drawSurfs[inst->numDrawSurfs++] = ds;
                     ds->miscModel = qtrue;
                     ds->smoothingRadius = smoothingRadius;
+                    ds->hasVertexColor = hasVertexColor;
+                    if (hasVertexColor)
+                        VectorCopy(vertexColor, ds->vertexColor);
                     ds->planeNum = -1;
                     ds->shaderInfo = si;
                     ds->lightmapNum = -1;

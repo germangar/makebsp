@@ -175,6 +175,8 @@ typedef struct drawsurf_s
     vec3_t lightColor;
     float backsplashFraction;
     float lightSubdivide;
+    int hasVertexColor;
+    vec3_t vertexColor;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

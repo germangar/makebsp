@@ -337,6 +337,13 @@ void PatchMapDrawSurfs(entity_t *e)
         {
             ds->smoothingRadius = atof(rad_str);
         }
+
+        const char *vcolStr = ValueForKey(e, "vertexcolor");
+        if (vcolStr[0])
+        {
+            ds->hasVertexColor = 1;
+            ParseColor(vcolStr, ds->vertexColor);
+        }
     }
 
     qprintf("%5i patches\n", patchCount);
