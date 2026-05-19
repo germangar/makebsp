@@ -332,8 +332,8 @@ extern int nogridlighting;
 typedef enum
 {
 	SUPERSAMPLE_NONE = 0,
-	SUPERSAMPLE_MODELS = 1,
-	SUPERSAMPLE_ALL = 2
+	SUPERSAMPLE_8X = 8,
+	SUPERSAMPLE_16X = 16
 } ssMode_t;
 
 extern ssMode_t superSampleMode;

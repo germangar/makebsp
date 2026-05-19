@@ -887,6 +887,24 @@ void BuildLocalSurfaces(void)
     {
         dsurface_t *ds = &drawSurfaces[i];
         localSurfaces[i].radInterval = rad_interval;
+        
+        // Ensure trisoups have enough quality for radiosity unless -fast is active
+        if (ds->surfaceType == MST_TRIANGLE_SOUP && !g_fast)
+        {
+            shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+            int ssize = samplesize;
+            if (si && si->lightmapSampleSize)
+                ssize = si->lightmapSampleSize;
+
+            int oldInterval = localSurfaces[i].radInterval;
+            while (localSurfaces[i].radInterval > 1 && localSurfaces[i].radInterval * ssize > 16) {
+                localSurfaces[i].radInterval /= 2;
+            }
+            if (verbose && localSurfaces[i].radInterval != oldInterval) {
+                _printf("  Surface %d (Trisoup): rad_interval reduced from %d to %d (ssize: %d)\n", i, oldInterval, localSurfaces[i].radInterval, ssize);
+            }
+        }
+
         localSurfaces[i].smoothingRadius = game->defaultSmoothRadius;
         localSurfaces[i].si_override = NULL;
 

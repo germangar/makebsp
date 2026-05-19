@@ -167,16 +167,17 @@ int main(int argc, char **argv) {
             if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
             _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
         } else if (!strcmp(argv[i], "-supersampling")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a mode (0, 1, or 2)");
-            int mode = atoi(argv[i + 1]);
-            if (mode == 1) {
-                superSampleMode = SUPERSAMPLE_ALL;
-                _printf("Super-sampling enabled for ALL surfaces\n");
-            } else if (mode == 2) {
-                superSampleMode = SUPERSAMPLE_MODELS;
-                _printf("Super-sampling enabled for MODELS only\n");
-            } else {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a pattern value (e.g. 0, 8, or 16)");
+            int val = atoi(argv[i + 1]);
+            if (val <= 0) {
                 superSampleMode = SUPERSAMPLE_NONE;
+                _printf("Super-sampling disabled\n");
+            } else if (val <= 8) {
+                superSampleMode = SUPERSAMPLE_8X;
+                _printf("Super-sampling enabled: 8x Rotated Grid pattern\n");
+            } else {
+                superSampleMode = SUPERSAMPLE_16X;
+                _printf("Super-sampling enabled: 16x Halton pattern\n");
             }
             i++;
         } else if (!strcmp(argv[i], "-smooth")) {
@@ -306,9 +307,9 @@ int main(int argc, char **argv) {
                 "                     2 = super-sampling models only\n"
                 "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_ao_min <F>   = set inner distance limit for radiosity plateau\n"
-                "   rad_ao_max <F>   = set outer distance limit for radiosity gradient\n"
+                "   rad_ao_max <F>   = set transition range width for radiosity gradient (starts at min)\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
-                "   rad_interval <I>  = set sparse grid interval (1=Every luxel, 4=4x4 blocks)\n"
+                "   rad_interval <I>  = set sparse grid interval (1=Every luxel, default 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
                 "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
@@ -369,9 +370,8 @@ int main(int argc, char **argv) {
     _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
 
     if (superSampleMode != SUPERSAMPLE_NONE) {
-        const char *modeLog = (superSampleMode == SUPERSAMPLE_ALL) ? "Everything" : "Models Only";
-        int ssCnt = (game->defaultSmoothRadius >= 2.0f) ? 16 : 8;
-        _printf("Super-sampling Mode %d (%s): %d samples per texel (radius %.2f)\n", superSampleMode, modeLog, ssCnt, game->defaultSmoothRadius);
+        int ssCnt = (superSampleMode == SUPERSAMPLE_16X) ? 16 : 8;
+        _printf("Super-sampling: %d samples per texel\n", ssCnt);
     }
 
     _printf("reading %s\n", source);

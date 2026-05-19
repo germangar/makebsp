@@ -1443,15 +1443,7 @@ void TraceLtm(int num)
         for (j = 0; j < sampleHeight; j++)
         {
 
-            qboolean doSS = qfalse;
-            if (superSampleMode == SUPERSAMPLE_ALL)
-            {
-                doSS = qtrue;
-            }
-            else if (superSampleMode == SUPERSAMPLE_MODELS && ds->surfaceType == MST_TRIANGLE_SOUP)
-            {
-                doSS = qtrue;
-            }
+            qboolean doSS = (superSampleMode != SUPERSAMPLE_NONE);
 
             const float (*pattern)[2];
             int actualSamples;
@@ -1460,7 +1452,7 @@ void TraceLtm(int num)
                 actualSamples = 1;
                 pattern = ssPattern8;
             }
-            else if (game->defaultSmoothRadius >= 2.0f)
+            else if (superSampleMode == SUPERSAMPLE_16X)
             {
                 actualSamples = SS_PATTERN16_COUNT;
                 pattern = ssPattern16;

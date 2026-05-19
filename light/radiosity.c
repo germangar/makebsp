@@ -350,14 +350,14 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
             if (albedo[k] < 0.0f) albedo[k] = 0.0f;
         }
 
-        int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? rad_interval : 1;
+        int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? localSurfaces[i].radInterval : 1;
 
         for (ly = 0; ly < ds->lightmapHeight; ly += step) {
             for (lx = 0; lx < ds->lightmapWidth; lx += step) {
                 qboolean is_border = qfalse;
                 if (ds->surfaceType != MST_TRIANGLE_SOUP) {
                     is_border = IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight);
-                    if (!is_border && !IsInteriorSparsePixel(lx, ly, rad_interval)) {
+                    if (!is_border && !IsInteriorSparsePixel(lx, ly, localSurfaces[i].radInterval)) {
                         continue;
                     }
                 }
@@ -378,8 +378,8 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                 float st_x = (float)lx;
                 float st_y = (float)ly;
                 if (ds->surfaceType == MST_TRIANGLE_SOUP || !is_border) {
-                    st_x += (float)rad_interval * 0.5f;
-                    st_y += (float)rad_interval * 0.5f;
+                    st_x += (float)localSurfaces[i].radInterval * 0.5f;
+                    st_y += (float)localSurfaces[i].radInterval * 0.5f;
                 } else {
                     st_x += 0.5f;
                     st_y += 0.5f;
@@ -414,7 +414,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                 }
                 
                 if (ds->surfaceType == MST_TRIANGLE_SOUP || !is_border) {
-                    em->area = luxelArea * (float)(rad_interval * rad_interval);
+                    em->area = luxelArea * (float)(localSurfaces[i].radInterval * localSurfaces[i].radInterval);
                 } else {
                     em->area = luxelArea * 1.0f;
                 }
@@ -596,9 +596,10 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
                         float factor = 1.0f - rad_ao_intensity;
-                        if (dist < rad_ao_min) formFactorBase *= factor;
-                        else if (dist < rad_ao_max) {
-                            float lerp = (dist - rad_ao_min) / (rad_ao_max - rad_ao_min);
+                        if (dist <= rad_ao_min) {
+                            formFactorBase *= factor;
+                        } else if (dist < rad_ao_min + rad_ao_max) {
+                            float lerp = rad_ao_max > 0.0f ? (dist - rad_ao_min) / rad_ao_max : 1.0f;
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
@@ -672,9 +673,10 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float distClamped = dist < rad_ao_min ? rad_ao_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         float factor = 1.0f - rad_ao_intensity;
-                        if (dist < rad_ao_min) formFactorBase *= factor;
-                        else if (dist < rad_ao_max) {
-                            float lerp = (dist - rad_ao_min) / (rad_ao_max - rad_ao_min);
+                        if (dist <= rad_ao_min) {
+                            formFactorBase *= factor;
+                        } else if (dist < rad_ao_min + rad_ao_max) {
+                            float lerp = rad_ao_max > 0.0f ? (dist - rad_ao_min) / rad_ao_max : 1.0f;
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
