@@ -339,16 +339,18 @@ void PatchMapDrawSurfs(entity_t *e)
         }
 
         const char *vcolStr = ValueForKey(e, "vertexcolor");
+        if (!vcolStr[0])
+            vcolStr = ValueForKey(e, "_vertexcolor");
         if (vcolStr[0])
         {
             ds->hasVertexColor = 1;
             ParseColor(vcolStr, ds->vertexColor);
         }
 
-        // supersampling override
-        const char *ssStr = ValueForKey(e, "supersampling");
+        // supersample override
+        const char *ssStr = ValueForKey(e, "supersample");
         if (!ssStr[0])
-            ssStr = ValueForKey(e, "_supersampling");
+            ssStr = ValueForKey(e, "_supersample");
         if (ssStr[0])
         {
             float ssVal = atof(ssStr);

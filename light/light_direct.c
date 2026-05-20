@@ -1470,7 +1470,6 @@ void TraceLtm(int num)
         }
 
         jitterRadius = ssRadius;
-        _printf("Surface %d: triggering supersampling (radius %.3f, %s pattern)\n", realSurfIndex, ssRadius, patternName);
     }
 
     // determine which samples are occluded

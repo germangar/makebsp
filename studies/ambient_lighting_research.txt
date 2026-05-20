@@ -1,4 +1,5 @@
 # High-Quality Ambient Lighting Research Summary
+# Updated: 2026-05-20 — Audit pass, refined for implementation planning.
 
 Traditional "Quake-style" ambient lighting is a flat, constant color added to every texel. This lacks depth because it doesn't account for how surfaces are oriented or how occluded they are by nearby geometry.
 
@@ -13,7 +14,7 @@ This is the most critical feature for "natural" look. For every lightmap texel, 
 - Integration: We multiply the Hemispherical Ambient term by the AO factor.
 
 ## 3. Bent Normals
-During AO calculation, instead of just counting hits, we calculate the average unoccluded direction—the "Bent Normal."
+During AO calculation, instead of just counting hits, we calculate the average unoccluded direction — the "Bent Normal."
 - Benefit: Using the Bent Normal to sample the Sky/Ground gradient (instead of the geometric normal) prevents light from "bleeding" through walls in corners. It makes the ambient light feel like it's actually coming from the openings in the geometry.
 
 ## 4. Image-Based Lighting (IBL) / Sky Probes
@@ -22,25 +23,692 @@ Instead of a simple Sky/Ground gradient, we can sample a low-resolution blurred 
 
 ---
 
-# Proposed Implementation Plan
+# Audit & Refined Implementation Plan
+# Goal: Macro-scale ambient occlusion — rooms/caves feel dark, open areas feel bright.
+# Status: ACTIVE
 
-To modernize the -ambient setting, the following phases are proposed:
+## Design Requirement Clarifications
 
-### Phase 1: Hemispherical Ambient
-Add two new worldspawn keys (or CLI switches): _ambient_sky and _ambient_ground.
-- Implementation: In light_direct.c, replace the flat VectorCopy(ambientColor, color) with a normal-weighted interpolation.
+The user's stated requirements, which inform all implementation decisions below:
+  - Reactive to SPACE SIZE, not micro-geometry. A dungeon corridor must be darker than an
+    outdoor plaza. We do NOT care about AO in small creases or under tiny objects.
+  - Medium/big scale sensitivity. The relevant "radius" for feeling enclosed is roughly
+    128-2048 world units, not 4-32.
+  - Ray casting is acceptable. Speed is "doesn't need to be fast" but "not extremely slow".
+    A single extra compile pass of similar duration to TraceGrid is tolerable.
+  - Does NOT replace direct lighting. This modulates the ambient/flat component only.
 
-### Phase 2: AO Baking
-Add a -ao <samples> switch to light.exe.
-- Logic: For each texel in LightingAtSample, generate a Poisson-disk or Cosine-weighted distribution of rays.
-- Occlusion: Trace these rays against the world geometry.
-- Result: Multiply the starting color (the ambient term) by (1.0 - occlusion).
+## Audit of Existing Systems
 
-### Phase 3: Bent Normals (Optional/Advanced)
-- Store the unoccluded direction during the AO pass.
-- Use this direction for the Sky/Ground lookup.
+### What Already Exists
+1. `ambientColor` (light.c, ~L92): A single global flat color, scaled by the worldspawn
+   `ambient` key. This is the classic Quake-flat-fill. Applied to `gridData32[num].ambient`.
+
+2. `rad_ao_intensity` (radiosity.c + main.c L228-233): A radiosity-phase crease AO
+   system. This IS a small-scale AO — it darkens crevices where radiosity emitters are
+   close together. This is exactly what we do NOT want to extend; it operates at the
+   wrong scale (per-texel proximity).
+
+3. `TraceGrid` (light_direct.c, ~L1700): Traces light grid points using Embree against
+   the full scene BVH. This runs per-grid-point, already parallel via RunThreadsOnIndividual.
+   It is the natural sister process for our ambient AO.
+
+4. `gridData32[num].ambient[0]` (lightdata.h, L25): The 32-bit float ambient grid slot.
+   Currently accumulated with += (additive multi-pass compatible).
+
+5. `VoxelCache_BakeAll()` (lightdata.c): Pre-bakes per-surface world-space sample
+   positions. This is the existing geometry sampling infrastructure — directly reusable.
+
+6. Embree BVH (`g_scene`, light_trace.c): Full scene BVH including brushes, patches, and
+   models. All our rays can fire against this structure at zero setup cost.
+
+### What Is Missing
+- There is no mechanism that makes a texel's ambient contribution aware of how much open
+  space surrounds it at a MACRO scale (50-1000+ unit radius).
+- The existing `ambientColor` is applied flat — it does not vary per spatial position.
+
+## Recommended Architecture: Macro Ambient Occlusion (MAO) Pass
+
+### Core Concept
+This is a dedicated pre-pass, running BEFORE or DURING `TraceGrid`, that computes a
+per-grid-point "openness" scalar [0.0 ... 1.0]. This scalar then modulates how much of
+the global `ambientColor` that grid point receives.
+
+A completely enclosed grid point (0% open) gets 0.0x ambient.
+A completely open grid point (100% open) gets 1.0x ambient.
+
+This is NOT texture-space AO. It is LIGHT-GRID-SPACE openness, which then propagates
+to lightmap texels via the in-engine interpolation of the light grid at runtime. This is
+the correct scale for the requirement.
+
+### Why the Light Grid Is The Right Target
+
+The light grid is already a volumetric, coarse-resolution sample of the world. Its cell
+spacing (default 64x64x128 wu) is exactly the "medium/big scale" we want to react to.
+A corridor 128 units wide has ~2 grid cells across it, while a large room has 10+.
+This naturally provides the spatial averaging we need without per-texel overhead.
+
+Modern engines (Unreal Engine 5 uses "Volumetric Lightmaps", id Tech 6+ uses "Irradiance
+Probes") converged on exactly this architecture: AO lives in the probe/grid volume, not
+per lightmap texel. This is the right approach here too.
+
+### Ray Strategy: Stratified Hemisphere Sampling
+
+For each grid point, fire N rays distributed across the upper hemisphere (or full sphere
+for fully enclosed points). The openness factor is:
+
+    openness = (unoccluded_rays) / (total_rays)
+
+Ray length = `mao_radius` (CLI parameter, default ~512 wu). Rays that exit the radius
+without hitting solid geometry count as "open". Rays that hit solid count as "occluded".
+
+**Sample count**: 32-64 rays per grid point is sufficient. At 64 rays, with say 10,000
+grid points, that is 640,000 ray casts — comparable to a light pass against a single
+small light source. Well within "acceptable but not fast" budget.
+
+**Stratified hemisphere**: Use a Fibonacci sphere or cosine-weighted Hammersley sequence
+to distribute rays uniformly. The hemisphere should be oriented upward (world-space Z+)
+for a simple setup, or use the full sphere and average over both hemispheres for
+point-in-solid-geometry safety.
+
+### Integration Into the Pipeline
+
+#### Phase 1: MAO Grid Pre-Pass  `RunMAO()`
+
+  Location: New function in `light_direct.c`, called from `LightWorld()` AFTER
+  `InitTrace()` but BEFORE `TraceGrid()`.
+
+  Pseudocode:
+  ```
+  void RunMAOPass(void)
+  {
+      RunThreadsOnIndividual(numGridPoints, qtrue, ComputeMAOPoint);
+  }
+
+  void ComputeMAOPoint(int num)
+  {
+      vec3_t origin;   // grid point world-space position
+      GridIndexToOrigin(num, origin);
+
+      if (PointInSolid(origin))
+      {
+          maoGrid[num] = 0.0f;  // inside geometry: fully occluded
+          return;
+      }
+
+      int hits = 0;
+      for (int i = 0; i < MAO_SAMPLES; i++)
+      {
+          vec3_t dir;
+          HammersleySphericalDir(i, MAO_SAMPLES, dir);  // uniform sphere
+
+          vec3_t end;
+          VectorMA(origin, mao_radius, dir, end);
+
+          trace_t trace;
+          TraceLine(origin, end, &trace, qfalse, tw);
+
+          if (trace.passSolid)
+              hits++;
+      }
+
+      maoGrid[num] = 1.0f - ((float)hits / (float)MAO_SAMPLES);
+  }
+  ```
+
+  Output: `float *maoGrid` — a new per-grid-point array allocated alongside `gridData32`.
+
+#### Phase 2: Apply MAO to Ambient During TraceGrid
+
+  In `TraceGrid()`, after the standard ambient accumulation into `gridData32[num].ambient[0]`,
+  apply the MAO factor:
+
+  ```c
+  // After all light contributions are accumulated:
+  float maoFactor = 1.0f;
+  if (maoGrid)
+  {
+      // Lerp: mao_intensity = 0 means no effect, 1 = full effect
+      maoFactor = 1.0f - mao_intensity * (1.0f - maoGrid[num]);
+  }
+
+  // Scale the ambient component only, not the directed component
+  VectorScale(gridData32[num].ambient[0], maoFactor, gridData32[num].ambient[0]);
+  ```
+
+  This preserves direct lighting (from point lights, sun, area lights) and only
+  attenuates the flat ambient fill, which is exactly the design requirement.
+
+#### Phase 3: CLI Parameters
+
+  New switches to add in `main.c`:
+
+  ```
+  -mao_samples <N>    = number of hemisphere rays per grid point (default: 48)
+  -mao_radius <F>     = max ray length in world units (default: 512.0)
+  -mao_intensity <F>  = blend factor 0.0 = no effect, 1.0 = full darkening (default: 0.75)
+  ```
+
+  New worldspawn keys (read in `LightMain()`, analogous to `ambient`):
+  ```
+  _mao_radius <F>
+  _mao_intensity <F>
+  ```
+
+### Data Structures
+
+New global in `light_direct.c` (declared in `light.h`):
+  ```c
+  extern float *maoGrid;   // [numGridPoints], allocated before RunMAOPass
+  ```
+
+No changes to `bspGridPoint32_t` are needed — the MAO factor is consumed and discarded
+after it is applied to `gridData32`. It does not need to be stored in the BSP.
+
+### Fibonacci/Hammersley Sphere Distribution
+
+A simple, portable implementation of uniform sphere point distribution:
+  ```c
+  void HammersleyDir(int i, int N, vec3_t out)
+  {
+      // Van der Corput sequence for Hammersley 2D
+      unsigned int bits = (unsigned int)i;
+      bits = (bits << 16u) | (bits >> 16u);
+      bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+      bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+      bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+      bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+      float ry = (float)bits * 2.3283064365386963e-10f; // / 0x100000000
+
+      float rx = (float)i / (float)N;
+      float phi   = rx * 2.0f * M_PI;
+      float cosTheta = 1.0f - 2.0f * ry;  // uniform sphere, not just hemisphere
+      float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+      out[0] = cosf(phi) * sinTheta;
+      out[1] = sinf(phi) * sinTheta;
+      out[2] = cosTheta;
+  }
+  ```
+
+  Using the full sphere (not hemisphere) avoids needing to know surface orientation at
+  the grid point and handles concave ceilings correctly. The "openness" on a full sphere
+  naturally encodes both how open the ceiling AND the floor are above and below each probe.
+
+### Alternative: Cone Sampling Towards Sky
+  For maps where "open sky above = brighter" is the primary goal, we could restrict rays
+  to the upper hemisphere only. But full sphere is more general and works for caves,
+  interiors, and partially-enclosed spaces equally well.
+
+## Comparison With Modern Engine Approaches
+
+  UE5 Lumen / Indirect Lighting Cache:
+    Uses "Irradiance Probes" in a volumetric grid. Each probe stores baked irradiance
+    across a full sphere using Spherical Harmonics. AO is implicit in the SH data.
+    Concept matches ours but uses SH instead of a scalar.
+
+  id Tech 7 (DOOM Eternal):
+    "Lightmass" bakes both irradiance and AO into probes. AO at probe scale attenuates
+    the indirect light contribution. Near-identical concept.
+
+  Our approach is a simplified version of this: instead of full SH, we store a single
+  scalar (openness) and apply it to the ambient only. This is the correct simplification
+  for a BSP-based engine where full SH is not supported by the runtime.
+
+## Phase Ordering in the Full Pipeline
+
+  Updated `LightWorld()` call order:
+  ```
+  InitTrace()
+  InitTracingGeometry()       // Embree BVH built
+  RunMAOPass()                // NEW: fire sphere rays per grid point, populate maoGrid
+  TraceGrid()                 // Existing: accumulate lights, then apply maoGrid factor
+  TraceLtm()                  // Existing: lightmap texel tracing (unchanged)
+  LightRadiosity()            // Existing: radiosity bounce (unchanged)
+  ```
+
+  The MAO pass is a pure read-only BVH query (no writes to lightFloats, no per-surface
+  state). It is completely parallelizable and thread-safe assuming `maoGrid` writes are
+  to distinct indices (which they are, one per grid point).
+
+## Implementation Scope
+
+### Files to Modify
+  - `light/light_direct.c`: Add `ComputeMAOPoint()`, `RunMAOPass()`, modify `TraceGrid()`
+    to apply `maoGrid` factor.
+  - `light/light.h`: Declare `maoGrid`, `mao_samples`, `mao_radius`, `mao_intensity`.
+  - `light/main.c`: Add CLI switch parsing for `-mao_samples`, `-mao_radius`, `-mao_intensity`.
+  - `light/light.c` (`LightMain`): Read worldspawn keys `_mao_radius`, `_mao_intensity`.
+    Allocate and free `maoGrid`.
+  - `light/light_direct.c` (`LightWorld`): Call `RunMAOPass()` before `TraceGrid()`.
+
+### Files NOT to Modify
+  - `lightdata.c/h`: No new buffer types needed.
+  - `radiosity.c`: Unaffected. The existing `rad_ao_intensity` crease AO is a separate
+    system and should remain untouched.
+  - BSP serialization: No format changes needed.
+
+## Estimated Performance
+
+  With default settings (48 samples, 10,000 grid points):
+  - 480,000 Embree rays total.
+  - At ~50M rays/sec (Embree typical on modern CPU), ~10ms worst case.
+  - In practice, TraceGrid already takes seconds per map. MAO adds <5% to that phase.
+  - Larger sample counts (128+) or very large grid densities may approach 1-2 seconds.
+
+  This is firmly within the "not fast but not extremely slow" budget.
+
+## Open Questions / Future Extensions
+
+  1. Should `maoGrid` also modulate `gridData32[num].directed[0]`? Currently, we only
+     modulate ambient. Modulating directed would make enclosed spaces lose their sense
+     of directional light too, which may be undesirable. Keep it ambient-only for V1.
+
+  2. Should `mao_radius` auto-scale with `gridSize`? A map with 128-unit grid spacing
+     might want a different default than one with 64-unit spacing. Could expose a
+     multiplier `_mao_radius_grid_factor` as a future tuning knob.
+
+  3. Interaction with `-fast`: In fast mode, MAO could run with fewer samples (e.g.,
+     MAO_SAMPLES / 4) controlled by the existing `g_fast` flag.
 
 ---
 
-# Status: ON HOLD
-Paused to investigate DeluxeMaps (Light Direction Maps) implementation first.
+# Addendum: Hemispherical Color + Deluxemaps
+
+## Q1: Does the Hemispherical Sky/Ground Color integrate with MAO?
+
+Yes — and the integration improves both systems. This resolves open question #3 above.
+
+### The Upgrade: Split-Hemisphere Openness
+
+Instead of computing a single `openness` scalar per grid point, we split the MAO sphere
+rays into two buckets: upper hemisphere (ray.z > 0) and lower hemisphere (ray.z < 0).
+
+  openness_sky    = unoccluded_upper_rays / total_upper_rays
+  openness_ground = unoccluded_lower_rays / total_lower_rays
+
+The ambient color at a grid point then becomes:
+
+  ambient_color = (openness_sky * sky_color) + (openness_ground * ground_color)
+
+This replaces the original plan of `openness * ambientColor` entirely.
+
+### Why This Is Architecturally Correct
+
+The sky_color and ground_color are two new global vec3_t values (analogous to the current
+`ambientColor`). They are defined via worldspawn keys:
+
+  "_ambient_sky"    <R G B>   e.g., "0.4 0.5 0.8"   (cool sky blue)
+  "_ambient_ground" <R G B>   e.g., "0.3 0.2 0.1"   (warm earth brown)
+  "ambient"         <F>       (existing) — acts as a shared intensity scale for both
+
+The existing `ambientColor` + `ambient` scalar becomes the legacy flat path. If neither
+`_ambient_sky` nor `_ambient_ground` are set, the system falls back to the original flat
+color behavior (setting both sky and ground to `ambientColor` is equivalent to the old
+system, just with openness modulation applied equally).
+
+### Examples of What This Produces
+
+  - Open outdoor area (sky clear above, ground clear below):
+      openness_sky ≈ 0.95, openness_ground ≈ 0.85
+      → bright sky color + significant ground bounce color → naturally lit feel
+
+  - Indoor corridor (ceiling 96wu above, floor 0wu below):
+      openness_sky ≈ 0.05, openness_ground ≈ 0.20 (some ground visible through floor gap)
+      → very little sky color → dark interior with a faint warm floor tint
+
+  - Cave mouth (open to one side, ceiling overhead):
+      openness_sky varies with direction → gradient across the cave entrance
+      → natural "brighter near entrance" effect from the grid interpolation
+
+  - Completely enclosed room (no openings):
+      openness_sky ≈ 0, openness_ground ≈ 0
+      → near-zero ambient → the room is lit ONLY by emitters (point lights, surface lights)
+      → exactly the desired behavior: darkness without direct lights
+
+### Data Structure Change
+
+The original plan stored `float *maoGrid` (a per-grid-point scalar). With the
+split-hemisphere approach, we instead store `vec3_t *maoAmbient` — the fully computed
+ambient RGB for each grid point. This is consumed directly in `TraceGrid`:
+
+  ```c
+  // In TraceGrid(), replacing the ambientColor flat application:
+  if (maoAmbient)
+  {
+      VectorAdd(maoAmbient[num], gridData32[num].ambient[0], gridData32[num].ambient[0]);
+  }
+  else
+  {
+      VectorAdd(ambientColor, gridData32[num].ambient[0], gridData32[num].ambient[0]);
+  }
+  ```
+
+Pre-computing the RGB value in the MAO pass rather than at TraceGrid time is cleaner
+because sky_color and ground_color are global constants — the multiplication is the same
+for every grid point, so doing it once per point in `ComputeMAOPoint` is correct.
+
+### New CLI Parameters (updated)
+
+  -mao_samples <N>      = sphere ray count per grid point (default: 48)
+  -mao_radius <F>       = max ray length in world units (default: 512.0)
+
+  (Note: the old -mao_intensity scalar is replaced by the color tuning via worldspawn.
+   The mapper directly controls the result by setting sky/ground colors.)
+
+---
+
+## Q2: How Does Ambient Interact with Deluxemaps?
+
+### The Fundamental Insight: Ambient Is Grid-Level, Deluxemaps Are Texel-Level
+
+To answer this correctly, we must first understand where each system lives:
+
+  LIGHTMAP TEXELS (lightFloats / deluxeFloats):
+    - Computed by TraceLtm → LightingAtSample.
+    - Contains: direct lighting (point lights, area lights, sun).
+    - Deluxemaps store the DOMINANT DIRECTION of this direct light per texel.
+    - `LightingAtSample` initializes `dir = surface_normal` as a seed, then the
+      MergeAccumulatedState mechanism updates it as each light contribution arrives.
+
+  LIGHT GRID (gridData32):
+    - Computed by TraceGrid.
+    - Contains: ambient (omnidirectional fill) + directed (strongest directional light).
+    - `gridData32[num].latLong` = encoded direction of the dominant DIRECT light.
+    - The ambient slot has NO corresponding direction in the BSP format — by design.
+
+The ambient term is applied at RUNTIME by the engine through light grid interpolation.
+The lightmap texture itself does NOT contain ambient energy. The two systems are decoupled.
+
+### The Critical Consequence: Ambient Has No Deluxemap Direction
+
+The deluxemap (deluxeFloats) is written per-texel only during TraceLtm. Ambient energy
+is NOT written into TraceLtm at all — `LightingAtSample` only processes the `lights`
+list (point, area, spotlight, sun). The `ambientColor` / `maoAmbient` is applied
+exclusively in `TraceGrid`, which writes to `gridData32[num].ambient`, not to
+`lightFloats` or `deluxeFloats`.
+
+Therefore: AMBIENT LIGHTING HAS NO DELUXEMAP DIRECTION, AND DOES NOT NEED ONE.
+
+This is not a limitation — it is the correct design. Here is why:
+
+  1. Ambient light is by definition omnidirectional. Assigning it a specific direction
+     would be physically wrong. The engine understands the `ambient` grid slot as
+     omni-directional fill and renders it without directional bias.
+
+  2. The deluxemap direction for each texel is driven by the DIRECT lights only.
+     A surface in a dark room with only ambient may have a meaningless deluxemap
+     direction, but that's acceptable because normal mapping is only visually significant
+     where there's directional light to create shading differences. In pure ambient
+     conditions, normal maps don't contribute perceivable detail regardless.
+
+  3. The fallback direction in LightingAtSample is `dir = surface_normal` (line 1011
+     of light_direct.c). This means: if NO direct light hits a texel, the deluxemap
+     will point along the surface normal. The effect in the engine is equivalent to
+     "no directional light, no normal map effect" — correct behavior.
+
+### What About the `gridData32[num].latLong` Field?
+
+This field encodes the direction of the dominant DIRECT light at each grid point
+(summedDir in TraceGrid, weighted by contribution luminance). It is NOT related to
+the ambient slot. The engine uses it to apply the "directed" grid component directionally.
+
+The MAO pass does NOT modify latLong. It only touches the ambient slot. The directed
+grid direction continues to come from real light sources, which is correct.
+
+### Summary Table
+
+  | Data                        | Where stored      | Has direction? | MAO affects? |
+  |-----------------------------|-------------------|----------------|--------------|
+  | Direct light (lightmap)     | lightFloats        | YES (deluxeFloats) | No       |
+  | Ambient fill                | gridData32.ambient | NO (by design) | YES          |
+  | Dominant direct (grid)      | gridData32.directed| YES (latLong)  | No           |
+  | Radiosity bounce            | radiosityFloats    | Optional       | No           |
+
+### Future: Bent Normal for the Ambient Grid (Optional/Advanced)
+
+If, in a future version, we wanted the ambient component of the GRID to have a
+directional hint (not a deluxemap per-texel, but a per-probe direction for the engine
+to shade ambient with a surface normal), we would need:
+  - A new BSP field per grid point (format change, not trivial).
+  - Engine support for reading and applying it.
+This is out of scope for the current FBSP format. The two-color (sky/ground) hemispherical
+approach already provides perceptually correct directional cueing through COLOR rather than
+a direction vector, which is exactly the right tradeoff for the current architecture.
+
+---
+
+# Addendum 2: Per-Texel Ambient Baking (TraceAmbient Pass)
+
+## Requirement Clarification
+
+Ambient must be baked into the LIGHTMAPS, not only into the light grid.
+The goal is a "base lighting" pass that creates fill light for scenarios where no direct
+sun or point lights are present (night scenes, overcast days, pure ambient environments).
+This is a standard baked-lighting technique used in virtually all game engines.
+
+The previous plan routed ambient exclusively through `gridData32.ambient`, which is
+applied at runtime by the engine for dynamic entities and non-lightmapped objects.
+That is still needed. But world geometry reads its lighting from the lightmap textures
+(lightFloats), which must also receive the ambient contribution.
+
+## Revised Architecture: Two Parallel Ambient Passes
+
+### Pass A: Grid-level ambient (previously planned, unchanged)
+  - Target: `gridData32[num].ambient[0]`
+  - Purpose: ambient for dynamic entities, Gouraud-shaded geometry
+  - Computed in: `TraceGrid()` using the pre-built `maoAmbient[num]` array from MAO
+  - Granularity: one value per grid cell (~64-128 wu)
+
+### Pass B: Lightmap-level ambient (new) — `TraceAmbient()`
+  - Target: `lightFloats[k]` (and optionally `deluxeFloats[k]`)
+  - Purpose: ambient for all lightmapped world surfaces
+  - Computed in: a new dedicated function `TraceAmbient(int num)` per surface
+  - Granularity: one value per lightmap texel (~8-16 wu, depending on samplesize)
+  - Runs AFTER `TraceLtm` (direct lights), BEFORE or AFTER `LightRadiosity`
+
+## TraceAmbient() — Design
+
+### Per-Texel Algorithm
+
+For each surface, for each lightmap texel:
+  1. Reconstruct the world-space `origin` and `normal` using the same coordinate math
+     as `TraceLtm`. This code is shared verbatim — same surface-type branches
+     (MST_PLANAR, MST_PATCH, MST_TRIANGLE_SOUP), same gutter handling.
+  2. Fire N sphere rays (Hammersley distribution) of length `mao_radius`.
+  3. Classify each ray: upper hemisphere (dir.z > 0) or lower hemisphere (dir.z < 0).
+     Count: sky_unoccluded, sky_total, ground_unoccluded, ground_total.
+  4. Compute per-texel ambient color:
+       ambient_color = (sky_unoccluded/sky_total) * sky_color
+                     + (ground_unoccluded/ground_total) * ground_color
+  5. Add to lightFloats:
+       lightFloats[k*3+0] += ambient_color[0]
+       lightFloats[k*3+1] += ambient_color[1]
+       lightFloats[k*3+2] += ambient_color[2]
+  6. If deluxemaps enabled: compute bent normal and merge into deluxeFloats[k].
+     (See Bent Normal section below.)
+
+### Coordinate Reconstruction
+
+`TraceAmbient()` reuses the same geometry setup as `TraceLtm()` verbatim:
+  - Same lightmapOrigin, lightmapVecs reconstruction
+  - Same MST_PLANAR / MST_PATCH / MST_TRIANGLE_SOUP branches
+  - Same entity origin offset
+  - Same `SAMPLE_NUDGE` along the normal to avoid self-intersection
+  - Same call to `PointInSolid()` is NOT needed per-texel (it's baked lightmap space)
+
+The inner ray loop is the NEW part. Everything above the per-texel sample point
+reconstruction is identical to TraceLtm.
+
+### Sample Count
+
+  mao_ambient_samples (default: 32)  — sphere rays per texel
+
+  This is less than the grid pass because lightmap texels provide spatial averaging
+  from many adjacent samples. 32 rays gives sufficient quality.
+
+  In -fast mode: reduce to 16 automatically.
+
+### Performance Estimate
+
+  500,000 texels × 32 rays = 16,000,000 Embree ray casts.
+  At ~100M rays/sec on modern hardware with Embree: ~0.16 seconds total.
+  In practice with thread overhead and cache pressure: 0.5-2 seconds.
+
+  This is strictly within the "not fast, but not extremely slow" budget.
+  TraceLtm with 100 lights and 500K texels does ~50M rays already.
+
+### Call Site in LightWorld()
+
+  ```c
+  void LightWorld(void)
+  {
+      ...
+      TraceGrid();          // existing: direct light grid + maoAmbient injection
+      TraceLtm();           // existing: direct lighting into lightFloats
+      TraceAmbient();       // NEW: per-texel ambient into lightFloats
+      LightRadiosity();     // existing: radiosity bounce
+  }
+  ```
+
+  TraceAmbient runs after TraceLtm so that when we merge the ambient direction into
+  deluxeFloats, the direct lighting direction is already there to blend against.
+
+---
+
+## Deluxemap Direction for Per-Texel Ambient: The Bent Normal
+
+### Why We Can Solve This Now
+
+In the previous grid-level-only plan, ambient had no deluxemap because `deluxeFloats`
+is a per-texel buffer and ambient was grid-level. Now that we're baking ambient per
+texel, we CAN compute a per-texel directional hint for the ambient contribution.
+
+### The Bent Normal
+
+During the hemisphere ray pass, accumulate the weighted average of all UNOCCLUDED ray
+directions. Weight each ray by its color contribution (sky_color for upper rays,
+ground_color for lower rays):
+
+  ```c
+  vec3_t bentNormal = {0, 0, 0};
+  for each unoccluded ray r:
+      vec3_t weight = (r.z > 0) ? sky_color : ground_color;
+      float w = luminance(weight);  // 0.299*R + 0.587*G + 0.114*B
+      VectorMA(bentNormal, w, r.dir, bentNormal);
+  VectorNormalize(bentNormal, bentNormal);
+  ```
+
+This gives a direction that points toward where most ambient light arrives from,
+weighted by color intensity. In an open outdoor area, it points up (sky dominates).
+In a corridor facing north, it points north (the opening).
+
+This is physically meaningful and correct for normal-map shading under ambient light:
+a bump map lit by the bent normal direction shows correct highlights toward the opening.
+
+### Blending With the Direct Light Direction
+
+`TraceAmbient()` runs AFTER `TraceLtm()`, so `deluxeFloats[k]` already contains the
+direct lighting direction from `TraceLtm`. We must BLEND, not overwrite.
+
+The correct blending function is `MergeAccumulatedState()` — the same luminance-weighted
+direction merge that all other passes already use (line 562 of light_direct.c):
+
+  ```c
+  // In TraceAmbient(), after computing ambient_color and bentNormal:
+  if (deluxeFloats)
+  {
+      // Read existing direct-light state from the float buffers
+      vec3_t existingColor, existingDir, existingEnergy;
+      VectorCopy(&lightFloats[k*3], existingColor);    // color BEFORE we add ambient
+      VectorCopy(&deluxeFloats[k*3], existingDir);
+      VectorCopy(&energyFloats[k*3], existingEnergy);
+
+      // ambient_color acts as the irradiance; bentNormal is the direction
+      // energyAdd = ambient_color (ambient has no separation of energy/angle,
+      // so irradiance == energy here, same as a glow contribution)
+      MergeAccumulatedState(existingColor, existingDir, existingEnergy,
+                            ambient_color, bentNormal, ambient_color, normal);
+
+      // Write merged direction back (color was already added via lightFloats +=)
+      VectorCopy(existingDir, &deluxeFloats[k*3]);
+      VectorCopy(existingEnergy, &energyFloats[k*3]);
+  }
+  ```
+
+### What Happens in Purely Ambient Texels (no direct light)
+
+In `LightingAtSample()`, the deluxemap is seeded with `dir = surface_normal` (line 1011).
+If no light contributes, `lightFloats[k]` stays near zero. Then `TraceAmbient` runs:
+
+  - If the texel has ambient: `existingColor` ≈ 0, so `MergeAccumulatedState` is
+    fully dominated by `ambient_color`. The `dirNew` becomes `bentNormal`. Correct.
+
+  - If the texel has NO ambient (fully enclosed, zero openness): neither
+    `existingColor` nor `ambient_color` is meaningful. The direction stays as the
+    surface normal fallback. This means "no lighting, no normal-map effect" — correct.
+
+### What Happens in Mixed Texels (direct + ambient)
+
+The direct light has already set a strong direction (e.g., toward a lamp at 45°).
+`MergeAccumulatedState` weights by luminance: if the lamp is much brighter than ambient,
+the lamp direction dominates. If ambient roughly matches the lamp, the direction blends
+between them. The result is never "fake" — it represents where the majority of energy is
+arriving from. This is exactly what deluxemaps should encode.
+
+### The Fallback Direction: Surface Normal vs. Bent Normal
+
+Previous plan said: "if no direct light, deluxemap = surface_normal."
+Revised: "if no direct light but ambient IS present, deluxemap = bentNormal."
+
+The bent normal is strictly better than the surface normal in this case:
+  - Surface normal: says "light comes from straight in front of the surface" (arbitrary)
+  - Bent normal: says "light comes from the direction of the nearest opening" (correct)
+
+This means bump-mapped surfaces in purely ambient-lit rooms will now show the correct
+shading tilt toward the room's opening even without any point lights present.
+
+---
+
+## Updated Summary Table
+
+  | Data                        | Where stored        | Has direction?      | Ambient affects? |
+  |-----------------------------|---------------------|---------------------|------------------|
+  | Direct light (lightmap)     | lightFloats          | YES (deluxeFloats)  | No               |
+  | Ambient fill (lightmap)     | lightFloats          | YES (bentNormal via deluxeFloats) | YES (TraceAmbient) |
+  | Ambient fill (grid)         | gridData32.ambient   | NO (by design)      | YES (TraceGrid)  |
+  | Dominant direct (grid)      | gridData32.directed  | YES (latLong)       | No               |
+  | Radiosity bounce            | radiosityFloats      | Optional            | No               |
+
+---
+
+## Files to Modify (updated)
+
+  ### New file (or section in light_direct.c):
+    `TraceAmbient(int num)` — per-surface, per-texel ambient pass
+    `LightAmbient(void)` — launcher using RunThreadsOnWeighted
+
+  ### Modified:
+    - `light/light_direct.c` (`LightWorld`): Add `LightAmbient()` after `LightWorld`.
+    - `light/light.h`: Declare `vec3_t sky_color`, `vec3_t ground_color`,
+      `float *maoAmbient`, `int mao_ambient_samples`.
+    - `light/main.c`: Parse `-mao_ambient_samples`, worldspawn `_ambient_sky`,
+      `_ambient_ground`. Allocate/free `maoAmbient`.
+    - `light/light.c` (`LightMain`): Read sky/ground worldspawn keys.
+
+  ### Unchanged:
+    - `lightdata.c/h`, radiosity.c, lm_postprocess.c — no changes needed.
+    - BSP format — no changes needed.
+
+---
+
+# Status: READY FOR IMPLEMENTATION
+# Blocked by: Nothing.
+# Key design decisions confirmed (FINAL):
+#   1. Two ambient passes: TraceGrid (grid) + TraceAmbient (lightmap texels).
+#   2. Sky/ground split-hemisphere: vec3_t maoAmbient computed per grid point AND
+#      per texel independently (same algorithm, same parameters, different granularity).
+#   3. Bent normal: computed during TraceAmbient hemisphere sampling, merged into
+#      deluxeFloats using MergeAccumulatedState (luminance-weighted blend).
+#   4. In purely ambient texels: deluxe direction = bent normal (not surface normal).
+#   5. In mixed texels: deluxe direction = luminance-weighted blend of all contributions.
+#   6. latLong in gridData32 continues to point to strongest direct light source.

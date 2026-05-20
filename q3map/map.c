@@ -1201,8 +1201,23 @@ void ProcessFuncLight(entity_t *ent)
             {
                 if (!strcmp(ep->key, "classname") || !strcmp(ep->key, "origin") || !strcmp(ep->key, "model"))
                     continue;
+
+                // Exclude smoothing radius keys (they belong to the surface, not the point light)
+                if (!strcmp(ep->key, "smoothradius") || !strcmp(ep->key, "_smoothradius") ||
+                    !strcmp(ep->key, "smoothingradius") || !strcmp(ep->key, "_smoothingradius"))
+                    continue;
+
+                // Exclude supersample keys from direct inheritance (handled explicitly below)
+                if (!strcmp(ep->key, "supersample") || !strcmp(ep->key, "_supersample"))
+                    continue;
+
                 SetKeyValue(le, ep->key, ep->value);
             }
+
+            // Map supersample to _supersample for the generated light entity
+            const char *ss = ValueForKey(ent, "supersample");
+            if (!ss[0]) ss = ValueForKey(ent, "_supersample");
+            if (ss[0]) SetKeyValue(le, "_supersample", ss);
 
             // If no color is set, try to derive it from the surface image
             const char *color = ValueForKey(ent, "_color");

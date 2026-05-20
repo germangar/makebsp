@@ -554,6 +554,8 @@ void CreateEntityLights(void)
                 intensity = FloatForKey(e, "_light");
 
             _color = ValueForKey(e, "_color");
+            if (!_color[0])
+                _color = ValueForKey(e, "color");
             if (_color && _color[0])
             {
                 ParseColor(_color, sunLight);
@@ -601,6 +603,8 @@ void CreateEntityLights(void)
         if (!intensity)
             intensity = 300;
         _color = ValueForKey(e, "_color");
+        if (!_color[0])
+            _color = ValueForKey(e, "color");
         if (_color && _color[0])
         {
             ParseColor(_color, dl->color);
@@ -1255,6 +1259,8 @@ void LightMain(void)
 
     // find the optional world ambient
     const char *_color = ValueForKey(&entities[0], "_color");
+    if (!_color[0])
+        _color = ValueForKey(&entities[0], "color");
     if (_color[0])
     {
         ParseColor(_color, ambientColor);

@@ -749,17 +749,19 @@ void LoadTriangleModels(void)
             vec3_t vertexColor;
             VectorClear(vertexColor);
             const char *vcolStr = ValueForKey(entity, "vertexcolor");
+            if (!vcolStr[0])
+                vcolStr = ValueForKey(entity, "_vertexcolor");
             if (vcolStr[0])
             {
                 hasVertexColor = 1;
                 ParseColor(vcolStr, vertexColor);
             }
 
-            // supersampling override
+            // supersample override
             float superSampleRadius = -1.0f;
-            const char *ssStr = ValueForKey(entity, "supersampling");
+            const char *ssStr = ValueForKey(entity, "supersample");
             if (!ssStr[0])
-                ssStr = ValueForKey(entity, "_supersampling");
+                ssStr = ValueForKey(entity, "_supersample");
             if (ssStr[0])
             {
                 superSampleRadius = atof(ssStr);

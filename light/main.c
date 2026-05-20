@@ -166,8 +166,8 @@ int main(int argc, char **argv) {
             if (game->deluxeMinAngle < 0.0f) game->deluxeMinAngle = 0.0f;
             if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
             _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
-        } else if (!strcmp(argv[i], "-supersampling")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a radius value (e.g. 0.5 or 1.0)");
+        } else if (!strcmp(argv[i], "-supersample")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersample requires a radius value (e.g. 0.5 or 1.0)");
             superSampleRadius = atof(argv[i + 1]);
             if (superSampleRadius < 0.0f)
                 superSampleRadius = 0.0f;
@@ -177,8 +177,8 @@ int main(int argc, char **argv) {
                 _printf("Super-sampling disabled\n");
             }
             i++;
-        } else if (!strcmp(argv[i], "-smooth")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smooth requires a number of passes");
+        } else if (!strcmp(argv[i], "-smoothpasses")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothpasses requires a number of passes");
             game->defaultSmoothPasses = atoi(argv[i + 1]);
             if (game->defaultSmoothPasses < 0) game->defaultSmoothPasses = 0;
             _printf("Smoothing passes set to %d\n", game->defaultSmoothPasses);
@@ -295,10 +295,10 @@ int main(int argc, char **argv) {
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
-                "   smooth <passes> = number of post-process smoothing passes to run\n"
+                "   smoothpasses <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
                 "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
-                "   supersampling <mode> = trace-time super-sampling mode:\n"
+                "   supersample <mode> = trace-time super-sampling mode:\n"
                 "                     0 = OFF\n"
                 "                     1 = super-sampling EVERYTHING\n"
                 "                     2 = super-sampling models only\n"

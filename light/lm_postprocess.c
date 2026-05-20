@@ -271,8 +271,18 @@ void GpuLightmapState_Upload(void) {
     int *pS=Q_Alloc(totalP*sizeof(int)), *pX=Q_Alloc(totalP*sizeof(int)), *pY=Q_Alloc(totalP*sizeof(int)), *vL=Q_Alloc(totalP*sizeof(int));
     memset(pS, -1, totalP*sizeof(int)); int nV=0; int W=LIGHTMAP_WIDTH*scale, H=LIGHTMAP_HEIGHT*scale;
     for (s=0; s<numPlanarSurfaces; s++) {
-        dsurface_t *ds=&drawSurfaces[planarSurfaces[s].surfaceNum]; int lm=ds->lightmapNum[0], sW=ds->lightmapWidth*scale, sH=ds->lightmapHeight*scale, oX=ds->lightmapOffset[0][0]*scale, oY=ds->lightmapOffset[0][1]*scale;
-        for(y=0;y<sH;y++) for(x=0;x<sW;x++) { int p=(lm*H+oY+y)*W+oX+x, p1=(lm*LIGHTMAP_HEIGHT+(oY+y)/scale)*LIGHTMAP_WIDTH+(oX+x)/scale; if(lightAlphaMask[p1]==0)continue; pS[p]=s; pX[p]=x; pY[p]=y; vL[nV++]=p; }
+        dsurface_t *ds=&drawSurfaces[planarSurfaces[s].surfaceNum]; 
+        int lm=ds->lightmapNum[0], sW=ds->lightmapWidth*scale, sH=ds->lightmapHeight*scale, oX=ds->lightmapOffset[0][0]*scale, oY=ds->lightmapOffset[0][1]*scale;
+        qboolean needsFilter = (planarSurfaces[s].smoothingRadius > 0.0f || game->antialiasingPasses > 0);
+        
+        for(y=0;y<sH;y++) {
+            for(x=0;x<sW;x++) { 
+                int p=(lm*H+oY+y)*W+oX+x, p1=(lm*LIGHTMAP_HEIGHT+(oY+y)/scale)*LIGHTMAP_WIDTH+(oX+x)/scale; 
+                if(lightAlphaMask[p1]==0) continue; 
+                pS[p]=s; pX[p]=x; pY[p]=y; 
+                if (needsFilter) vL[nV++]=p; 
+            }
+        }
     }
     st->numValid=nV; st->validList=clCreateBuffer(g_clContext, CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR, nV*sizeof(int), vL, &err);
     float *radii = Q_Alloc(numPlanarSurfaces * sizeof(float));

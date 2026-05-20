@@ -123,18 +123,20 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
                 ds->lightSubdivide = atof(subdivideStr);
         }
     }
-    // New: vertexcolor handling for func_group / misc_model
+    // Resolve vertexcolor override (func_group, misc_model, etc)
     const char *vcolStr = ValueForKey(e, "vertexcolor");
+    if (!vcolStr[0])
+        vcolStr = ValueForKey(e, "_vertexcolor");
     if (vcolStr[0])
     {
         ds->hasVertexColor = 1;
         ParseColor(vcolStr, ds->vertexColor);
     }
 
-    // Resolve supersampling
-    const char *ssStr = ValueForKey(e, "supersampling");
+    // Resolve supersample
+    const char *ssStr = ValueForKey(e, "supersample");
     if (!ssStr[0])
-        ssStr = ValueForKey(e, "_supersampling");
+        ssStr = ValueForKey(e, "_supersample");
     if (ssStr[0])
     {
         float ssVal = atof(ssStr);
