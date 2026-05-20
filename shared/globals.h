@@ -12,6 +12,7 @@ typedef struct {
     float lightSubdivide;
     int hasVertexColor;
     vec3_t vertexColor;
+    float superSampleRadius;
 } extraSurface_t;
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;

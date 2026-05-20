@@ -59,6 +59,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
     VectorSet(ds->lightColor, -1.0f, -1.0f, -1.0f);
     ds->backsplashFraction = -1.0f;
     ds->lightSubdivide = -1.0f;
+    ds->superSampleRadius = -1.0f;
 
     return ds;
 }
@@ -128,6 +129,19 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     {
         ds->hasVertexColor = 1;
         ParseColor(vcolStr, ds->vertexColor);
+    }
+
+    // Resolve supersampling
+    const char *ssStr = ValueForKey(e, "supersampling");
+    if (!ssStr[0])
+        ssStr = ValueForKey(e, "_supersampling");
+    if (ssStr[0])
+    {
+        float ssVal = atof(ssStr);
+        if (ssVal < 0.0f)
+            ds->superSampleRadius = 0.0f;
+        else
+            ds->superSampleRadius = ssVal;
     }
 }
 
@@ -1338,6 +1352,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
 
     numDrawSurfaces++;
 
@@ -1418,6 +1433,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
 
     numDrawSurfaces++;
 
@@ -1507,6 +1523,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
 
     numDrawSurfaces++;
 
@@ -1560,6 +1577,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
 
     numDrawSurfaces++;
 

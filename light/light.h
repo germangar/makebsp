@@ -263,8 +263,8 @@ typedef struct
     // vertex color override
     qboolean hasVertexColor;
     vec3_t vertexColor;
+    float superSampleRadius;
 } localSurface_t;
-
 extern localSurface_t *localSurfaces;
 void BuildLocalSurfaces(void);
 
@@ -333,14 +333,7 @@ extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
 
-typedef enum
-{
-	SUPERSAMPLE_NONE = 0,
-	SUPERSAMPLE_8X = 8,
-	SUPERSAMPLE_16X = 16
-} ssMode_t;
-
-extern ssMode_t superSampleMode;
+extern float superSampleRadius;
 void SmoothLightmaps(float radius);
 void PostProcessLightmaps(void);
 

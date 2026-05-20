@@ -344,6 +344,19 @@ void PatchMapDrawSurfs(entity_t *e)
             ds->hasVertexColor = 1;
             ParseColor(vcolStr, ds->vertexColor);
         }
+
+        // supersampling override
+        const char *ssStr = ValueForKey(e, "supersampling");
+        if (!ssStr[0])
+            ssStr = ValueForKey(e, "_supersampling");
+        if (ssStr[0])
+        {
+            float ssVal = atof(ssStr);
+            if (ssVal < 0.0f)
+                ds->superSampleRadius = 0.0f;
+            else
+                ds->superSampleRadius = ssVal;
+        }
     }
 
     qprintf("%5i patches\n", patchCount);

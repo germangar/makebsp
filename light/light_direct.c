@@ -1303,14 +1303,14 @@ void TraceLtm(int num)
         return; // doesn't need lightmap lighting
     }
 
-    int superSample = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
+    int isDilated = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
     int use_upscale = upscale;
 
     tw->patchshadows = patchshadows;
     tw->forceFrontOnly = qtrue;
 
     int scale = use_upscale ? UPSCALE_FACTOR : 1;
-    int currentGutter = superSample ? (GUTTER * scale) : 0;
+    int currentGutter = isDilated ? (GUTTER * scale) : 0;
 
     if (ds->surfaceType == MST_PATCH)
     {
@@ -1340,7 +1340,7 @@ void TraceLtm(int num)
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         }
 
-        if (!superSample)
+        if (!isDilated)
         {
             VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
             VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
@@ -1436,34 +1436,49 @@ void TraceLtm(int num)
         }
     }
 
+    // Resolve per-surface supersampling and pattern selection
+    float ssRadius = localSurfaces[realSurfIndex].superSampleRadius;
+    qboolean doSS = (ssRadius > 0.0f);
+    const float (*pattern)[2] = ssPattern8;
+    int actualSamples = 1;
+    float jitterRadius = 0.0f;
+
+    if (doSS)
+    {
+        int ssize = samplesize;
+        if (si && si->lightmapSampleSize)
+        {
+            ssize = si->lightmapSampleSize;
+        }
+        if (ssize <= 0)
+        {
+            ssize = 4;
+        }
+
+        const char *patternName;
+        if (ssRadius > 0.5f * (float)ssize)
+        {
+            pattern = ssPattern16;
+            actualSamples = SS_PATTERN16_COUNT;
+            patternName = "16x";
+        }
+        else
+        {
+            pattern = ssPattern8;
+            actualSamples = SS_PATTERN8_COUNT;
+            patternName = "8x";
+        }
+
+        jitterRadius = ssRadius;
+        _printf("Surface %d: triggering supersampling (radius %.3f, %s pattern)\n", realSurfIndex, ssRadius, patternName);
+    }
+
     // determine which samples are occluded
     memset(occluded_data, 0, extW * extH * sizeof(byte));
     for (i = 0; i < sampleWidth; i++)
     {
         for (j = 0; j < sampleHeight; j++)
         {
-
-            qboolean doSS = (superSampleMode != SUPERSAMPLE_NONE);
-
-            const float (*pattern)[2];
-            int actualSamples;
-            if (!doSS)
-            {
-                actualSamples = 1;
-                pattern = ssPattern8;
-            }
-            else if (superSampleMode == SUPERSAMPLE_16X)
-            {
-                actualSamples = SS_PATTERN16_COUNT;
-                pattern = ssPattern16;
-            }
-            else
-            {
-                actualSamples = SS_PATTERN8_COUNT;
-                pattern = ssPattern8;
-            }
-
-            float jitterRadius = doSS ? game->defaultSmoothRadius : 0.0f;
             vec3_t accumColor;
             vec3_t accumDir, accumEnergy, accumNormal;
             int hitCount;
@@ -1583,7 +1598,7 @@ void TraceLtm(int num)
         }
     }
 
-    if (superSample && use_upscale)
+    if (isDilated && use_upscale)
     {
         for (i = 0; i < ds->lightmapWidth; i++)
         {
@@ -1640,7 +1655,7 @@ void TraceLtm(int num)
             }
         }
     }
-    else if (superSample && !use_upscale)
+    else if (isDilated && !use_upscale)
     {
         for (i = 0; i < ds->lightmapWidth; i++)
         {

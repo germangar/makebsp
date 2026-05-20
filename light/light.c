@@ -31,7 +31,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define DEFAULT_SPOTLIGHT_DISTANCE 64.0f
 
-ssMode_t superSampleMode = SUPERSAMPLE_NONE;
+float superSampleRadius = 0.0f;
 
 qboolean notrace;
 qboolean patchshadows = qtrue;
@@ -886,7 +886,16 @@ void BuildLocalSurfaces(void)
     for (i = 0; i < numDrawSurfaces; i++)
     {
         dsurface_t *ds = &drawSurfaces[i];
-        localSurfaces[i].radInterval = rad_interval;
+        if (g_fast) {
+            int ri = 32 / samplesize;
+            if (ri < 8) {
+                ri = 8;
+            }
+
+            localSurfaces[i].radInterval = ri;
+        } else {
+            localSurfaces[i].radInterval = rad_interval;
+        }
         
         // Ensure trisoups have enough quality for radiosity unless -fast is active
         if (ds->surfaceType == MST_TRIANGLE_SOUP && !g_fast)
@@ -964,8 +973,22 @@ void BuildLocalSurfaces(void)
                 VectorCopy(extra[i].vertexColor, localSurfaces[i].vertexColor);
             }
         }
+
+        // Apply supersampling override
+        localSurfaces[i].superSampleRadius = -1.0f; // Default
+        if (extra && i < numExtra)
+        {
+            localSurfaces[i].superSampleRadius = extra[i].superSampleRadius;
+        }
+
+        // Incorporate global switch if not set in entity
+        if (localSurfaces[i].superSampleRadius < 0.0f)
+        {
+            localSurfaces[i].superSampleRadius = superSampleRadius;
+        }
     }
-    if (extra) free(extra);
+    if (extra)
+        free(extra);
 }
 
 /*

@@ -177,6 +177,7 @@ typedef struct drawsurf_s
     float lightSubdivide;
     int hasVertexColor;
     vec3_t vertexColor;
+    float superSampleRadius;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

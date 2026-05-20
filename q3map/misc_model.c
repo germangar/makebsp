@@ -755,6 +755,18 @@ void LoadTriangleModels(void)
                 ParseColor(vcolStr, vertexColor);
             }
 
+            // supersampling override
+            float superSampleRadius = -1.0f;
+            const char *ssStr = ValueForKey(entity, "supersampling");
+            if (!ssStr[0])
+                ssStr = ValueForKey(entity, "_supersampling");
+            if (ssStr[0])
+            {
+                superSampleRadius = atof(ssStr);
+                if (superSampleRadius < 0.0f)
+                    superSampleRadius = 0.0f;
+            }
+
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)
@@ -935,6 +947,7 @@ void LoadTriangleModels(void)
                     mapDrawSurface_t *ds = AllocDrawSurf();
                     inst->drawSurfs[inst->numDrawSurfs++] = ds;
                     ds->miscModel = qtrue;
+                    ds->superSampleRadius = superSampleRadius;
                     ds->smoothingRadius = smoothingRadius;
                     ds->hasVertexColor = hasVertexColor;
                     if (hasVertexColor)

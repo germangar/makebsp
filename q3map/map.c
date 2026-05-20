@@ -1325,7 +1325,9 @@ qboolean ParseMapEntity(void)
             SetTerrainTextures();
         }
         MoveBrushesToWorld(mapent);
-        num_entities--;
+        // We do NOT decrement num_entities here.
+        // This keeps the entity index valid so that DrawSurfaceForSide can
+        // resolve the sidecar overrides before the entity is stripped from the BSP.
         return qtrue;
     }
 

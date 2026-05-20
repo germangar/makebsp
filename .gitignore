@@ -10,7 +10,7 @@ testmapbuild.bat
 libs/assimp_src/
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
-
+.antigravitycli
 
 
 AGENTS.md

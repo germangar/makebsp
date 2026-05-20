@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
 
-    superSampleMode = SUPERSAMPLE_NONE;
+    superSampleRadius = 0.0f;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-tempname")) {
@@ -167,17 +167,14 @@ int main(int argc, char **argv) {
             if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
             _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
         } else if (!strcmp(argv[i], "-supersampling")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a pattern value (e.g. 0, 8, or 16)");
-            int val = atoi(argv[i + 1]);
-            if (val <= 0) {
-                superSampleMode = SUPERSAMPLE_NONE;
-                _printf("Super-sampling disabled\n");
-            } else if (val <= 8) {
-                superSampleMode = SUPERSAMPLE_8X;
-                _printf("Super-sampling enabled: 8x Rotated Grid pattern\n");
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersampling requires a radius value (e.g. 0.5 or 1.0)");
+            superSampleRadius = atof(argv[i + 1]);
+            if (superSampleRadius < 0.0f)
+                superSampleRadius = 0.0f;
+            if (superSampleRadius > 0.0f) {
+                _printf("Super-sampling enabled: radius %.3f with 8x pattern\n", superSampleRadius);
             } else {
-                superSampleMode = SUPERSAMPLE_16X;
-                _printf("Super-sampling enabled: 16x Halton pattern\n");
+                _printf("Super-sampling disabled\n");
             }
             i++;
         } else if (!strcmp(argv[i], "-smooth")) {
@@ -369,9 +366,8 @@ int main(int argc, char **argv) {
     _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", game->defaultSmoothPasses, game->defaultSmoothRadius, game->antialiasingPasses);
     _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
 
-    if (superSampleMode != SUPERSAMPLE_NONE) {
-        int ssCnt = (superSampleMode == SUPERSAMPLE_16X) ? 16 : 8;
-        _printf("Super-sampling: %d samples per texel\n", ssCnt);
+    if (superSampleRadius > 0.0f) {
+        _printf("Super-sampling: enabled (radius %.3f, 8 samples per texel)\n", superSampleRadius);
     }
 
     _printf("reading %s\n", source);
