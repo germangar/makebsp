@@ -260,10 +260,7 @@ int main(int argc, char **argv) {
             rad_voxel_size = (float)atof(argv[i + 1]);
             if (rad_voxel_size < 0.1f) rad_voxel_size = 0.1f;
             i++;
-        } else if (!strcmp(argv[i], "-rad_anglematch")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_anglematch requires a numeric value");
-            rad_angle_match = (float)atof(argv[i + 1]);
-            i++;
+
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
@@ -316,6 +313,7 @@ int main(int argc, char **argv) {
                 "   falloff_sun <type> = override the sun falloff model\n"
                 "   falloff_sun_softbias <F> = override the sun soft bias\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
+                "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
@@ -333,7 +331,6 @@ int main(int argc, char **argv) {
                 "   rad_interval <I>  = set sparse grid interval (1=Every luxel, default 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
-                "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
                 "   mao_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
