@@ -330,6 +330,8 @@ void TraceAmbient(int num)
 
             vec3_t ambColor;
             VectorClear(ambColor);
+            vec3_t bentAccum;
+            VectorClear(bentAccum);
             float totalWeight = 0.0f;
             
             for (int gz = iz_min; gz <= iz_max; gz++) {
@@ -375,6 +377,11 @@ void TraceAmbient(int num)
                             ambColor[0] += gCol[0] * w;
                             ambColor[1] += gCol[1] * w;
                             ambColor[2] += gCol[2] * w;
+                            
+                            float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
+                            bentAccum[0] += dir[0] * w * lum;
+                            bentAccum[1] += dir[1] * w * lum;
+                            bentAccum[2] += dir[2] * w * lum;
                         }
                         
                         // Accumulate weight regardless of occlusion so blocked rays darken the final result
@@ -395,9 +402,11 @@ void TraceAmbient(int num)
             if (ambLum < 0.0001f)
                 continue;
 
-            // Use surface normal as the ambient direction for deluxemap blending
+            // Use bent surface normal as the ambient direction for deluxemap blending
             vec3_t bentNormal;
-            VectorCopy(normal, bentNormal);
+            if (VectorNormalize(bentAccum, bentNormal) < 0.0001f) {
+                VectorCopy(normal, bentNormal);
+            }
 
             if (lightFloats && deluxeFloats && energyFloats)
             {
