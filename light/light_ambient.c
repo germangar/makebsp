@@ -205,13 +205,15 @@ void TraceAmbient(int num)
     int isDilated = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
     int use_upscale = upscale;
     int scale = use_upscale ? UPSCALE_FACTOR : 1;
-    int currentGutter = isDilated ? (GUTTER * scale) : 0;
+    // TraceAmbient does not do local buffer upscaling, so we strictly evaluate the inner texels.
+    // The global DilateLightmapAtlas will smear these correctly outward into the gutters.
+    int currentGutter = 0;
 
     if (ds->surfaceType == MST_PATCH)
     {
         mesh = localSurfaces[realSurfIndex].patchMesh;
-        sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
-        sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
+        sampleWidth = ds->lightmapWidth;
+        sampleHeight = ds->lightmapHeight;
     }
     else
     {
@@ -222,29 +224,11 @@ void TraceAmbient(int num)
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
             VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
         }
-        if (!isDilated)
-        {
-            VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
-            VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
-            sampleWidth = ds->lightmapWidth;
-            sampleHeight = ds->lightmapHeight;
-        }
-        else
-        {
-            if (use_upscale)
-            {
-                float invScale = 1.0f / (float)scale;
-                VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
-                VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
-            }
-            else
-            {
-                VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
-                VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
-            }
-            sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
-            sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
-        }
+
+        VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
+        VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
+        sampleWidth = ds->lightmapWidth;
+        sampleHeight = ds->lightmapHeight;
     }
 
     for (i = 0; i < sampleWidth; i++)

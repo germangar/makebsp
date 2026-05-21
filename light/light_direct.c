@@ -1668,6 +1668,7 @@ void TraceLtm(int num)
             for (j = 0; j < ds->lightmapHeight; j++)
             {
                 VectorCopy(color[i + currentGutter][j + currentGutter], color[i][j]);
+                sampleHit[i][j] = sampleHit[i + currentGutter][j + currentGutter];
                 if (deluxe)
                 {
                     VectorCopy(deluxe[i + currentGutter][j + currentGutter], deluxe[i][j]);
