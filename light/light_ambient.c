@@ -335,22 +335,20 @@ void TraceAmbient(int num)
                         float NdotL = DotProduct(normal, dir);
                         if (NdotL <= 0.01f) continue; // Behind surface
 
+                        float falloff = 1.0f - (distSq / gatherRadiusSq);
+                        float w = NdotL * falloff;
+
                         // Trace ray
                         trace_t trace;
                         TraceLine(origin, gPos, &trace, qfalse, tw);
                         if (!trace.passSolid) {
-                            // Flattened falloff: 1.0 - (dist^2 / radius^2)
-                            // This keeps weight very high for most of the sphere,
-                            // boosting the importance of distant points, but still
-                            // smoothly drops to 0 at the edge to prevent popping.
-                            float falloff = 1.0f - (distSq / gatherRadiusSq);
-                            float w = NdotL * falloff;
-
                             ambColor[0] += gCol[0] * w;
                             ambColor[1] += gCol[1] * w;
                             ambColor[2] += gCol[2] * w;
-                            totalWeight += w;
                         }
+                        
+                        // Accumulate weight regardless of occlusion so blocked rays darken the final result
+                        totalWeight += w;
                     }
                 }
             }
