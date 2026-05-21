@@ -33,7 +33,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 float superSampleRadius = 0.0f;
 
-qboolean notrace;
+qboolean nodirect;
 qboolean patchshadows = qtrue;
 qboolean upscale;
 qboolean lightmapBorder;
@@ -91,6 +91,16 @@ int defaultLightSubdivide = 999; // vary by surface size?
 
 vec3_t ambientColor;
 
+// Macro Ambient Occlusion (MAO) — hemisphere sky/ground ambient
+vec3_t    skyColor;
+vec3_t    groundColor;
+float    *maoAmbient        = NULL;
+int       mao_grid_samples   = 48;
+int       mao_ambient_samples = 32;
+float     mao_radius         = 512.0f;
+float     mao_gather_radius  = 256.0f;
+qboolean  mao_enabled        = qfalse;
+
 localSurface_t *localSurfaces;
 
 // 7,9,11 normalized to avoid being nearly coplanar with common faces
@@ -99,7 +109,8 @@ localSurface_t *localSurfaces;
 
 // these are usually overrided by shader values
 vec3_t sunDirection = {0.45, 0.3, 0.9};
-vec3_t sunLight = {100, 100, 50};
+vec3_t sunLight = {0, 0, 0};
+qboolean hasSun = qfalse;
 
 int numSkyBrushes;
 skyBrush_t skyBrushes[MAX_MAP_BRUSHES];
@@ -573,6 +584,12 @@ void CreateEntityLights(void)
                     intensity = 300.0f;
                 VectorSet(sunLight, intensity, intensity, intensity);
             }
+
+            hasSun = qtrue;
+            _printf("DEBUG: Found sun entity %d (classname '%s')\n", i, name);
+            _printf("       _sun=%s, _sun_dir=%s, light=%s, _color=%s\n", 
+                ValueForKey(e, "_sun"), ValueForKey(e, "_sun_dir"), ValueForKey(e, "light"), ValueForKey(e, "_color"));
+
 
             continue;
         }
@@ -1270,8 +1287,58 @@ void LightMain(void)
         VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
     }
 
-    f = FloatForKey(&entities[0], "ambient");
+    const char *ambientStr = ValueForKey(&entities[0], "_ambient");
+    if (!ambientStr[0])
+        ambientStr = ValueForKey(&entities[0], "ambient");
+    f = ambientStr[0] ? (float)atof(ambientStr) : 0.0f;
     VectorScale(ambientColor, f, ambientColor);
+
+    // Parse hemisphere sky/ground ambient colors.
+    // Fall back to ambientColor (flat) when not explicitly set.
+    {
+        const char *skyVal = ValueForKey(&entities[0], "_ambient_sky");
+        if (!skyVal[0])
+            skyVal = ValueForKey(&entities[0], "ambient_sky");
+
+        const char *groundVal = ValueForKey(&entities[0], "_ambient_ground");
+        if (!groundVal[0])
+            groundVal = ValueForKey(&entities[0], "ambient_ground");
+
+        // If the mapper didn't provide an ambient scalar, default to 1.0 
+        // for the explicitly parsed sky/ground colors so they don't turn black.
+        float explicitScale = ambientStr[0] ? (float)atof(ambientStr) : 1.0f;
+
+        if (skyVal[0])
+        {
+            ParseColor(skyVal, skyColor);
+            VectorScale(skyColor, explicitScale, skyColor);
+        }
+        else
+        {
+            VectorCopy(ambientColor, skyColor);
+        }
+
+        if (groundVal[0])
+        {
+            ParseColor(groundVal, groundColor);
+            VectorScale(groundColor, explicitScale, groundColor);
+        }
+        else
+        {
+            VectorCopy(ambientColor, groundColor);
+        }
+
+        float skyLum    = skyColor[0]    * 0.299f + skyColor[1]    * 0.587f + skyColor[2]    * 0.114f;
+        float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
+        if (skyLum > 0.001f || groundLum > 0.001f)
+        {
+            mao_enabled = qtrue;
+            _printf("MAO Ambient: sky (%.2f %.2f %.2f) ground (%.2f %.2f %.2f) radius %.0f\n",
+                    skyColor[0], skyColor[1], skyColor[2],
+                    groundColor[0], groundColor[1], groundColor[2],
+                    mao_radius);
+        }
+    }
 
     FindSkyBrushes();
     SetEntityOrigins();
@@ -1343,6 +1410,14 @@ void LightMain(void)
         if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
             Error("MAX_MAP_LIGHTGRID");
         qprintf("%5i gridPoints\n", numGridPoints);
+
+        // Allocate per-grid-point MAO ambient array now that numGridPoints is known
+        if (mao_enabled)
+        {
+            maoAmbient = calloc(numGridPoints * 3, sizeof(float));
+            if (!maoAmbient)
+                Error("Failed to allocate maoAmbient (%i grid points)", numGridPoints);
+        }
     }
 
     // create lights out of patches and lights
@@ -1380,5 +1455,11 @@ void LightMain(void)
             FreeMesh(localSurfaces[i].patchMesh);
         if (localSurfaces[i].si_override)
             free(localSurfaces[i].si_override);
+    }
+
+    if (maoAmbient)
+    {
+        free(maoAmbient);
+        maoAmbient = NULL;
     }
 }

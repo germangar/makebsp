@@ -76,9 +76,9 @@ int main(int argc, char **argv) {
             pointScale *= atof(argv[i + 1]);
             _printf("point light scaling at %f\n", pointScale);
             i++;
-        } else if (!strcmp(argv[i], "-notrace")) {
-            notrace = qtrue;
-            _printf("No occlusion tracing\n");
+        } else if (!strcmp(argv[i], "-nodirect")) {
+            nodirect = qtrue;
+            _printf("No direct lighting\n");
         } else if (!strcmp(argv[i], "-upscale")) {
             upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
@@ -231,6 +231,30 @@ int main(int argc, char **argv) {
             if (rad_ao_intensity < 0.0f) rad_ao_intensity = 0.0f;
             if (rad_ao_intensity > 1.0f) rad_ao_intensity = 1.0f;
             i++;
+        } else if (!strcmp(argv[i], "-mao_samples")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_samples requires a numeric value");
+            mao_grid_samples = atoi(argv[i + 1]);
+            if (mao_grid_samples < 4)   mao_grid_samples = 4;
+            if (mao_grid_samples > 512) mao_grid_samples = 512;
+            i++;
+        } else if (!strcmp(argv[i], "-mao_ambient_samples")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_ambient_samples requires a numeric value");
+            mao_ambient_samples = atoi(argv[i + 1]);
+            if (mao_ambient_samples < 4)   mao_ambient_samples = 4;
+            if (mao_ambient_samples > 512) mao_ambient_samples = 512;
+            i++;
+        } else if (!strcmp(argv[i], "-mao_radius")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_radius requires a numeric value");
+            mao_radius = (float)atof(argv[i + 1]);
+            if (mao_radius < 32.0f) mao_radius = 32.0f;
+            _printf("MAO radius set to %.1f wu\n", mao_radius);
+            i++;
+        } else if (!strcmp(argv[i], "-mao_gather_radius")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_gather_radius requires a numeric value");
+            mao_gather_radius = (float)atof(argv[i + 1]);
+            if (mao_gather_radius < 32.0f) mao_gather_radius = 32.0f;
+            _printf("MAO gather radius set to %.1f wu\n", mao_gather_radius);
+            i++;
         } else if (!strcmp(argv[i], "-rad_voxelsize")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_voxelsize requires a numeric value");
             rad_voxel_size = (float)atof(argv[i + 1]);
@@ -285,7 +309,7 @@ int main(int argc, char **argv) {
                 "   threads <X>    = set number of threads to X\n"
                 "   area <V>       = set the area light scale to V\n"
                 "   point <W>      = set the point light scale to W\n"
-                "   notrace        = don't cast any shadows\n"
+                "   -nodirect      = skip direct lighting passes\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   falloff <type>  = set the falloff model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
                 "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
@@ -312,6 +336,12 @@ int main(int argc, char **argv) {
                 "   rad_anglematch <A>= set the angle in degrees for surface compatibility\n"
                 "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
+                "   mao_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
+                "   mao_ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"
+                "   mao_radius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
+                "   mao_gather_radius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
+                "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
+                "                         Worldspawn: _ambient_sky <R G B>, _ambient_ground <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
