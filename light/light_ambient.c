@@ -37,6 +37,23 @@ static void StratifiedCosineDir(int i, int N, float randU, float randV, vec3_t o
     out[2] = cosTheta;  // always >= 0 (upper hemisphere)
 }
 
+static void StratifiedUniformDir(int i, int N, float randU, float randV, vec3_t out)
+{
+    float phi = 2.0f * (float)M_PI * (float)i / (float)N;
+    phi += randU * 2.0f * (float)M_PI; 
+
+    float xi = ((float)i + randV) / (float)N;  // stratified in [0,1)
+    xi = xi - floorf(xi);                        // wrap to [0,1) for safety
+    
+    // Uniform distribution over hemisphere
+    float cosTheta = 1.0f - xi;
+    float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+
+    out[0] = cosf(phi) * sinTheta;
+    out[1] = sinf(phi) * sinTheta;
+    out[2] = cosTheta;  // always >= 0 (upper hemisphere)
+}
+
 /*
 ================
 ComputeMAOPoint
@@ -91,14 +108,17 @@ void ComputeMAOPoint(int num)
         float jU = fmodf(randU + (float)i * 0.618034f, 1.0f);  // golden ratio shuffle
         float jV = fmodf(randV + (float)i * 0.381966f, 1.0f);
 
-        StratifiedCosineDir(i, skyN, jU, jV, dir);  // dir.z >= 0
+        StratifiedUniformDir(i, skyN, jU, jV, dir);  // dir.z >= 0
 
         end[0] = origin[0] + dir[0] * mao_radius;
         end[1] = origin[1] + dir[1] * mao_radius;
         end[2] = origin[2] + dir[2] * mao_radius;
 
-        // Cosine weight: contribution proportional to cos(theta) = dir[2]
-        float w = dir[2];
+        // Half-lambert weight: pow(NdotL * 0.5 + 0.5, 2.0)
+        float NdotL = dir[2];
+        float w = (NdotL * 0.5f + 0.5f);
+        w = w * w;
+        
         skyWeight += w;
         TraceLine(origin, end, &trace, qfalse, tw);
         if (!trace.passSolid)
@@ -118,14 +138,18 @@ void ComputeMAOPoint(int num)
         float jU = fmodf(randU + (float)i * 0.618034f + 0.5f, 1.0f);
         float jV = fmodf(randV + (float)i * 0.381966f + 0.5f, 1.0f);
 
-        StratifiedCosineDir(i, groundN, jU, jV, dir);
+        StratifiedUniformDir(i, groundN, jU, jV, dir);
         dir[2] = -dir[2];  // flip to lower hemisphere
 
         end[0] = origin[0] + dir[0] * mao_radius;
         end[1] = origin[1] + dir[1] * mao_radius;
         end[2] = origin[2] + dir[2] * mao_radius;
 
-        float w = -dir[2];  // cos(theta) for lower hemisphere
+        // Half-lambert weight: pow(NdotL * 0.5 + 0.5, 2.0)
+        float NdotL = -dir[2]; // Normal is down (0, 0, -1), dir is down
+        float w = (NdotL * 0.5f + 0.5f);
+        w = w * w;
+        
         groundWeight += w;
         TraceLine(origin, end, &trace, qfalse, tw);
         if (!trace.passSolid)
@@ -336,6 +360,12 @@ void TraceAmbient(int num)
                         if (NdotL <= 0.01f) continue; // Behind surface
 
                         float falloff = 1.0f - (distSq / gatherRadiusSq);
+                        
+                        // Inverse-Square with Minimum Size (Offset Model)
+                        // Gives a headstart of 32 units, as requested.
+                        // float sizeSq = 32.0f * 32.0f;
+                        // float falloff = 1.0f / (distSq + sizeSq);
+
                         float w = NdotL * falloff;
 
                         // Trace ray
