@@ -232,6 +232,7 @@ extern float   mao_radius;             // max ray length in world units (default
 extern float   mao_gather_radius;      // radius for gathering from irradiance probes (default 256)
 extern qboolean mao_enabled;           // true if sky/ground color is non-zero
 extern int numSkyBrushes;
+extern int *surfaceWorkOrder;
 extern int numLights;
 extern skyBrush_t skyBrushes[];
 extern vec3_t gridMins, gridSize;
