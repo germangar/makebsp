@@ -27,7 +27,7 @@
   "snapUVs": true,
   "antialiasingPasses": 0, /* post-process AA passes */
   "smoothPasses": 4, /* passes of blurring lightmaps */
-  "smoothRadius": 0.25, /* fractional values accepted. Minimum 0.1 */
+  "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "reinhard", /* [ off, softknee, reinhard, filmic ] */
   "enforceSampleSize": true
 }

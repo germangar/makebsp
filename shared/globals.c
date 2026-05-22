@@ -47,7 +47,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
-		0.25f,      // defaultSmoothRadius
+		0.35f,      // defaultSmoothRadius
         TONEMAP_REINHARD, // exposureFilter
         qtrue       // enforceSampleSize
 	},
