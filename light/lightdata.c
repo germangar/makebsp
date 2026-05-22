@@ -68,6 +68,10 @@ static void DilateLightmapAtlas(int width, int passes)
             if (sLM < 0)
                 continue;
 
+            // TEST: Disable dilation for triangle soups
+            if (ds->surfaceType == MST_TRIANGLE_SOUP)
+                continue;
+
             int sX = ds->lightmapOffset[0][0];
             int sY = ds->lightmapOffset[0][1];
             int sW = ds->lightmapWidth;

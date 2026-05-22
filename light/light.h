@@ -116,7 +116,7 @@ void GpuLightmapState_Upload(void);
 void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
-#define SAMPLE_NUDGE 0.25f
+#define SAMPLE_NUDGE 0.001f
 #define SPOTLIGHT_SOFTNESS_RANGE 128.0f
 
 /* These values have been manually calibrated.
