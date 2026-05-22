@@ -29,7 +29,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../libs/pakstuff.h"
 #endif
 
-#define DEFAULT_SPOTLIGHT_DISTANCE 64.0f
+#define DEFAULT_SPOTLIGHT_TARGET_DISTANCE 64.0f
 
 float superSampleRadius = 0.0f;
 
@@ -712,7 +712,7 @@ void CreateEntityLights(void)
             if (!radius)
                 radius = 64;
 
-            dl->radiusByDist = (radius + ((SPOTLIGHT_SOFTNESS_RANGE * 0.5f) * dl->coneSoftness)) / DEFAULT_SPOTLIGHT_DISTANCE;
+            dl->radiusByDist = (radius + ((SPOTLIGHT_SOFTNESS_RANGE * 0.5f) * dl->coneSoftness)) / DEFAULT_SPOTLIGHT_TARGET_DISTANCE;
             dl->type = emit_spotlight;
 
             // Backlight / Backsplash implementation

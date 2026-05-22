@@ -228,9 +228,9 @@ void TraceAmbient(int num)
 
     int isDilated = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
     int use_upscale = upscale;
-    int scale = use_upscale ? UPSCALE_FACTOR : 1;
-    // TraceAmbient does not do local buffer upscaling, so we strictly evaluate the inner texels.
-    // The global DilateLightmapAtlas will smear these correctly outward into the gutters.
+    // TraceAmbient evaluates interior texels globally. We use the TraceLtm math formula verbatim 
+    // for unification, so we define local scale=1 and currentGutter=0 to represent the global mapping.
+    int scale = 1;
     int currentGutter = 0;
 
     if (ds->surfaceType == MST_PATCH)
@@ -259,8 +259,9 @@ void TraceAmbient(int num)
     {
         for (j = 0; j < sampleHeight; j++)
         {
-            float u = (float)i + 0.5f;
-            float v = (float)j + 0.5f;
+            float u = (float)(i - currentGutter) + 0.5f; // TraceAmbient has no jdx
+            float v = (float)(j - currentGutter) + 0.5f; // TraceAmbient has no jdy
+            float step = 1.0f / (float)scale;
             vec3_t origin;
             double base[3];
 
@@ -268,8 +269,8 @@ void TraceAmbient(int num)
             {
                 float st[2];
                 vec3_t temp_origin;
-                st[0] = (float)ds->lightmapOffset[0][0] + u;
-                st[1] = (float)ds->lightmapOffset[0][1] + v;
+                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
                 if (!TriSoupSamplePoint(ds, st, temp_origin, normal))
                     continue;
                 for (c = 0; c < 3; c++)
@@ -279,8 +280,8 @@ void TraceAmbient(int num)
             {
                 float st[2];
                 vec3_t temp_origin;
-                st[0] = (float)ds->lightmapOffset[0][0] + u;
-                st[1] = (float)ds->lightmapOffset[0][1] + v;
+                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
                 if (!PatchSamplePoint(mesh, st, temp_origin, normal))
                     continue;
                 for (c = 0; c < 3; c++)
