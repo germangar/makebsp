@@ -1171,6 +1171,135 @@ mesh_t *LinearSubdivideMesh(mesh_t *in)
 
 /*
 =============
+PrecacheTexelGeometry
+=============
+*/
+void PrecacheTexelGeometryThread(int i)
+{
+    int x, y, k;
+    dsurface_t *ds;
+    vec3_t lightmapOrigin, lightmapVecs[3];
+    int surfWeight = 1;
+
+    ds = &drawSurfaces[i];
+    if (ds->lightmapNum[0] >= 0) {
+        surfWeight = ds->lightmapWidth * ds->lightmapHeight;
+    }
+
+    if (ds->lightmapNum[0] < 0) {
+        ThreadCompletedWeighted(surfWeight);
+        return;
+    }
+
+    int currentGutter = upscale ? (GUTTER * 2) : GUTTER;
+    int scale = upscale ? 2 : 1;
+
+    int sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
+    int sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
+
+    if (ds->surfaceType != MST_PATCH)
+    {
+        VectorCopy(ds->lightmapVecs[2], lightmapVecs[2]);
+        VectorCopy(ds->lightmapOrigin, lightmapOrigin);
+        if (ds->surfaceType == MST_PLANAR)
+        {
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
+        }
+        VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
+        VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
+    }
+
+    for (x = 0; x < sampleWidth; x++)
+    {
+        for (y = 0; y < sampleHeight; y++)
+        {
+            int py = ds->lightmapOffset[0][1] * scale + y - currentGutter;
+            int px = ds->lightmapOffset[0][0] * scale + x - currentGutter;
+
+            if (px < 0 || px >= LIGHTMAP_WIDTH * scale || py < 0 || py >= LIGHTMAP_HEIGHT * scale)
+                continue;
+
+            int idx = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py) * LIGHTMAP_WIDTH * scale + px;
+
+            float u = (float)(x - currentGutter) + 0.5f;
+            float v = (float)(y - currentGutter) + 0.5f;
+            float step = 1.0f / (float)scale;
+            
+            vec3_t origin, normal;
+            qboolean hit = qtrue;
+
+            if (ds->surfaceType == MST_TRIANGLE_SOUP)
+            {
+                float st[2];
+                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                if (!TriSoupSamplePoint(ds, st, origin, normal))
+                    hit = qfalse;
+            }
+            else if (ds->surfaceType == MST_PATCH)
+            {
+                mesh_t *mesh = localSurfaces[i].patchMesh;
+                if (!mesh) {
+                    hit = qfalse;
+                } else {
+                    float st[2];
+                    st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                    st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                    if (!PatchSamplePoint(mesh, st, origin, normal))
+                        hit = qfalse;
+                }
+            }
+            else
+            {
+                for (k = 0; k < 3; k++)
+                {
+                    origin[k] = lightmapOrigin[k] + u * lightmapVecs[0][k] + v * lightmapVecs[1][k];
+                    normal[k] = lightmapVecs[2][k];
+                }
+            }
+
+            if (hit)
+            {
+                for (k = 0; k < 3; k++)
+                {
+                    texelOrigins[idx][k] = origin[k] + normal[k] * SAMPLE_NUDGE + localSurfaces[i].entityOrigin[k];
+                    texelNormals[idx][k] = normal[k];
+                }
+            }
+            else
+            {
+                for (k = 0; k < 3; k++)
+                {
+                    texelOrigins[idx][k] = 0.0f;
+                    texelNormals[idx][k] = 0.0f;
+                }
+            }
+        }
+    }
+
+    ThreadCompletedWeighted(surfWeight);
+}
+
+void PrecacheTexelGeometry(void)
+{
+    int i;
+    long long totalLuxels = 0;
+    
+    for (i = 0; i < numDrawSurfaces; i++) {
+        if (drawSurfaces[i].lightmapNum[0] >= 0)
+            totalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
+        else
+            totalLuxels += 1;
+    }
+
+    _printf("--- PrecacheTexelGeometry ---\n");
+    RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, PrecacheTexelGeometryThread);
+    _printf("\n");
+}
+
+/*
+=============
 TraceLtm
 =============
 */
@@ -1455,18 +1584,15 @@ void TraceLtm(int num)
             ssize = 4;
         }
 
-        const char *patternName;
         if (ssRadius > 0.5f * (float)ssize)
         {
             pattern = ssPattern16;
             actualSamples = SS_PATTERN16_COUNT;
-            patternName = "16x";
         }
         else
         {
             pattern = ssPattern8;
             actualSamples = SS_PATTERN8_COUNT;
-            patternName = "8x";
         }
 
         jitterRadius = ssRadius;
@@ -1489,6 +1615,11 @@ void TraceLtm(int num)
             hitCount = 0;
             int ss, k;
 
+            // Map current sample to global lightmap index for PrecacheTexelGeometry lookup
+            int py = ds->lightmapOffset[0][1] * scale + j - currentGutter;
+            int px = ds->lightmapOffset[0][0] * scale + i - currentGutter;
+            int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py) * LIGHTMAP_WIDTH * scale + px;
+
             for (ss = 0; ss < actualSamples; ss++)
             {
                 float jdx = 0.0f, jdy = 0.0f;
@@ -1504,50 +1635,75 @@ void TraceLtm(int num)
                 float v = (float)(j - currentGutter) + jdy + 0.5f;
                 float step = 1.0f / (float)scale;
 
-                if (ds->surfaceType == MST_TRIANGLE_SOUP)
+                if (ss == 0)
                 {
-                    float st[2];
-                    vec3_t temp_origin;
-                    st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                    st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                    int native_px = px / scale;
+                    int native_py = py / scale;
+                    int native_p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + native_py) * LIGHTMAP_WIDTH + native_px;
 
-                    if (!TriSoupSamplePoint(ds, st, temp_origin, normal))
+                    if (unreachableMask && BITMAP_TEST(unreachableMask, native_p))
+                        continue;
+
+                    if (texelNormals[p][0] == 0.0f && texelNormals[p][1] == 0.0f && texelNormals[p][2] == 0.0f)
                         continue;
 
                     for (k = 0; k < 3; k++)
                     {
-                        base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
-                    }
-                }
-                else if (ds->surfaceType == MST_PATCH)
-                {
-                    float target_s = (float)ds->lightmapOffset[0][0] + u * step;
-                    float target_t = (float)ds->lightmapOffset[0][1] + v * step;
-                    float st[2] = {target_s, target_t};
-                    vec3_t temp_origin;
-
-                    if (!PatchSamplePoint(mesh, st, temp_origin, normal))
-                        continue;
-
-                    for (k = 0; k < 3; k++)
-                    {
-                        base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
+                        base[k] = texelOrigins[p][k];
+                        normal[k] = texelNormals[p][k];
                     }
                 }
                 else
                 {
+                    vec3_t temp_origin;
+                    if (ds->surfaceType == MST_TRIANGLE_SOUP)
+                    {
+                        float st[2];
+                        st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                        st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+
+                        if (!TriSoupSamplePoint(ds, st, temp_origin, normal))
+                            continue;
+
+                        for (k = 0; k < 3; k++)
+                        {
+                            base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
+                        }
+                    }
+                    else if (ds->surfaceType == MST_PATCH)
+                    {
+                        float target_s = (float)ds->lightmapOffset[0][0] + u * step;
+                        float target_t = (float)ds->lightmapOffset[0][1] + v * step;
+                        float st[2] = {target_s, target_t};
+
+                        if (!PatchSamplePoint(mesh, st, temp_origin, normal))
+                            continue;
+
+                        for (k = 0; k < 3; k++)
+                        {
+                            base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
+                        }
+                    }
+                    else
+                    {
+                        for (k = 0; k < 3; k++)
+                        {
+                            base[k] = (double)lightmapOrigin[k] +
+                                      (double)normal[k] * SAMPLE_NUDGE +
+                                      (double)u * lightmapVecs[0][k] +
+                                      (double)v * lightmapVecs[1][k];
+                        }
+                    }
+
                     for (k = 0; k < 3; k++)
                     {
-                        base[k] = (double)lightmapOrigin[k] +
-                                  (double)normal[k] * SAMPLE_NUDGE +
-                                  (double)u * lightmapVecs[0][k] +
-                                  (double)v * lightmapVecs[1][k];
+                        base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
                     }
                 }
 
+                // convert to vec3_t for raycast
                 for (k = 0; k < 3; k++)
                 {
-                    base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
                     origin[k] = (float)base[k];
                 }
 

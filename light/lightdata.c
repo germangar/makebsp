@@ -23,6 +23,9 @@ float *accumRadiosityDeluxeSum = NULL;
 float *accumRadiosityEnergyFloats = NULL;
 byte *lightAlphaMask = NULL;
 byte *unreachableMask = NULL;
+
+vec3_t *texelOrigins = NULL;
+vec3_t *texelNormals = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
@@ -572,6 +575,23 @@ static void UpConvertLightmaps(void)
         memset(unreachableMask, 0, ((numLightBytes / 3) + 7) / 8);
     }
 
+    int scale = upscale ? 2 : 1;
+    int upscaledPixels = (numLightBytes / 3) * (scale * scale);
+
+    if (!texelOrigins)
+    {
+        texelOrigins = Q_Alloc(upscaledPixels * sizeof(vec3_t));
+        if (!texelOrigins)
+            Error("UpConvert: malloc texelOrigins failed");
+    }
+
+    if (!texelNormals)
+    {
+        texelNormals = Q_Alloc(upscaledPixels * sizeof(vec3_t));
+        if (!texelNormals)
+            Error("UpConvert: malloc texelNormals failed");
+    }
+
     if (game->deluxeMap)
     {
         if (deluxeFloats)
@@ -895,6 +915,8 @@ void DownConvertLightingData(void)
     if (normalFloats)      { Q_Free(normalFloats);      normalFloats = NULL; }
     if (lightAlphaMask)    { Q_Free(lightAlphaMask);    lightAlphaMask = NULL; }
     if (unreachableMask)   { Q_Free(unreachableMask);   unreachableMask = NULL; }
+    if (texelOrigins)      { Q_Free(texelOrigins);      texelOrigins = NULL; }
+    if (texelNormals)      { Q_Free(texelNormals);      texelNormals = NULL; }
     if (lightSurfaceIndex) { Q_Free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
     if (gridData32)        { Q_Free(gridData32);        gridData32 = NULL; }
 }

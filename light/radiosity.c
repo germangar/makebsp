@@ -465,24 +465,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
     int surf_rad_interval = localSurfaces[surfIdx].radInterval;
 
-    mesh_t *patchMesh = NULL;
-    vec3_t dstNormal;
-    vec3_t lightmapOrigin;
-    
-    VectorCopy(ds->lightmapOrigin, lightmapOrigin);
-    if (ds->surfaceType == MST_PATCH) {
-        patchMesh = localSurfaces[surfIdx].patchMesh;
-    } else if (ds->surfaceType == MST_PLANAR) {
-        VectorCopy(ds->lightmapVecs[2], dstNormal);
-        if (VectorNormalize(dstNormal, dstNormal) < 0.0001f) {
-            VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
-        }
-        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
-        VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
-    } else {
-        if (ds->numVerts < 3) return;
-        VectorCopy(drawVerts[ds->firstVert].normal, dstNormal);
-    }
+    if (ds->surfaceType != MST_PATCH && ds->surfaceType != MST_PLANAR && ds->numVerts < 3) return;
 
     voxelPoint_t *points = NULL;
     int numPoints = 0;
@@ -490,74 +473,38 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
+    int scale = upscale ? 2 : 1;
     int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
 
     for (int ly = 0; ly < ds->lightmapHeight; ly += step) {
         for (int lx = 0; lx < ds->lightmapWidth; lx += step) {
             if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+                // Determine native lx/ly for IsBorderPixel checks
                 if (!IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight) && 
                     !IsInteriorSparsePixel(lx, ly, surf_rad_interval)) {
                     continue;
                 }
             }
 
-            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int py = ds->lightmapOffset[0][1] + ly;
+            int px = ds->lightmapOffset[0][0] + lx;
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
             
             if (unreachableMask && BITMAP_TEST(unreachableMask, k_dst)) {
                 continue;
             }
 
-            // Skip if masked, unless it's a triangle soup (which we might unmask)
-            if (lightAlphaMask && !lightAlphaMask[k_dst]) {
-                if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+            int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
+            if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
+                continue;
+
+            vec3_t dst, dstNormal;
+            for (int c = 0; c < 3; c++) {
+                dst[c] = texelOrigins[k_upscale][c];
+                dstNormal[c] = texelNormals[k_upscale][c];
             }
 
-            vec3_t dst;
-            float st_x = (float)lx + 0.5f;
-            float st_y = (float)ly + 0.5f;
-
-            if (ds->surfaceType == MST_TRIANGLE_SOUP) {
-                qboolean found = qfalse;
-                if (g_fast && points) {
-                    for (int i = 0; i < numPoints; i++) {
-                        if (points[i].pixelIndex == k_dst) {
-                            VectorCopy(points[i].pos, dst);
-                            VectorCopy(points[i].normal, dstNormal);
-                            found = qtrue;
-                            break;
-                        }
-                    }
-                }
-                
-                if (!found) {
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + st_x;
-                    st[1] = (float)ds->lightmapOffset[0][1] + st_y;
-                    if (!TriSoupSamplePoint(ds, st, dst, dstNormal)) continue;
-                }
-                
-                // Unmask if it was masked
-                if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
-                    if (!PointInSolid(dst)) {
-                        lightAlphaMask[k_dst] = ds->surfaceType;
-                    }
-                }
-
-                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
-                VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
-            } else if (ds->surfaceType == MST_PATCH) {
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + st_x;
-                st[1] = (float)ds->lightmapOffset[0][1] + st_y;
-                if (!PatchSamplePoint(patchMesh, st, dst, dstNormal)) continue;
-                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
-                VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
-            } else {
-                VectorMA(lightmapOrigin, st_x, ds->lightmapVecs[0], dst);
-                VectorMA(dst, st_y, ds->lightmapVecs[1], dst);
-                VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
-                VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
-            }
+            // Note: We no longer modify lightAlphaMask here, as PrecacheTexelGeometry handles all geometry evaluation.
 
             // ---------------------------------------------------------------
             // Trisoup: original path — bake cosDst into scalar, write radiosityFloats.
@@ -982,19 +929,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
     int surf_rad_interval = localSurfaces[surfIdx].radInterval;
 
-    mesh_t *patchMesh = NULL;
-    vec3_t surfNormal = {0,0,0};
-    if (ds->surfaceType == MST_PATCH) {
-        patchMesh = localSurfaces[surfIdx].patchMesh;
-    } else if (ds->numVerts > 0) {
-        VectorCopy(drawVerts[ds->firstVert].normal, surfNormal);
-    } else {
-        VectorSet(surfNormal, 0, 0, 1);
-    }
-
+    int scale = upscale ? 2 : 1;
     int numPixels = ds->lightmapWidth * ds->lightmapHeight;
     if (numPixels <= 0) {
-        
         return;
     }
 
@@ -1016,7 +953,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     // Initialize temp buffers with existing values for all surfaces
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
-            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int py = ds->lightmapOffset[0][1] + ly;
+            int px = ds->lightmapOffset[0][0] + lx;
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
             int k_temp = ly * ds->lightmapWidth + lx;
             VectorCopy(&radiosityFloats[k_dst * 3], tempColor[k_temp]);
             if (game->deluxeMap) {
@@ -1041,9 +980,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             for (int i = 0; i < numPoints; i++) {
                 int pIdx = points[i].pixelIndex;
                 int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
-                int lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
-                int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
-                int k_temp = ly * ds->lightmapWidth + lx;
+                int native_lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                int native_ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
+                
+                int k_temp = native_ly * ds->lightmapWidth + native_lx;
 
                 if (k_temp < 0 || k_temp >= numPixels) continue;
 
@@ -1076,12 +1016,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
                                 if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
                                     filled[k_temp] = 2; // Dilated
                                     // Unmask if it was masked
-                                    int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
-                                    if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
-                                        if (!PointInSolid(pointPos[kn])) {
-                                            lightAlphaMask[k_dst] = ds->surfaceType;
-                                        }
-                                    }
+                                    // Note: We no longer modify lightAlphaMask here, as PrecacheTexelGeometry handles all geometry evaluation.
                                     goto next_p;
                                 }
                             }
@@ -1098,7 +1033,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
-            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int py = ds->lightmapOffset[0][1] + ly;
+            int px = ds->lightmapOffset[0][0] + lx;
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
             int k_temp = ly * ds->lightmapWidth + lx;
             
             if (unreachableMask && BITMAP_TEST(unreachableMask, k_dst)) {
@@ -1106,23 +1043,20 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             }
 
             // Skip if masked, unless it's a triangle soup (which we might unmask)
-            if (lightAlphaMask && !lightAlphaMask[k_dst]) {
+            if (lightAlphaMask && lightAlphaMask[k_dst] != ds->surfaceType) {
                 if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
             }
 
-            // Resolve the per-texel normal for this pixel.
+            // Resolve the per-texel normal for this pixel from precache
+            int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
+            if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
+                continue;
+
             vec3_t texelNormal;
-            if (ds->surfaceType == MST_PATCH) {
-                if (patchMesh && lx < patchMesh->width && ly < patchMesh->height) {
-                    VectorCopy(patchMesh->verts[ly * patchMesh->width + lx].normal, texelNormal);
-                } else {
-                    VectorCopy(surfNormal, texelNormal);
-                }
-            } else {
-                VectorCopy(surfNormal, texelNormal);
-            }
+            VectorCopy(texelNormals[k_upscale], texelNormal);
 
             if (ds->surfaceType != MST_TRIANGLE_SOUP) {
+                // Determine native lx/ly for IsBorderPixel checks
                 if (IsBorderPixel(lx, ly, ds->lightmapWidth, ds->lightmapHeight) || 
                     IsInteriorSparsePixel(lx, ly, surf_rad_interval)) {
                     continue; // Already evaluated at exact resolution, keep it.
@@ -1132,20 +1066,12 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             }
 
             // Fallback path if cache was missing
-            vec3_t pos, normal;
-            float st[2];
-            st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
-            st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-            if (!TriSoupSamplePoint(ds, st, pos, normal)) continue;
-            VectorAdd(pos, localSurfaces[surfIdx].entityOrigin, pos);
+            vec3_t pos;
+            VectorCopy(texelOrigins[k_upscale], pos);
+            // Note: We no longer modify lightAlphaMask here, as PrecacheTexelGeometry handles all geometry evaluation.
 
-            if (RadiosityVoxelSample(pos, normal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
-                // Unmask if it was masked
-                if (lightAlphaMask && lightAlphaMask[k_dst] == 0) {
-                    if (!PointInSolid(pos)) {
-                        lightAlphaMask[k_dst] = ds->surfaceType;
-                    }
-                }
+            if (RadiosityVoxelSample(pos, texelNormal, tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
+                // Keep sample
             }
         }
     }
@@ -1156,7 +1082,9 @@ flush:
     // Flush temp buffer back to radiosityFloats for this surface
     for (int ly = 0; ly < ds->lightmapHeight; ly++) {
         for (int lx = 0; lx < ds->lightmapWidth; lx++) {
-            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
+            int py = ds->lightmapOffset[0][1] + ly;
+            int px = ds->lightmapOffset[0][0] + lx;
+            int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
             int k_temp = ly * ds->lightmapWidth + lx;
             VectorCopy(tempColor[k_temp], &radiosityFloats[k_dst * 3]);
             if (game->deluxeMap) {

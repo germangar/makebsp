@@ -249,6 +249,9 @@ extern byte *unreachableMask;
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;
 
+extern vec3_t *texelOrigins;
+extern vec3_t *texelNormals;
+
 //===============================================================
 
 // light.c
@@ -357,6 +360,7 @@ void LightWorld(void);
 void RunMAOPass(void);
 void LightAmbient(long long totalLuxels);
 void DilateDeluxeDirections(void);
+void PrecacheTexelGeometry(void);
 void TraceLtm(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,

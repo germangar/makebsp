@@ -192,6 +192,7 @@ void RunMAOPass(void)
     }
 
     RunThreadsOnIndividual(numGridPoints, qtrue, ComputeMAOPoint);
+    _printf("\n");
 }
 
 /*
@@ -201,13 +202,9 @@ TraceAmbient
 */
 void TraceAmbient(int num)
 {
-    int i, j, k, c;
+    int i, j, k;
     int realSurfIndex;
     dsurface_t *ds;
-    mesh_t *mesh = NULL;
-    int sampleWidth, sampleHeight;
-    vec3_t lightmapVecs[2];
-    vec3_t lightmapOrigin, normal;
     int surfWeight;
     traceWork_t *tw;
 
@@ -226,91 +223,37 @@ void TraceAmbient(int num)
         return;
     }
 
-    int isDilated = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
-    int use_upscale = upscale;
-    // TraceAmbient evaluates interior texels globally. We use the TraceLtm math formula verbatim 
-    // for unification, so we define local scale=1 and currentGutter=0 to represent the global mapping.
-    int scale = 1;
-    int currentGutter = 0;
-
-    if (ds->surfaceType == MST_PATCH)
-    {
-        mesh = localSurfaces[realSurfIndex].patchMesh;
-        sampleWidth = ds->lightmapWidth;
-        sampleHeight = ds->lightmapHeight;
-    }
-    else
-    {
-        VectorCopy(ds->lightmapVecs[2], normal);
-        VectorCopy(ds->lightmapOrigin, lightmapOrigin);
-        if (ds->surfaceType == MST_PLANAR)
-        {
-            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
-            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
-        }
-
-        VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
-        VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
-        sampleWidth = ds->lightmapWidth;
-        sampleHeight = ds->lightmapHeight;
-    }
+    int sampleWidth = ds->lightmapWidth;
+    int sampleHeight = ds->lightmapHeight;
 
     for (i = 0; i < sampleWidth; i++)
     {
         for (j = 0; j < sampleHeight; j++)
         {
-            k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j)
-                    * LIGHTMAP_WIDTH
-                    + ds->lightmapOffset[0][0] + i;
+            int py = ds->lightmapOffset[0][1] + j;
+            int px = ds->lightmapOffset[0][0] + i;
+            
+            if (px < 0 || px >= LIGHTMAP_WIDTH || py < 0 || py >= LIGHTMAP_HEIGHT)
+                continue;
+
+            k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + py) * LIGHTMAP_WIDTH + px;
             if (k < 0 || k >= numLightBytes / 3)
                 continue;
 
             if (unreachableMask && BITMAP_TEST(unreachableMask, k))
                 continue;
 
-            float u = (float)(i - currentGutter) + 0.5f; // TraceAmbient has no jdx
-            float v = (float)(j - currentGutter) + 0.5f; // TraceAmbient has no jdy
-            float step = 1.0f / (float)scale;
-            vec3_t origin;
-            double base[3];
+            int scale = upscale ? 2 : 1;
+            int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
 
-            if (ds->surfaceType == MST_TRIANGLE_SOUP)
-            {
-                float st[2];
-                vec3_t temp_origin;
-                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
-                if (!TriSoupSamplePoint(ds, st, temp_origin, normal))
-                    continue;
-                for (c = 0; c < 3; c++)
-                    base[c] = (double)temp_origin[c] + (double)normal[c] * SAMPLE_NUDGE;
-            }
-            else if (ds->surfaceType == MST_PATCH)
-            {
-                float st[2];
-                vec3_t temp_origin;
-                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
-                if (!PatchSamplePoint(mesh, st, temp_origin, normal))
-                    continue;
-                for (c = 0; c < 3; c++)
-                    base[c] = (double)temp_origin[c] + (double)normal[c] * SAMPLE_NUDGE;
-            }
-            else
-            {
-                for (c = 0; c < 3; c++)
-                {
-                    base[c] = (double)lightmapOrigin[c]
-                            + (double)normal[c] * SAMPLE_NUDGE
-                            + (double)u * lightmapVecs[0][c]
-                            + (double)v * lightmapVecs[1][c];
-                }
-            }
+            if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
+                continue;
 
-            for (c = 0; c < 3; c++)
+            vec3_t origin, normal;
+            for (int c = 0; c < 3; c++)
             {
-                base[c] += localSurfaces[realSurfIndex].entityOrigin[c];
-                origin[c] = (float)base[c];
+                origin[c] = texelOrigins[k_upscale][c];
+                normal[c] = texelNormals[k_upscale][c];
             }
 
             if (lightAlphaMask && lightAlphaMask[k] == 0)

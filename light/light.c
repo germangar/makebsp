@@ -586,11 +586,6 @@ void CreateEntityLights(void)
             }
 
             hasSun = qtrue;
-            _printf("DEBUG: Found sun entity %d (classname '%s')\n", i, name);
-            _printf("       _sun=%s, _sun_dir=%s, light=%s, _color=%s\n", 
-                ValueForKey(e, "_sun"), ValueForKey(e, "_sun_dir"), ValueForKey(e, "light"), ValueForKey(e, "_color"));
-
-
             continue;
         }
 
@@ -1333,10 +1328,6 @@ void LightMain(void)
         if (skyLum > 0.001f || groundLum > 0.001f)
         {
             mao_enabled = qtrue;
-            _printf("MAO Ambient: sky (%.2f %.2f %.2f) ground (%.2f %.2f %.2f) radius %.0f\n",
-                    skyColor[0], skyColor[1], skyColor[2],
-                    groundColor[0], groundColor[1], groundColor[2],
-                    mao_radius);
         }
     }
 
@@ -1378,6 +1369,9 @@ void LightMain(void)
 
     // Generate the base geometric mask
     GenerateLightmapAlphaMask();
+
+    // Precache all native and upscaled texel geometries centrally
+    PrecacheTexelGeometry();
 
     if (debugLightmaps)
     {
@@ -1431,8 +1425,8 @@ void LightMain(void)
     {
         numLights++;
     }
-    _printf("%i point lights\n", numPointLights);
-    _printf("%i area lights\n", numAreaLights);
+    _printf("%5i point lights\n", numPointLights);
+    _printf("%5i area lights\n", numAreaLights);
 
     InitTrace();
     LightWorld();
