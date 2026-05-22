@@ -244,6 +244,7 @@ extern float *lightFloats;
 extern float *deluxeFloats;
 extern int *lightSurfaceIndex;
 extern byte *lightAlphaMask;
+extern byte *unreachableMask;
 
 extern qboolean debugLightmaps;
 extern qboolean debugLightmapsAlpha;

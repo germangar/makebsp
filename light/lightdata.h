@@ -47,6 +47,12 @@ extern float *radiosityEnergyFloats;
 extern float *accumRadiosityDeluxeSum;
 extern float *accumRadiosityEnergyFloats;
 extern byte *lightAlphaMask;
+extern byte *unreachableMask;
+
+#define BITMAP_SET(map, i)   ((map)[(i) >> 3] |=  (1 << ((i) & 7)))
+#define BITMAP_CLEAR(map, i) ((map)[(i) >> 3] &= ~(1 << ((i) & 7)))
+#define BITMAP_TEST(map, i)  ((map)[(i) >> 3] &   (1 << ((i) & 7)))
+
 
 typedef struct {
     vec3_t pos;

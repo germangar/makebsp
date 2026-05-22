@@ -1752,6 +1752,21 @@ void TraceLtm(int num)
                     }
                 }
             }
+
+            if (unreachableMask)
+            {
+                if (k >= 0 && k < numLightBytes / 3)
+                {
+                    if (!sampleHit[i][j])
+                    {
+                        BITMAP_SET(unreachableMask, k);
+                    }
+                    else
+                    {
+                        BITMAP_CLEAR(unreachableMask, k);
+                    }
+                }
+            }
         }
     }
 

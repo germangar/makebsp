@@ -22,6 +22,7 @@ float *radiosityEnergyFloats = NULL;
 float *accumRadiosityDeluxeSum = NULL;
 float *accumRadiosityEnergyFloats = NULL;
 byte *lightAlphaMask = NULL;
+byte *unreachableMask = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
@@ -185,7 +186,7 @@ static void DilateLightmapAtlas(int width, int passes)
         Q_Free(tempNormal);
 }
 
-static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, int oldW, float *newFloats, byte *newMask, int newW)
+static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats, byte *oldMask, byte *oldUnreachable, int oldW, float *newFloats, byte *newMask, byte *newUnreachable, int newW)
 {
     int x, y, dx, dy;
     int sLM = ds->lightmapNum[0];
@@ -215,6 +216,7 @@ static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats
             int newP = (sLM * newW * newW) + nY * newW + nX;
 
             float sumColor[3] = {0, 0, 0}, sumWeight = 0.0f;
+            int blockUnreachable = 1; // Assume unreachable until proven otherwise
 
             // Map back to absolute coordinates in the old atlas to maintain alignment
             int startX = sOldX + (x * ratio);
@@ -234,10 +236,14 @@ static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats
                         continue;
 
                     int oldP = (sLM * oldW * oldW) + Y * oldW + X;
-                    if (oldMask[oldP] != 0)
+                    if (oldMask && oldMask[oldP] != 0)
                     {
                         VectorAdd(sumColor, &oldFloats[oldP * 3], sumColor);
                         sumWeight += 1.0f;
+                    }
+                    if (oldUnreachable && !BITMAP_TEST(oldUnreachable, oldP))
+                    {
+                        blockUnreachable = 0; // Found a reachable sub-pixel!
                     }
                 }
             }
@@ -245,7 +251,15 @@ static void DownscaleSurfaceLightmap(dsurface_t *ds, int ratio, float *oldFloats
             if (sumWeight > 0.01f)
             {
                 VectorScale(sumColor, 1.0f / sumWeight, &newFloats[newP * 3]);
-                newMask[newP] = 1;
+                if (newMask) newMask[newP] = 1;
+            }
+            if (newUnreachable)
+            {
+                if (blockUnreachable) {
+                    BITMAP_SET(newUnreachable, newP);
+                } else {
+                    BITMAP_CLEAR(newUnreachable, newP);
+                }
             }
         }
     }
@@ -275,15 +289,20 @@ void DownscaleLightmaps(int oldW, int newW)
     if (newDeluxe) memset(newDeluxe, 0, newTotalPixels * 3 * sizeof(float));
     byte *newMask = Q_Alloc(newTotalPixels * sizeof(byte));
     if (newMask) memset(newMask, 0, newTotalPixels * sizeof(byte));
+    byte *newUnreachable = NULL;
+    if (unreachableMask) {
+        newUnreachable = Q_Alloc((newTotalPixels + 7) / 8);
+        if (newUnreachable) memset(newUnreachable, 0, (newTotalPixels + 7) / 8);
+    }
 
     for (i = 0; i < numDrawSurfaces; i++)
     {
         if (drawSurfaces[i].lightmapNum[0] >= 0)
         {
-            DownscaleSurfaceLightmap(&drawSurfaces[i], ratio, lightFloats, lightAlphaMask, oldW, newFloats, newMask, newW);
+            DownscaleSurfaceLightmap(&drawSurfaces[i], ratio, lightFloats, lightAlphaMask, unreachableMask, oldW, newFloats, newMask, newUnreachable, newW);
             if (newDeluxe)
             {
-                DownscaleSurfaceLightmap(&drawSurfaces[i], ratio, deluxeFloats, lightAlphaMask, oldW, newDeluxe, NULL, newW);
+                DownscaleSurfaceLightmap(&drawSurfaces[i], ratio, deluxeFloats, lightAlphaMask, unreachableMask, oldW, newDeluxe, NULL, NULL, newW);
             }
         }
     }
@@ -301,8 +320,10 @@ void DownscaleLightmaps(int oldW, int newW)
 
     Q_Free(lightFloats);
     Q_Free(lightAlphaMask);
+    if (unreachableMask) Q_Free(unreachableMask);
     lightFloats = newFloats;
     lightAlphaMask = newMask;
+    unreachableMask = newUnreachable;
 
     if (deluxeFloats)
     {
@@ -540,6 +561,11 @@ static void UpConvertLightmaps(void)
         if (!lightAlphaMask)
             Error("UpConvert: malloc lightAlphaMask failed");
         memset(lightAlphaMask, 0, (numLightBytes / 3) * sizeof(byte));
+
+        unreachableMask = Q_Alloc(((numLightBytes / 3) + 7) / 8);
+        if (!unreachableMask)
+            Error("UpConvert: malloc unreachableMask failed");
+        memset(unreachableMask, 0, ((numLightBytes / 3) + 7) / 8);
     }
 
     if (game->deluxeMap)
@@ -864,6 +890,7 @@ void DownConvertLightingData(void)
     if (energyFloats)      { Q_Free(energyFloats);      energyFloats = NULL; }
     if (normalFloats)      { Q_Free(normalFloats);      normalFloats = NULL; }
     if (lightAlphaMask)    { Q_Free(lightAlphaMask);    lightAlphaMask = NULL; }
+    if (unreachableMask)   { Q_Free(unreachableMask);   unreachableMask = NULL; }
     if (lightSurfaceIndex) { Q_Free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
     if (gridData32)        { Q_Free(gridData32);        gridData32 = NULL; }
 }
