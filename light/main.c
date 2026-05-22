@@ -194,8 +194,8 @@ int main(int argc, char **argv) {
             if (game->defaultSmoothRadius < 0.1f)
                 game->defaultSmoothRadius = 0.1f;
             i++;
-        } else if (!strcmp(argv[i], "-radiosity")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a number of passes");
+        } else if (!strcmp(argv[i], "-rad_passes")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_passes requires a number of passes");
             game->radiosityPasses = atoi(argv[i + 1]);
             if (game->radiosityPasses < 0)
                 game->radiosityPasses = 0;
@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
                 "                     0 = OFF\n"
                 "                     1 = super-sampling EVERYTHING\n"
                 "                     2 = super-sampling models only\n"
-                "   radiosity <N>    = set the number of radiosity passes (high-fidelity bounce)\n"
+                "   rad_passes <N>   = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_ao_min <F>   = set inner distance limit for radiosity plateau\n"
                 "   rad_ao_max <F>   = set transition range width for radiosity gradient (starts at min)\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
