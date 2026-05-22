@@ -736,9 +736,9 @@ void LoadTriangleModels(void)
             if (!radStr[0])
                 radStr = ValueForKey(entity, "_smoothradius");
             if (!radStr[0])
-                radStr = ValueForKey(entity, "smoothingradius");
+                radStr = ValueForKey(entity, "smooth");
             if (!radStr[0])
-                radStr = ValueForKey(entity, "_smoothingradius");
+                radStr = ValueForKey(entity, "_smooth");
             if (radStr[0])
             {
                 smoothingRadius = atof(radStr);

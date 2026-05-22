@@ -188,8 +188,8 @@ int main(int argc, char **argv) {
             game->antialiasingPasses = atoi(argv[i + 1]);
             _printf("Anti-Aliasing post-process pass enabled (Mode %d)\n", game->antialiasingPasses);
             i++;
-        } else if (!strcmp(argv[i], "-smoothradius")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smoothradius requires a radius value");
+        } else if (!strcmp(argv[i], "-smooth")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-smooth requires a radius value");
             game->defaultSmoothRadius = (float)atof(argv[i + 1]);
             if (game->defaultSmoothRadius < 0.1f)
                 game->defaultSmoothRadius = 0.1f;

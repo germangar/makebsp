@@ -1204,7 +1204,7 @@ void ProcessFuncLight(entity_t *ent)
 
                 // Exclude smoothing radius keys (they belong to the surface, not the point light)
                 if (!strcmp(ep->key, "smoothradius") || !strcmp(ep->key, "_smoothradius") ||
-                    !strcmp(ep->key, "smoothingradius") || !strcmp(ep->key, "_smoothingradius"))
+                    !strcmp(ep->key, "smooth") || !strcmp(ep->key, "_smooth"))
                     continue;
 
                 // Exclude supersample keys from direct inheritance (handled explicitly below)

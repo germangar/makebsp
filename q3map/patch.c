@@ -330,9 +330,9 @@ void PatchMapDrawSurfs(entity_t *e)
         if (!rad_str[0])
             rad_str = ValueForKey(e, "_smoothradius");
         if (!rad_str[0])
-            rad_str = ValueForKey(e, "smoothingradius");
+            rad_str = ValueForKey(e, "smooth");
         if (!rad_str[0])
-            rad_str = ValueForKey(e, "_smoothingradius");
+            rad_str = ValueForKey(e, "_smooth");
         if (rad_str[0])
         {
             ds->smoothingRadius = atof(rad_str);

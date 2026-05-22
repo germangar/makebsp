@@ -83,10 +83,12 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     const char *radiusStr = ValueForKey(e, "smoothradius");
     if (!radiusStr[0])
         radiusStr = ValueForKey(e, "_smoothradius");
-    if (!radiusStr[0])
-        radiusStr = ValueForKey(e, "smoothingradius");
-    if (!radiusStr[0])
-        radiusStr = ValueForKey(e, "_smoothingradius");
+    if (!radiusStr[0]) {
+        radiusStr = ValueForKey(e, "smooth");
+        if (!radiusStr[0]) {
+            radiusStr = ValueForKey(e, "_smooth");
+        }
+    }
     if (radiusStr[0])
         ds->smoothingRadius = atof(radiusStr);
 
