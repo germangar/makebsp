@@ -259,6 +259,15 @@ void TraceAmbient(int num)
     {
         for (j = 0; j < sampleHeight; j++)
         {
+            k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j)
+                    * LIGHTMAP_WIDTH
+                    + ds->lightmapOffset[0][0] + i;
+            if (k < 0 || k >= numLightBytes / 3)
+                continue;
+
+            if (unreachableMask && BITMAP_TEST(unreachableMask, k))
+                continue;
+
             float u = (float)(i - currentGutter) + 0.5f; // TraceAmbient has no jdx
             float v = (float)(j - currentGutter) + 0.5f; // TraceAmbient has no jdy
             float step = 1.0f / (float)scale;
@@ -304,14 +313,10 @@ void TraceAmbient(int num)
                 origin[c] = (float)base[c];
             }
 
-            k = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + j)
-                    * LIGHTMAP_WIDTH
-                    + ds->lightmapOffset[0][0] + i;
-            if (k < 0 || k >= numLightBytes / 3)
-                continue;
-
             if (lightAlphaMask && lightAlphaMask[k] == 0)
-                continue;
+            {
+                lightAlphaMask[k] = ds->surfaceType;
+            }
 
             // --- Volumetric Irradiance Gathering ---
             float gatherRadius = mao_gather_radius;

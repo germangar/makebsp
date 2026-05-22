@@ -503,6 +503,10 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             
+            if (unreachableMask && BITMAP_TEST(unreachableMask, k_dst)) {
+                continue;
+            }
+
             // Skip if masked, unless it's a triangle soup (which we might unmask)
             if (lightAlphaMask && !lightAlphaMask[k_dst]) {
                 if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
@@ -1097,6 +1101,10 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
             int k_temp = ly * ds->lightmapWidth + lx;
             
+            if (unreachableMask && BITMAP_TEST(unreachableMask, k_dst)) {
+                continue;
+            }
+
             // Skip if masked, unless it's a triangle soup (which we might unmask)
             if (lightAlphaMask && !lightAlphaMask[k_dst]) {
                 if (ds->surfaceType != MST_TRIANGLE_SOUP) continue;
