@@ -357,6 +357,47 @@ void TraceAmbient(int num)
                 VectorCopy(normal, bentNormal);
             }
 
+            // Exaggerate the ambient bent normal away from the surface normal
+            if (game->deluxeAmbientExaggerate > 1.0f) {
+                float w = DotProduct(normal, bentNormal);
+                vec3_t tangent;
+                
+                // Extract tangent
+                for (int c = 0; c < 3; c++) {
+                    tangent[c] = bentNormal[c] - (normal[c] * w);
+                }
+                
+                // Scale up the tangent to bend it further
+                for (int c = 0; c < 3; c++) {
+                    tangent[c] *= game->deluxeAmbientExaggerate;
+                }
+                
+                // Reconstruct and re-normalize
+                for (int c = 0; c < 3; c++) {
+                    bentNormal[c] = (normal[c] * w) + tangent[c];
+                }
+                
+                if (VectorNormalize(bentNormal, bentNormal) < 0.0001f) {
+                    VectorCopy(normal, bentNormal);
+                }
+
+                // Clamp to maximum 45 degrees (cos(45) = 0.70710678f)
+                float newW = DotProduct(normal, bentNormal);
+                float maxCos = 0.70710678f; // Both sin(45) and cos(45)
+                if (newW < maxCos) {
+                    vec3_t pureTangent;
+                    for (int c = 0; c < 3; c++) {
+                        pureTangent[c] = bentNormal[c] - (normal[c] * newW);
+                    }
+                    if (VectorNormalize(pureTangent, pureTangent) > 0.0001f) {
+                        for (int c = 0; c < 3; c++) {
+                            bentNormal[c] = (normal[c] * maxCos) + (pureTangent[c] * maxCos);
+                        }
+                        VectorNormalize(bentNormal, bentNormal);
+                    }
+                }
+            }
+
             if (lightFloats && deluxeFloats && energyFloats)
             {
                 vec3_t existColor, existDir, existEnergy, normalizedBent;

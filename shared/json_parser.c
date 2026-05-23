@@ -242,6 +242,14 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->deluxeMinAngle = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!strcmp(key, "deluxeAmbientExaggerate") && val->type == json_type_number)
+        {
+            game->deluxeAmbientExaggerate = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!strcmp(key, "deluxeRadiosityExaggerate") && val->type == json_type_number)
+        {
+            game->deluxeRadiosityExaggerate = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!strcmp(key, "smoothPasses") && val->type == json_type_number)
         {
             game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
@@ -449,6 +457,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"deluxeMap\": %s,\n"
             "  \"deluxeMinAngle\": %.2f,\n"
+            "  \"deluxeAmbientExaggerate\": %.2f,\n"
+            "  \"deluxeRadiosityExaggerate\": %.2f,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"snapUVs\": %s,\n"
             "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
@@ -472,6 +482,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             sunFalloffStr,
             game->deluxeMap ? "true" : "false",
             game->deluxeMinAngle,
+            game->deluxeAmbientExaggerate,
+            game->deluxeRadiosityExaggerate,
             game->forceUVGen ? "true" : "false",
             game->snapUVs ? "true" : "false",
             game->antialiasingPasses,

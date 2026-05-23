@@ -1120,6 +1120,48 @@ static void RadiosityMerge(const float *srcBuffer) {
             if (VectorNormalize(&accumRadiosityDeluxeSum[i*3], radDir) < 0.0001f) {
                 VectorCopy(&normalFloats[i*3], radDir);
             }
+
+            // Exaggerate the radiosity bent normal away from the surface normal
+            if (game->deluxeRadiosityExaggerate > 1.0f) {
+                float w = DotProduct(&normalFloats[i*3], radDir);
+                vec3_t tangent;
+                
+                // Extract tangent
+                for (int c = 0; c < 3; c++) {
+                    tangent[c] = radDir[c] - (normalFloats[i*3+c] * w);
+                }
+                
+                // Scale up the tangent to bend it further
+                for (int c = 0; c < 3; c++) {
+                    tangent[c] *= game->deluxeRadiosityExaggerate;
+                }
+                
+                // Reconstruct and re-normalize
+                for (int c = 0; c < 3; c++) {
+                    radDir[c] = (normalFloats[i*3+c] * w) + tangent[c];
+                }
+                
+                if (VectorNormalize(radDir, radDir) < 0.0001f) {
+                    VectorCopy(&normalFloats[i*3], radDir);
+                }
+
+                // Clamp to maximum 75 degrees (cos(75) ≈ 0.2588190f, sin(75) ≈ 0.9659258f)
+                float newW = DotProduct(&normalFloats[i*3], radDir);
+                float maxCos = 0.258819045f; // cos(75)
+                float maxSin = 0.965925826f; // sin(75)
+                if (newW < maxCos) {
+                    vec3_t pureTangent;
+                    for (int c = 0; c < 3; c++) {
+                        pureTangent[c] = radDir[c] - (normalFloats[i*3+c] * newW);
+                    }
+                    if (VectorNormalize(pureTangent, pureTangent) > 0.0001f) {
+                        for (int c = 0; c < 3; c++) {
+                            radDir[c] = (normalFloats[i*3+c] * maxCos) + (pureTangent[c] * maxSin);
+                        }
+                        VectorNormalize(radDir, radDir);
+                    }
+                }
+            }
             MergeAccumulatedState(
                 &lightFloats[i * 3], &deluxeFloats[i * 3], &energyFloats[i * 3],
                 &srcBuffer[i * 3], radDir, &accumRadiosityEnergyFloats[i * 3],

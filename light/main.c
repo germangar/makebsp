@@ -166,6 +166,16 @@ int main(int argc, char **argv) {
             if (game->deluxeMinAngle < 0.0f) game->deluxeMinAngle = 0.0f;
             if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
             _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
+        } else if (!strcmp(argv[i], "-deluxe_ambient_exaggerate")) {
+            if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe_ambient_exaggerate requires a scalar factor");
+            game->deluxeAmbientExaggerate = atof(argv[++i]);
+            if (game->deluxeAmbientExaggerate < 0.0f) game->deluxeAmbientExaggerate = 0.0f;
+            _printf("Deluxe Ambient Exaggerate multiplier set to %.2f\n", game->deluxeAmbientExaggerate);
+        } else if (!strcmp(argv[i], "-deluxe_radiosity_exaggerate")) {
+            if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe_radiosity_exaggerate requires a scalar factor");
+            game->deluxeRadiosityExaggerate = atof(argv[++i]);
+            if (game->deluxeRadiosityExaggerate < 0.0f) game->deluxeRadiosityExaggerate = 0.0f;
+            _printf("Deluxe Radiosity Exaggerate multiplier set to %.2f\n", game->deluxeRadiosityExaggerate);
         } else if (!strcmp(argv[i], "-supersample")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersample requires a radius value (e.g. 0.5 or 1.0)");
             superSampleRadius = atof(argv[i + 1]);
@@ -315,6 +325,8 @@ int main(int argc, char **argv) {
                 "   falloff_sun_softbias <F> = override the sun soft bias\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
+                "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n"
+                "   deluxe_radiosity_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during radiosity pass\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
@@ -387,6 +399,13 @@ int main(int argc, char **argv) {
             game->lightmapsRGB ? "sRGB" : "Linear",
             game->deluxeMap ? "Deluxe" : "Standard",
             (game->hdr == HDR_8BIT) ? "range" : "clamped");
+    
+    if (game->deluxeMap && game->deluxeAmbientExaggerate > 1.0f) {
+        _printf("Ambient Deluxe Exaggeration: %.2fx tangent scaling\n", game->deluxeAmbientExaggerate);
+    }
+    if (game->deluxeMap && game->deluxeRadiosityExaggerate > 1.0f) {
+        _printf("Radiosity Deluxe Exaggeration: %.2fx tangent scaling\n", game->deluxeRadiosityExaggerate);
+    }
     _printf("Lightmap size: %d (Write: %d)\n", game->lightmapSize, game->writeLightmapSize);
 
 

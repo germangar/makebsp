@@ -65,6 +65,8 @@ typedef struct {
 	falloff_t   sunFalloff;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
+	float       deluxeAmbientExaggerate;
+	float       deluxeRadiosityExaggerate;
 	qboolean    forceUVGen;	qboolean    snapUVs;
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
