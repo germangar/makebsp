@@ -221,9 +221,10 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
             game->radiosityColorRatio = (float)atof(argv[i + 1]);
             i++;
-        } else if (!strcmp(argv[i], "-rad_intensity")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_intensity requires a numeric value");
+        } else if (!strcmp(argv[i], "-radiosity")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-radiosity requires a numeric value");
             game->radiosityIntensity = (float)atof(argv[i + 1]);
+            if (game->radiosityIntensity < 0.0f) game->radiosityIntensity = 0.0f;
             i++;
         } else if (!strcmp(argv[i], "-rad_ao_intensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_intensity requires a numeric value");
@@ -331,7 +332,7 @@ int main(int argc, char **argv) {
                 "   rad_interval <I>  = set sparse grid interval (1=Every luxel, default 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
-                "   rad_bounce_scale <F>= set final bounce energy multiplier\n"
+                "   radiosity <F>       = set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
                 "   mao_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
                 "   mao_ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"

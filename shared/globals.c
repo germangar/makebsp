@@ -37,12 +37,12 @@ game_t gameTemplates[MAX_GAMES] = {
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
 		4,          // radiosityPasses
-		0.5f,       // radiosityIntensity
+		1.0f,       // radiosityIntensity
 		1.0f,       // radiosityColorRatio
 		FALLOFF_LAMBERT, // falloff
 		FALLOFF_LAMBERT, // sunFalloff
 		qtrue,      // deluxeMap
-		30.0f,      // deluxeMinAngle
+		15.0f,      // deluxeMinAngle
 		qtrue,      // forceUVGen
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses

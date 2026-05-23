@@ -26,7 +26,7 @@ Architecture:
 // Tuning parameters (managed via main.c CLI)
 // ---------------------------------------------------------------------------
 
-static float rad_bounce_scale;    // Energy per bounce (conserved)
+static float rad_intensity;    // Energy per bounce (conserved)
 static float rad_color_ratio;     // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
 float rad_ao_min        = RAD_AO_MIN_DEFAULT;
@@ -418,7 +418,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                 } else {
                     em->area = luxelArea * 1.0f;
                 }
-                VectorScale(src, rad_bounce_scale, em->color);
+                VectorScale(src, rad_intensity, em->color);
                 
                 // If deluxe mapping is active, apply the receiver-side falloff correction.
                 // When deluxe mapping is off, the srcBuffer already contains the fully attenuated color, so we skip it.
@@ -1137,10 +1137,10 @@ static void RadiosityMerge(const float *srcBuffer) {
 
 void LightRadiosity(void) {
     int radiosityPasses = game->radiosityPasses;
-    rad_bounce_scale = game->radiosityIntensity;
+    rad_intensity = game->radiosityIntensity * 0.5f;
     rad_color_ratio = game->radiosityColorRatio;
 
-    if (radiosityPasses <= 0) return;
+    if (radiosityPasses <= 0 || rad_intensity <= 0.0f) return;
     _printf("--- Radiosity ---\n");
 
     if (rad_voxel_size <= 0.0f) {

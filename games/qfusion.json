@@ -17,12 +17,12 @@
   "texturesRGB": true,
   "colorsRGB": true,
   "radiosityPasses": 4,
-  "radiosityIntensity": 0.50,
+  "radiosityIntensity": 1.00,
   "radiosityColorRatio": 1.00,
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "deluxeMap": true,
-  "deluxeMinAngle": 30.00,
+  "deluxeMinAngle": 15.00,
   "forceUVGen": true,
   "snapUVs": true,
   "antialiasingPasses": 0, /* post-process AA passes */
