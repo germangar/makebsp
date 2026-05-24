@@ -22,8 +22,9 @@
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "deluxeMap": false,
-
-  "snapUVs": true,
+  "deluxeMinAngle": 40.00,
+  "deluxeAmbientExaggerate": 1.00,
+  "deluxeRadiosityExaggerate": 1.00,
   "antialiasingPasses": 0, /* post-process AA passes */
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */

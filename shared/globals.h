@@ -67,7 +67,7 @@ typedef struct {
 	float       deluxeMinAngle;
 	float       deluxeAmbientExaggerate;
 	float       deluxeRadiosityExaggerate;
-	qboolean    snapUVs;
+
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;

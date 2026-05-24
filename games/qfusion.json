@@ -25,7 +25,6 @@
   "deluxeMinAngle": 15.00,
   "deluxeAmbientExaggerate": 1.00,
   "deluxeRadiosityExaggerate": 1.00,
-  "snapUVs": true,
   "antialiasingPasses": 0, /* post-process AA passes */
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */

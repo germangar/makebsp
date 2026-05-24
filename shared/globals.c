@@ -46,7 +46,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
 
-		qtrue,      // snapUVs
+
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
@@ -81,7 +81,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
 
-		qtrue,      // snapUVs
+
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
