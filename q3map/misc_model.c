@@ -477,13 +477,150 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
 
 /*
 ====================
-TrySpreadUVs
+GenerateXAtlasUVsFromScratch
 
-Advanced UV overlap detection and resolving.
-Resolves mirrored/stacked UVs by spreading them into a 1D or 2D slot array.
-Safeguarded to only touch simple mirrored props.
+Use xatlas library to fully generate a UV map from scratch.
 ====================
 */
+static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, float lightmapScale, vec3_t scale_vec)
+{
+    xatlasAtlas *atlas = xatlasCreate();
+    if (!atlas)
+        return NULL;
+
+    xatlasMeshDecl decl;
+    xatlasMeshDeclInit(&decl);
+
+    float *positions = malloc(sizeof(float) * 3 * mesh->mNumVertices);
+    for (int i = 0; i < (int)mesh->mNumVertices; i++)
+    {
+        positions[i * 3 + 0] = mesh->mVertices[i].x * scale_vec[0];
+        positions[i * 3 + 1] = mesh->mVertices[i].y * scale_vec[1];
+        positions[i * 3 + 2] = mesh->mVertices[i].z * scale_vec[2];
+    }
+
+    uint32_t *indices = malloc(sizeof(uint32_t) * mesh->mNumFaces * 3);
+    int validTris = 0;
+    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    {
+        if (mesh->mFaces[i].mNumIndices == 3)
+        {
+            indices[validTris * 3 + 0] = mesh->mFaces[i].mIndices[0];
+            indices[validTris * 3 + 1] = mesh->mFaces[i].mIndices[1];
+            indices[validTris * 3 + 2] = mesh->mFaces[i].mIndices[2];
+            validTris++;
+        }
+    }
+
+    decl.vertexPositionData = positions;
+    decl.vertexPositionStride = sizeof(float) * 3;
+    decl.vertexCount = mesh->mNumVertices;
+    decl.indexData = indices;
+    decl.indexCount = validTris * 3;
+    decl.indexFormat = xatlasIndexFormat_UInt32;
+
+    xatlasAddMeshError error = xatlasAddMesh(atlas, &decl, 1);
+    if (error != xatlasAddMeshError_Success)
+    {
+        _printf("xatlasAddMesh failed: %s\n", xatlasAddMeshErrorString(error));
+        xatlasDestroy(atlas);
+        free(positions);
+        free(indices);
+        return NULL;
+    }
+
+    xatlasAddMeshJoin(atlas);
+
+    xatlasChartOptions chartOptions;
+    xatlasChartOptionsInit(&chartOptions);
+    xatlasComputeCharts(atlas, &chartOptions);
+
+    xatlasPackOptions packOptions;
+    xatlasPackOptionsInit(&packOptions);
+    packOptions.padding = 2; // 2 texels of padding
+
+    int targetRes;
+    if (guessUVs)
+    {
+        float area3D = 0;
+        for (int i = 0; i < (int)mesh->mNumFaces; i++)
+        {
+            if (mesh->mFaces[i].mNumIndices == 3)
+            {
+                vec3_t v0, v1, v2;
+                int i0 = mesh->mFaces[i].mIndices[0];
+                int i1 = mesh->mFaces[i].mIndices[1];
+                int i2 = mesh->mFaces[i].mIndices[2];
+
+                v0[0] = mesh->mVertices[i0].x * scale_vec[0];
+                v0[1] = mesh->mVertices[i0].y * scale_vec[1];
+                v0[2] = mesh->mVertices[i0].z * scale_vec[2];
+
+                v1[0] = mesh->mVertices[i1].x * scale_vec[0];
+                v1[1] = mesh->mVertices[i1].y * scale_vec[1];
+                v1[2] = mesh->mVertices[i1].z * scale_vec[2];
+
+                v2[0] = mesh->mVertices[i2].x * scale_vec[0];
+                v2[1] = mesh->mVertices[i2].y * scale_vec[1];
+                v2[2] = mesh->mVertices[i2].z * scale_vec[2];
+
+                vec3_t side1, side2, cross;
+                VectorSubtract(v1, v0, side1);
+                VectorSubtract(v2, v0, side2);
+                CrossProduct(side1, side2, cross);
+                area3D += 0.5f * VectorLength(cross);
+            }
+        }
+
+        int ssize_val = ssize ? ssize : samplesize;
+        float targetResFloat = sqrt(area3D) / (float)ssize_val;
+        targetResFloat *= lightmapScale;
+        targetRes = (int)ceil(targetResFloat);
+        if (targetRes > LIGHTMAP_WIDTH - 2) targetRes = LIGHTMAP_WIDTH - 2;
+        if (targetRes < 16) targetRes = 16;
+    }
+    else
+    {
+        targetRes = (LIGHTMAP_WIDTH >= 64) ? LIGHTMAP_WIDTH : 1024;
+    }
+
+    packOptions.resolution = targetRes;
+    packOptions.texelsPerUnit = 0.0f;
+    xatlasPackCharts(atlas, &packOptions);
+
+    if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
+    {
+        xatlasDestroy(atlas);
+        free(positions);
+        free(indices);
+        return NULL;
+    }
+
+    uv_t *outUVs = calloc(mesh->mNumFaces * 3, sizeof(uv_t));
+    xatlasMesh *xMesh = &atlas->meshes[0];
+
+    int validIdx = 0;
+    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    {
+        if (mesh->mFaces[i].mNumIndices == 3)
+        {
+            for (int v = 0; v < 3; v++)
+            {
+                uint32_t xIdx = xMesh->indexArray[validIdx * 3 + v];
+                xatlasVertex *xv = &xMesh->vertexArray[xIdx];
+
+                outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
+                outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
+            }
+            validIdx++;
+        }
+    }
+
+    xatlasDestroy(atlas);
+    free(positions);
+    free(indices);
+    return outUVs;
+}
 
 
 /*
@@ -602,6 +739,13 @@ void LoadTriangleModels(void)
                 }
             }
 
+            int forceUVGen = 0;
+            const char *forceuv_str = ValueForKey(entity, "forceuvgen");
+            if (!forceuv_str[0])
+                forceuv_str = ValueForKey(entity, "_forceuvgen");
+            if (forceuv_str[0])
+                forceUVGen = atoi(forceuv_str);
+
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)
@@ -620,27 +764,31 @@ void LoadTriangleModels(void)
                 shaderInfo_t *si = ShaderInfoForShader(shaderName);
 
                 // ==========================================
-                // UV Overlap Detection & Automatic Spreading
+                // UV Automatic Spreading
                 // ==========================================
                 uv_t *xatlasUVs = NULL;
                 int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
 
-                if (mesh->mTextureCoords[uvChannel])
-                {
-                    int ssize = samplesize;
-                    if (si && si->lightmapSampleSize > 0)
-                        ssize = si->lightmapSampleSize;
+                int ssize = samplesize;
+                if (si && si->lightmapSampleSize > 0)
+                    ssize = si->lightmapSampleSize;
 
+                if (mesh->mTextureCoords[uvChannel] && !forceUVGen)
+                {
                     xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize, inst->lightmapScale, scale_vec);
-                    if (xatlasUVs)
-                    {
-                        _printf("xatlas packing successful.\n");
-                    }
-                    else
-                    {
-                        _printf("WARNING: xatlas packing failed for model %s (mesh %d).\n", model, i);
-                    }
                 }
+                
+                if (!xatlasUVs)
+                {
+                    if (forceUVGen)
+                        _printf("Model %s (mesh %d) forcing UV generation from scratch...\n", model, i);
+                    else
+                        _printf("Mesh missing or invalid UVs for model %s (mesh %d). Generating entirely new UVs from scratch...\n", model, i);
+                    xatlasUVs = GenerateXAtlasUVsFromScratch(mesh, ssize, inst->lightmapScale, scale_vec);
+                }
+
+                if (!xatlasUVs)
+                    _printf("WARNING: Total xatlas generation failure.\n");
 
                 // ==========================================
                 // STEP 1: Extract Raw Collision Topology
