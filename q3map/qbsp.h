@@ -247,7 +247,6 @@ extern qboolean coplanar;
 extern qboolean nofog;
 extern qboolean testExpand;
 extern qboolean showseams;
-extern int forceUVGen;
 extern int snapUVs;
 extern qboolean guessUVs;
 

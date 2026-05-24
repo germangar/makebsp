@@ -852,63 +852,19 @@ void LoadTriangleModels(void)
 
                 if (mesh->mTextureCoords[uvChannel])
                 {
-                    // Most Basic Check: UV Area Ratio Detection (Sampled).
-                    // Ratio > 1.1 means significant overlaps/mirroring.
-                    qboolean potentialOverlap = forceUVGen;
-                    float areaSum = 0;
-                    float uvMins[2] = {999999, 999999}, uvMaxs[2] = {-999999, -999999};
-                    int sampleStep = (mesh->mNumFaces > 200) ? 10 : 1;
-                    for (int k = 0; k < (int)mesh->mNumFaces; k += sampleStep)
+                    int ssize = samplesize;
+                    if (si && si->lightmapSampleSize > 0)
+                        ssize = si->lightmapSampleSize;
+
+                    xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize, inst->lightmapScale, scale_vec);
+                    if (xatlasUVs)
                     {
-                        if (mesh->mFaces[k].mNumIndices != 3)
-                            continue;
-                        struct aiVector3D *v0 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[0]];
-                        struct aiVector3D *v1 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[1]];
-                        struct aiVector3D *v2 = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[2]];
-
-                        // Triangle Area (Shoelace formula)
-                        float a = 0.5f * fabsf((v0->x - v2->x) * (v1->y - v0->y) - (v0->x - v1->x) * (v2->y - v0->y));
-                        areaSum += a;
-
-                        // UV Bounds
-                        for (int m = 0; m < 3; m++)
-                        {
-                            struct aiVector3D *v = &mesh->mTextureCoords[uvChannel][mesh->mFaces[k].mIndices[m]];
-                            if (v->x < uvMins[0])
-                                uvMins[0] = v->x;
-                            if (v->x > uvMaxs[0])
-                                uvMaxs[0] = v->x;
-                            if (v->y < uvMins[1])
-                                uvMins[1] = v->y;
-                            if (v->y > uvMaxs[1])
-                                uvMaxs[1] = v->y;
-                        }
+                        _printf("xatlas packing successful.\n");
                     }
-                    float bboxArea = (uvMaxs[0] - uvMins[0]) * (uvMaxs[1] - uvMins[1]);
-                    float areaRatio = (bboxArea > 0.001f) ? (areaSum * sampleStep / bboxArea) : 0;
-
-                    if (areaRatio > 1.05f)
+                    else
                     {
-                        potentialOverlap = qtrue;
-                    }
-
-                    if (potentialOverlap)
-                    {
-                        _printf("Potential UV overlap detected (ratio: %.2f). Trying xatlas packing...\n", areaRatio);
-                        int ssize = samplesize;
-                        if (si && si->lightmapSampleSize > 0)
-                            ssize = si->lightmapSampleSize;
-
-                        xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize, inst->lightmapScale, scale_vec);
-                        if (xatlasUVs)
-                        {
-                            _printf("xatlas packing successful.\n");
-                        }
-                        else
-                        {
-                            _printf("xatlas packing failed, falling back to original spreading.\n");
-                            TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
-                        }
+                        _printf("xatlas packing failed, falling back to original spreading.\n");
+                        TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
                     }
                 }
 

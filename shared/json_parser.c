@@ -264,13 +264,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->antialiasingPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "forceUVGen"))
-        {
-            if (val->type == json_type_true)
-                game->forceUVGen = qtrue;
-            else if (val->type == json_type_false)
-                game->forceUVGen = qfalse;
-        }
         else if (!strcmp(key, "snapUVs"))
         {
             if (val->type == json_type_true)
@@ -459,7 +452,6 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"deluxeMinAngle\": %.2f,\n"
             "  \"deluxeAmbientExaggerate\": %.2f,\n"
             "  \"deluxeRadiosityExaggerate\": %.2f,\n"
-            "  \"forceUVGen\": %s,\n"
             "  \"snapUVs\": %s,\n"
             "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
@@ -484,7 +476,6 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->deluxeMinAngle,
             game->deluxeAmbientExaggerate,
             game->deluxeRadiosityExaggerate,
-            game->forceUVGen ? "true" : "false",
             game->snapUVs ? "true" : "false",
             game->antialiasingPasses,
             game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,

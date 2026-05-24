@@ -48,7 +48,6 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
-int forceUVGen;
 int snapUVs;
 qboolean guessUVs = qfalse;
 
@@ -544,7 +543,7 @@ int main(int argc, char **argv)
 
     // Apply game defaults before parsing CLI
     samplesize = game->defaultSampleSize;
-    forceUVGen = game->forceUVGen;
+
     snapUVs = game->snapUVs;
 
     tempsource[0] = '\0';
@@ -692,12 +691,6 @@ int main(int argc, char **argv)
             i++;
             _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
         }
-        else if (!strcmp(argv[i], "-forceuvgen"))
-        {
-            if (i + 1 >= argc || argv[i + 1][0] == '-')
-                Error("-forceuvgen requires a 0|1 argument");
-            forceUVGen = atoi(argv[++i]);
-        }
         else if (!strcmp(argv[i], "-snapuvs"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -758,7 +751,6 @@ int main(int argc, char **argv)
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
-                "   forceuvgen <0|1> = force UV reconstruction for all misc_models\n"
                 "   snapuvs <0|1>    = align misc_model UVs to lightmap grid\n"
                 "   enforceSampleSize <0|1> = strictly follow shader/global sample size\n");
         exit(0);
@@ -768,7 +760,7 @@ int main(int argc, char **argv)
 
     start = I_FloatTime();
 
-    _printf("forceUVGen: %s, snapUVs: %s, guessUVs: %s\n", forceUVGen ? "true" : "false", snapUVs ? "true" : "false", guessUVs ? "true" : "false");
+    _printf("snapUVs: %s, guessUVs: %s\n", snapUVs ? "true" : "false", guessUVs ? "true" : "false");
 
     ThreadSetDefault();
     // numthreads = 1;		// multiple threads aren't helping because of

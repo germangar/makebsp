@@ -45,7 +45,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		15.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
-		qtrue,      // forceUVGen
+
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
@@ -80,7 +80,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		40.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
-		qtrue,      // forceUVGen
+
 		qtrue,      // snapUVs
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
