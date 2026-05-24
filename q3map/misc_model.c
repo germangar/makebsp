@@ -740,6 +740,12 @@ void LoadTriangleModels(void)
             }
 
             int forceUVGen = 0;
+            const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
+            if (!world_forceuv_str[0])
+                world_forceuv_str = ValueForKey(&entities[0], "_forceuvgen");
+            if (world_forceuv_str[0])
+                forceUVGen = atoi(world_forceuv_str);
+
             const char *forceuv_str = ValueForKey(entity, "forceuvgen");
             if (!forceuv_str[0])
                 forceuv_str = ValueForKey(entity, "_forceuvgen");
