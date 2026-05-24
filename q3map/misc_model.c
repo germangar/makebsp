@@ -484,230 +484,7 @@ Resolves mirrored/stacked UVs by spreading them into a 1D or 2D slot array.
 Safeguarded to only touch simple mirrored props.
 ====================
 */
-static void TrySpreadUVs(const struct aiMesh *mesh, int uvChannel, const char *modelName, int meshIdx, float *outU, float *outV)
-{
-    int numIslands = 0;
-    int *triIsland = IdentifyIslands(mesh, &numIslands);
-    if (!triIsland)
-        return;
 
-    float initialMaxU = -999999, initialMaxV = -999999;
-    for (int j = 0; j < (int)mesh->mNumFaces; j++)
-    {
-        if (triIsland[j] == -1)
-            continue;
-        for (int k = 0; k < 3; k++)
-        {
-            int vIdx = mesh->mFaces[j].mIndices[k];
-            struct aiVector3D *u = &mesh->mTextureCoords[uvChannel][vIdx];
-            if (u->x > initialMaxU)
-                initialMaxU = u->x;
-            if (u->y > initialMaxV)
-                initialMaxV = u->y;
-        }
-    }
-
-    qboolean abortSpreading = (numIslands > 500 || initialMaxU > 5.0f || initialMaxV > 5.0f) ? qtrue : qfalse;
-    int numShifted = 0;
-    typedef struct
-    {
-        float mins[2], maxs[2], offset[2];
-    } uvIsland_t;
-    uvIsland_t *islands = NULL;
-
-    if (!abortSpreading)
-    {
-        islands = malloc(sizeof(uvIsland_t) * numIslands);
-        for (int j = 0; j < numIslands; j++)
-        {
-            islands[j].mins[0] = islands[j].mins[1] = 999999;
-            islands[j].maxs[0] = islands[j].maxs[1] = -999999;
-            islands[j].offset[0] = islands[j].offset[1] = 0;
-        }
-        for (int j = 0; j < (int)mesh->mNumFaces; j++)
-        {
-            if (triIsland[j] == -1)
-                continue;
-            int islId = triIsland[j];
-            for (int k = 0; k < 3; k++)
-            {
-                int vIdx = mesh->mFaces[j].mIndices[k];
-                struct aiVector3D *u = &mesh->mTextureCoords[uvChannel][vIdx];
-                if (u->x < islands[islId].mins[0])
-                    islands[islId].mins[0] = u->x;
-                if (u->y < islands[islId].mins[1])
-                    islands[islId].mins[1] = u->y;
-                if (u->x > islands[islId].maxs[0])
-                    islands[islId].maxs[0] = u->x;
-                if (u->y > islands[islId].maxs[1])
-                    islands[islId].maxs[1] = u->y;
-            }
-        }
-
-        // ------------------------------------------
-        // BEST-FIT CORNER-SEARCH PACKER
-        // ------------------------------------------
-        // 1. Sort by Area (Descending)
-        int *sortIds = malloc(sizeof(int) * numIslands);
-        for (int j = 0; j < numIslands; j++)
-        {
-            sortIds[j] = j;
-        }
-
-        // Simple Bubble Sort (numIslands is small)
-        for (int a = 0; a < numIslands - 1; a++)
-        {
-            for (int b = a + 1; b < numIslands; b++)
-            {
-                float areaA = (islands[sortIds[a]].maxs[0] - islands[sortIds[a]].mins[0]) * (islands[sortIds[a]].maxs[1] - islands[sortIds[a]].mins[1]);
-                float areaB = (islands[sortIds[b]].maxs[0] - islands[sortIds[b]].mins[0]) * (islands[sortIds[b]].maxs[1] - islands[sortIds[b]].mins[1]);
-                if (areaB > areaA)
-                {
-                    int t = sortIds[a];
-                    sortIds[a] = sortIds[b];
-                    sortIds[b] = t;
-                }
-            }
-        }
-
-        // 2. Greedy Best-Fit Corner Search
-        float gutter = 0.1f;
-        float currentGlobalMaxU = 0;
-        float currentGlobalMaxV = 0;
-
-        for (int i = 0; i < numIslands; i++)
-        {
-            int targetId = sortIds[i];
-            float bestU = -1, bestV = -1, bestScore = 999999;
-            float iw = islands[targetId].maxs[0] - islands[targetId].mins[0];
-            float ih = islands[targetId].maxs[1] - islands[targetId].mins[1];
-
-            // Generate Candidate Positions (0,0 + all corners of placed islands)
-            int numCand = i * 2 + 1;
-            for (int c = 0; c < numCand; c++)
-            {
-                float px, py;
-                if (c == 0)
-                {
-                    px = 0;
-                    py = 0;
-                }
-                else
-                {
-                    int k = (c - 1) / 2;
-                    int kId = sortIds[k];
-                    if ((c - 1) % 2 == 0)
-                    {
-                        // Corner Right: (maxU_k + gutter, minV_k)
-                        px = (islands[kId].maxs[0] + islands[kId].offset[0]) + gutter;
-                        py = (islands[kId].mins[1] + islands[kId].offset[1]);
-                    }
-                    else
-                    {
-                        // Corner Top: (minU_k, maxV_k + gutter)
-                        px = (islands[kId].mins[0] + islands[kId].offset[0]);
-                        py = (islands[kId].maxs[1] + islands[kId].offset[1]) + gutter;
-                    }
-                }
-
-                // Target Offsets to reach (px, py)
-                float tx = px - islands[targetId].mins[0];
-                float ty = py - islands[targetId].mins[1];
-
-                // Collision Check (against all islands from 0 to i-1)
-                qboolean collision = qfalse;
-                float targetMins[2] = {px, py};
-                float targetMaxs[2] = {px + iw, py + ih};
-                float targetArea = iw * ih;
-
-                for (int m = 0; m < i; m++)
-                {
-                    int mId = sortIds[m];
-                    float testMins[2] = {islands[mId].mins[0] + islands[mId].offset[0], islands[mId].mins[1] + islands[mId].offset[1]};
-                    float testMaxs[2] = {islands[mId].maxs[0] + islands[mId].offset[0], islands[mId].maxs[1] + islands[mId].offset[1]};
-
-                    float interMinU = (targetMins[0] > testMins[0]) ? targetMins[0] : testMins[0], interMaxU = (targetMaxs[0] < testMaxs[0]) ? targetMaxs[0] : testMaxs[0];
-                    float interMinV = (targetMins[1] > testMins[1]) ? targetMins[1] : testMins[1], interMaxV = (targetMaxs[1] < testMaxs[1]) ? targetMaxs[1] : testMaxs[1];
-                    float interW = interMaxU - interMinU, interH = interMaxV - interMinV;
-                    if (interW > 0.001f && interH > 0.001f)
-                    {
-                        float testArea = (testMaxs[0] - testMins[0]) * (testMaxs[1] - testMins[1]);
-                        float interArea = interW * interH, minArea = (testArea < targetArea) ? testArea : targetArea;
-                        if (interArea > 0.01f * minArea)
-                        {
-                            collision = qtrue;
-                            break;
-                        }
-                    }
-                }
-
-                if (!collision)
-                {
-                    float newMaxU = (currentGlobalMaxU > targetMaxs[0]) ? currentGlobalMaxU : targetMaxs[0];
-                    float newMaxV = (currentGlobalMaxV > targetMaxs[1]) ? currentGlobalMaxV : targetMaxs[1];
-                    // Score prioritizing square aspect ratio and minimum range
-                    float score = (newMaxU > newMaxV) ? newMaxU : newMaxV;
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestU = tx;
-                        bestV = ty;
-                    }
-                }
-            }
-
-            if (bestU != -1)
-            {
-                islands[targetId].offset[0] = bestU;
-                islands[targetId].offset[1] = bestV;
-                if (bestU != 0 || bestV != 0)
-                    numShifted++;
-                float finalMaxU = islands[targetId].maxs[0] + bestU;
-                float finalMaxV = islands[targetId].maxs[1] + bestV;
-                if (finalMaxU > currentGlobalMaxU)
-                    currentGlobalMaxU = finalMaxU;
-                if (finalMaxV > currentGlobalMaxV)
-                    currentGlobalMaxV = finalMaxV;
-            }
-            else
-            {
-                abortSpreading = qtrue;
-                break;
-            }
-
-            if (currentGlobalMaxU > 20.0f || currentGlobalMaxV > 20.0f)
-            {
-                abortSpreading = qtrue;
-                break;
-            }
-        }
-        free(sortIds);
-    }
-
-    // ------------------------------------------
-    // STEP 3: Write Back Offsets
-    // ------------------------------------------
-    if (!abortSpreading)
-    {
-        for (int j = 0; j < (int)mesh->mNumFaces; j++)
-        {
-            if (triIsland[j] == -1)
-                continue;
-            int id = triIsland[j];
-            outU[j] = islands[id].offset[0];
-            outV[j] = islands[id].offset[1];
-        }
-    }
-    else
-    {
-        for (int j = 0; j < (int)mesh->mNumFaces; j++)
-            outU[j] = outV[j] = 0;
-    }
-
-    if (islands)
-        free(islands);
-    free(triIsland);
-}
 
 /*
 ====================
@@ -845,8 +622,6 @@ void LoadTriangleModels(void)
                 // ==========================================
                 // UV Overlap Detection & Automatic Spreading
                 // ==========================================
-                float *uOffsets = calloc(mesh->mNumFaces, sizeof(float));
-                float *vOffsets = calloc(mesh->mNumFaces, sizeof(float));
                 uv_t *xatlasUVs = NULL;
                 int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
 
@@ -863,8 +638,7 @@ void LoadTriangleModels(void)
                     }
                     else
                     {
-                        _printf("xatlas packing failed, falling back to original spreading.\n");
-                        TrySpreadUVs(mesh, uvChannel, model, i, uOffsets, vOffsets);
+                        _printf("WARNING: xatlas packing failed for model %s (mesh %d).\n", model, i);
                     }
                 }
 
@@ -938,10 +712,6 @@ void LoadTriangleModels(void)
                 {
                     if (xatlasUVs)
                         free(xatlasUVs);
-                    if (uOffsets)
-                        free(uOffsets);
-                    if (vOffsets)
-                        free(vOffsets);
                     continue;
                 }
 
@@ -1127,11 +897,11 @@ void LoadTriangleModels(void)
                                 }
                                 else
                                 {
-                                    // Original or Spread UVs
+                                    // Original UVs
                                     if (mesh->mTextureCoords[uvChannel])
                                     {
-                                        dv->lightmap[0][0] = mesh->mTextureCoords[uvChannel][oldIdx].x + uOffsets[currentFace];
-                                        dv->lightmap[0][1] = mesh->mTextureCoords[uvChannel][oldIdx].y + vOffsets[currentFace];
+                                        dv->lightmap[0][0] = mesh->mTextureCoords[uvChannel][oldIdx].x;
+                                        dv->lightmap[0][1] = mesh->mTextureCoords[uvChannel][oldIdx].y;
                                     }
                                 }
 
@@ -1160,10 +930,6 @@ void LoadTriangleModels(void)
                 free(vMapReverse);
                 if (xatlasUVs)
                     free(xatlasUVs);
-                if (uOffsets)
-                    free(uOffsets);
-                if (vOffsets)
-                    free(vOffsets);
             }
         }
     }
