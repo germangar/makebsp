@@ -312,7 +312,7 @@ TryXAtlasUVs
 Use xatlas library to pack existing UVs.
 ====================
 */
-static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize)
+static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, float lightmapScale, vec3_t scale_vec)
 {
     int numIslands = 0;
     int *triIsland = IdentifyIslands(mesh, &numIslands);
@@ -380,10 +380,43 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize)
     xatlasPackOptionsInit(&packOptions);
     packOptions.padding = 2; // 2 texels of padding
 
-    // Since we use xatlasAddUvMesh (2D only), xatlas doesn't know the 3D physical size.
-    // We must use resolution-based packing. The scale will be recalculated later.
-    // To preserve 2-texel padding, we use a fixed resolution and rely on the scale.
-    int targetRes = (LIGHTMAP_WIDTH >= 64) ? LIGHTMAP_WIDTH : 1024;
+    float area3D = 0;
+    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    {
+        if (mesh->mFaces[i].mNumIndices == 3)
+        {
+            vec3_t v0, v1, v2;
+            int i0 = mesh->mFaces[i].mIndices[0];
+            int i1 = mesh->mFaces[i].mIndices[1];
+            int i2 = mesh->mFaces[i].mIndices[2];
+
+            v0[0] = mesh->mVertices[i0].x * scale_vec[0];
+            v0[1] = mesh->mVertices[i0].y * scale_vec[1];
+            v0[2] = mesh->mVertices[i0].z * scale_vec[2];
+
+            v1[0] = mesh->mVertices[i1].x * scale_vec[0];
+            v1[1] = mesh->mVertices[i1].y * scale_vec[1];
+            v1[2] = mesh->mVertices[i1].z * scale_vec[2];
+
+            v2[0] = mesh->mVertices[i2].x * scale_vec[0];
+            v2[1] = mesh->mVertices[i2].y * scale_vec[1];
+            v2[2] = mesh->mVertices[i2].z * scale_vec[2];
+
+            vec3_t side1, side2, cross;
+            VectorSubtract(v1, v0, side1);
+            VectorSubtract(v2, v0, side2);
+            CrossProduct(side1, side2, cross);
+            area3D += 0.5f * VectorLength(cross);
+        }
+    }
+
+    int ssize_val = ssize ? ssize : samplesize;
+    float targetResFloat = sqrt(area3D) / (float)ssize_val;
+    targetResFloat *= lightmapScale;
+    int targetRes = (int)ceil(targetResFloat);
+    if (targetRes > LIGHTMAP_WIDTH - 2) targetRes = LIGHTMAP_WIDTH - 2;
+    if (targetRes < 16) targetRes = 16;
+
     packOptions.resolution = targetRes;
     packOptions.texelsPerUnit = 0.0f;
     xatlasPackCharts(atlas, &packOptions);
@@ -769,6 +802,21 @@ void LoadTriangleModels(void)
                     superSampleRadius = 0.0f;
             }
 
+            inst->lightmapScale = 1.0f;
+            const char *ent_scale_str = ValueForKey(entity, "_lightmapscale");
+            if (!ent_scale_str[0])
+                ent_scale_str = ValueForKey(entity, "lightmapscale");
+            if (ent_scale_str[0])
+            {
+                float ent_scale = atof(ent_scale_str);
+                if (ent_scale > 0)
+                {
+                    if (ent_scale < 0.01f) ent_scale = 0.01f;
+                    if (ent_scale > 16.0f) ent_scale = 16.0f;
+                    inst->lightmapScale = ent_scale;
+                }
+            }
+
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)
@@ -843,7 +891,7 @@ void LoadTriangleModels(void)
                         if (si && si->lightmapSampleSize > 0)
                             ssize = si->lightmapSampleSize;
 
-                        xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize);
+                        xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize, inst->lightmapScale, scale_vec);
                         if (xatlasUVs)
                         {
                             _printf("xatlas packing successful.\n");
@@ -967,27 +1015,7 @@ void LoadTriangleModels(void)
                     }
 
                     // Entity-level lightmapscale for models
-                    ds->lightmapScale = 1.0f;
-                    if (inst->creator)
-                    {
-                        const char *ent_scale_str = ValueForKey(inst->creator, "_lightmapscale");
-                        if (!ent_scale_str[0])
-                            ent_scale_str = ValueForKey(inst->creator, "lightmapscale");
-
-                        if (ent_scale_str[0])
-                        {
-                            float ent_scale = atof(ent_scale_str);
-                            if (ent_scale > 0)
-                            {
-                                // Safeguards
-                                if (ent_scale < 0.01f)
-                                    ent_scale = 0.01f;
-                                if (ent_scale > 16.0f)
-                                    ent_scale = 16.0f;
-                                ds->lightmapScale = ent_scale;
-                            }
-                        }
-                    }
+                    ds->lightmapScale = inst->lightmapScale;
 
                     _printf("Final samplesize for misc_model: %d, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
 

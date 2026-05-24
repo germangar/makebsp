@@ -483,6 +483,7 @@ typedef struct modelInstance_s
     int numDrawSurfs;
     mapDrawSurface_t **drawSurfs; // References to surfaces created for this instance
     entity_t *creator;            // Reference to the entity that created this instance
+    float lightmapScale;
     float triangle_density;
     modelCategory_t category;
 
