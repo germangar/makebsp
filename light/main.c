@@ -37,6 +37,119 @@ int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
 
+static qboolean HasArg(const char *arg, int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], arg)) return qtrue;
+    }
+    return qfalse;
+}
+
+static void ParseWorldspawnKeys(int argc, char **argv)
+{
+    entity_t *ent = &entities[0];
+    
+    // These keys have been set by the bsp compiler
+    const char *val = ValueForKey(ent, "__texelsize");
+    if (val[0]) {
+        samplesize = atoi(val);
+        _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
+    }
+
+    const char *lmSizeVal = ValueForKey(ent, "__lightmapImageSize");
+    if (!lmSizeVal[0]) {
+        Error("Worldspawn missing required key '__lightmapImageSize'.\n"
+                "This BSP was likely compiled with an old version of q3map.\n"
+                "Please re-run the BSP phase.");
+    }
+    int bspLmSize = atoi(lmSizeVal);
+    if (bspLmSize != game->lightmapSize) {
+        Error("Lightmap size mismatch!\n"
+                "BSP was built for %dx%d lightmaps, but the lighting tool is configured for %dx%d.\n"
+                "Check your game profile or -lightmapsize command line setting.",
+                bspLmSize, bspLmSize, game->lightmapSize, game->lightmapSize);
+    }
+
+    // map keys
+    val = ValueForKey(ent, "smooth");
+    if (!val[0]) val = ValueForKey(ent, "_smooth");
+    if (val[0] && !HasArg("-smooth", argc, argv)) {
+        game->defaultSmoothRadius = (float)atof(val);
+        if (game->defaultSmoothRadius < 0.1f)
+            game->defaultSmoothRadius = 0.1f;
+    }
+
+    val = ValueForKey(ent, "smoothpasses");
+    if (!val[0]) val = ValueForKey(ent, "_smoothpasses");
+    if (val[0] && !HasArg("-smoothpasses", argc, argv)) {
+        game->defaultSmoothPasses = atoi(val);
+        if (game->defaultSmoothPasses < 0) game->defaultSmoothPasses = 0;
+    }
+
+    val = ValueForKey(ent, "antialiasing");
+    if (!val[0]) val = ValueForKey(ent, "_antialiasing");
+    if (val[0] && !HasArg("-antialiasing", argc, argv)) {
+        game->antialiasingPasses = atoi(val);
+    }
+
+    val = ValueForKey(ent, "deluxe_minangle");
+    if (!val[0]) val = ValueForKey(ent, "_deluxe_minangle");
+    if (val[0] && !HasArg("-deluxe_minangle", argc, argv)) {
+        game->deluxeMinAngle = atof(val);
+        if (game->deluxeMinAngle < 0.0f) game->deluxeMinAngle = 0.0f;
+        if (game->deluxeMinAngle > 89.0f) game->deluxeMinAngle = 89.0f;
+    }
+
+    val = ValueForKey(ent, "exposurefilter");
+    if (!val[0]) val = ValueForKey(ent, "_exposurefilter");
+    if (val[0] && !HasArg("-exposurefilter", argc, argv)) {
+        if (!strcmp(val, "softknee")) game->exposureFilter = TONEMAP_SOFTKNEE;
+        else if (!strcmp(val, "reinhard")) game->exposureFilter = TONEMAP_REINHARD;
+        else if (!strcmp(val, "filmic")) game->exposureFilter = TONEMAP_FILMIC;
+        else game->exposureFilter = TONEMAP_LINEAR;
+    }
+
+    val = ValueForKey(ent, "falloff");
+    if (!val[0]) val = ValueForKey(ent, "_falloff");
+    if (val[0] && !HasArg("-falloff", argc, argv)) {
+        if (!strcmp(val, "halflambert")) {
+            game->falloff = FALLOFF_HALFLAMBERT;
+            falloffSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+            sunSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+        } else if (!strcmp(val, "lambert")) {
+            game->falloff = FALLOFF_LAMBERT;
+            falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+            sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+        } else if (!strcmp(val, "quadratic")) {
+            game->falloff = FALLOFF_QUADRATIC;
+            falloffSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
+            sunSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
+        } else if (!strcmp(val, "doublequadratic")) {
+            game->falloff = FALLOFF_DOUBLEQUADRATIC;
+            falloffSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+            sunSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+        } else if (!strcmp(val, "unreal")) {
+            game->falloff = FALLOFF_UNREAL;
+            falloffSoftBias = FALLOFF_UNREAL_SOFTBIAS;
+            sunSoftBias = FALLOFF_UNREAL_SOFTBIAS;
+        } else {
+            Error("Unknown falloff type: %s", val);
+        }
+    }
+
+    val = ValueForKey(ent, "radiosity");
+    if (!val[0]) val = ValueForKey(ent, "_radiosity");
+    if (val[0] && !HasArg("-radiosity", argc, argv)) {
+        game->radiosityIntensity = (float)atof(val);
+        if (game->radiosityIntensity < 0.0f) game->radiosityIntensity = 0.0f;
+    }
+
+    val = ValueForKey(ent, "rad_color_ratio");
+    if (!val[0]) val = ValueForKey(ent, "_rad_color_ratio");
+    if (val[0] && !HasArg("-rad_color_ratio", argc, argv)) {
+        game->radiosityColorRatio = (float)atof(val);
+    }
+}
+
 int main(int argc, char **argv) {
     int i;
     double start, end;
@@ -50,7 +163,6 @@ int main(int argc, char **argv) {
     pointScale = 7500;
 
     openclEnabled = qtrue;
-
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
@@ -358,6 +470,7 @@ int main(int argc, char **argv) {
         exit(0);
     }
 
+    
     start = I_FloatTime();
 
     SetQdirFromPath(argv[i]);
@@ -376,76 +489,17 @@ int main(int argc, char **argv) {
 
     LoadShaderInfo();
 
-
-
-    // Print active configuration summary
-    const char *fLog = "lambert";
-    if (game->falloff == FALLOFF_HALFLAMBERT) fLog = "halflambert";
-    else if (game->falloff == FALLOFF_QUADRATIC) fLog = "quadratic";
-    else if (game->falloff == FALLOFF_DOUBLEQUADRATIC) fLog = "doublequadratic";
-    else if (game->falloff == FALLOFF_UNREAL) fLog = "unreal";
-
-    _printf("Active game: %s (BSP format: %s)\n", game->arg, game->bspIdent);
-    _printf("Falloff mode: %s (Bias %.2f)\n", fLog, falloffSoftBias);
-    
-    const char *sfLog = "lambert";
-    if (game->sunFalloff == FALLOFF_HALFLAMBERT) sfLog = "halflambert";
-    else if (game->sunFalloff == FALLOFF_QUADRATIC) sfLog = "quadratic";
-    else if (game->sunFalloff == FALLOFF_DOUBLEQUADRATIC) sfLog = "doublequadratic";
-    else if (game->sunFalloff == FALLOFF_UNREAL) sfLog = "unreal";
-    
-    _printf("Sun Falloff mode: %s (Bias %.2f)\n", sfLog, sunSoftBias);
-    _printf("Lighting flags: %s %s %s\n", 
-            game->lightmapsRGB ? "sRGB" : "Linear",
-            game->deluxeMap ? "Deluxe" : "Standard",
-            (game->hdr == HDR_8BIT) ? "range" : "clamped");
-    
-    if (game->deluxeMap && game->deluxeAmbientExaggerate > 1.0f) {
-        _printf("Ambient Deluxe Exaggeration: %.2fx tangent scaling\n", game->deluxeAmbientExaggerate);
-    }
-    if (game->deluxeMap && game->deluxeRadiosityExaggerate > 1.0f) {
-        _printf("Radiosity Deluxe Exaggeration: %.2fx tangent scaling\n", game->deluxeRadiosityExaggerate);
-    }
-    _printf("Lightmap size: %d (Write: %d)\n", game->lightmapSize, game->writeLightmapSize);
-
-
-
-    _printf("Smoothing: %d passes (radius %.2f), AA: %d passes\n", game->defaultSmoothPasses, game->defaultSmoothRadius, game->antialiasingPasses);
-    _printf("Radiosity: %d passes (intensity %.2f, color ratio %.2f)\n", game->radiosityPasses, game->radiosityIntensity, game->radiosityColorRatio);
-
-    if (superSampleRadius > 0.0f) {
-        _printf("Super-sampling: enabled (radius %.3f, 8 samples per texel)\n", superSampleRadius);
-    }
-
     _printf("reading %s\n", source);
     LoadBSPFile(source);
 
     // Parse entity strings into structs
     ParseEntities();
 
-    // Determine samplesize and lightmap size from worldspawn or game default
-    if (num_entities > 0) {
-        const char *val = ValueForKey(&entities[0], "__texelsize");
-        if (val[0]) {
-            samplesize = atoi(val);
-            _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
-        }
-
-        const char *lmSizeVal = ValueForKey(&entities[0], "__lightmapImageSize");
-        if (!lmSizeVal[0]) {
-            Error("Worldspawn missing required key '__lightmapImageSize'.\n"
-                  "This BSP was likely compiled with an old version of q3map.\n"
-                  "Please re-run the BSP phase.");
-        }
-        int bspLmSize = atoi(lmSizeVal);
-        if (bspLmSize != game->lightmapSize) {
-            Error("Lightmap size mismatch!\n"
-                  "BSP was built for %dx%d lightmaps, but the lighting tool is configured for %dx%d.\n"
-                  "Check your game profile or -lightmapsize command line setting.",
-                  bspLmSize, bspLmSize, game->lightmapSize, game->lightmapSize);
-        }
-        _printf("Verified lightmap image size %dx%d from worldspawn (__lightmapImageSize)\n", bspLmSize, bspLmSize);
+    if (num_entities <= 0) {
+        Error("map %s doesn't have a worldspawn\n", source);
     }
+
+    ParseWorldspawnKeys(argc, argv);
 
     if (samplesize <= 0) {
         samplesize = game->defaultSampleSize;

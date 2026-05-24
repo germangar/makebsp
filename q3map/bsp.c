@@ -502,6 +502,29 @@ static void WriteSurfaceExtraFile(const char *path)
     fclose(f);
 }
 
+static qboolean HasArg(const char *arg, int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], arg)) return qtrue;
+    }
+    return qfalse;
+}
+
+static void ParseWorldspawnKeys(int argc, char **argv)
+{
+    if (num_entities <= 0) return;
+    entity_t *ent = &entities[0];
+    const char *val;
+
+    val = ValueForKey(ent, "samplesize");
+    if (!val[0]) val = ValueForKey(ent, "_samplesize");
+    if (!val[0]) val = ValueForKey(ent, "_lightmapsamplesize");
+    if (val[0] && !HasArg("-samplesize", argc, argv)) {
+        samplesize = atoi(val);
+        if (samplesize < 1) samplesize = 1;
+        _printf("Worldspawn override: default lightmap sample size = %dx%d units\n", samplesize, samplesize);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int i;
@@ -822,6 +845,8 @@ int main(int argc, char **argv)
     {
         LoadMapFile(name);
     }
+
+    ParseWorldspawnKeys(argc, argv);
 
     SetModelNumbers();
     SetLightStyles();
