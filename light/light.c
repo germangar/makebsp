@@ -1266,6 +1266,189 @@ void ExportAlphaMask(const char *filenamePrefix)
     free(debugBytes);
 }
 
+static void RasterizeTriangleToRGB(dsurface_t *ds, float st0[2], float st1[2], float st2[2], byte *debugBytes, byte color[3])
+{
+    float minX = st0[0];
+    if (st1[0] < minX) minX = st1[0];
+    if (st2[0] < minX) minX = st2[0];
+    float maxX = st0[0];
+    if (st1[0] > maxX) maxX = st1[0];
+    if (st2[0] > maxX) maxX = st2[0];
+    float minY = st0[1];
+    if (st1[1] < minY) minY = st1[1];
+    if (st2[1] < minY) minY = st2[1];
+    float maxY = st0[1];
+    if (st1[1] > maxY) maxY = st1[1];
+    if (st2[1] > maxY) maxY = st2[1];
+
+    int startX = (int)floor(minX) - ds->lightmapOffset[0][0];
+    int endX = (int)ceil(maxX) - ds->lightmapOffset[0][0];
+    int startY = (int)floor(minY) - ds->lightmapOffset[0][1];
+    int endY = (int)ceil(maxY) - ds->lightmapOffset[0][1];
+
+    if (startX < 0) startX = 0;
+    if (endX >= ds->lightmapWidth) endX = ds->lightmapWidth - 1;
+    if (startY < 0) startY = 0;
+    if (endY >= ds->lightmapHeight) endY = ds->lightmapHeight - 1;
+
+    if (startX > endX || startY > endY) return;
+
+    float dx01 = st0[0] - st1[0];
+    float dy01 = st0[1] - st1[1];
+    float dx12 = st1[0] - st2[0];
+    float dy12 = st1[1] - st2[1];
+    float dx20 = st2[0] - st0[0];
+    float dy20 = st2[1] - st0[1];
+
+    float area = dx01 * dy20 - dy01 * dx20;
+    if (area == 0.0f) return;
+
+    if (area < 0.0f) {
+        dx01 = -dx01; dy01 = -dy01;
+        dx12 = -dx12; dy12 = -dy12;
+        dx20 = -dx20; dy20 = -dy20;
+    }
+
+    float px0 = (float)ds->lightmapOffset[0][0] + (float)startX + 0.5f;
+    float py0 = (float)ds->lightmapOffset[0][1] + (float)startY + 0.5f;
+
+    float e0_row = (px0 - st0[0]) * dy01 - (py0 - st0[1]) * dx01;
+    float e1_row = (px0 - st1[0]) * dy12 - (py0 - st1[1]) * dx12;
+    float e2_row = (px0 - st2[0]) * dy20 - (py0 - st2[1]) * dx20;
+
+    for (int y = startY; y <= endY; y++) {
+        float e0 = e0_row;
+        float e1 = e1_row;
+        float e2 = e2_row;
+
+        int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + y) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + startX;
+
+        for (int x = startX; x <= endX; x++) {
+            if (e0 <= 0.001f && e1 <= 0.001f && e2 <= 0.001f) {
+                int k = p * 3;
+                debugBytes[k] = color[0];
+                debugBytes[k + 1] = color[1];
+                debugBytes[k + 2] = color[2];
+            }
+            e0 += dy01;
+            e1 += dy12;
+            e2 += dy20;
+            p++;
+        }
+
+        e0_row -= dx01;
+        e1_row -= dx12;
+        e2_row -= dx20;
+    }
+}
+
+/*
+==========================
+ExportUVmaps
+
+==========================
+*/
+void ExportUVmaps(const char *filenamePrefix)
+{
+    int i, numPages;
+    char filename[1024];
+    dsurface_t *ds;
+    byte color[3];
+
+    _printf("--- ExportUVmaps (%s) ---\n", filenamePrefix);
+    
+    byte *debugBytes = malloc(numLightBytes);
+    if (!debugBytes)
+    {
+        _printf("WARNING: Failed to allocate memory for ExportUVmaps\n");
+        return;
+    }
+    memset(debugBytes, 24, numLightBytes);
+
+    int total_tris = 0;
+    for (i = 0; i < numDrawSurfaces; i++)
+    {
+        ds = &drawSurfaces[i];
+        if (ds->lightmapNum[0] < 0)
+            continue;
+
+        color[0] = (i * 123) % 200 + 55;
+        color[1] = (i * 456) % 200 + 55;
+        color[2] = (i * 789) % 200 + 55;
+
+        if (ds->surfaceType == MST_PATCH)
+        {
+            mesh_t *mesh = localSurfaces[i].patchMesh;
+            if (!mesh)
+                continue;
+
+            for (int my = 0; my < mesh->height - 1; my++)
+            {
+                for (int mx = 0; mx < mesh->width - 1; mx++)
+                {
+                    drawVert_t *v00 = &mesh->verts[my * mesh->width + mx];
+                    drawVert_t *v10 = &mesh->verts[my * mesh->width + mx + 1];
+                    drawVert_t *v01 = &mesh->verts[(my + 1) * mesh->width + mx];
+                    drawVert_t *v11 = &mesh->verts[(my + 1) * mesh->width + mx + 1];
+                    float st00[2] = {v00->lightmap[0][0] * LIGHTMAP_WIDTH, v00->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                    float st10[2] = {v10->lightmap[0][0] * LIGHTMAP_WIDTH, v10->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                    float st01[2] = {v01->lightmap[0][0] * LIGHTMAP_WIDTH, v01->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                    float st11[2] = {v11->lightmap[0][0] * LIGHTMAP_WIDTH, v11->lightmap[0][1] * LIGHTMAP_HEIGHT};
+
+                    RasterizeTriangleToRGB(ds, st00, st10, st11, debugBytes, color);
+                    total_tris++;
+
+                    RasterizeTriangleToRGB(ds, st00, st11, st01, debugBytes, color);
+                    total_tris++;
+                }
+            }
+        }
+        else if (ds->surfaceType == MST_TRIANGLE_SOUP || ds->surfaceType == MST_PLANAR)
+        {
+            int max_indexes = (ds->surfaceType == MST_TRIANGLE_SOUP) ? ds->numIndexes : ((ds->numVerts - 2) * 3);
+            for (int j = 0; j < max_indexes; j += 3)
+            {
+                drawVert_t *v0, *v1, *v2;
+                if (ds->surfaceType == MST_TRIANGLE_SOUP) {
+                    v0 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
+                    v1 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 1]];
+                    v2 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 2]];
+                } else {
+                    v0 = &drawVerts[ds->firstVert];
+                    v1 = &drawVerts[ds->firstVert + (j/3) + 1];
+                    v2 = &drawVerts[ds->firstVert + (j/3) + 2];
+                }
+                
+                float st0[2] = {v0->lightmap[0][0] * LIGHTMAP_WIDTH, v0->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                float st1[2] = {v1->lightmap[0][0] * LIGHTMAP_WIDTH, v1->lightmap[0][1] * LIGHTMAP_HEIGHT};
+                float st2[2] = {v2->lightmap[0][0] * LIGHTMAP_WIDTH, v2->lightmap[0][1] * LIGHTMAP_HEIGHT};
+
+                RasterizeTriangleToRGB(ds, st0, st1, st2, debugBytes, color);
+                total_tris++;
+            }
+        }
+    }
+
+    _printf("    Total triangles rasterized: %d\n", total_tris);
+
+    numPages = 0;
+    for (i = 0; i < numDrawSurfaces; i++)
+    {
+        if (drawSurfaces[i].lightmapNum[0] > numPages)
+            numPages = drawSurfaces[i].lightmapNum[0];
+    }
+    numPages++;
+
+    for (i = 0; i < numPages; i++)
+    {
+        sprintf(filename, "%s%d.bmp", filenamePrefix, i);
+        _printf("    Writing %s...\n", filename);
+        SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
+    }
+
+    free(debugBytes);
+}
+
 /*
 ========
 LightMain
@@ -1384,8 +1567,7 @@ void LightMain(void)
 
     if (debugLightmaps)
     {
-        ExportAlphaMask("vis_lm_");
-        return;
+        ExportUVmaps("vis_lm_");
     }
 
     // Initialize the grid
