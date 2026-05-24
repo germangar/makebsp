@@ -380,42 +380,50 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
     xatlasPackOptionsInit(&packOptions);
     packOptions.padding = 2; // 2 texels of padding
 
-    float area3D = 0;
-    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    int targetRes;
+    if (guessUVs)
     {
-        if (mesh->mFaces[i].mNumIndices == 3)
+        float area3D = 0;
+        for (int i = 0; i < (int)mesh->mNumFaces; i++)
         {
-            vec3_t v0, v1, v2;
-            int i0 = mesh->mFaces[i].mIndices[0];
-            int i1 = mesh->mFaces[i].mIndices[1];
-            int i2 = mesh->mFaces[i].mIndices[2];
+            if (mesh->mFaces[i].mNumIndices == 3)
+            {
+                vec3_t v0, v1, v2;
+                int i0 = mesh->mFaces[i].mIndices[0];
+                int i1 = mesh->mFaces[i].mIndices[1];
+                int i2 = mesh->mFaces[i].mIndices[2];
 
-            v0[0] = mesh->mVertices[i0].x * scale_vec[0];
-            v0[1] = mesh->mVertices[i0].y * scale_vec[1];
-            v0[2] = mesh->mVertices[i0].z * scale_vec[2];
+                v0[0] = mesh->mVertices[i0].x * scale_vec[0];
+                v0[1] = mesh->mVertices[i0].y * scale_vec[1];
+                v0[2] = mesh->mVertices[i0].z * scale_vec[2];
 
-            v1[0] = mesh->mVertices[i1].x * scale_vec[0];
-            v1[1] = mesh->mVertices[i1].y * scale_vec[1];
-            v1[2] = mesh->mVertices[i1].z * scale_vec[2];
+                v1[0] = mesh->mVertices[i1].x * scale_vec[0];
+                v1[1] = mesh->mVertices[i1].y * scale_vec[1];
+                v1[2] = mesh->mVertices[i1].z * scale_vec[2];
 
-            v2[0] = mesh->mVertices[i2].x * scale_vec[0];
-            v2[1] = mesh->mVertices[i2].y * scale_vec[1];
-            v2[2] = mesh->mVertices[i2].z * scale_vec[2];
+                v2[0] = mesh->mVertices[i2].x * scale_vec[0];
+                v2[1] = mesh->mVertices[i2].y * scale_vec[1];
+                v2[2] = mesh->mVertices[i2].z * scale_vec[2];
 
-            vec3_t side1, side2, cross;
-            VectorSubtract(v1, v0, side1);
-            VectorSubtract(v2, v0, side2);
-            CrossProduct(side1, side2, cross);
-            area3D += 0.5f * VectorLength(cross);
+                vec3_t side1, side2, cross;
+                VectorSubtract(v1, v0, side1);
+                VectorSubtract(v2, v0, side2);
+                CrossProduct(side1, side2, cross);
+                area3D += 0.5f * VectorLength(cross);
+            }
         }
-    }
 
-    int ssize_val = ssize ? ssize : samplesize;
-    float targetResFloat = sqrt(area3D) / (float)ssize_val;
-    targetResFloat *= lightmapScale;
-    int targetRes = (int)ceil(targetResFloat);
-    if (targetRes > LIGHTMAP_WIDTH - 2) targetRes = LIGHTMAP_WIDTH - 2;
-    if (targetRes < 16) targetRes = 16;
+        int ssize_val = ssize ? ssize : samplesize;
+        float targetResFloat = sqrt(area3D) / (float)ssize_val;
+        targetResFloat *= lightmapScale;
+        targetRes = (int)ceil(targetResFloat);
+        if (targetRes > LIGHTMAP_WIDTH - 2) targetRes = LIGHTMAP_WIDTH - 2;
+        if (targetRes < 16) targetRes = 16;
+    }
+    else
+    {
+        targetRes = (LIGHTMAP_WIDTH >= 64) ? LIGHTMAP_WIDTH : 1024;
+    }
 
     packOptions.resolution = targetRes;
     packOptions.texelsPerUnit = 0.0f;

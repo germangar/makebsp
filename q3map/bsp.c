@@ -50,6 +50,7 @@ qboolean testExpand;
 qboolean showseams;
 int forceUVGen;
 int snapUVs;
+qboolean guessUVs = qfalse;
 
 char outbase[32];
 
@@ -703,6 +704,11 @@ int main(int argc, char **argv)
                 Error("-snapuvs requires a 0|1 argument");
             snapUVs = atoi(argv[++i]);
         }
+        else if (!strcmp(argv[i], "-guessuvs"))
+        {
+            guessUVs = qtrue;
+            _printf("Guessing optimal UV packing resolution\n");
+        }
         else if (!strcmp(argv[i], "-enforceSampleSize"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -746,6 +752,7 @@ int main(int argc, char **argv)
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
+                "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n"
                 "   tmpout         = write output files to /tmp\n"
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
@@ -761,7 +768,7 @@ int main(int argc, char **argv)
 
     start = I_FloatTime();
 
-    _printf("forceUVGen: %s, snapUVs: %s\n", forceUVGen ? "true" : "false", snapUVs ? "true" : "false");
+    _printf("forceUVGen: %s, snapUVs: %s, guessUVs: %s\n", forceUVGen ? "true" : "false", snapUVs ? "true" : "false", guessUVs ? "true" : "false");
 
     ThreadSetDefault();
     // numthreads = 1;		// multiple threads aren't helping because of

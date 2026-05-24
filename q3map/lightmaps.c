@@ -189,7 +189,10 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
     scale *= ds->lightmapScale;
 
     // Extra boost to ensure small triangles capture at least one texel center
-    scale *= 1.1f;
+    if (guessUVs)
+    {
+        scale *= 1.1f;
+    }
 
     // ==========================================================================
     // UV SNAPPING TO TEXEL GRID
