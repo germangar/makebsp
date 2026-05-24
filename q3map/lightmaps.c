@@ -263,6 +263,200 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
     }
 }
 
+static qboolean CheckPatchPlanar(mapDrawSurface_t *ds, vec3_t outNormal) {
+    int numVerts = ds->patchWidth * ds->patchHeight;
+    if (numVerts < 3) return qfalse;
+
+    vec3_t p0, p1, p2, n;
+    VectorCopy(ds->verts[0].xyz, p0);
+
+    qboolean found = qfalse;
+    int i, j;
+    for (i = 1; i < numVerts - 1; i++) {
+        for (j = i + 1; j < numVerts; j++) {
+            VectorSubtract(ds->verts[i].xyz, p0, p1);
+            VectorSubtract(ds->verts[j].xyz, p0, p2);
+            CrossProduct(p1, p2, n);
+            if (VectorNormalize(n, n) > 0.001f) {
+                found = qtrue;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    if (!found) return qfalse;
+
+    float dist = DotProduct(p0, n);
+    float maxDist = 0.0f;
+    for (i = 0; i < numVerts; i++) {
+        float d = DotProduct(ds->verts[i].xyz, n);
+        float dev = fabs(d - dist);
+        if (dev > maxDist) maxDist = dev;
+    }
+
+    if (maxDist <= 0.1f) {
+        if (outNormal) VectorCopy(n, outNormal);
+        return qtrue;
+    }
+    return qfalse;
+}
+
+static void AllocateLightmapForPlanarPatch(mapDrawSurface_t *ds, vec3_t planeNormal)
+{
+    vec3_t mins, maxs, size, delta;
+    int i;
+    drawVert_t *verts;
+    int w, h;
+    int x, y, ssize;
+    int axis;
+    vec3_t vecs[2];
+    float s, t;
+    vec3_t origin;
+    float d;
+    vec3_t absNormal;
+
+    ssize = ds->samplesize;
+    verts = ds->verts;
+    int numVerts = ds->patchWidth * ds->patchHeight;
+
+    ClearBounds(mins, maxs);
+    for (i = 0; i < numVerts; i++)
+    {
+        AddPointToBounds(verts[i].xyz, mins, maxs);
+    }
+
+    for (i = 0; i < 3; i++)
+    {
+        mins[i] = ssize * floor(mins[i] / ssize);
+        maxs[i] = ssize * ceil(maxs[i] / ssize);
+        size[i] = (maxs[i] - mins[i]) / ssize + 1;
+    }
+
+    memset(vecs, 0, sizeof(vecs));
+
+    absNormal[0] = fabs(planeNormal[0]);
+    absNormal[1] = fabs(planeNormal[1]);
+    absNormal[2] = fabs(planeNormal[2]);
+
+    if (absNormal[0] >= absNormal[1] && absNormal[0] >= absNormal[2])
+    {
+        w = size[1];
+        h = size[2];
+        axis = 0;
+        vecs[0][1] = 1.0 / ssize;
+        vecs[1][2] = 1.0 / ssize;
+    }
+    else if (absNormal[1] >= absNormal[0] && absNormal[1] >= absNormal[2])
+    {
+        w = size[0];
+        h = size[2];
+        axis = 1;
+        vecs[0][0] = 1.0 / ssize;
+        vecs[1][2] = 1.0 / ssize;
+    }
+    else
+    {
+        w = size[0];
+        h = size[1];
+        axis = 2;
+        vecs[0][0] = 1.0 / ssize;
+        vecs[1][1] = 1.0 / ssize;
+    }
+
+    if (!planeNormal[axis])
+    {
+        Error("Chose a 0 valued axis");
+    }
+
+    if (w > LIGHTMAP_WIDTH - 2)
+    {
+        VectorScale(vecs[0], (float)(LIGHTMAP_WIDTH - 2) / w, vecs[0]);
+        w = LIGHTMAP_WIDTH - 2;
+    }
+
+    if (h > LIGHTMAP_HEIGHT - 2)
+    {
+        VectorScale(vecs[1], (float)(LIGHTMAP_HEIGHT - 2) / h, vecs[1]);
+        h = LIGHTMAP_HEIGHT - 2;
+    }
+
+    c_exactLightmap += (w + 2) * (h + 2);
+
+    qboolean allocated = qfalse;
+    for (i = 0; i < numLightmaps; i++)
+    {
+        if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+        {
+            ds->lightmapNum = i;
+            allocated = qtrue;
+            break;
+        }
+    }
+
+    if (!allocated)
+    {
+        PrepareNewLightmap();
+        if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+        {
+            Error("Entity %i, brush %i: Planar patch lightmap allocation failed",
+                  ds->mapBrush->entitynum, ds->mapBrush->brushnum);
+        }
+        ds->lightmapNum = numLightmaps - 1;
+    }
+
+    ds->lightmapWidth = w;
+    ds->lightmapHeight = h;
+    ds->lightmapX = x + 1;
+    ds->lightmapY = y + 1;
+
+    x = ds->lightmapX;
+    y = ds->lightmapY;
+
+    for (i = 0; i < numVerts; i++)
+    {
+        VectorSubtract(verts[i].xyz, mins, delta);
+        s = DotProduct(delta, vecs[0]) + x + 0.5f;
+        t = DotProduct(delta, vecs[1]) + y + 0.5f;
+
+        verts[i].lightmap[0][0] = s / LIGHTMAP_WIDTH;
+        if (s <= (float)x + 0.5001f)
+            verts[i].lightmap[0][0] -= UV_PRECISION_NUDGE;
+        if (s >= (float)(x + w) - 0.5001f)
+            verts[i].lightmap[0][0] += UV_PRECISION_NUDGE;
+
+        verts[i].lightmap[0][1] = t / LIGHTMAP_HEIGHT;
+        if (t <= (float)y + 0.5001f)
+            verts[i].lightmap[0][1] -= UV_PRECISION_NUDGE;
+        if (t >= (float)(y + h) - 0.5001f)
+            verts[i].lightmap[0][1] += UV_PRECISION_NUDGE;
+    }
+
+    float planeDist = DotProduct(verts[0].xyz, planeNormal);
+
+    d = DotProduct(mins, planeNormal) - planeDist;
+    d /= planeNormal[axis];
+    VectorCopy(mins, origin);
+    origin[axis] -= d;
+
+    for (i = 0; i < 2; i++)
+    {
+        vec3_t normalized;
+        float len;
+
+        len = VectorNormalize(vecs[i], normalized);
+        VectorScale(normalized, (1.0 / len), vecs[i]);
+        d = DotProduct(vecs[i], planeNormal);
+        d /= planeNormal[axis];
+        vecs[i][axis] -= d;
+    }
+
+    VectorCopy(origin, ds->lightmapOrigin);
+    VectorCopy(vecs[0], ds->lightmapVecs[0]);
+    VectorCopy(vecs[1], ds->lightmapVecs[1]);
+    VectorCopy(planeNormal, ds->lightmapVecs[2]);
+}
+
 void AllocateLightmapForPatch(mapDrawSurface_t *ds)
 {
     int i, j, k;
@@ -398,7 +592,15 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds)
 
     if (ds->patch)
     {
-        AllocateLightmapForPatch(ds);
+        vec3_t planeNormal;
+        if (CheckPatchPlanar(ds, planeNormal))
+        {
+            AllocateLightmapForPlanarPatch(ds, planeNormal);
+        }
+        else
+        {
+            AllocateLightmapForPatch(ds);
+        }
         return;
     }
 

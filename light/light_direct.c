@@ -1444,14 +1444,7 @@ void TraceLtm(int num)
     if (ds->surfaceType == MST_PATCH)
     {
         mesh = localSurfaces[realSurfIndex].patchMesh;
-        if (mesh->width != ds->lightmapWidth ||
-            mesh->height != ds->lightmapHeight)
-        {
-            Error("Mesh lightmap miscount (%dx%d != %dx%d)\n"
-                  "This usually happens when 'q3map' and 'light' use different -samplesize values.\n"
-                  "Make sure both tools use the same -samplesize flag.",
-                  mesh->width, mesh->height, ds->lightmapWidth, ds->lightmapHeight);
-        }
+
 
         // We don't need to manually subdivide further; we will interpolate in the loop.
         sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
