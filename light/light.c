@@ -1202,7 +1202,14 @@ void ExportAlphaMask(const char *filenamePrefix)
         return;
 
     _printf("--- ExportAlphaMask (%s) ---\n", filenamePrefix);
-    memset(lightBytes, 24, numLightBytes);
+    
+    byte *debugBytes = malloc(numLightBytes);
+    if (!debugBytes)
+    {
+        _printf("WARNING: Failed to allocate memory for ExportAlphaMask\n");
+        return;
+    }
+    memset(debugBytes, 24, numLightBytes);
 
     for (i = 0; i < numDrawSurfaces; i++)
     {
@@ -1232,9 +1239,9 @@ void ExportAlphaMask(const char *filenamePrefix)
                     if (lightAlphaMask[p])
                     {
                         k = p * 3;
-                        lightBytes[k] = color[0];
-                        lightBytes[k + 1] = color[1];
-                        lightBytes[k + 2] = color[2];
+                        debugBytes[k] = color[0];
+                        debugBytes[k + 1] = color[1];
+                        debugBytes[k + 2] = color[2];
                     }
                 }
             }
@@ -1253,8 +1260,10 @@ void ExportAlphaMask(const char *filenamePrefix)
     {
         sprintf(filename, "%s%d.bmp", filenamePrefix, i);
         _printf("    Writing %s...\n", filename);
-        SaveBMP(filename, &lightBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
+        SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }
+
+    free(debugBytes);
 }
 
 /*
