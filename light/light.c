@@ -1620,10 +1620,14 @@ void LightMain(void)
     _printf("%5i area lights\n", numAreaLights);
 
     InitTrace();
-    LightWorld();
+    long long totalLuxels = LightWorld();
 
     // Call radiosity passes
     LightRadiosity();
+
+    LightAmbient(totalLuxels);
+    
+    free(surfaceWorkOrder);
 
     if (debugLightmapsAlpha)
     {

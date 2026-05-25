@@ -2077,7 +2077,7 @@ void TraceGrid(int num)
 
 
 
-void LightWorld(void)
+long long LightWorld(void)
 {
     double start, end;
     int i;
@@ -2118,9 +2118,7 @@ void LightWorld(void)
     _printf("\n");
     _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
 
-    LightAmbient(totalLuxels);
-
-    free(surfaceWorkOrder);
+    return totalLuxels;
 }
 
 void DilateDeluxeDirections(void)
