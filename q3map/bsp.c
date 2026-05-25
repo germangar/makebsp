@@ -185,6 +185,8 @@ void ProcessWorldModel(void)
         FixTJunctions(e);
     }
 
+    GenerateHalos(e);
+
     // allocate lightmaps for faces and patches
     AllocateLightmaps(e);
 

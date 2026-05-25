@@ -29,5 +29,7 @@
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "reinhard", /* [ off, softknee, reinhard, filmic ] */
-  "enforceSampleSize": true
+  "enforceSampleSize": true,
+  "flareShader": "",
+  "haloShader": "textures/wsw_flareshalos/glow_halo_white"
 }

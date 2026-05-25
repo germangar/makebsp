@@ -178,6 +178,7 @@ typedef struct drawsurf_s
     int hasVertexColor;
     vec3_t vertexColor;
     float superSampleRadius;
+    qboolean isHalo;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s
@@ -532,6 +533,7 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree);
 void MakeDrawSurfaces(bspbrush_t *b);
 void ClipSidesIntoTree(entity_t *e, tree_t *tree);
 void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree);
+void GenerateHalos(entity_t *e);
 
 //==============================================================================
 

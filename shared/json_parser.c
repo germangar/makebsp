@@ -311,6 +311,14 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             else if (val->type == json_type_false)
                 game->enforceSampleSize = qfalse;
         }
+        else if (!strcmp(key, "flareShader") && val->type == json_type_string)
+        {
+            game->flareShader = copystring(json_value_as_string(val)->string);
+        }
+        else if (!strcmp(key, "haloShader") && val->type == json_type_string)
+        {
+            game->haloShader = copystring(json_value_as_string(val)->string);
+        }
 
         el = el->next;
     }
@@ -450,7 +458,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
-            "  \"enforceSampleSize\": %s\n"
+            "  \"enforceSampleSize\": %s,\n"
+            "  \"flareShader\": \"%s\",\n"
+            "  \"haloShader\": \"%s\"\n"
             "}\n",
             game->arg, game->gamePath, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
@@ -472,7 +482,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
 
             game->antialiasingPasses,
             game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
-            game->enforceSampleSize ? "true" : "false");
+            game->enforceSampleSize ? "true" : "false",
+            game->flareShader,
+            game->haloShader);
     SaveFile(filename, buffer, strlen(buffer));
 }
 

@@ -1357,6 +1357,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
+    drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
 
     numDrawSurfaces++;
 
@@ -1438,6 +1439,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
+    drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
 
     numDrawSurfaces++;
 
@@ -1528,6 +1530,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
+    drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
 
     numDrawSurfaces++;
 
@@ -1582,6 +1585,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
+    drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
 
     numDrawSurfaces++;
 
@@ -1742,6 +1746,15 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree)
                 EmitFlareSurf(ds);
             }
         }
+        else if (ds->isHalo)
+        {
+            winding_t *w = WindingFromDrawSurf(ds);
+            refs = FilterMapDrawSurfIntoTree_r(w, ds, tree->headnode);
+            if (refs > 0)
+            {
+                EmitPlanarSurf(ds);
+            }
+        }
         else
         {
             refs = FilterFaceIntoTree(ds, tree);
@@ -1764,4 +1777,147 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree)
     qprintf("%5i references\n", c_refs);
     qprintf("%5i stripfaces\n", c_stripSurfaces);
     qprintf("%5i fanfaces\n", c_fanSurfaces);
+}
+
+/*
+================
+FindTargetEntity
+================
+*/
+static entity_t *FindTargetEntity(const char *target)
+{
+    int i;
+    const char *n;
+
+    for (i = 0; i < num_entities; i++)
+    {
+        n = ValueForKey(&entities[i], "targetname");
+        if (!strcmp(n, target))
+        {
+            return &entities[i];
+        }
+    }
+
+    return NULL;
+}
+
+/*
+================
+GenerateHalos
+================
+*/
+void GenerateHalos(entity_t *e)
+{
+    int i;
+    entity_t *light;
+    const char *name;
+    const char *target;
+    vec3_t origin, normal, dest;
+    float intensity, radius;
+    const char *_color;
+    vec3_t color;
+    int count = 0;
+
+    if (!game->haloShader || !game->haloShader[0]) return;
+
+    qprintf("----- GenerateHalos -----\n");
+
+    for (i = 0; i < num_entities; i++) {
+        light = &entities[i];
+        name = ValueForKey(light, "classname");
+        if (strncmp(name, "light", 5)) continue;
+        if (ValueForKey(light, "_sun")[0]) continue; // not a sun
+
+        qboolean isSpotlight = qfalse;
+        target = ValueForKey(light, "target");
+        if (target[0]) {
+            entity_t *e2 = FindTargetEntity(target);
+            if (e2) {
+                GetVectorForKey(e2, "origin", dest);
+                GetVectorForKey(light, "origin", origin);
+                VectorSubtract(dest, origin, normal);
+                if (VectorNormalize(normal, normal) > 0) isSpotlight = qtrue;
+            }
+        } else if (ValueForKey(light, "_dir")[0]) {
+            GetVectorForKey(light, "_dir", normal);
+            if (VectorNormalize(normal, normal) > 0) isSpotlight = qtrue;
+        } else if (ValueForKey(light, "_angles")[0]) {
+            vec3_t angles;
+            GetVectorForKey(light, "_angles", angles);
+            float yaw = angles[1] * (Q_PI / 180.0f);
+            float pitch = angles[0] * (Q_PI / 180.0f);
+            normal[0] = cos(yaw) * cos(pitch);
+            normal[1] = sin(yaw) * cos(pitch);
+            normal[2] = -sin(pitch);
+            VectorNormalize(normal, normal);
+            isSpotlight = qtrue;
+        }
+
+        if (isSpotlight) {
+            GetVectorForKey(light, "origin", origin);
+
+            intensity = FloatForKey(light, "light");
+            if (!intensity) intensity = FloatForKey(light, "_light");
+            if (!intensity) intensity = 300;
+
+            _color = ValueForKey(light, "_color");
+            if (!_color[0]) _color = ValueForKey(light, "color");
+            if (_color[0]) ParseColor(_color, color);
+            else VectorSet(color, 1, 1, 1);
+
+            radius = FloatForKey(light, "radius");
+            if (!radius) radius = 64;
+
+            float length = intensity * 0.4f;
+            if (length > 2048.0f) length = 2048.0f;
+            float width = FloatForKey(light, "radius");
+            if (!width) width = length * 0.5f;
+
+            // Generate mapDrawSurface_t
+            mapDrawSurface_t *ds = AllocDrawSurf();
+            ds->shaderInfo = ShaderInfoForShader(game->haloShader);
+            ds->isHalo = qtrue;
+            ds->lightmapNum = -1;
+            ds->fogNum = -1;
+
+            ds->numVerts = 4;
+            ds->verts = malloc(4 * sizeof(drawVert_t));
+            memset(ds->verts, 0, 4 * sizeof(drawVert_t));
+            
+            vec3_t right, up;
+            vec3_t temp;
+            VectorSet(temp, 0, 0, 1);
+            if (fabs(normal[2]) > 0.99f) VectorSet(temp, 1, 0, 0);
+            CrossProduct(temp, normal, right);
+            VectorNormalize(right, right);
+            CrossProduct(normal, right, up);
+
+            VectorMA(origin, -width * 0.5f, right, ds->verts[0].xyz);
+            VectorMA(origin,  width * 0.5f, right, ds->verts[1].xyz);
+            VectorMA(ds->verts[1].xyz, length, normal, ds->verts[2].xyz);
+            VectorMA(ds->verts[0].xyz, length, normal, ds->verts[3].xyz);
+
+            for (int v = 0; v < 4; v++) {
+                VectorCopy(normal, ds->verts[v].normal);
+            }
+            ds->verts[0].st[0] = 0; ds->verts[0].st[1] = 0;
+            ds->verts[1].st[0] = 1; ds->verts[1].st[1] = 0;
+            ds->verts[2].st[0] = 1; ds->verts[2].st[1] = 1;
+            ds->verts[3].st[0] = 0; ds->verts[3].st[1] = 1;
+
+            ds->numIndexes = 6;
+            ds->indexes = malloc(6 * sizeof(int));
+            ds->indexes[0] = 0; ds->indexes[1] = 1; ds->indexes[2] = 2;
+            ds->indexes[3] = 0; ds->indexes[4] = 2; ds->indexes[5] = 3;
+
+            VectorCopy(origin, ds->lightmapOrigin);
+            VectorCopy(color, ds->lightmapVecs[0]);
+            VectorClear(ds->lightmapVecs[1]); // Ensure no garbage
+            VectorCopy(normal, ds->lightmapVecs[2]);
+            
+            count++;
+        }
+    }
+    
+    qprintf("%5i halos generated\n", count);
 }

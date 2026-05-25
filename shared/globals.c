@@ -51,7 +51,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
         TONEMAP_REINHARD, // exposureFilter
-        qtrue       // enforceSampleSize
+        qtrue,      // enforceSampleSize
+		"",         // flareShader
+		"halo"      // haloShader
 	},
 	{
 		"quake3",
@@ -86,7 +88,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
         TONEMAP_LINEAR, // exposureFilter
-        qtrue       // enforceSampleSize
+        qtrue,       // enforceSampleSize
+		"",         // flareShader
+		""          // haloShader
 	}
 };
 

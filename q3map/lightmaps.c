@@ -786,7 +786,7 @@ void AllocateLightmaps(entity_t *e)
         {
             continue; // leftover from a surface subdivision
         }
-        if (!ds->patch && !ds->miscModel)
+        if (!ds->patch && !ds->miscModel && ds->side)
         {
             VectorCopy(mapplanes[ds->side->planenum].normal, ds->lightmapVecs[2]);
         }

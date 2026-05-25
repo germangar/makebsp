@@ -13,6 +13,7 @@ typedef struct {
     int hasVertexColor;
     vec3_t vertexColor;
     float superSampleRadius;
+    qboolean isHalo;
 } extraSurface_t;
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;
@@ -73,6 +74,9 @@ typedef struct {
 	float       defaultSmoothRadius;
     tonemap_t   exposureFilter;
     qboolean    enforceSampleSize;
+
+	const char	*flareShader;
+	const char	*haloShader;
 } game_t;
 
 extern float falloffSoftBias;
