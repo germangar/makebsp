@@ -1404,10 +1404,13 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
         memcpy(outv, &ds->verts[j], sizeof(*outv));
-        outv->color[0][0] = 255;
-        outv->color[0][1] = 255;
-        outv->color[0][2] = 255;
-        outv->color[0][3] = 255;
+        if (!ds->hasVertexColor)
+        {
+            outv->color[0][0] = 255;
+            outv->color[0][1] = 255;
+            outv->color[0][2] = 255;
+            outv->color[0][3] = 255;
+        }
     }
 
     // create the indexes
@@ -1898,20 +1901,23 @@ void GenerateHalos(entity_t *e)
             VectorMA(ds->verts[0].xyz, length, normal, ds->verts[3].xyz);
 
             for (int v = 0; v < 4; v++) {
-                VectorCopy(normal, ds->verts[v].normal);
+                VectorCopy(up, ds->verts[v].normal);
+                
+                ds->verts[v].color[0][0] = color[0] * 255.0f;
+                ds->verts[v].color[0][1] = color[1] * 255.0f;
+                ds->verts[v].color[0][2] = color[2] * 255.0f;
+                ds->verts[v].color[0][3] = 255;
             }
+            ds->hasVertexColor = qtrue;
+            VectorCopy(color, ds->vertexColor);
+
             ds->verts[0].st[0] = 0; ds->verts[0].st[1] = 0;
             ds->verts[1].st[0] = 1; ds->verts[1].st[1] = 0;
             ds->verts[2].st[0] = 1; ds->verts[2].st[1] = 1;
             ds->verts[3].st[0] = 0; ds->verts[3].st[1] = 1;
 
-            ds->numIndexes = 6;
-            ds->indexes = malloc(6 * sizeof(int));
-            ds->indexes[0] = 0; ds->indexes[1] = 1; ds->indexes[2] = 2;
-            ds->indexes[3] = 0; ds->indexes[4] = 2; ds->indexes[5] = 3;
-
             VectorCopy(origin, ds->lightmapOrigin);
-            VectorCopy(color, ds->lightmapVecs[0]);
+            VectorClear(ds->lightmapVecs[0]); // Ensure no garbage
             VectorClear(ds->lightmapVecs[1]); // Ensure no garbage
             VectorCopy(normal, ds->lightmapVecs[2]);
             

@@ -693,7 +693,7 @@ static void ParseShaderFile(const char *filename)
                 if (!Q_strncasecmp(token, "autosprite", 10))
                 {
                     si->autosprite = qtrue;
-                    si->contents = CONTENTS_DETAIL;
+                    si->contents |= CONTENTS_DETAIL;
                 }
                 continue;
             }
