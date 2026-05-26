@@ -113,6 +113,7 @@ void UnparseEntities(void);
 
 void SetKeyValue(entity_t *ent, const char *key, const char *value);
 void RemoveKeyValue(entity_t *ent, const char *key);
+qboolean KeyMatches(const char *keyInMap, const char *keyRequested);
 const char *ValueForKey(const entity_t *ent, const char *key);
 // will return "" if not present
 

@@ -864,50 +864,61 @@ void RemoveKeyValue(entity_t *ent, const char *key)
     }
 }
 
-const char *ValueForKey(const entity_t *ent, const char *key)
+/*
+================
+KeyMatches
+
+Unified case-insensitive key comparison with optional single '_' prefix handling.
+Used to identify if keyInMap (from the map file) matches keyRequested (from the code).
+================
+*/
+qboolean KeyMatches(const char *keyInMap, const char *keyRequested)
 {
-    epair_t *ep;
-
-    // 1. Exact match (handles both prefixed and non-prefixed as requested, and __ keys)
-    for (ep = ent->epairs; ep; ep = ep->next)
+    // 1. Case-insensitive exact match
+    if (!Q_stricmp(keyInMap, keyRequested))
     {
-        if (!Q_stricmp(ep->key, key))
-        {
-            return ep->value;
-        }
+        return qtrue;
     }
 
-    // 2. Double underscore keys are internal, do not perform fallback
-    if (key[0] == '_' && key[1] == '_')
+    // 2. Double underscore keys are internal/special, do not perform fallback
+    if (keyRequested[0] == '_' && keyRequested[1] == '_')
     {
-        return "";
+        return qfalse;
     }
 
-    // 3. Fallback logic: check for alternate prefix state
-    if (key[0] == '_')
+    // 3. Prefix fallback logic
+    if (keyRequested[0] == '_')
     {
-        // Requested key has a single underscore, look for version WITHOUT underscore
-        for (ep = ent->epairs; ep; ep = ep->next)
+        // Requested "_color", match if map has "color"
+        if (!Q_stricmp(keyInMap, keyRequested + 1))
         {
-            if (!Q_stricmp(ep->key, key + 1))
-            {
-                return ep->value;
-            }
+            return qtrue;
         }
     }
     else
     {
-        // Requested key has NO underscore, look for version WITH a single underscore
-        char altKey[1024];
-        if (snprintf(altKey, sizeof(altKey), "_%s", key) < sizeof(altKey))
+        // Requested "color", match if map has "_color"
+        if (keyInMap[0] == '_' && keyInMap[1] != '_')
         {
-            for (ep = ent->epairs; ep; ep = ep->next)
+            if (!Q_stricmp(keyInMap + 1, keyRequested))
             {
-                if (!Q_stricmp(ep->key, altKey))
-                {
-                    return ep->value;
-                }
+                return qtrue;
             }
+        }
+    }
+
+    return qfalse;
+}
+
+const char *ValueForKey(const entity_t *ent, const char *key)
+{
+    epair_t *ep;
+
+    for (ep = ent->epairs; ep; ep = ep->next)
+    {
+        if (KeyMatches(ep->key, key))
+        {
+            return ep->value;
         }
     }
 

@@ -71,7 +71,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
 
     // map keys
     val = ValueForKey(ent, "smooth");
-    if (!val[0]) val = ValueForKey(ent, "_smooth");
     if (val[0] && !HasArg("-smooth", argc, argv)) {
         game->defaultSmoothRadius = (float)atof(val);
         if (game->defaultSmoothRadius < 0.1f)
@@ -79,20 +78,17 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     }
 
     val = ValueForKey(ent, "smoothpasses");
-    if (!val[0]) val = ValueForKey(ent, "_smoothpasses");
     if (val[0] && !HasArg("-smoothpasses", argc, argv)) {
         game->defaultSmoothPasses = atoi(val);
         if (game->defaultSmoothPasses < 0) game->defaultSmoothPasses = 0;
     }
 
     val = ValueForKey(ent, "antialiasing");
-    if (!val[0]) val = ValueForKey(ent, "_antialiasing");
     if (val[0] && !HasArg("-antialiasing", argc, argv)) {
         game->antialiasingPasses = atoi(val);
     }
 
     val = ValueForKey(ent, "deluxe_minangle");
-    if (!val[0]) val = ValueForKey(ent, "_deluxe_minangle");
     if (val[0] && !HasArg("-deluxe_minangle", argc, argv)) {
         game->deluxeMinAngle = atof(val);
         if (game->deluxeMinAngle < 0.0f) game->deluxeMinAngle = 0.0f;
@@ -100,7 +96,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     }
 
     val = ValueForKey(ent, "exposurefilter");
-    if (!val[0]) val = ValueForKey(ent, "_exposurefilter");
     if (val[0] && !HasArg("-exposurefilter", argc, argv)) {
         if (!strcmp(val, "softknee")) game->exposureFilter = TONEMAP_SOFTKNEE;
         else if (!strcmp(val, "reinhard")) game->exposureFilter = TONEMAP_REINHARD;
@@ -109,7 +104,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     }
 
     val = ValueForKey(ent, "falloff");
-    if (!val[0]) val = ValueForKey(ent, "_falloff");
     if (val[0] && !HasArg("-falloff", argc, argv)) {
         if (!strcmp(val, "halflambert")) {
             game->falloff = FALLOFF_HALFLAMBERT;
@@ -137,14 +131,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     }
 
     val = ValueForKey(ent, "radiosity");
-    if (!val[0]) val = ValueForKey(ent, "_radiosity");
     if (val[0] && !HasArg("-radiosity", argc, argv)) {
         game->radiosityIntensity = (float)atof(val);
         if (game->radiosityIntensity < 0.0f) game->radiosityIntensity = 0.0f;
     }
 
     val = ValueForKey(ent, "rad_color_ratio");
-    if (!val[0]) val = ValueForKey(ent, "_rad_color_ratio");
     if (val[0] && !HasArg("-rad_color_ratio", argc, argv)) {
         game->radiosityColorRatio = (float)atof(val);
     }

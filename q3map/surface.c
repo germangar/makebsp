@@ -1870,11 +1870,9 @@ void GenerateHalos(entity_t *e)
             VectorMA(origin, -8.0f, normal, origin);
 
             intensity = FloatForKey(light, "light");
-            if (!intensity) intensity = FloatForKey(light, "_light");
             if (!intensity) intensity = 300;
 
-            _color = ValueForKey(light, "_color");
-            if (!_color[0]) _color = ValueForKey(light, "color");
+            _color = ValueForKey(light, "color");
             if (_color[0]) ParseColor(_color, color);
             else VectorSet(color, 1, 1, 1);
 

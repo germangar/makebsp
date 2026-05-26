@@ -1162,11 +1162,9 @@ void ProcessFuncLight(entity_t *ent)
             VectorCopy(mapplanes[side->planenum].normal, normal);
 
             // Nudge light away from the surface
-            float nudge = FloatForKey(ent, "_nudge");
-            if (!nudge)
-                nudge = FloatForKey(ent, "nudge");
+            float nudge = FloatForKey(ent, "nudge");
 
-            if (!nudge && !ValueForKey(ent, "_nudge")[0] && !ValueForKey(ent, "nudge")[0])
+            if (!nudge && !ValueForKey(ent, "nudge")[0])
             {
                 if (isPoint)
                     nudge = 0.01f;
@@ -1193,39 +1191,35 @@ void ProcessFuncLight(entity_t *ent)
             if (!isPoint)
             {
                 sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
-                SetKeyValue(le, "_dir", buf);
+                SetKeyValue(le, "dir", buf);
             }
 
             // Inherit all other keys (color, light, radius, etc) from the func_light
             for (epair_t *ep = ent->epairs; ep; ep = ep->next)
             {
-                if (!strcmp(ep->key, "classname") || !strcmp(ep->key, "origin") || !strcmp(ep->key, "model"))
+                if (KeyMatches(ep->key, "classname") || KeyMatches(ep->key, "origin") || KeyMatches(ep->key, "model"))
                     continue;
 
                 // Exclude smoothing radius keys (they belong to the surface, not the point light)
-                if (!strcmp(ep->key, "smoothradius") || !strcmp(ep->key, "_smoothradius") ||
-                    !strcmp(ep->key, "smooth") || !strcmp(ep->key, "_smooth"))
+                if (KeyMatches(ep->key, "smoothradius") || KeyMatches(ep->key, "smooth"))
                     continue;
 
                 // Exclude supersample keys from direct inheritance (handled explicitly below)
-                if (!strcmp(ep->key, "supersample") || !strcmp(ep->key, "_supersample"))
+                if (KeyMatches(ep->key, "supersample"))
                     continue;
 
                 SetKeyValue(le, ep->key, ep->value);
             }
 
-            // Map supersample to _supersample for the generated light entity
+            // Map supersample for the generated light entity
             const char *ss = ValueForKey(ent, "supersample");
-            if (!ss[0]) ss = ValueForKey(ent, "_supersample");
-            if (ss[0]) SetKeyValue(le, "_supersample", ss);
+            if (ss[0]) SetKeyValue(le, "supersample", ss);
 
             // If no color is set, try to derive it from the surface image
-            const char *color = ValueForKey(ent, "_color");
-            if (!color[0])
-                color = ValueForKey(ent, "color");
+            const char *color = ValueForKey(ent, "color");
 
             if (!color[0]) {
-                SetKeyValue(le, "_lightimage", side->shaderInfo->shader);
+                SetKeyValue(le, "lightimage", side->shaderInfo->shader);
             }
         }
     }

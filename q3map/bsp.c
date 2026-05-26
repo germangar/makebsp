@@ -444,17 +444,17 @@ void InjectSunEntity(void)
             memset(e, 0, sizeof(*e));
 
             SetKeyValue(e, "classname", "light");
-            SetKeyValue(e, "_sun", "1");
+            SetKeyValue(e, "sun", "1");
 
             // Store the normalized direction vector to avoid precision loss
             sprintf(buf, "%f %f %f", si->sunDirection[0], si->sunDirection[1],
                     si->sunDirection[2]);
-            SetKeyValue(e, "_sun_dir", buf);
+            SetKeyValue(e, "sun_dir", buf);
 
             // Store the color and intensity
             sprintf(buf, "%f %f %f", si->sunLight[0], si->sunLight[1],
                     si->sunLight[2]);
-            SetKeyValue(e, "_color", buf);
+            SetKeyValue(e, "color", buf);
 
             // We only ever support ONE global sun direction in our engine
             break;
@@ -518,8 +518,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     const char *val;
 
     val = ValueForKey(ent, "samplesize");
-    if (!val[0]) val = ValueForKey(ent, "_samplesize");
-    if (!val[0]) val = ValueForKey(ent, "_lightmapsamplesize");
     if (val[0] && !HasArg("-samplesize", argc, argv)) {
         samplesize = atoi(val);
         if (samplesize < 1) samplesize = 1;

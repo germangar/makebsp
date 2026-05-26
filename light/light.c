@@ -530,7 +530,7 @@ void CreateEntityLights(void)
             continue;
 
         // Check if this is a sun entity (injected or manual)
-        if (ValueForKey(e, "_sun")[0])
+        if (ValueForKey(e, "sun")[0])
         {
             float intensity;
             const char *t;
@@ -548,10 +548,10 @@ void CreateEntityLights(void)
             else
             {
                 // Fallback to high-precision dir from injector or default
-                const char *sunDirKey = ValueForKey(e, "_sun_dir");
+                const char *sunDirKey = ValueForKey(e, "sun_dir");
                 if (sunDirKey && sunDirKey[0])
                 {
-                    GetVectorForKey(e, "_sun_dir", sunDirection);
+                    GetVectorForKey(e, "sun_dir", sunDirection);
                 }
                 else
                 {
@@ -562,12 +562,8 @@ void CreateEntityLights(void)
 
             // 2. Intensity and Color
             intensity = FloatForKey(e, "light");
-            if (!intensity)
-                intensity = FloatForKey(e, "_light");
 
-            _color = ValueForKey(e, "_color");
-            if (!_color[0])
-                _color = ValueForKey(e, "color");
+            _color = ValueForKey(e, "color");
             if (_color && _color[0])
             {
                 ParseColor(_color, sunLight);
@@ -604,28 +600,23 @@ void CreateEntityLights(void)
         }
 
         GetVectorForKey(e, "origin", dl->origin);
-        dl->style = FloatForKey(e, "_style");
-        if (!dl->style)
-            dl->style = FloatForKey(e, "style");
+        dl->style = FloatForKey(e, "style");
         if (dl->style < 0)
             dl->style = 0;
 
         intensity = FloatForKey(e, "light");
         if (!intensity)
-            intensity = FloatForKey(e, "_light");
-        if (!intensity)
             intensity = 300;
-        _color = ValueForKey(e, "_color");
-        if (!_color[0])
-            _color = ValueForKey(e, "color");
+
+        _color = ValueForKey(e, "color");
         if (_color && _color[0])
         {
             ParseColor(_color, dl->color);
         }
         else
         {
-            // If no color key, check for _lightimage
-            const char *lightimage = ValueForKey(e, "_lightimage");
+            // If no color key, check for lightimage
+            const char *lightimage = ValueForKey(e, "lightimage");
             if (lightimage[0])
             {
                 shaderInfo_t *si = ShaderInfoForShader(lightimage);
@@ -647,20 +638,18 @@ void CreateEntityLights(void)
         intensity = intensity * pointScale;
         dl->photons = intensity;
 
-        dl->coneSoftness = FloatForKey(e, "_softness");
-        if (!dl->coneSoftness)
-            dl->coneSoftness = FloatForKey(e, "softness");
+        dl->coneSoftness = FloatForKey(e, "softness");
         if (dl->coneSoftness < 0)
             dl->coneSoftness = 0;
-        else if (!ValueForKey(e, "_softness")[0] && !ValueForKey(e, "softness")[0])
-            dl->coneSoftness = 1.0f; // Default if both keys missing
+        else if (!ValueForKey(e, "softness")[0])
+            dl->coneSoftness = 1.0f; // Default if key missing
 
         dl->type = emit_point;
 
         // spotlights
         target = ValueForKey(e, "target");
-        const char *dirStr = ValueForKey(e, "_dir");
-        const char *anglesStr = ValueForKey(e, "_angles");
+        const char *dirStr = ValueForKey(e, "dir");
+        const char *anglesStr = ValueForKey(e, "angles");
         qboolean isSpotlight = qfalse;
 
         if (target[0])
@@ -683,7 +672,7 @@ void CreateEntityLights(void)
         }
         else if (dirStr[0])
         {
-            GetVectorForKey(e, "_dir", dl->normal);
+            GetVectorForKey(e, "dir", dl->normal);
             if (VectorNormalize(dl->normal, dl->normal) > 0)
             {
                 isSpotlight = qtrue;
@@ -692,7 +681,7 @@ void CreateEntityLights(void)
         else if (anglesStr[0])
         {
             vec3_t angles;
-            GetVectorForKey(e, "_angles", angles);
+            GetVectorForKey(e, "angles", angles);
             float yaw = angles[1] * (Q_PI / 180.0f);
             float pitch = angles[0] * (Q_PI / 180.0f);
             dl->normal[0] = cos(yaw) * cos(pitch);
@@ -1463,9 +1452,7 @@ void LightMain(void)
     _printf("--- LightMain ---\n");
 
     // find the optional world ambient
-    const char *_color = ValueForKey(&entities[0], "_color");
-    if (!_color[0])
-        _color = ValueForKey(&entities[0], "color");
+    const char *_color = ValueForKey(&entities[0], "color");
     if (_color[0])
     {
         ParseColor(_color, ambientColor);
@@ -1475,22 +1462,15 @@ void LightMain(void)
         VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
     }
 
-    const char *ambientStr = ValueForKey(&entities[0], "_ambient");
-    if (!ambientStr[0])
-        ambientStr = ValueForKey(&entities[0], "ambient");
+    const char *ambientStr = ValueForKey(&entities[0], "ambient");
     f = ambientStr[0] ? (float)atof(ambientStr) : 0.0f;
     VectorScale(ambientColor, f, ambientColor);
 
     // Parse hemisphere sky/ground ambient colors.
     // Fall back to ambientColor (flat) when not explicitly set.
     {
-        const char *skyVal = ValueForKey(&entities[0], "_ambient_sky");
-        if (!skyVal[0])
-            skyVal = ValueForKey(&entities[0], "ambient_sky");
-
-        const char *groundVal = ValueForKey(&entities[0], "_ambient_ground");
-        if (!groundVal[0])
-            groundVal = ValueForKey(&entities[0], "ambient_ground");
+        const char *skyVal = ValueForKey(&entities[0], "ambient_sky");
+        const char *groundVal = ValueForKey(&entities[0], "ambient_ground");
 
         // If the mapper didn't provide an ambient scalar, default to 1.0 
         // for the explicitly parsed sky/ground colors so they don't turn black.
