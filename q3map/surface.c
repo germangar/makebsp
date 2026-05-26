@@ -1857,6 +1857,13 @@ void GenerateHalos(entity_t *e)
         }
 
         if (isSpotlight) {
+            const char *haloShader = ValueForKey(light, "haloshader");
+            if (!haloShader[0]) {
+                haloShader = game->haloShader;
+            } else if (!Q_stricmp(haloShader, "none") || !strcmp(haloShader, "0")) {
+                continue;
+            }
+
             GetVectorForKey(light, "origin", origin);
 
             // Move the origin 16 units backwards so the halo doesn't start abruptly in mid-air
@@ -1908,7 +1915,7 @@ void GenerateHalos(entity_t *e)
 
             // Generate mapDrawSurface_t
             mapDrawSurface_t *ds = AllocDrawSurf();
-            ds->shaderInfo = ShaderInfoForShader(game->haloShader);
+            ds->shaderInfo = ShaderInfoForShader(haloShader);
             ds->isHalo = qtrue;
             ds->lightmapNum = -1;
             ds->fogNum = -1;

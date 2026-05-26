@@ -31,5 +31,5 @@
   "exposurefilter": "reinhard", /* [ off, softknee, reinhard, filmic ] */
   "enforceSampleSize": true,
   "flareShader": "",
-  "haloShader": "halo_small"
+  "haloShader": "halo"
 }
