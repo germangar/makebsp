@@ -686,7 +686,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 
 
 static void RadiosityIntegrateThread(int surfIdx) {
-    RadiosityIntegrateOneSurface(surfIdx);
+    int realSurfIndex = surfaceWorkOrder[surfIdx];
+    dsurface_t *ds = &drawSurfaces[realSurfIndex];
+    int surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+    
+    RadiosityIntegrateOneSurface(realSurfIndex);
+    
+    ThreadCompletedWeighted(surfWeight);
 }
 
 // ---------------------------------------------------------------------------
@@ -1119,7 +1125,13 @@ flush:
 }
 
 static void RadiosityReconstructThread(int surfIdx) {
-    RadiosityReconstructOneSurface(surfIdx);
+    int realSurfIndex = surfaceWorkOrder[surfIdx];
+    dsurface_t *ds = &drawSurfaces[realSurfIndex];
+    int surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+    
+    RadiosityReconstructOneSurface(realSurfIndex);
+    
+    ThreadCompletedWeighted(surfWeight);
 }
 
 // ---------------------------------------------------------------------------
@@ -1235,7 +1247,7 @@ void LightRadiosity(void) {
         }
         _printf("  [integrate]  ");
         fflush(stdout);
-        RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityIntegrateThread);
+        RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
 
         RadiosityVoxelize();
@@ -1243,7 +1255,7 @@ void LightRadiosity(void) {
         
         _printf("  [reconstruct] Fill ");
         fflush(stdout);
-        RunThreadsOnIndividual(numDrawSurfaces, qtrue, RadiosityReconstructThread);
+        RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, RadiosityReconstructThread);
         _printf("done\n");
 
         if (game->deluxeMap) {

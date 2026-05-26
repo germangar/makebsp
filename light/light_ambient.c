@@ -437,14 +437,14 @@ void TraceAmbient(int num)
     ThreadCompletedWeighted(surfWeight);
 }
 
-void LightAmbient(long long totalLuxels)
+void LightAmbient(void)
 {
     double start, end;
     if (!mao_enabled)
         return;
     _printf("--- TraceAmbient (%i samples/texel) ---\n", mao_ambient_samples);
     start = I_FloatTime();
-    RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceAmbient);
+    RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceAmbient);
     end = I_FloatTime();
     _printf("\n");
     _printf("%5.0f seconds elapsed in TraceAmbient\n", end - start);

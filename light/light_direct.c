@@ -1284,17 +1284,17 @@ void PrecacheTexelGeometryThread(int i)
 void PrecacheTexelGeometry(void)
 {
     int i;
-    long long totalLuxels = 0;
+    numTotalLuxels = 0;
     
     for (i = 0; i < numDrawSurfaces; i++) {
         if (drawSurfaces[i].lightmapNum[0] >= 0)
-            totalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
+            numTotalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
         else
-            totalLuxels += 1;
+            numTotalLuxels += 1;
     }
 
     _printf("--- PrecacheTexelGeometry ---\n");
-    RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, PrecacheTexelGeometryThread);
+    RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, PrecacheTexelGeometryThread);
     _printf("\n");
 }
 
@@ -2077,24 +2077,15 @@ void TraceGrid(int num)
 
 
 
-long long LightWorld(void)
+void LightWorld(void)
 {
     double start, end;
     int i;
-    long long totalLuxels = 0;
 
     surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
     {
         surfaceWorkOrder[i] = i;
-        if (drawSurfaces[i].lightmapNum[0] >= 0)
-        {
-            totalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
-        }
-        else
-        {
-            totalLuxels += 1;
-        }
     }
     qsort(surfaceWorkOrder, numDrawSurfaces, sizeof(int), CompareSurfaces);
 
@@ -2113,12 +2104,10 @@ long long LightWorld(void)
 
     _printf("--- TraceLtm ---\n");
     start = I_FloatTime();
-    RunThreadsOnWeighted(numDrawSurfaces, totalLuxels, qtrue, TraceLtm);
+    RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceLtm);
     end = I_FloatTime();
     _printf("\n");
     _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
-
-    return totalLuxels;
 }
 
 void DilateDeluxeDirections(void)

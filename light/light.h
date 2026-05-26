@@ -356,9 +356,10 @@ extern light_t *lights;
 extern qboolean patchshadows;
 
 int CompareSurfaces(const void *a, const void *b);
-long long LightWorld(void);
+extern long long numTotalLuxels;
+void LightWorld(void);
 void RunMAOPass(void);
-void LightAmbient(long long totalLuxels);
+void LightAmbient(void);
 void DilateDeluxeDirections(void);
 void PrecacheTexelGeometry(void);
 void TraceLtm(int num);

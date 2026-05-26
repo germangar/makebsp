@@ -43,6 +43,7 @@ qboolean debugLightmapsAlpha;
 
 int novertexlighting = 0;
 int nogridlighting = 0;
+long long numTotalLuxels = 0;
 
 // for run time tweaking of all area sources in the level
 float areaScale = 0.25;
@@ -1620,12 +1621,12 @@ void LightMain(void)
     _printf("%5i area lights\n", numAreaLights);
 
     InitTrace();
-    long long totalLuxels = LightWorld();
+    LightWorld();
 
     // Call radiosity passes
     LightRadiosity();
 
-    LightAmbient(totalLuxels);
+    LightAmbient();
     
     free(surfaceWorkOrder);
 
