@@ -1222,9 +1222,9 @@ void PrecacheTexelGeometryThread(int i)
 
             int idx = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py) * LIGHTMAP_WIDTH * scale + px;
 
-            float u = (float)(x - currentGutter) + 0.5f;
-            float v = (float)(y - currentGutter) + 0.5f;
             float step = 1.0f / (float)scale;
+            float u = ((float)(x - currentGutter) + 0.5f) * step;
+            float v = ((float)(y - currentGutter) + 0.5f) * step;
             
             vec3_t origin, normal;
             qboolean hit = qtrue;
@@ -1232,8 +1232,8 @@ void PrecacheTexelGeometryThread(int i)
             if (ds->surfaceType == MST_TRIANGLE_SOUP)
             {
                 float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                st[0] = (float)ds->lightmapOffset[0][0] + u;
+                st[1] = (float)ds->lightmapOffset[0][1] + v;
                 if (!TriSoupSamplePoint(ds, st, origin, normal))
                     hit = qfalse;
             }
@@ -1244,8 +1244,8 @@ void PrecacheTexelGeometryThread(int i)
                     hit = qfalse;
                 } else {
                     float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                    st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                    st[0] = (float)ds->lightmapOffset[0][0] + u;
+                    st[1] = (float)ds->lightmapOffset[0][1] + v;
                     if (!PatchSamplePoint(mesh, st, origin, normal))
                         hit = qfalse;
                 }
