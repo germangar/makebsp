@@ -868,13 +868,49 @@ const char *ValueForKey(const entity_t *ent, const char *key)
 {
     epair_t *ep;
 
+    // 1. Exact match (handles both prefixed and non-prefixed as requested, and __ keys)
     for (ep = ent->epairs; ep; ep = ep->next)
     {
-        if (!strcmp(ep->key, key))
+        if (!Q_stricmp(ep->key, key))
         {
             return ep->value;
         }
     }
+
+    // 2. Double underscore keys are internal, do not perform fallback
+    if (key[0] == '_' && key[1] == '_')
+    {
+        return "";
+    }
+
+    // 3. Fallback logic: check for alternate prefix state
+    if (key[0] == '_')
+    {
+        // Requested key has a single underscore, look for version WITHOUT underscore
+        for (ep = ent->epairs; ep; ep = ep->next)
+        {
+            if (!Q_stricmp(ep->key, key + 1))
+            {
+                return ep->value;
+            }
+        }
+    }
+    else
+    {
+        // Requested key has NO underscore, look for version WITH a single underscore
+        char altKey[1024];
+        if (snprintf(altKey, sizeof(altKey), "_%s", key) < sizeof(altKey))
+        {
+            for (ep = ent->epairs; ep; ep = ep->next)
+            {
+                if (!Q_stricmp(ep->key, altKey))
+                {
+                    return ep->value;
+                }
+            }
+        }
+    }
+
     return "";
 }
 
