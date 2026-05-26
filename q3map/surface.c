@@ -1859,6 +1859,9 @@ void GenerateHalos(entity_t *e)
         if (isSpotlight) {
             GetVectorForKey(light, "origin", origin);
 
+            // Move the origin 16 units backwards so the halo doesn't start abruptly in mid-air
+            VectorMA(origin, -16.0f, normal, origin);
+
             intensity = FloatForKey(light, "light");
             if (!intensity) intensity = FloatForKey(light, "_light");
             if (!intensity) intensity = 300;
@@ -1868,13 +1871,40 @@ void GenerateHalos(entity_t *e)
             if (_color[0]) ParseColor(_color, color);
             else VectorSet(color, 1, 1, 1);
 
+            // Normalize luminance to 0.75 so faint colors become brighter, 
+            // and pure white (1.0) drops down slightly to 0.75
+            float lum = color[0] * 0.299f + color[1] * 0.587f + color[2] * 0.114f;
+            if (lum > 0.001f) {
+                float scale = 0.75f / lum;
+                VectorScale(color, scale, color);
+            }
+
             radius = FloatForKey(light, "radius");
             if (!radius) radius = 64;
 
-            float length = intensity * 0.4f;
+            // Scale length to 0.3x intensity to keep it from extending too far
+            float length = intensity * 0.3f;
             if (length > 2048.0f) length = 2048.0f;
-            float width = FloatForKey(light, "radius");
-            if (!width) width = length * 0.5f;
+            if (length < 128.0f) length = 128.0f;
+            
+            // The texture needs a constant scaling factor to fit the curved halo perfectly.
+            // You can adjust this 'haloScale' value until it looks right in-game.
+            float haloScale = 1.5f; 
+            
+            // Clamp the radius for the quad calculation so extremely wide spotlights
+            // don't create overwhelmingly massive billboards that clip the room
+            float quadRadius = radius;
+            if (quadRadius > 90.0f) quadRadius = 90.0f;
+            
+            // Calculate the physical width of the cone at the END of the quad (at `length`)
+            // and apply the haloScale padding to fit the texture.
+            float physicalWidthAtEnd = 2.0f * length * (quadRadius / 64.0f);
+            float width = physicalWidthAtEnd * haloScale;
+            
+            // Ensure length is strictly greater than width so autosprite2 rotates around the correct axis
+            if (width >= length) {
+                width = length - 1.0f;
+            }
 
             // Generate mapDrawSurface_t
             mapDrawSurface_t *ds = AllocDrawSurf();
@@ -1903,9 +1933,13 @@ void GenerateHalos(entity_t *e)
             for (int v = 0; v < 4; v++) {
                 VectorCopy(up, ds->verts[v].normal);
                 
-                ds->verts[v].color[0][0] = color[0] * 255.0f;
-                ds->verts[v].color[0][1] = color[1] * 255.0f;
-                ds->verts[v].color[0][2] = color[2] * 255.0f;
+                float r = color[0] * 255.0f;
+                float g = color[1] * 255.0f;
+                float b = color[2] * 255.0f;
+                
+                ds->verts[v].color[0][0] = r > 255.0f ? 255 : (byte)r;
+                ds->verts[v].color[0][1] = g > 255.0f ? 255 : (byte)g;
+                ds->verts[v].color[0][2] = b > 255.0f ? 255 : (byte)b;
                 ds->verts[v].color[0][3] = 255;
             }
             ds->hasVertexColor = qtrue;
