@@ -1866,8 +1866,8 @@ void GenerateHalos(entity_t *e)
 
             GetVectorForKey(light, "origin", origin);
 
-            // Move the origin 16 units backwards so the halo doesn't start abruptly in mid-air
-            VectorMA(origin, -16.0f, normal, origin);
+            // Move the origin 8 units backwards so the halo doesn't start abruptly in mid-air
+            VectorMA(origin, -8.0f, normal, origin);
 
             intensity = FloatForKey(light, "light");
             if (!intensity) intensity = FloatForKey(light, "_light");
@@ -1878,11 +1878,11 @@ void GenerateHalos(entity_t *e)
             if (_color[0]) ParseColor(_color, color);
             else VectorSet(color, 1, 1, 1);
 
-            // Normalize luminance to 0.75 so faint colors become brighter, 
-            // and pure white (1.0) drops down slightly to 0.75
+            // Normalize luminance to 0.7 so faint colors become brighter, 
+            // and pure white (1.0) drops down slightly to 0.7
             float lum = color[0] * 0.299f + color[1] * 0.587f + color[2] * 0.114f;
             if (lum > 0.001f) {
-                float scale = 0.75f / lum;
+                float scale = 0.7f / lum;
                 VectorScale(color, scale, color);
             }
 
@@ -1891,7 +1891,7 @@ void GenerateHalos(entity_t *e)
 
             // Scale length to 0.3x intensity to keep it from extending too far
             float length = intensity * 0.3f;
-            if (length > 2048.0f) length = 2048.0f;
+            if (length > 768.0f) length = 768.0f;
             if (length < 128.0f) length = 128.0f;
             
             // The texture needs a constant scaling factor to fit the curved halo perfectly.
