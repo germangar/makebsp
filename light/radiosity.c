@@ -343,11 +343,8 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
         }
 
         vec3_t albedo;
-        float avgLum = (si->averageColor[0] + si->averageColor[1] + si->averageColor[2]) / (3.0f * 255.0f);
         for (k = 0; k < 3; k++) {
-            float fullColor  = si->averageColor[k] / 255.0f;
-            albedo[k] = fullColor * rad_color_ratio + avgLum * (1.0f - rad_color_ratio);
-            if (albedo[k] < 0.0f) albedo[k] = 0.0f;
+            albedo[k] = si->averageColor[k] / 255.0f;
         }
 
         int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? localSurfaces[i].radInterval : 1;
@@ -430,6 +427,25 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
 
                     // Attenuate the physical emitter color
                     VectorScale(em->color, prevCos, em->color);
+                }
+
+                // Apply sky tint to the incident light before it hits the wall
+                if (mao_enabled && rad_color_ratio < 1.0f) {
+                    float srcLum = em->color[0] * 0.299f + em->color[1] * 0.587f + em->color[2] * 0.114f;
+                    vec3_t tintedLight;
+                    float skyLum = skyColor[0] * 0.299f + skyColor[1] * 0.587f + skyColor[2] * 0.114f;
+                    
+                    if (skyLum > 0.0001f) {
+                        for (k = 0; k < 3; k++) {
+                            tintedLight[k] = (skyColor[k] / skyLum) * srcLum;
+                        }
+                    } else {
+                        VectorCopy(em->color, tintedLight);
+                    }
+                    
+                    for (k = 0; k < 3; k++) {
+                        em->color[k] = em->color[k] * rad_color_ratio + tintedLight[k] * (1.0f - rad_color_ratio);
+                    }
                 }
 
                 for (k = 0; k < 3; k++) em->color[k] *= albedo[k];
