@@ -54,7 +54,7 @@ typedef struct {
 } hacdSettings_t;
 
 /* Settings for large models (like wood-bridge) - Unnormalized */
-static hacdSettings_t hacd_settings_large = {
+static hacdSettings_t hacd_settings_object = {
     1.8308,   // scaleFactor (2000 / 1092.38)
     qtrue,    // disableNormalize
     0.0001,   // compacity
@@ -63,6 +63,19 @@ static hacdSettings_t hacd_settings_large = {
     1,        // nClusters
     0.0,      // ccConnectDist
     qtrue,    // extraPoints
+    qtrue     // facePoints
+};
+
+/* Settings for walkable models (stairs, floors, smooth terrain) */
+static hacdSettings_t hacd_settings_walkable = {
+    1.0,      // scaleFactor (Standard, diagonal becomes 2.0)
+    qfalse,   // disableNormalize (Normalize the mesh so size doesn't skew math)
+    0.0001,      // compacity
+    0.0,      // volume
+    1.0,        // concavity (The smaller the tighter to the original shape)
+    1,        // nClusters (Let concavity dictate the stop condition)
+    0.0,      // ccConnectDist
+    qfalse,   // extraPoints (qfalse prevents the hulls from stretching across the mesh and acting like a wrapper)
     qtrue     // facePoints
 };
 
@@ -162,11 +175,19 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
 
     /* Call HACD extruder */
 
+    #define ENABLE_SNAP_GRID 0
+    #define SNAP_GRID 0.125f
     HACD_Vec3 *hacdPts = malloc(colMesh->numVerts * sizeof(HACD_Vec3));
     for (int i = 0; i < colMesh->numVerts; i++) {
+#if ENABLE_SNAP_GRID
+        hacdPts[i].x = roundf(colMesh->verts[i][0] / SNAP_GRID) * SNAP_GRID;
+        hacdPts[i].y = roundf(colMesh->verts[i][1] / SNAP_GRID) * SNAP_GRID;
+        hacdPts[i].z = roundf(colMesh->verts[i][2] / SNAP_GRID) * SNAP_GRID;
+#else
         hacdPts[i].x = colMesh->verts[i][0];
         hacdPts[i].y = colMesh->verts[i][1];
         hacdPts[i].z = colMesh->verts[i][2];
+#endif
     }
 
     HACD_Triangle *hacdTris = malloc(colMesh->numTris * sizeof(HACD_Triangle));
@@ -201,10 +222,18 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
             s = &hacd_settings_wrap;
         }
     }
-    else if (diagonal <= MS_TINY) {
-        s = &hacd_settings_wrap;
-    } else {
-        s = &hacd_settings_large;
+    else if (inst->category == MC_WALKABLE)
+    {
+        //s = &hacd_settings_walkable;
+        s = &hacd_settings_object;
+    }
+    else 
+    {
+        if (diagonal <= MS_TINY) {
+            s = &hacd_settings_wrap;
+        } else {
+            s = &hacd_settings_object;
+        }
     }
 
     hacd_set_disable_normalize(hacd, s->disableNormalize);

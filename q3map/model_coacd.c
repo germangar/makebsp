@@ -92,17 +92,18 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
     bspbrush_t *hulls_list = NULL;
 
     float threshold, resolution, prep_resolution;
-    int mcts_max_depth;
+    int mcts_max_depth, preprocess_mode = COACD_PREPROCESS_AUTO;
     qboolean decimate;
     modelCategory_t category = inst->category;
     switch (category)
     {
     case MC_WALKABLE:
-        threshold = 0.1f;
-        resolution = 1500;
-        prep_resolution = 100;
-        mcts_max_depth = 3;
-        decimate = qtrue;
+        threshold = 0.05f;
+        resolution = 500;
+        prep_resolution = 50;
+        mcts_max_depth = 12;
+        decimate = qfalse;
+        preprocess_mode = COACD_PREPROCESS_OFF;
         break;
     case MC_WRAP:
         threshold = 0.2f;
@@ -159,11 +160,19 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
             }
 
             int startVert = currentVert;
+            #define ENABLE_SNAP_GRID 0
+            #define SNAP_GRID 0.125f
             for (k = 0; k < ds->numVerts; k++)
             {
+#if ENABLE_SNAP_GRID
+                allVerts[currentVert * 3 + 0] = round(ds->verts[k].xyz[0] / SNAP_GRID) * SNAP_GRID;
+                allVerts[currentVert * 3 + 1] = round(ds->verts[k].xyz[1] / SNAP_GRID) * SNAP_GRID;
+                allVerts[currentVert * 3 + 2] = round(ds->verts[k].xyz[2] / SNAP_GRID) * SNAP_GRID;
+#else
                 allVerts[currentVert * 3 + 0] = ds->verts[k].xyz[0];
                 allVerts[currentVert * 3 + 1] = ds->verts[k].xyz[1];
                 allVerts[currentVert * 3 + 2] = ds->verts[k].xyz[2];
+#endif
                 currentVert++;
             }
 
@@ -183,7 +192,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
             &input,
             threshold,             // threshold
             -1,                    // max_convex_hull (no limit)
-            COACD_PREPROCESS_AUTO, // preprocess_mode
+            preprocess_mode,       // preprocess_mode
             prep_resolution,       // prep_resolution (voxel grid)
             resolution,            // sample_resolution (ACTUAL accuracy)
             20,                    // mcts_nodes
@@ -255,7 +264,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
                 &input,
                 threshold,             // threshold
                 -1,                    // max_convex_hull (no limit)
-                COACD_PREPROCESS_AUTO, // preprocess_mode
+                preprocess_mode, // preprocess_mode
                 prep_resolution,       // prep_resolution (voxel grid)
                 resolution,            // sample_resolution (ACTUAL accuracy)
                 20,                    // mcts_nodes

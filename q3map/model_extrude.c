@@ -210,8 +210,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         return NULL;
     }
 
-    /* Use actual face normal for extrusion direction.
-       Axial snapping (Garux clipModel_default) is a future optimization. */
+    /* Use actual face normal for extrusion direction. Needs improving*/
     vec3_t extrudeDir;
     VectorCopy(poly->normal, extrudeDir);
 
@@ -775,6 +774,16 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     if (numTris == 0)
         return NULL;
 
+    #define ENABLE_SNAP_GRID 0
+    #define SNAP_GRID 0.125f
+#if ENABLE_SNAP_GRID
+    for (int i = 0; i < mesh->numVerts; i++) {
+        verts[i * 3 + 0] = roundf(verts[i * 3 + 0] / SNAP_GRID) * SNAP_GRID;
+        verts[i * 3 + 1] = roundf(verts[i * 3 + 1] / SNAP_GRID) * SNAP_GRID;
+        verts[i * 3 + 2] = roundf(verts[i * 3 + 2] / SNAP_GRID) * SNAP_GRID;
+    }
+#endif
+
     /* 1. Build triangle descriptors with normals and plane distances */
     clipTri_t *tris = calloc(numTris, sizeof(clipTri_t));
     int validTris = 0;
@@ -867,6 +876,7 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     int *ringVerts = malloc(MAX_POLY_VERTS * sizeof(int));
     int *orderedTriIdx = malloc(MAX_POLY_VERTS * sizeof(int));
 
+#if 0
     for (int v = 0; v < maxVertIdx; v++)
     {
         if (vertTriCount[v] < 3)
@@ -908,6 +918,7 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
             }
         }
     }
+#endif
 
     free(ringVerts);
     free(orderedTriIdx);
