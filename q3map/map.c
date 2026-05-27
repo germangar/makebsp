@@ -1201,7 +1201,7 @@ void ProcessFuncLight(entity_t *ent)
                     continue;
 
                 // Exclude smoothing radius keys (they belong to the surface, not the point light)
-                if (KeyMatches(ep->key, "smoothradius") || KeyMatches(ep->key, "smooth"))
+                if (KeyMatches(ep->key, "smooth"))
                     continue;
 
                 SetKeyValue(le, ep->key, ep->value);

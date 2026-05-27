@@ -324,9 +324,7 @@ void PatchMapDrawSurfs(entity_t *e)
             }
         }
 
-        const char *rad_str = ValueForKey(e, "smoothradius");
-        if (!rad_str[0])
-            rad_str = ValueForKey(e, "smooth");
+        const char *rad_str = ValueForKey(e, "smooth");
         if (rad_str[0])
         {
             ds->smoothingRadius = atof(rad_str);
