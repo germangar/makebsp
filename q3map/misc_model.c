@@ -706,6 +706,13 @@ void LoadTriangleModels(void)
                 ParseColor(vcolStr, vertexColor);
             }
 
+            int upscale = 0;
+            const char *upscaleStr = ValueForKey(entity, "upscale");
+            if (upscaleStr[0])
+            {
+                upscale = atoi(upscaleStr);
+            }
+
             // supersample override
             float superSampleRadius = -1.0f;
             const char *ssStr = ValueForKey(entity, "supersample");
@@ -874,6 +881,7 @@ void LoadTriangleModels(void)
                     ds->superSampleRadius = superSampleRadius;
                     ds->smoothingRadius = smoothingRadius;
                     ds->hasVertexColor = hasVertexColor;
+                    ds->upscale = upscale;
                     if (hasVertexColor)
                         VectorCopy(vertexColor, ds->vertexColor);
                     ds->planeNum = -1;

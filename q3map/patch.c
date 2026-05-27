@@ -339,6 +339,11 @@ void PatchMapDrawSurfs(entity_t *e)
             ParseColor(vcolStr, ds->vertexColor);
         }
 
+        // upscale override
+        const char *upscaleStr = ValueForKey(e, "upscale");
+        if (upscaleStr[0])
+            ds->upscale = atoi(upscaleStr);
+
         // supersample override
         const char *ssStr = ValueForKey(e, "supersample");
         if (ssStr[0])

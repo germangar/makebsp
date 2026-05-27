@@ -992,6 +992,12 @@ void BuildLocalSurfaces(void)
         {
             localSurfaces[i].superSampleRadius = superSampleRadius;
         }
+
+        localSurfaces[i].upscale = 0;
+        if (extra && i < numExtra)
+        {
+            localSurfaces[i].upscale = extra[i].upscale;
+        }
     }
     if (extra)
         free(extra);

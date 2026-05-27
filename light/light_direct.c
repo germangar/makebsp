@@ -1432,8 +1432,8 @@ void TraceLtm(int num)
         return; // doesn't need lightmap lighting
     }
 
-    int isDilated = upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
-    int use_upscale = upscale;
+    int use_upscale = upscale || localSurfaces[realSurfIndex].upscale;
+    int isDilated = use_upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
 
     tw->patchshadows = patchshadows;
     tw->forceFrontOnly = qtrue;
@@ -1628,7 +1628,8 @@ void TraceLtm(int num)
                 float v = (float)(j - currentGutter) + jdy + 0.5f;
                 float step = 1.0f / (float)scale;
 
-                if (ss == 0)
+                int global_scale = upscale ? 2 : 1;
+                if (ss == 0 && scale == global_scale)
                 {
                     int native_px = px / scale;
                     int native_py = py / scale;
@@ -1648,6 +1649,13 @@ void TraceLtm(int num)
                 }
                 else
                 {
+                    int native_px = px / scale;
+                    int native_py = py / scale;
+                    int native_p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + native_py) * LIGHTMAP_WIDTH + native_px;
+
+                    if (ss == 0 && unreachableMask && BITMAP_TEST(unreachableMask, native_p))
+                        continue;
+
                     vec3_t temp_origin;
                     if (ds->surfaceType == MST_TRIANGLE_SOUP)
                     {

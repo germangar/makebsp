@@ -14,6 +14,7 @@ typedef struct {
     vec3_t vertexColor;
     float superSampleRadius;
     qboolean isHalo;
+    int upscale;
 } extraSurface_t;
 
 typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;

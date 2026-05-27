@@ -60,6 +60,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->backsplashFraction = -1.0f;
     ds->lightSubdivide = -1.0f;
     ds->superSampleRadius = -1.0f;
+    ds->upscale = 0;
 
     return ds;
 }
@@ -123,6 +124,11 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
         ds->hasVertexColor = 1;
         ParseColor(vcolStr, ds->vertexColor);
     }
+
+    // Resolve upscale
+    const char *upscaleStr = ValueForKey(e, "upscale");
+    if (upscaleStr[0])
+        ds->upscale = atoi(upscaleStr);
 
     // Resolve supersample
     const char *ssStr = ValueForKey(e, "supersample");
@@ -1345,6 +1351,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
+    drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
 
     numDrawSurfaces++;
 
@@ -1430,6 +1437,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
+    drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
 
     numDrawSurfaces++;
 
@@ -1521,6 +1529,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
+    drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
 
     numDrawSurfaces++;
 
@@ -1576,6 +1585,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
+    drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
 
     numDrawSurfaces++;
 

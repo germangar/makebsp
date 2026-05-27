@@ -1204,16 +1204,8 @@ void ProcessFuncLight(entity_t *ent)
                 if (KeyMatches(ep->key, "smoothradius") || KeyMatches(ep->key, "smooth"))
                     continue;
 
-                // Exclude supersample keys from direct inheritance (handled explicitly below)
-                if (KeyMatches(ep->key, "supersample"))
-                    continue;
-
                 SetKeyValue(le, ep->key, ep->value);
             }
-
-            // Map supersample for the generated light entity
-            const char *ss = ValueForKey(ent, "supersample");
-            if (ss[0]) SetKeyValue(le, "supersample", ss);
 
             // If no color is set, try to derive it from the surface image
             const char *color = ValueForKey(ent, "color");

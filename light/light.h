@@ -277,6 +277,7 @@ typedef struct
     qboolean hasVertexColor;
     vec3_t vertexColor;
     float superSampleRadius;
+    int upscale;
 } localSurface_t;
 extern localSurface_t *localSurfaces;
 void BuildLocalSurfaces(void);
