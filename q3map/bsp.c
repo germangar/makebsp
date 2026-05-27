@@ -148,7 +148,7 @@ void ProcessWorldModel(void)
 
     // Set default block size
     VectorSet(blockSize, 1024, 1024, 1024);
-    const char *value = ValueForKey(&entities[0], "_blocksize");
+    const char *value = ValueForKey(&entities[0], "blocksize");
     if (value && value[0])
     {
         int s = sscanf(value, "%f %f %f", &blockSize[0], &blockSize[1], &blockSize[2]);
@@ -404,7 +404,7 @@ void InjectSunEntity(void)
     // Check if a sun entity already exists
     for (i = 0; i < num_entities; i++)
     {
-        if (ValueForKey(&entities[i], "_sun")[0])
+        if (ValueForKey(&entities[i], "sun")[0])
         {
             _printf("Sun entity already exists, skipping shader injection.\n");
             return;

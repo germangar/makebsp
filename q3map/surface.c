@@ -81,13 +81,8 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
 {
     // Resolve smoothing radius
     const char *radiusStr = ValueForKey(e, "smoothradius");
-    if (!radiusStr[0])
-        radiusStr = ValueForKey(e, "_smoothradius");
     if (!radiusStr[0]) {
         radiusStr = ValueForKey(e, "smooth");
-        if (!radiusStr[0]) {
-            radiusStr = ValueForKey(e, "_smooth");
-        }
     }
     if (radiusStr[0])
         ds->smoothingRadius = atof(radiusStr);
@@ -108,9 +103,7 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             if (lightStr[0])
                 ds->lightValue = atof(lightStr);
 
-            const char *colorStr = ValueForKey(e, "_color");
-            if (!colorStr[0])
-                colorStr = ValueForKey(e, "color");
+            const char *colorStr = ValueForKey(e, "color");
             if (colorStr[0])
                 ParseColor(colorStr, ds->lightColor);
 
@@ -118,17 +111,13 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             if (bsStr[0])
                 ds->backsplashFraction = atof(bsStr) * 0.01f; // Convert percentage to fraction
 
-            const char *subdivideStr = ValueForKey(e, "_subdivide");
-            if (!subdivideStr[0])
-                subdivideStr = ValueForKey(e, "subdivide");
+            const char *subdivideStr = ValueForKey(e, "subdivide");
             if (subdivideStr[0])
                 ds->lightSubdivide = atof(subdivideStr);
         }
     }
     // Resolve vertexcolor override (func_group, misc_model, etc)
     const char *vcolStr = ValueForKey(e, "vertexcolor");
-    if (!vcolStr[0])
-        vcolStr = ValueForKey(e, "_vertexcolor");
     if (vcolStr[0])
     {
         ds->hasVertexColor = 1;
@@ -137,8 +126,6 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
 
     // Resolve supersample
     const char *ssStr = ValueForKey(e, "supersample");
-    if (!ssStr[0])
-        ssStr = ValueForKey(e, "_supersample");
     if (ssStr[0])
     {
         float ssVal = atof(ssStr);
@@ -1841,12 +1828,12 @@ void GenerateHalos(entity_t *e)
                 VectorSubtract(dest, origin, normal);
                 if (VectorNormalize(normal, normal) > 0) isSpotlight = qtrue;
             }
-        } else if (ValueForKey(light, "_dir")[0]) {
-            GetVectorForKey(light, "_dir", normal);
+        } else if (ValueForKey(light, "dir")[0]) {
+            GetVectorForKey(light, "dir", normal);
             if (VectorNormalize(normal, normal) > 0) isSpotlight = qtrue;
-        } else if (ValueForKey(light, "_angles")[0]) {
+        } else if (ValueForKey(light, "angles")[0]) {
             vec3_t angles;
-            GetVectorForKey(light, "_angles", angles);
+            GetVectorForKey(light, "angles", angles);
             float yaw = angles[1] * (Q_PI / 180.0f);
             float pitch = angles[0] * (Q_PI / 180.0f);
             normal[0] = cos(yaw) * cos(pitch);

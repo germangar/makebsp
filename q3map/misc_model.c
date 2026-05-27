@@ -689,11 +689,7 @@ void LoadTriangleModels(void)
             float smoothingRadius = -1.0f;
             const char *radStr = ValueForKey(entity, "smoothradius");
             if (!radStr[0])
-                radStr = ValueForKey(entity, "_smoothradius");
-            if (!radStr[0])
                 radStr = ValueForKey(entity, "smooth");
-            if (!radStr[0])
-                radStr = ValueForKey(entity, "_smooth");
             if (radStr[0])
             {
                 smoothingRadius = atof(radStr);
@@ -704,8 +700,6 @@ void LoadTriangleModels(void)
             vec3_t vertexColor;
             VectorClear(vertexColor);
             const char *vcolStr = ValueForKey(entity, "vertexcolor");
-            if (!vcolStr[0])
-                vcolStr = ValueForKey(entity, "_vertexcolor");
             if (vcolStr[0])
             {
                 hasVertexColor = 1;
@@ -715,8 +709,6 @@ void LoadTriangleModels(void)
             // supersample override
             float superSampleRadius = -1.0f;
             const char *ssStr = ValueForKey(entity, "supersample");
-            if (!ssStr[0])
-                ssStr = ValueForKey(entity, "_supersample");
             if (ssStr[0])
             {
                 superSampleRadius = atof(ssStr);
@@ -725,9 +717,7 @@ void LoadTriangleModels(void)
             }
 
             inst->lightmapScale = 1.0f;
-            const char *ent_scale_str = ValueForKey(entity, "_lightmapscale");
-            if (!ent_scale_str[0])
-                ent_scale_str = ValueForKey(entity, "lightmapscale");
+            const char *ent_scale_str = ValueForKey(entity, "lightmapscale");
             if (ent_scale_str[0])
             {
                 float ent_scale = atof(ent_scale_str);
@@ -741,14 +731,10 @@ void LoadTriangleModels(void)
 
             int forceUVGen = 0;
             const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
-            if (!world_forceuv_str[0])
-                world_forceuv_str = ValueForKey(&entities[0], "_forceuvgen");
             if (world_forceuv_str[0])
                 forceUVGen = atoi(world_forceuv_str);
 
             const char *forceuv_str = ValueForKey(entity, "forceuvgen");
-            if (!forceuv_str[0])
-                forceuv_str = ValueForKey(entity, "_forceuvgen");
             if (forceuv_str[0])
                 forceUVGen = atoi(forceuv_str);
 

@@ -311,9 +311,7 @@ void PatchMapDrawSurfs(entity_t *e)
         {
             ds->samplesize = scan->shaderInfo->lightmapSampleSize;
         }
-        const char *ent_sample_str = ValueForKey(e, "_lightmapsamplesize");
-        if (!ent_sample_str[0])
-            ent_sample_str = ValueForKey(e, "_samplesize");
+        const char *ent_sample_str = ValueForKey(e, "lightmapsamplesize");
         if (!ent_sample_str[0])
             ent_sample_str = ValueForKey(e, "samplesize");
 
@@ -328,19 +326,13 @@ void PatchMapDrawSurfs(entity_t *e)
 
         const char *rad_str = ValueForKey(e, "smoothradius");
         if (!rad_str[0])
-            rad_str = ValueForKey(e, "_smoothradius");
-        if (!rad_str[0])
             rad_str = ValueForKey(e, "smooth");
-        if (!rad_str[0])
-            rad_str = ValueForKey(e, "_smooth");
         if (rad_str[0])
         {
             ds->smoothingRadius = atof(rad_str);
         }
 
         const char *vcolStr = ValueForKey(e, "vertexcolor");
-        if (!vcolStr[0])
-            vcolStr = ValueForKey(e, "_vertexcolor");
         if (vcolStr[0])
         {
             ds->hasVertexColor = 1;
@@ -349,8 +341,6 @@ void PatchMapDrawSurfs(entity_t *e)
 
         // supersample override
         const char *ssStr = ValueForKey(e, "supersample");
-        if (!ssStr[0])
-            ssStr = ValueForKey(e, "_supersample");
         if (ssStr[0])
         {
             float ssVal = atof(ssStr);
