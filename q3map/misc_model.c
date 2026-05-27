@@ -743,6 +743,25 @@ void LoadTriangleModels(void)
             if (forceuv_str[0])
                 forceUVGen = atoi(forceuv_str);
 
+            inst->has_collision_type_override = qfalse;
+            const char *col_type_str = ValueForKey(entity, "collisiontype");
+            if (col_type_str[0])
+            {
+                inst->has_collision_type_override = qtrue;
+                if (!Q_stricmp(col_type_str, "shell")) inst->collision_type_override = MC_SHELL;
+                else if (!Q_stricmp(col_type_str, "object")) inst->collision_type_override = MC_OBJECT;
+                else if (!Q_stricmp(col_type_str, "walkable")) inst->collision_type_override = MC_WALKABLE;
+                else if (!Q_stricmp(col_type_str, "wrap")) inst->collision_type_override = MC_WRAP;
+                else if (!Q_stricmp(col_type_str, "extrude")) inst->collision_type_override = MC_EXTRUDE;
+                else if (!Q_stricmp(col_type_str, "terrain")) inst->collision_type_override = MC_TERRAIN;
+                else if (!Q_stricmp(col_type_str, "none") || !Q_stricmp(col_type_str, "nosolid") || !Q_stricmp(col_type_str, "nonsolid")) inst->collision_type_override = MC_NONE;
+                else
+                {
+                    _printf("WARNING: Unknown collisiontype '%s' on misc_model, falling back to auto\n", col_type_str);
+                    inst->has_collision_type_override = qfalse;
+                }
+            }
+
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)

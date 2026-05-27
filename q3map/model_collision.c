@@ -62,6 +62,8 @@ const char *CategoryString(modelCategory_t cat)
         return "MC_SHELL";
     case MC_TERRAIN:
         return "MC_TERRAIN";
+    case MC_EXTRUDE:
+        return "MC_EXTRUDE";
     default:
         return "MC_NONE";
     }
@@ -451,6 +453,11 @@ static void CategorizeModel(modelInstance_t *inst)
     else if (inwardRatio > 0.8f)
     {
         category = MC_SHELL;
+    }
+
+    if (inst->has_collision_type_override)
+    {
+        category = inst->collision_type_override;
     }
 
     inst->category = category;
@@ -1099,13 +1106,13 @@ static void DecomposeModelCollision(modelInstance_t *inst)
     shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
     qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
 
-    if (category == MC_TERRAIN)
-    {
-        hulls_list = GenerateCollisionTerrainExtrusion(inst, caulk);
-    }
-    else if (category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)
+    if (category == MC_TERRAIN || category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)
     {
         hulls_list = GenerateHACDCollision(inst, caulk);
+    }
+    else if (category == MC_EXTRUDE)
+    {
+        hulls_list = GenerateExtrusionCollision(inst, caulk);
     }
     else
     {

@@ -474,7 +474,8 @@ typedef enum
     MC_WALKABLE,
     MC_WRAP,
     MC_SHELL,
-    MC_TERRAIN
+    MC_TERRAIN,
+    MC_EXTRUDE  // user-forced only; never set by auto-categorization
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256
@@ -488,6 +489,9 @@ typedef struct modelInstance_s
     float lightmapScale;
     float triangle_density;
     modelCategory_t category;
+    
+    qboolean has_collision_type_override;
+    modelCategory_t collision_type_override;
 
     int num_collision_meshes;
     struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes

@@ -236,7 +236,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     bspbrush_t *b = AllocBrush(numSides + 6);
     b->numsides = numSides;
     b->detail = qtrue;
-    b->contents = si->contents;
+    b->contents = CONTENTS_SOLID | CONTENTS_TRANSLUCENT | CONTENTS_DETAIL;
     b->contentShader = si;
 
     /* Side 0: front face */
@@ -262,6 +262,16 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 
     free(pts);
     free(bpts);
+
+    int flags = si->surfaceFlags;
+    flags &= ~(SURF_HINT | SURF_POINTLIGHT | SURF_NONSOLID | SURF_LIGHTFILTER | SURF_ALPHASHADOW);
+    flags |= (SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NODLIGHT);
+
+    for (int i = 0; i < numSides; i++)
+    {
+        b->sides[i].contents = b->contents;
+        b->sides[i].surfaceFlags = flags;
+    }
 
     if (!planesOk || frontPlane == -1 || backPlane == -1)
     {
@@ -293,6 +303,10 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 ====================
 ExtrudeFanToBrush
 
+/*
+====================
+ExtrudeFanToBrush
+
 Diamond/bipyramid approach: the hub vertex is the front tip, and a
 computed back point is the rear tip. The ring vertices form the equator.
   - N front faces: each original fan triangle (hub, ring[i], ring[i+1])
@@ -311,12 +325,6 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
     int N = fanTriCount;
     int numSides = 2 * N; /* N front faces + N back faces */
 
-    /*
-    if (numSides > MAX_BRUSH_SIDES) {
-      _printf("    WARNING: ExtrudeFan failed (numSides %d > MAX_BRUSH_SIDES)\n", numSides);
-      return NULL;
-    }
-    */
     if (numSides > MAX_BRUSH_SIDES)
         return NULL;
 
@@ -344,7 +352,6 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
     float axisLen = VectorNormalize(axis, axis);
     if (axisLen < 0.001f)
     {
-        // _printf("    WARNING: ExtrudeFan failed (axis too short, hub=%d)\n", hubIdx);
         return NULL;
     }
 
@@ -362,17 +369,13 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
             maxRadius = r;
     }
 
-    /* Reject flat fans: hub must protrude at least 30% of ring radius.
-       Flat fans (like vertices on plank sides) produce thin diamonds that spike. */
+    /* Reject flat fans: hub must protrude at least 30% of ring radius. */
     if (maxRadius > 0.001f && axisLen < maxRadius * 0.3f)
     {
-        // _printf("    WARNING: ExtrudeFan rejected (flat fan: axisLen=%.3f, radius=%.3f, hub=%d, ring=%d)\n", axisLen, maxRadius, hubIdx, ringCount);
         return NULL;
     }
 
-    /* Find the maximum projection of ring vertices onto the axis (from hub).
-       This gives the actual "depth" of the fan, not the Euclidean spread.
-       Using Euclidean distance caused huge diamonds on flat fans. */
+    /* Find the maximum projection of ring vertices onto the axis (from hub). */
     float maxProj = 0;
     for (int i = 0; i < ringCount; i++)
     {
@@ -394,7 +397,7 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
     bspbrush_t *b = AllocBrush(numSides + 6);
     b->numsides = numSides;
     b->detail = qtrue;
-    b->contents = si->contents;
+    b->contents = CONTENTS_SOLID | CONTENTS_TRANSLUCENT | CONTENTS_DETAIL;
     b->contentShader = si;
 
     qboolean planesOk = qtrue;
@@ -439,23 +442,30 @@ static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
             planesOk = qfalse;
     }
 
+    int flags = si->surfaceFlags;
+    flags &= ~(SURF_HINT | SURF_POINTLIGHT | SURF_NONSOLID | SURF_LIGHTFILTER | SURF_ALPHASHADOW);
+    flags |= (SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NODLIGHT);
+
+    for (int i = 0; i < numSides; i++)
+    {
+        b->sides[i].contents = b->contents;
+        b->sides[i].surfaceFlags = flags;
+    }
+
     if (!planesOk)
     {
-        // _printf("    WARNING: ExtrudeFan failed (plane degenerate, hub=%d, ring=%d)\n", hubIdx, ringCount);
         FreeBrush(b);
         return NULL;
     }
 
     if (!CreateBrushWindings(b))
     {
-        // _printf("    WARNING: ExtrudeFan failed (CreateBrushWindings, hub=%d, ring=%d)\n", hubIdx, ringCount);
         FreeBrush(b);
         return NULL;
     }
 
     if (!BoundBrush(b))
     {
-        // _printf("    WARNING: ExtrudeFan failed (BoundBrush, hub=%d, ring=%d)\n", hubIdx, ringCount);
         FreeBrush(b);
         return NULL;
     }
@@ -612,64 +622,147 @@ static qboolean OrderFanRing(int hubIdx, clipTri_t *tris,
 ====================
 ValidateFanConvexity
 
-Checks that a triangle fan forms a convex shape:
-- The hub vertex must be on the "outward" side of the base ring polygon
-- All fan face normals must point generally in the same direction
+Strictly checks that the diamond/bipyramid brush generated from this fan
+is mathematically convex. If any vertex of the proposed shape falls on
+the "front" (positive) side of any of its bounding planes, it is concave
+and cannot be a valid BSP brush.
 ====================
 */
 static qboolean ValidateFanConvexity(int hubIdx, int *ringVerts, int ringCount,
                                      clipTri_t *tris, int *fanTriIdx, int fanTriCount,
-                                     float *verts)
+                                     float *verts, float extrudeDist)
 {
-    /* With diamond/bipyramid shape, no angle constraint needed.
-       Just compute avgNormal for the hub-outward check below. */
-    vec3_t avgNormal = {0, 0, 0};
-    for (int i = 0; i < fanTriCount; i++)
+    int N = fanTriCount;
+
+    /* Build the list of vertices for the diamond */
+    int numPts = N + 2; /* hub, backPoint, and N ring verts */
+    vec3_t *pts = malloc(numPts * sizeof(vec3_t));
+
+    /* 0: hub */
+    pts[0][0] = verts[hubIdx * 3 + 0];
+    pts[0][1] = verts[hubIdx * 3 + 1];
+    pts[0][2] = verts[hubIdx * 3 + 2];
+
+    /* 1..N: ring verts */
+    vec3_t centroid = {0, 0, 0};
+    for (int i = 0; i < N; i++)
     {
-        VectorAdd(avgNormal, tris[fanTriIdx[i]].normal, avgNormal);
+        pts[i + 1][0] = verts[ringVerts[i] * 3 + 0];
+        pts[i + 1][1] = verts[ringVerts[i] * 3 + 1];
+        pts[i + 1][2] = verts[ringVerts[i] * 3 + 2];
+        VectorAdd(centroid, pts[i + 1], centroid);
     }
-    if (VectorNormalize(avgNormal, avgNormal) < 0.0001f)
-        return qfalse;
+    VectorScale(centroid, 1.0f / N, centroid);
 
-    /* The hub must be on the outward side of the ring plane.
-       Compute the ring centroid and check that hub is further along avgNormal. */
-    vec3_t ringCenter = {0, 0, 0};
-    for (int i = 0; i < ringCount; i++)
+    /* Axis */
+    vec3_t axis;
+    VectorSubtract(centroid, pts[0], axis);
+    if (VectorNormalize(axis, axis) < 0.001f)
     {
-        ringCenter[0] += verts[ringVerts[i] * 3 + 0];
-        ringCenter[1] += verts[ringVerts[i] * 3 + 1];
-        ringCenter[2] += verts[ringVerts[i] * 3 + 2];
-    }
-    ringCenter[0] /= ringCount;
-    ringCenter[1] /= ringCount;
-    ringCenter[2] /= ringCount;
-
-    vec3_t hubPos;
-    hubPos[0] = verts[hubIdx * 3 + 0];
-    hubPos[1] = verts[hubIdx * 3 + 1];
-    hubPos[2] = verts[hubIdx * 3 + 2];
-
-    vec3_t toHub;
-    VectorSubtract(hubPos, ringCenter, toHub);
-    float hubDot = DotProduct(toHub, avgNormal);
-
-    /* Hub should be in front of (or near) the ring centroid */
-    if (hubDot < -0.01f)
+        free(pts);
         return qfalse;
+    }
 
-    return qtrue;
+    /* Find back projection depth */
+    float maxProj = 0;
+    for (int i = 0; i < N; i++)
+    {
+        vec3_t diff;
+        VectorSubtract(pts[i + 1], pts[0], diff);
+        float proj = DotProduct(diff, axis);
+        if (proj > maxProj)
+            maxProj = proj;
+    }
+
+    /* N+1: backPoint */
+    VectorMA(pts[0], maxProj + extrudeDist, axis, pts[N + 1]);
+
+    /* Now, test strict convexity: 
+       For every face (N front, N back), ALL points must be on or behind the plane. */
+    
+    qboolean isConvex = qtrue;
+
+    /* Front faces */
+    for (int i = 0; i < N; i++)
+    {
+        clipTri_t *tri = &tris[fanTriIdx[i]];
+        vec3_t p0, p1, p2;
+        p0[0] = verts[tri->indices[0] * 3 + 0];
+        p0[1] = verts[tri->indices[0] * 3 + 1];
+        p0[2] = verts[tri->indices[0] * 3 + 2];
+        p1[0] = verts[tri->indices[1] * 3 + 0];
+        p1[1] = verts[tri->indices[1] * 3 + 1];
+        p1[2] = verts[tri->indices[1] * 3 + 2];
+        p2[0] = verts[tri->indices[2] * 3 + 0];
+        p2[1] = verts[tri->indices[2] * 3 + 1];
+        p2[2] = verts[tri->indices[2] * 3 + 2];
+
+        vec3_t normal;
+        vec3_t v1, v2;
+        VectorSubtract(p2, p0, v1);
+        VectorSubtract(p1, p0, v2);
+        CrossProduct(v1, v2, normal);
+        VectorNormalize(normal, normal);
+        float dist = DotProduct(normal, p0);
+
+        for (int p = 0; p < numPts; p++)
+        {
+            float d = DotProduct(pts[p], normal) - dist;
+            if (d > 0.01f) /* Point is in front of the plane! Shape is concave. */
+            {
+                isConvex = qfalse;
+                break;
+            }
+        }
+        if (!isConvex) break;
+    }
+
+    if (!isConvex)
+    {
+        free(pts);
+        return qfalse;
+    }
+
+    /* Back faces */
+    for (int i = 0; i < N; i++)
+    {
+        int next = (i + 1) % N;
+        vec3_t r0, r1;
+        VectorCopy(pts[i + 1], r0);
+        VectorCopy(pts[next + 1], r1);
+
+        vec3_t normal;
+        vec3_t v1, v2;
+        VectorSubtract(r1, pts[N + 1], v1);
+        VectorSubtract(r0, pts[N + 1], v2);
+        CrossProduct(v1, v2, normal);
+        VectorNormalize(normal, normal);
+        float dist = DotProduct(normal, pts[N + 1]);
+
+        for (int p = 0; p < numPts; p++)
+        {
+            float d = DotProduct(pts[p], normal) - dist;
+            if (d > 0.01f) /* Point is in front of the plane! Shape is concave. */
+            {
+                isConvex = qfalse;
+                break;
+            }
+        }
+        if (!isConvex) break;
+    }
+
+    free(pts);
+    return isConvex;
 }
 
 /*
 ====================
 ExtrudeTrianglesToBrushes
 
-Optimized version with two merge passes:
-1. Triangle fan detection — fans of N triangles sharing a hub vertex
-   become single N+1-sided pyramidal brushes
-2. Coplanar merging — remaining coplanar adjacent triangles are merged
-   into larger polygons
-3. Individual extrusion — any remaining triangles extruded as 5-sided brushes
+Optimized version:
+1. Triangle fan detection — fans of strictly convex geometry are merged
+2. Coplanar merging — adjacent coplanar triangles are merged
+3. Individual extrusion — remaining triangles are extruded individually
 ====================
 */
 bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
@@ -720,7 +813,7 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
         validTris++;
     }
 
-    /* 1.5 Fan detection: build vertex→triangle adjacency and detect fans */
+    /* 1.5 Fan detection: build vertex→triangle adjacency and detect perfectly convex fans */
 
     /* Find max vertex index to size the adjacency arrays */
     int maxVertIdx = 0;
@@ -770,10 +863,7 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     free(fillPos);
 
     /* Try to form fans around vertices with 3+ adjacent triangles */
-    int fanBrushCount = 0;
-    int fanTriConsumed = 0;
     float extrudeDist = 0.5f;
-
     int *ringVerts = malloc(MAX_POLY_VERTS * sizeof(int));
     int *orderedTriIdx = malloc(MAX_POLY_VERTS * sizeof(int));
 
@@ -799,8 +889,8 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
         if (!OrderFanRing(v, tris, fanTriIdx, &fanCount, verts, ringVerts, orderedTriIdx))
             continue;
 
-        /* Validate that the fan is convex */
-        if (!ValidateFanConvexity(v, ringVerts, fanCount, tris, orderedTriIdx, fanCount, verts))
+        /* STRICT VALIDATION: check that the resulting shape is 100% mathematically convex */
+        if (!ValidateFanConvexity(v, ringVerts, fanCount, tris, orderedTriIdx, fanCount, verts, extrudeDist))
             continue;
 
         /* Extrude the fan as a single pyramidal brush */
@@ -810,13 +900,11 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
         {
             b->next = hulls_list;
             hulls_list = b;
-            fanBrushCount++;
 
             /* Mark all fan triangles as consumed */
             for (int f = 0; f < fanCount; f++)
             {
                 tris[orderedTriIdx[f]].merged = qtrue;
-                fanTriConsumed++;
             }
         }
     }
@@ -826,13 +914,6 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     free(vertTriCount);
     free(vertTriOffset);
     free(adjTriangles);
-
-    /*
-    if (fanBrushCount > 0) {
-      _printf("  Fan merge: %d triangles -> %d diamond brushes\n",
-              fanTriConsumed, fanBrushCount);
-    }
-    */
 
     /* 2. Merge coplanar adjacent triangles into polygons (remaining non-fan tris) */
     int remaining = 0;
