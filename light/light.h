@@ -162,6 +162,8 @@ static inline float CalculateLightReach(float area, float intensity, float thres
     float reach = 0.0f;
     switch (model)
     {
+        case ATTENUATION_UNREAL:
+        case ATTENUATION_SMOOTHSTEP:
         case ATTENUATION_INVERSE_SQUARE:
         case ATTENUATION_INVERSE_SQUARE_PI:
             if (area > 0)
@@ -275,6 +277,25 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
                 }
             }
             break;
+        case ATTENUATION_UNREAL:
+        {
+            float distRatio = dist / light->reach;
+            if (distRatio >= 1.0f) return 0.0f;
+            float distRatio4 = distRatio * distRatio * distRatio * distRatio;
+            float window = 1.0f - distRatio4;
+            if (window < 0.0f) window = 0.0f;
+            window = window * window;
+            energy = (light->photons / (d * d)) * window;
+            break;
+        }
+        case ATTENUATION_SMOOTHSTEP:
+        {
+            float distRatio = dist / light->reach;
+            if (distRatio >= 1.0f) return 0.0f;
+            float window = 1.0f - (distRatio * distRatio);
+            energy = light->photons * (window * window) / (offset * offset);
+            break;
+        }
         case ATTENUATION_INVERSE_SQUARE_PI:
             energy = light->photons / (M_PI * d * d);
             break;

@@ -158,6 +158,10 @@ static void ParseWorldspawnKeys(int argc, char **argv)
             game->attenuationModel = ATTENUATION_LINEAR;
         } else if (!Q_stricmp(val, "standard")) {
             game->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+        } else if (!Q_stricmp(val, "unreal")) {
+            game->attenuationModel = ATTENUATION_UNREAL;
+        } else if (!Q_stricmp(val, "smoothstep")) {
+            game->attenuationModel = ATTENUATION_SMOOTHSTEP;
         } else {
             Error("Unknown attenuation mode: %s", val);
         }
@@ -310,7 +314,7 @@ int main(int argc, char **argv) {
                 Error("Unknown shading mode: %s", arg);
             }
         } else if (!strcmp(argv[i], "-attenuation")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-attenuation requires a type (standard, soft, linear)");
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-attenuation requires a type (standard, soft, linear, unreal, smoothstep)");
             char *arg = argv[++i];
             if (!Q_stricmp(arg, "soft")) {
                 game->attenuationModel = ATTENUATION_INVERSE;
@@ -318,6 +322,10 @@ int main(int argc, char **argv) {
                 game->attenuationModel = ATTENUATION_LINEAR;
             } else if (!Q_stricmp(arg, "standard")) {
                 game->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+            } else if (!Q_stricmp(arg, "unreal")) {
+                game->attenuationModel = ATTENUATION_UNREAL;
+            } else if (!Q_stricmp(arg, "smoothstep")) {
+                game->attenuationModel = ATTENUATION_SMOOTHSTEP;
             } else {
                 Error("Unknown attenuation mode: %s", arg);
             }

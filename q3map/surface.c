@@ -132,6 +132,10 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
                     ds->attenuationModel = ATTENUATION_LINEAR;
                 else if (!Q_stricmp(attStr, "standard"))
                     ds->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+                else if (!Q_stricmp(attStr, "unreal"))
+                    ds->attenuationModel = ATTENUATION_UNREAL;
+                else if (!Q_stricmp(attStr, "smoothstep"))
+                    ds->attenuationModel = ATTENUATION_SMOOTHSTEP;
                 else
                 {
                     _printf("WARNING: Unknown attenuation mode '%s' on func_light entity\n", attStr);

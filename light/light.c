@@ -636,6 +636,10 @@ void CreateEntityLights(void)
                 dl->attenuationModel = ATTENUATION_LINEAR;
             else if (!Q_stricmp(attStr, "standard"))
                 dl->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+            else if (!Q_stricmp(attStr, "unreal"))
+                dl->attenuationModel = ATTENUATION_UNREAL;
+            else if (!Q_stricmp(attStr, "smoothstep"))
+                dl->attenuationModel = ATTENUATION_SMOOTHSTEP;
             else
                 _printf("WARNING: Unknown attenuation mode '%s' on light entity\n", attStr);
         }
