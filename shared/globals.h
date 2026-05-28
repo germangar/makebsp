@@ -67,8 +67,8 @@ typedef struct {
     float       rad_ao_intensity;
     float       rad_ao_min;
     float       rad_ao_max;
-	shadingModel_t   falloff;
-	shadingModel_t   sunFalloff;
+	shadingModel_t   shadingModel;
+	shadingModel_t   sunShadingModel;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
 	float       deluxeAmbientExaggerate;

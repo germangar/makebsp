@@ -317,7 +317,7 @@ void TraceAmbient(int num)
                         // float sizeSq = 32.0f * 32.0f;
                         // float shadingModel = 1.0f / (distSq + sizeSq);
 
-                        float w = NdotL * falloff;
+                        float w = NdotL * shadingModel;
 
                         // Trace ray
                         trace_t trace;

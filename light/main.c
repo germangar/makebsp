@@ -126,7 +126,7 @@ static void ParseWorldspawnKeys(int argc, char **argv)
             shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
         } else {
-            Error("Unknown falloff type: %s", val);
+            Error("Unknown shading mode: %s", val);
         }
     }
 
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-sRGB")) {
             game->lightmapsRGB = qtrue;
         } else if (!strcmp(argv[i], "-shading")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff requires a type (lambert, halflambert, etc.)");
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-shading requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
                 game->shadingModel = SHADING_MODEL_HALFLAMBERT;
@@ -268,22 +268,22 @@ int main(int argc, char **argv) {
                 shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
             } else {
-                Error("Unknown falloff type: %s", arg);
+                Error("Unknown shading mode: %s", arg);
             }
-        } else if (!strcmp(argv[i], "-falloff_softbias")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_softbias requires a numeric value");
+        } else if (!strcmp(argv[i], "-shading_softbias")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-shading_softbias requires a numeric value");
             shadingModelSoftBias = (float)atof(argv[i + 1]);
             if (shadingModelSoftBias < 0.0f) shadingModelSoftBias = 0.0f;
             if (shadingModelSoftBias > 1.0f) shadingModelSoftBias = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-falloff_sun_softbias")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun_softbias requires a numeric value");
+        } else if (!strcmp(argv[i], "-sunshading_softbias")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-sunshading_softbias requires a numeric value");
             sunSoftBias = (float)atof(argv[i + 1]);
             if (sunSoftBias < 0.0f) sunSoftBias = 0.0f;
             if (sunSoftBias > 1.0f) sunSoftBias = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-falloff_sun")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun requires a type (lambert, halflambert, etc.)");
+        } else if (!strcmp(argv[i], "-sunshading")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-sunshading requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
                 game->sunShadingModel = SHADING_MODEL_HALFLAMBERT;
@@ -296,7 +296,7 @@ int main(int argc, char **argv) {
             } else if (!strcmp(arg, "unreal")) {
                 game->sunShadingModel = SHADING_MODEL_UNREAL;
             } else {
-                Error("Unknown sun falloff type: %s", arg);
+                Error("Unknown sun shading mode: %s", arg);
             }
         } else if (!strcmp(argv[i], "-deluxe")) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe requires 1 or 0");
