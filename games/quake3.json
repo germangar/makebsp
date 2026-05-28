@@ -16,24 +16,24 @@
   "lightgridRGB": false,
   "texturesRGB": false,
   "colorsRGB": false,
-  "radiosityPasses": 4,
+  "radiosityPasses": 4, /* Number of times the light bounces */
   "radiosityIntensity": 1.00,
-  "radiosityColorRatio": 0.75,
-  "radiosityInterval": 4,
-  "rad_ao_intensity": 0.50,
+  "radiosityColorRatio": 0.75, /* Percentage (0.0 to 1.0) of surface color transferred to the bounce light */
+  "radiosityInterval": 4, /* Radiosity grid sample size */
+  "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
   "rad_ao_min": 0.00,
-  "rad_ao_max": 32.00,
+  "rad_ao_max": 32.00, /* Distance of ambient occlusion shadowing */
   "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "cutoff": 0.100000,
-  "fadeout": 0.000000,
+  "cutoff": 0.100000, /* Minimum remaining light energy to apply the contribution to a surface */
+  "fadeout": 0.000000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */
   "deluxeMap": false,
   "deluxeMinAngle": 40.00,
   "deluxeAmbientExaggerate": 1.00,
   "deluxeRadiosityExaggerate": 1.00,
-  "antialiasingPasses": 0, /* post-process AA passes */
+  "antialiasingPasses": 0, /*Number of post-process AA passes */
   "superSampleRadius": 0.00,
-  "upscale": false,
+  "upscale": false, /* Raytrace surfaces at 2x resolution */
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "off", /* [ off, softknee, reinhard, filmic ] */

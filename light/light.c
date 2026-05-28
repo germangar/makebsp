@@ -1655,12 +1655,19 @@ void LightMain(void)
     _printf("%5i area lights\n", numAreaLights);
 
     InitTrace();
-    LightWorld();
+    
+    if (!ambientonly) {
+        LightWorld();
+    }
 
-    // Call radiosity passes
-    LightRadiosity();
+    if (!ambientonly && !directonly) {
+        // Call radiosity passes
+        LightRadiosity();
+    }
 
-    LightAmbient();
+    if (!directonly && !radiosityonly) {
+        LightAmbient();
+    }
     
     free(surfaceWorkOrder);
 

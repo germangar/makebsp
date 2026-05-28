@@ -1272,6 +1272,13 @@ void LightRadiosity(void) {
     }
 
     _printf("--- Radiosity Merge ---\n");
+    if (radiosityonly) {
+        memset(lightFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+        if (game->deluxeMap) {
+            memset(deluxeFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+            memset(energyFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+        }
+    }
     RadiosityMerge(accumRadiosityFloats);
     _printf("done\n");
 

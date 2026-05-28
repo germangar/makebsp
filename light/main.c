@@ -37,6 +37,10 @@ int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
 
+qboolean directonly = qfalse;
+qboolean radiosityonly = qfalse;
+qboolean ambientonly = qfalse;
+
 static qboolean HasArg(const char *arg, int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], arg)) return qtrue;
@@ -226,6 +230,12 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-threads")) {
             numthreads = atoi(argv[i + 1]);
             i++;
+        } else if (!strcmp(argv[i], "-directonly")) {
+            directonly = qtrue;
+        } else if (!strcmp(argv[i], "-radiosityonly")) {
+            radiosityonly = qtrue;
+        } else if (!strcmp(argv[i], "-ambientonly")) {
+            ambientonly = qtrue;
         } else if (!strcmp(argv[i], "-area")) {
             areaScale *= atof(argv[i + 1]);
             _printf("area light scaling at %f\n", areaScale);
@@ -488,6 +498,10 @@ int main(int argc, char **argv) {
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
+                "    -deluxemode <0-2>   Output deluxe lighting to direction lightmaps. 0=none, 1=average, 2=bumpmap.\n"
+                "    -directonly         Skip radiosity and ambient passes.\n"
+                "    -radiosityonly      Skip ambient and clear direct lighting before merging radiosity.\n"
+                "    -ambientonly        Skip direct and radiosity passes.\n"
                 "   smoothpasses <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
                 "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
