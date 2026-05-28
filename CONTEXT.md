@@ -32,6 +32,7 @@ The project implements a custom three-phase radiosity system:
 - **Surface types**: There are 3 surface types which are treated diferently MST_PLANAR (always planar surfaces from brushes), MST_PATCH (bezier curve surfaces), MST_TRIANGLE_SOUP (triangle meshes from 3D models).
 - **UV map coordinates**: MST_PLANAR UV coordinates are rectangles and adjust to texel centers. MST_PATCH coordinates fall on texel centers too. MST_TRIANGLE_SOUP coordinates adhere to texel edges as close as they can, since they are not rectangles.
 - **Sparse Sampling**: To optimize performance, the system can sample emitters at a configurable interval (Sparse Grid) and then interpolate the results across the full lightmap.
+- **Radiosity Ambient Blending**: If `rad_color_ratio` is less than 1.0 and ambient color is present, the system uses the ambient color as a replacement for the bounced color. This reduces color bleeding while preserving overall energy. Ambient is added after radiosity to prevent overblowing.
 - **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
 
 ## 5. Geometry Processing: xatlas & CoACD
@@ -63,3 +64,15 @@ Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easi
 
 - **Mechanism**: q3map serializes per-surface overrides into a lightweight binary array (extraSurface_t) at cache/[mapname].srf, which is then re-loaded by light during surface initialization.
 - **Precedence**: Sidecar data acts as a selective override for global game_t defaults.
+
+## 10. Unified Distance Attenuation
+The lighting math utilizes a centralized `CalculateAttenuation` pipeline designed to prevent hotspots while maintaining aggressive culling:
+- **Singularity Offsets**: An `offset` parameter (e.g., `DEFAULT_ATTN_OFFSET`) shifts the inverse-square curve, ensuring $1 / d^2$ never explodes to infinity near the source.
+- **Decoupled Soft Fades**: The visual fade of a light is decoupled from its broad-phase culling. `MIN_LIGHT_ADD` acts as the strict, high-performance geometry cutoff. However, a soft fade is applied *before* this cutoff via `MIN_SOFTNESS_FADE_ADD` and `ATTN_SOFTNESS_RANGE`, allowing the light energy to smoothly slope toward zero visually, without bloating the broad-phase culling bounding spheres.
+- **Early-Out Optimizations**: Spotlights perform expensive vector operations. The distance attenuation is explicitly calculated *first*; if distance alone culls the texel, the system bypasses the spotlight math entirely.
+
+## 11. Entity Parsing & Nomenclature
+The toolchain features a highly modernized entity parsing system for mappers:
+- **Agnostic Keys**: Entity keys are entirely case-insensitive and completely ignore the legacy Quake `_` prefix (e.g., `_color` and `Color` are treated identically).
+- **Nomenclature Shift**: The term `falloff` has been explicitly replaced with `shading` in the codebase and CLI to clarify that it refers to angle/surface shading, distinguishing it from distance-based "attenuation".
+- **Dynamic Overrides**: `misc_model` and `func_*` entities support powerful per-entity overrides, such as `upscale`, `smooth`, `collisiontype` (for tweaking convex hull/trisoup generation), and `haloshader` for overriding automatically generated light halos.

@@ -906,6 +906,14 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             }
         }
 
+        add = CalculateAttenuation(light, dist, ATTENUATION_INVERSE_SQUARE, DEFAULT_ATTN_OFFSET);
+        
+        // Early distance cull: skip expensive spotlight vector math if distance alone kills it
+        if (add <= MIN_LIGHT_ADD)
+        {
+            return qfalse;
+        }
+
         if (light->type == emit_spotlight)
         {
             float softness;
@@ -949,10 +957,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                 if (coneScale > 1.0f)
                     coneScale = 1.0f;
             }
-        }
 
-        add = CalculateAttenuation(light->photons, dist, ATTENUATION_INVERSE_SQUARE, DEFAULT_ATTN_OFFSET);
-        add *= coneScale;
+            add *= coneScale;
+        }
 
         out->angle = surfaceAngle;
         out->isGlow = qfalse;

@@ -113,6 +113,14 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             const char *subdivideStr = ValueForKey(e, "subdivide");
             if (subdivideStr[0])
                 ds->lightSubdivide = atof(subdivideStr);
+
+            const char *cutoffStr = ValueForKey(e, "cutoff");
+            if (cutoffStr[0])
+                ds->cutoff = atof(cutoffStr);
+
+            const char *fadeoutStr = ValueForKey(e, "fadeout");
+            if (fadeoutStr[0])
+                ds->fadeout = atof(fadeoutStr);
         }
     }
     // Resolve vertexcolor override (func_group, misc_model, etc)
@@ -1355,6 +1363,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
+    drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
+    drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
 
     numDrawSurfaces++;
 
@@ -1441,6 +1451,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
+    drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
+    drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
 
     numDrawSurfaces++;
 
@@ -1533,6 +1545,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
+    drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
+    drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
 
     numDrawSurfaces++;
 
@@ -1589,6 +1603,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
+    drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
+    drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
 
     numDrawSurfaces++;
 

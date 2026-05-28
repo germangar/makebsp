@@ -121,7 +121,7 @@ void GpuLightmapState_Free(void);
 
 /* These values have been manually calibrated.
 If the distance falloff calculation changes they would need to be recalibrated */
-#define MIN_LIGHT_ADD 0.1f
+#define MIN_LIGHT_ADD game->minLightAdd
 #define MIN_RADIOSITY_EMITTER_ADD 0.0002f
 #define MIN_RADIOSITY_EMITTER_GROUP_ADD MIN_RADIOSITY_EMITTER_ADD
 #define MIN_DELUXE_ENERGY 0.001f
@@ -138,29 +138,20 @@ typedef enum
 
 #define DEFAULT_ATTN_OFFSET 16.0f
 
+
+
 /*
 ================
-CalculateAttenuation
-
-Calculates distance-based energy decay.
+SETUP_SOFTNESS_RANGE
+Calculates and assigns the dynamic attenuation softness range for a light
 ================
 */
-static inline float CalculateAttenuation(float photons, float dist, attenuationModel_t model, float offset)
-{
-    float energy = 0.0f;
-    float d = dist + offset;
-    
-    switch (model) {
-        case ATTENUATION_INVERSE_SQUARE:
-            energy = photons / (d * d);
-            break;
-        case ATTENUATION_INVERSE_SQUARE_PI:
-            energy = photons / (M_PI * d * d);
-            break;
+#define SETUP_SOFTNESS_RANGE(l) \
+    if ((l)->fadeout <= 0.0f) { \
+        (l)->attnSoftnessRange = 0.0f; \
+    } else { \
+        (l)->attnSoftnessRange = (l)->reach * (l)->fadeout; \
     }
-    
-    return (energy > 0.0f) ? energy : 0.0f;
-}
 
 /*
 ================
@@ -232,6 +223,9 @@ typedef struct light_s
 	vec3_t color;
 	float radiusByDist; // for spotlights
 	float coneSoftness; // scalar for edge transition
+	float attnSoftnessRange; // distance-based fade range for attenuation
+	float min_light_add; // specific cutoff energy limit for this light
+	float fadeout; // percentage of reach to fade (0.0 to 1.0)
 
 	qboolean twosided; // fog lights both sides
 
@@ -240,6 +234,47 @@ typedef struct light_s
 	vec3_t emitColor; // full out-of-gamut value
 	float reach;	  // pre-calculated max distance
 } light_t;
+
+/*
+================
+CalculateAttenuation
+
+Calculates distance-based energy decay.
+================
+*/
+static inline float CalculateAttenuation(const light_t *light, float dist, attenuationModel_t model, float offset)
+{
+    float energy = 0.0f;
+    float d = dist + offset;
+    
+    switch (model) {
+        case ATTENUATION_INVERSE_SQUARE:
+            energy = light->photons / (d * d);
+
+            // The cut happens unconditionally by energy (fast & precise)
+            if (energy <= light->min_light_add)
+            {
+                return 0.0f;
+            }
+
+            if (light->attnSoftnessRange > 0.0f)
+            {
+                // Then from the energy limit, we soften backwards purely by physical distance
+                float fadeStartDist = light->reach - light->attnSoftnessRange;
+                if (dist > fadeStartDist)
+                {
+                    float fadeScale = (light->reach - dist) / light->attnSoftnessRange;
+                    energy *= fadeScale;
+                }
+            }
+            break;
+        case ATTENUATION_INVERSE_SQUARE_PI:
+            energy = light->photons / (M_PI * d * d);
+            break;
+    }
+    
+    return (energy > 0.0f) ? energy : 0.0f;
+}
 
 typedef struct
 {

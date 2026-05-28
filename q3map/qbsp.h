@@ -181,6 +181,8 @@ typedef struct drawsurf_s
     qboolean isHalo;
     int upscale;
     int enforceSampleSize;
+    float cutoff;
+    float fadeout;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

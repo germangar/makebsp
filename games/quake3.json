@@ -9,6 +9,7 @@
   "maxSurfaceIndexes": 6000,
   "lightmapSize": 128,
   "writeLightmapSize": 128,
+  "minLightAdd": 0.100000,
   "sampleSize": 8,
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 1.00,
@@ -19,13 +20,19 @@
   "radiosityPasses": 4,
   "radiosityIntensity": 1.00,
   "radiosityColorRatio": 0.75,
-  "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "radiosityInterval": 4,
+  "rad_ao_intensity": 0.50,
+  "rad_ao_min": 0.00,
+  "rad_ao_max": 32.00,
+  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "deluxeMap": false,
   "deluxeMinAngle": 40.00,
   "deluxeAmbientExaggerate": 1.00,
   "deluxeRadiosityExaggerate": 1.00,
   "antialiasingPasses": 0, /* post-process AA passes */
+  "superSampleRadius": 0.00,
+  "upscale": false,
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "off", /* [ off, softknee, reinhard, filmic ] */

@@ -29,6 +29,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		393210,     // maxSurfaceIndexes
 		512,
 		512,        // writeLightmapSize
+        0.1f,       // minLightAdd
 		4,          // defaultSampleSize
         HDR_8BIT,   // hdr
 		3.0f,       // hdr8BitScale
@@ -72,6 +73,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		6000,
 		128,
 		128,        // writeLightmapSize
+        0.1f,       // minLightAdd
 		8,          // defaultSampleSize
         HDR_OFF,    // hdr
 		1.0f,       // hdr8BitScale

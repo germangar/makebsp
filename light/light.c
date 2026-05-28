@@ -272,10 +272,33 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
         dl2->photons = dl->photons * ls->backsplashFraction;
         dl2->si = ls;
-        dl2->reach = CalculateLightReach(0, dl2->photons, MIN_LIGHT_ADD, DEFAULT_ATTN_OFFSET);
+
+        if (ls->cutoff > 0.0f)
+            dl2->min_light_add = ls->cutoff;
+        else
+            dl2->min_light_add = game->minLightAdd;
+
+        if (ls->fadeout > 0.0f)
+            dl2->fadeout = ls->fadeout;
+        else
+            dl2->fadeout = 0.0f;
+
+        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET);
+        SETUP_SOFTNESS_RANGE(dl2);
     }
 
-    dl->reach = CalculateLightReach(area, value * areaScale, MIN_LIGHT_ADD, DEFAULT_ATTN_OFFSET);
+    if (ls->cutoff > 0.0f)
+        dl->min_light_add = ls->cutoff;
+    else
+        dl->min_light_add = game->minLightAdd;
+
+    if (ls->fadeout > 0.0f)
+        dl->fadeout = ls->fadeout;
+    else
+        dl->fadeout = 0.0f;
+
+    dl->reach = CalculateLightReach(area, value * areaScale, dl->min_light_add, DEFAULT_ATTN_OFFSET);
+    SETUP_SOFTNESS_RANGE(dl);
 }
 
 /*
@@ -640,6 +663,28 @@ void CreateEntityLights(void)
         else if (!ValueForKey(e, "softness")[0])
             dl->coneSoftness = 1.0f; // Default if key missing
 
+        const char *cutoffStr = ValueForKey(e, "cutoff");
+        if (cutoffStr[0])
+        {
+            dl->min_light_add = atof(cutoffStr);
+            if (dl->min_light_add < 0.001f)
+                dl->min_light_add = 0.001f;
+        }
+        else
+            dl->min_light_add = game->minLightAdd;
+
+        const char *fadeoutStr = ValueForKey(e, "fadeout");
+        if (fadeoutStr[0])
+        {
+            dl->fadeout = atof(fadeoutStr);
+            if (dl->fadeout < 0.0f)
+                dl->fadeout = 0.0f;
+            else if (dl->fadeout > 1.0f)
+                dl->fadeout = 1.0f;
+        }
+        else
+            dl->fadeout = 0.0f;
+
         dl->type = emit_point;
 
         // spotlights
@@ -698,6 +743,7 @@ void CreateEntityLights(void)
 
             // Backlight / Backsplash implementation
             float bsIntensity = 0.0f;
+
             const char *bsStr = ValueForKey(e, "backsplash");
             
             if (bsStr[0])
@@ -713,10 +759,14 @@ void CreateEntityLights(void)
                 bl->photons = bsIntensity * pointScale;
                 VectorMA(dl->origin, 3.0f, dl->normal, bl->origin);
                 bl->type = emit_point;
-                bl->reach = CalculateLightReach(0, bl->photons, MIN_LIGHT_ADD, DEFAULT_ATTN_OFFSET);
+                bl->min_light_add = game->minLightAdd;
+                bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET);
+                SETUP_SOFTNESS_RANGE(bl);
             }
         }
-        dl->reach = CalculateLightReach(0, dl->photons, MIN_LIGHT_ADD, DEFAULT_ATTN_OFFSET);
+        dl->min_light_add = game->minLightAdd;
+        dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, DEFAULT_ATTN_OFFSET);
+        SETUP_SOFTNESS_RANGE(dl);
     }
 }
 
@@ -927,7 +977,7 @@ void BuildLocalSurfaces(void)
             if (extra[i].smoothingRadius >= 0.0f) {
                 localSurfaces[i].smoothingRadius = extra[i].smoothingRadius;
             }
-            if (extra[i].lightValue >= 0.0f || extra[i].backsplashFraction >= 0.0f || extra[i].lightSubdivide >= 0.0f) {
+            if (extra[i].lightValue >= 0.0f || extra[i].backsplashFraction >= 0.0f || extra[i].lightSubdivide >= 0.0f || extra[i].cutoff > 0.0f || extra[i].fadeout > 0.0f) {
                 shaderOverride = qtrue;
             }
             if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
@@ -950,6 +1000,12 @@ void BuildLocalSurfaces(void)
                 }
                 if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f) {
                     VectorCopy(extra[i].lightColor, localSurfaces[i].si_override->color);
+                }
+                if (extra[i].cutoff > 0.0f) {
+                    localSurfaces[i].si_override->cutoff = extra[i].cutoff;
+                }
+                if (extra[i].fadeout > 0.0f) {
+                    localSurfaces[i].si_override->fadeout = extra[i].fadeout;
                 }
             }
         }
