@@ -142,19 +142,6 @@ typedef enum
 
 /*
 ================
-SETUP_SOFTNESS_RANGE
-Calculates and assigns the dynamic attenuation softness range for a light
-================
-*/
-#define SETUP_SOFTNESS_RANGE(l) \
-    if ((l)->fadeout <= 0.0f) { \
-        (l)->attnSoftnessRange = 0.0f; \
-    } else { \
-        (l)->attnSoftnessRange = (l)->reach * (l)->fadeout; \
-    }
-
-/*
-================
 CalculateLightReach
 
 Calculates the distance at which a light's contribution falls below threshold.
