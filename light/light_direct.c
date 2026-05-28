@@ -951,16 +951,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             }
         }
 
-        if (light->linearLight)
-        {
-            add = coneScale * light->photons * 0.000125f - dist;
-            if (add < 0)
-                return qfalse;
-        }
-        else
-        {
-            add = (light->photons / (dist * dist)) * coneScale;
-        }
+        add = CalculateAttenuation(light->photons, dist, ATTENUATION_INVERSE_SQUARE, DEFAULT_ATTN_OFFSET);
+        add *= coneScale;
 
         out->angle = surfaceAngle;
         out->isGlow = qfalse;

@@ -32,6 +32,11 @@ typedef enum {
     HDR_32BIT = 3
 } hdrFormat_t;
 
+typedef enum {
+    ATTENUATION_INVERSE_SQUARE,
+    ATTENUATION_INVERSE_SQUARE_PI
+} attenuationModel_t;
+
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
 
 extern int samplesize;

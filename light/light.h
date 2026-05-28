@@ -136,6 +136,32 @@ typedef enum
 	emit_sun
 } emittype_t;
 
+#define DEFAULT_ATTN_OFFSET 16.0f
+
+/*
+================
+CalculateAttenuation
+
+Calculates distance-based energy decay.
+================
+*/
+static inline float CalculateAttenuation(float photons, float dist, attenuationModel_t model, float offset)
+{
+    float energy = 0.0f;
+    float d = dist + offset;
+    
+    switch (model) {
+        case ATTENUATION_INVERSE_SQUARE:
+            energy = photons / (d * d);
+            break;
+        case ATTENUATION_INVERSE_SQUARE_PI:
+            energy = photons / (M_PI * d * d);
+            break;
+    }
+    
+    return (energy > 0.0f) ? energy : 0.0f;
+}
+
 /*
 ================
 CalculateLightReach
@@ -145,26 +171,25 @@ If area > 0, it uses the area-light formula (Lambertian).
 If area <= 0, it uses the point-light formula.
 ================
 */
-static inline float CalculateLightReach(float area, float intensity, float threshold, qboolean linearLight)
+static inline float CalculateLightReach(float area, float intensity, float threshold, float offset)
 {
 	if (intensity <= 0 || threshold <= 0)
 	{
 		return 0.0f;
 	}
-	if (linearLight)
-	{
-		// Linear light math: add = intensity * 0.000125f - dist
-		float reach = (intensity * 0.000125f) - threshold;
-		return (reach > 0.0f) ? reach : 0.0f;
-	}
+	
+    float reach = 0.0f;
 	if (area > 0)
 	{
-		return (float)sqrt((area * intensity) / threshold);
+		reach = (float)sqrt((area * intensity) / threshold);
 	}
 	else
 	{
-		return (float)sqrt(intensity / threshold);
+		reach = (float)sqrt(intensity / threshold);
 	}
+    
+    reach -= offset;
+    return (reach > 0.0f) ? reach : 0.0f;
 }
 
 /*
