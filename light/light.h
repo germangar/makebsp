@@ -152,7 +152,7 @@ If area > 0, it uses the area-light formula (Lambertian).
 If area <= 0, it uses the point-light formula.
 ================
 */
-static inline float CalculateLightReach(float area, float intensity, float threshold, float offset)
+static inline float CalculateLightReach(float area, float intensity, float threshold, float offset, attenuationModel_t model)
 {
 	if (intensity <= 0 || threshold <= 0)
 	{
@@ -160,14 +160,31 @@ static inline float CalculateLightReach(float area, float intensity, float thres
 	}
 	
     float reach = 0.0f;
-	if (area > 0)
-	{
-		reach = (float)sqrt((area * intensity) / threshold);
-	}
-	else
-	{
-		reach = (float)sqrt(intensity / threshold);
-	}
+    switch (model)
+    {
+        case ATTENUATION_INVERSE_SQUARE:
+        case ATTENUATION_INVERSE_SQUARE_PI:
+            if (area > 0)
+                reach = (float)sqrt((area * intensity) / threshold);
+            else
+                reach = (float)sqrt(intensity / threshold);
+            break;
+        case ATTENUATION_INVERSE:
+            // reach is where energy falls to min_light_add: I/d = threshold -> d = I/threshold
+            if (area > 0)
+                reach = (area * intensity) / threshold;
+            else
+                reach = intensity / threshold;
+            break;
+        case ATTENUATION_LINEAR:
+            // reach is where formula hits zero: I*0.000125 - d = 0 -> d = I*0.000125
+            // subtract threshold as a small guard
+            if (area > 0)
+                reach = (area * intensity * 0.000125f) - threshold;
+            else
+                reach = (intensity * 0.000125f) - threshold;
+            break;
+    }
     
     reach -= offset;
     return (reach > 0.0f) ? reach : 0.0f;
@@ -207,7 +224,7 @@ typedef struct light_s
 	vec3_t normal; // for surfaces, spotlights, and suns
 	float dist;	   // plane location along normal
 
-	qboolean linearLight;
+	attenuationModel_t attenuationModel;
 	int photons;
 	int style;
 	vec3_t color;
@@ -260,6 +277,15 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
             break;
         case ATTENUATION_INVERSE_SQUARE_PI:
             energy = light->photons / (M_PI * d * d);
+            break;
+        case ATTENUATION_INVERSE:
+            energy = light->photons / d;
+            if (energy <= light->min_light_add)
+                return 0.0f;
+            break;
+        case ATTENUATION_LINEAR:
+            energy = (light->photons * 0.000125f) - d;
+            // no cutoff check needed: formula naturally reaches zero at finite distance
             break;
     }
     

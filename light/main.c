@@ -117,36 +117,49 @@ static void ParseWorldspawnKeys(int argc, char **argv)
 
     val = ValueForKey(ent, "exposurefilter");
     if (val[0] && !HasArg("-exposurefilter", argc, argv)) {
-        if (!strcmp(val, "softknee")) game->exposureFilter = TONEMAP_SOFTKNEE;
-        else if (!strcmp(val, "reinhard")) game->exposureFilter = TONEMAP_REINHARD;
-        else if (!strcmp(val, "filmic")) game->exposureFilter = TONEMAP_FILMIC;
+        if (!Q_stricmp(val, "softknee")) game->exposureFilter = TONEMAP_SOFTKNEE;
+        else if (!Q_stricmp(val, "reinhard")) game->exposureFilter = TONEMAP_REINHARD;
+        else if (!Q_stricmp(val, "filmic")) game->exposureFilter = TONEMAP_FILMIC;
         else game->exposureFilter = TONEMAP_LINEAR;
     }
 
     val = ValueForKey(ent, "shading");
     if (val[0] && !HasArg("-shading", argc, argv)) {
-        if (!strcmp(val, "halflambert")) {
+        if (!Q_stricmp(val, "halflambert")) {
             game->shadingModel = SHADING_MODEL_HALFLAMBERT;
             shadingModelSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
-        } else if (!strcmp(val, "lambert")) {
+        } else if (!Q_stricmp(val, "lambert")) {
             game->shadingModel = SHADING_MODEL_LAMBERT;
             shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
-        } else if (!strcmp(val, "quadratic")) {
+        } else if (!Q_stricmp(val, "quadratic")) {
             game->shadingModel = SHADING_MODEL_QUADRATIC;
             shadingModelSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
-        } else if (!strcmp(val, "doublequadratic")) {
+        } else if (!Q_stricmp(val, "doublequadratic")) {
             game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
             shadingModelSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
-        } else if (!strcmp(val, "unreal")) {
+        } else if (!Q_stricmp(val, "unreal")) {
             game->shadingModel = SHADING_MODEL_UNREAL;
             shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
             sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
         } else {
             Error("Unknown shading mode: %s", val);
+        }
+    }
+
+    val = ValueForKey(ent, "attenuation");
+    if (val[0] && !HasArg("-attenuation", argc, argv)) {
+        if (!Q_stricmp(val, "soft")) {
+            game->attenuationModel = ATTENUATION_INVERSE;
+        } else if (!Q_stricmp(val, "linear")) {
+            game->attenuationModel = ATTENUATION_LINEAR;
+        } else if (!Q_stricmp(val, "standard")) {
+            game->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+        } else {
+            Error("Unknown attenuation mode: %s", val);
         }
     }
 
@@ -273,28 +286,40 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-shading")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-shading requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
-            if (!strcmp(arg, "halflambert")) {
+            if (!Q_stricmp(arg, "halflambert")) {
                 game->shadingModel = SHADING_MODEL_HALFLAMBERT;
                 shadingModelSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
-            } else if (!strcmp(arg, "lambert")) {
+            } else if (!Q_stricmp(arg, "lambert")) {
                 game->shadingModel = SHADING_MODEL_LAMBERT;
                 shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
-            } else if (!strcmp(arg, "quadratic")) {
+            } else if (!Q_stricmp(arg, "quadratic")) {
                 game->shadingModel = SHADING_MODEL_QUADRATIC;
                 shadingModelSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
-            } else if (!strcmp(arg, "doublequadratic")) {
+            } else if (!Q_stricmp(arg, "doublequadratic")) {
                 game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
                 shadingModelSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
-            } else if (!strcmp(arg, "unreal")) {
+            } else if (!Q_stricmp(arg, "unreal")) {
                 game->shadingModel = SHADING_MODEL_UNREAL;
                 shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
                 sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
             } else {
                 Error("Unknown shading mode: %s", arg);
+            }
+        } else if (!strcmp(argv[i], "-attenuation")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-attenuation requires a type (standard, soft, linear)");
+            char *arg = argv[++i];
+            if (!Q_stricmp(arg, "soft")) {
+                game->attenuationModel = ATTENUATION_INVERSE;
+            } else if (!Q_stricmp(arg, "linear")) {
+                game->attenuationModel = ATTENUATION_LINEAR;
+            } else if (!Q_stricmp(arg, "standard")) {
+                game->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+            } else {
+                Error("Unknown attenuation mode: %s", arg);
             }
         } else if (!strcmp(argv[i], "-shading_softbias")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-shading_softbias requires a numeric value");
@@ -311,15 +336,15 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-sunshading")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-sunshading requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
-            if (!strcmp(arg, "halflambert")) {
+            if (!Q_stricmp(arg, "halflambert")) {
                 game->sunShadingModel = SHADING_MODEL_HALFLAMBERT;
-            } else if (!strcmp(arg, "lambert")) {
+            } else if (!Q_stricmp(arg, "lambert")) {
                 game->sunShadingModel = SHADING_MODEL_LAMBERT;
-            } else if (!strcmp(arg, "quadratic")) {
+            } else if (!Q_stricmp(arg, "quadratic")) {
                 game->sunShadingModel = SHADING_MODEL_QUADRATIC;
-            } else if (!strcmp(arg, "doublequadratic")) {
+            } else if (!Q_stricmp(arg, "doublequadratic")) {
                 game->sunShadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
-            } else if (!strcmp(arg, "unreal")) {
+            } else if (!Q_stricmp(arg, "unreal")) {
                 game->sunShadingModel = SHADING_MODEL_UNREAL;
             } else {
                 Error("Unknown sun shading mode: %s", arg);
@@ -443,11 +468,11 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-exposurefilter")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-exposurefilter requires a mode (softknee, reinhard, or filmic)");
             const char *mode = argv[i + 1];
-            if (!strcmp(mode, "softknee")) {
+            if (!Q_stricmp(mode, "softknee")) {
                 game->exposureFilter = TONEMAP_SOFTKNEE;
-            } else if (!strcmp(mode, "reinhard")) {
+            } else if (!Q_stricmp(mode, "reinhard")) {
                 game->exposureFilter = TONEMAP_REINHARD;
-            } else if (!strcmp(mode, "filmic")) {
+            } else if (!Q_stricmp(mode, "filmic")) {
                 game->exposureFilter = TONEMAP_FILMIC;
             } else {
                 game->exposureFilter = TONEMAP_LINEAR;

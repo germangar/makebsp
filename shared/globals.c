@@ -47,6 +47,7 @@ game_t gameTemplates[MAX_GAMES] = {
         32.0f,      // rad_ao_max
 		SHADING_MODEL_LAMBERT, // falloff
 		SHADING_MODEL_LAMBERT, // sunFalloff
+		ATTENUATION_INVERSE_SQUARE, // attenuationModel
 		qtrue,      // deluxeMap
 		15.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
@@ -92,6 +93,7 @@ game_t gameTemplates[MAX_GAMES] = {
         32.0f,      // rad_ao_max
 		SHADING_MODEL_LAMBERT, // falloff
 		SHADING_MODEL_LAMBERT, // sunFalloff
+		ATTENUATION_INVERSE_SQUARE, // attenuationModel
 		qfalse,     // deluxeMap
 		40.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate

@@ -283,7 +283,8 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         else
             dl2->fadeout = 0.0f;
 
-        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET);
+        dl2->attenuationModel = game->attenuationModel;
+        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
         dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
     }
 
@@ -297,7 +298,8 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
     else
         dl->fadeout = 0.0f;
 
-    dl->reach = CalculateLightReach(area, value * areaScale, dl->min_light_add, DEFAULT_ATTN_OFFSET);
+    dl->attenuationModel = game->attenuationModel;
+    dl->reach = CalculateLightReach(area, value * areaScale, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
     dl->attnSoftnessRange = dl->reach * dl->fadeout;
 }
 
@@ -612,10 +614,11 @@ void CreateEntityLights(void)
         lights = dl;
         dl->coneSoftness = 1.0f;
 
+        dl->attenuationModel = game->attenuationModel;
         spawnflags = FloatForKey(e, "spawnflags");
         if (spawnflags & 1)
         {
-            dl->linearLight = qtrue;
+            dl->attenuationModel = ATTENUATION_LINEAR;
         }
 
         GetVectorForKey(e, "origin", dl->origin);
@@ -759,11 +762,12 @@ void CreateEntityLights(void)
                 bl->photons = bsIntensity * pointScale;
                 VectorMA(dl->origin, 3.0f, dl->normal, bl->origin);
                 bl->type = emit_point;
-                bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET);
+                // attenuationModel inherited from dl via memcpy above
+                bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET, bl->attenuationModel);
                 bl->attnSoftnessRange = bl->reach * bl->fadeout;
             }
         }
-        dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, DEFAULT_ATTN_OFFSET);
+        dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
         dl->attnSoftnessRange = dl->reach * dl->fadeout;
     }
 }

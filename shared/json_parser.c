@@ -128,56 +128,56 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         const char *key = el->name->string;
         struct json_value_s *val = el->value;
 
-        if (!strcmp(key, "game") && val->type == json_type_string)
+        if (!Q_stricmp(key, "game") && val->type == json_type_string)
         {
             game->arg = copystring(json_value_as_string(val)->string);
         }
-        else if (!strcmp(key, "gamePath") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "gamePath") && val->type == json_type_string)
         {
             game->gamePath = copystring(json_value_as_string(val)->string);
         }
-        else if (!strcmp(key, "bspIdent") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "bspIdent") && val->type == json_type_string)
         {
             game->bspIdent = copystring(json_value_as_string(val)->string);
         }
-        else if (!strcmp(key, "bspVersion") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "bspVersion") && val->type == json_type_number)
         {
             game->bspVersion = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "lumpCount") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lumpCount") && val->type == json_type_number)
         {
             game->lumpCount = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "maxLMSurfaceVerts") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "maxLMSurfaceVerts") && val->type == json_type_number)
         {
             game->maxLMSurfaceVerts = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "maxSurfaceVerts") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "maxSurfaceVerts") && val->type == json_type_number)
         {
             game->maxSurfaceVerts = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "maxSurfaceIndexes") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "maxSurfaceIndexes") && val->type == json_type_number)
         {
             game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "lightmapSize") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lightmapSize") && val->type == json_type_number)
         {
             int oldSize = game->lightmapSize;
             game->lightmapSize = atoi(json_value_as_number(val)->number);
             if (game->writeLightmapSize == oldSize)
                 game->writeLightmapSize = game->lightmapSize;
         }
-        else if (!strcmp(key, "writeLightmapSize") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "writeLightmapSize") && val->type == json_type_number)
         {
             game->writeLightmapSize = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "cutoff") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "cutoff") && val->type == json_type_number)
         {
             game->minLightAdd = (float)atof(json_value_as_number(val)->number);
             if (game->minLightAdd < 0.001f)
                 game->minLightAdd = 0.001f;
         }
-        else if (!strcmp(key, "fadeout") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "fadeout") && val->type == json_type_number)
         {
             game->fadeout = (float)atof(json_value_as_number(val)->number);
             if (game->fadeout < 0.0f)
@@ -185,178 +185,188 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             else if (game->fadeout > 1.0f)
                 game->fadeout = 1.0f;
         }
-        else if (!strcmp(key, "sampleSize") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "sampleSize") && val->type == json_type_number)
         {
             game->defaultSampleSize = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "hdr") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "hdr") && val->type == json_type_string)
         {
             const char *h = json_value_as_string(val)->string;
-            if (!strcmp(h, "rgb8"))
+            if (!Q_stricmp(h, "rgb8"))
                 game->hdr = HDR_8BIT;
-            else if (!strcmp(h, "rgba16f"))
+            else if (!Q_stricmp(h, "rgba16f"))
                 game->hdr = HDR_16BIT;
-            else if (!strcmp(h, "rgba32f"))
+            else if (!Q_stricmp(h, "rgba32f"))
                 game->hdr = HDR_32BIT;
             else
                 game->hdr = HDR_OFF;
         }
-        else if (!strcmp(key, "hdr8BitScale") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "hdr8BitScale") && val->type == json_type_number)
         {
             game->hdr8BitScale = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "lightmapsRGB"))
+        else if (!Q_stricmp(key, "lightmapsRGB"))
         {
             if (val->type == json_type_true)
                 game->lightmapsRGB = qtrue;
             else if (val->type == json_type_false)
                 game->lightmapsRGB = qfalse;
         }
-        else if (!strcmp(key, "lightgridRGB"))
+        else if (!Q_stricmp(key, "lightgridRGB"))
         {
             if (val->type == json_type_true)
                 game->lightgridRGB = qtrue;
             else if (val->type == json_type_false)
                 game->lightgridRGB = qfalse;
         }
-        else if (!strcmp(key, "texturesRGB"))
+        else if (!Q_stricmp(key, "texturesRGB"))
         {
             if (val->type == json_type_true)
                 game->texturesRGB = qtrue;
             else if (val->type == json_type_false)
                 game->texturesRGB = qfalse;
         }
-        else if (!strcmp(key, "colorsRGB"))
+        else if (!Q_stricmp(key, "colorsRGB"))
         {
             if (val->type == json_type_true)
                 game->colorsRGB = qtrue;
             else if (val->type == json_type_false)
                 game->colorsRGB = qfalse;
         }
-        else if (!strcmp(key, "radiosityPasses") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "radiosityPasses") && val->type == json_type_number)
         {
             game->radiosityPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "radiosityIntensity") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "radiosityIntensity") && val->type == json_type_number)
         {
             game->radiosityIntensity = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "radiosityColorRatio") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "radiosityColorRatio") && val->type == json_type_number)
         {
             game->radiosityColorRatio = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "radiosityInterval") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "radiosityInterval") && val->type == json_type_number)
         {
             game->radiosityInterval = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "rad_ao_intensity") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "rad_ao_intensity") && val->type == json_type_number)
         {
             game->rad_ao_intensity = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "rad_ao_min") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "rad_ao_min") && val->type == json_type_number)
         {
             game->rad_ao_min = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "rad_ao_max") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "rad_ao_max") && val->type == json_type_number)
         {
             game->rad_ao_max = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "deluxeMap"))
+        else if (!Q_stricmp(key, "deluxeMap"))
         {
             if (val->type == json_type_true)
                 game->deluxeMap = qtrue;
             else if (val->type == json_type_false)
                 game->deluxeMap = qfalse;
         }
-        else if (!strcmp(key, "deluxeMinAngle") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "deluxeMinAngle") && val->type == json_type_number)
         {
             game->deluxeMinAngle = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "deluxeAmbientExaggerate") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "deluxeAmbientExaggerate") && val->type == json_type_number)
         {
             game->deluxeAmbientExaggerate = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "deluxeRadiosityExaggerate") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "deluxeRadiosityExaggerate") && val->type == json_type_number)
         {
             game->deluxeRadiosityExaggerate = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "smoothPasses") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "smoothPasses") && val->type == json_type_number)
         {
             game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "smoothRadius") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "smoothRadius") && val->type == json_type_number)
         {
             game->defaultSmoothRadius = (float)atof(json_value_as_number(val)->number);
             if (game->defaultSmoothRadius < 0.1f)
                 game->defaultSmoothRadius = 0.1f;
         }
-        else if (!strcmp(key, "antialiasingPasses") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "antialiasingPasses") && val->type == json_type_number)
         {
             game->antialiasingPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "superSampleRadius") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "superSampleRadius") && val->type == json_type_number)
         {
             game->superSampleRadius = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "upscale"))
+        else if (!Q_stricmp(key, "upscale"))
         {
             if (val->type == json_type_true)
                 game->upscale = qtrue;
             else if (val->type == json_type_false)
                 game->upscale = qfalse;
         }
-        else if (!strcmp(key, "shading") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "shading") && val->type == json_type_string)
         {
             const char *f = json_value_as_string(val)->string;
-            if (!strcmp(f, "halflambert"))
+            if (!Q_stricmp(f, "halflambert"))
                 game->shadingModel = SHADING_MODEL_HALFLAMBERT;
-            else if (!strcmp(f, "quadratic"))
+            else if (!Q_stricmp(f, "quadratic"))
                 game->shadingModel = SHADING_MODEL_QUADRATIC;
-            else if (!strcmp(f, "doublequadratic"))
+            else if (!Q_stricmp(f, "doublequadratic"))
                 game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
-            else if (!strcmp(f, "unreal"))
+            else if (!Q_stricmp(f, "unreal"))
                 game->shadingModel = SHADING_MODEL_UNREAL;
             else
                 game->shadingModel = SHADING_MODEL_LAMBERT;
         }
-        else if (!strcmp(key, "sunShading") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "sunShading") && val->type == json_type_string)
         {
             const char *f = json_value_as_string(val)->string;
-            if (!strcmp(f, "halflambert"))
+            if (!Q_stricmp(f, "halflambert"))
                 game->sunShadingModel = SHADING_MODEL_HALFLAMBERT;
-            else if (!strcmp(f, "quadratic"))
+            else if (!Q_stricmp(f, "quadratic"))
                 game->sunShadingModel = SHADING_MODEL_QUADRATIC;
-            else if (!strcmp(f, "doublequadratic"))
+            else if (!Q_stricmp(f, "doublequadratic"))
                 game->sunShadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
-            else if (!strcmp(f, "unreal"))
+            else if (!Q_stricmp(f, "unreal"))
                 game->sunShadingModel = SHADING_MODEL_UNREAL;
             else
                 game->sunShadingModel = SHADING_MODEL_LAMBERT;
         }
-        else if (!strcmp(key, "exposurefilter") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "attenuation") && val->type == json_type_string)
+        {
+            const char *a = json_value_as_string(val)->string;
+            if (!Q_stricmp(a, "soft"))
+                game->attenuationModel = ATTENUATION_INVERSE;
+            else if (!Q_stricmp(a, "linear"))
+                game->attenuationModel = ATTENUATION_LINEAR;
+            else
+                game->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+        }
+        else if (!Q_stricmp(key, "exposurefilter") && val->type == json_type_string)
         {
             const char *ef = json_value_as_string(val)->string;
-            if (!strcmp(ef, "softknee"))
+            if (!Q_stricmp(ef, "softknee"))
                 game->exposureFilter = TONEMAP_SOFTKNEE;
-            else if (!strcmp(ef, "reinhard"))
+            else if (!Q_stricmp(ef, "reinhard"))
                 game->exposureFilter = TONEMAP_REINHARD;
-            else if (!strcmp(ef, "filmic"))
+            else if (!Q_stricmp(ef, "filmic"))
                 game->exposureFilter = TONEMAP_FILMIC;
             else
                 game->exposureFilter = TONEMAP_LINEAR;
         }
-        else if (!strcmp(key, "enforceSampleSize"))
+        else if (!Q_stricmp(key, "enforceSampleSize"))
         {
             if (val->type == json_type_true)
                 game->enforceSampleSize = qtrue;
             else if (val->type == json_type_false)
                 game->enforceSampleSize = qfalse;
         }
-        else if (!strcmp(key, "flareShader") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "flareShader") && val->type == json_type_string)
         {
             game->flareShader = copystring(json_value_as_string(val)->string);
         }
-        else if (!strcmp(key, "haloShader") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "haloShader") && val->type == json_type_string)
         {
             game->haloShader = copystring(json_value_as_string(val)->string);
         }
@@ -432,6 +442,20 @@ void JSON_ExportGame(const char *filename, game_t *game)
         break;
     }
 
+    const char *attenuationModelStr;
+    switch (game->attenuationModel)
+    {
+    case ATTENUATION_INVERSE:
+        attenuationModelStr = "soft";
+        break;
+    case ATTENUATION_LINEAR:
+        attenuationModelStr = "linear";
+        break;
+    default:
+        attenuationModelStr = "standard";
+        break;
+    }
+
     const char *hdrStr;
     switch (game->hdr)
     {
@@ -494,6 +518,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"rad_ao_max\": %.2f, /* Distance of ambient occlusion shadowing */\n"
             "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
+            "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
             "  \"cutoff\": %f, /* Minimum remaining light energy to apply the contribution to a surface */\n"
             "  \"fadeout\": %f, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */\n"
             "  \"deluxeMap\": %s,\n"
@@ -527,6 +552,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->rad_ao_max,
             shadingModelStr,
             sunShadingModelStr,
+            attenuationModelStr,
             game->minLightAdd,
             game->fadeout,
             game->deluxeMap ? "true" : "false",

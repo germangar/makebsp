@@ -36,7 +36,9 @@ typedef enum {
 
 typedef enum {
     ATTENUATION_INVERSE_SQUARE,
-    ATTENUATION_INVERSE_SQUARE_PI
+    ATTENUATION_INVERSE_SQUARE_PI,
+    ATTENUATION_INVERSE,
+    ATTENUATION_LINEAR
 } attenuationModel_t;
 
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
@@ -78,6 +80,7 @@ typedef struct {
     float       rad_ao_max;
 	shadingModel_t   shadingModel;
 	shadingModel_t   sunShadingModel;
+	attenuationModel_t attenuationModel;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
 	float       deluxeAmbientExaggerate;
