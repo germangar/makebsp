@@ -1,4 +1,4 @@
-﻿#include "light.h"
+#include "light.h"
 #include <omp.h>
 #include <math.h>
 #include <stdlib.h>
@@ -172,7 +172,7 @@ static float GetSurfaceTexelSize(dsurface_t *ds) {
 }
 void GpuLightmapState_Upload(void) {
     int s, x, y; GpuLightmapState *st = &g_gpuLM; cl_int err;
-    int scale = FILTER_UPSCALE ? 2 : 1; st->upscale = scale;
+    int scale = game->upscale ? 2 : 1; st->upscale = scale;
     int totalP1x = numLightBytes/3, totalP = totalP1x*scale*scale; st->totalAtlasPixels=totalP; st->numPlanarSurfaces=numPlanarSurfaces; st->pingIsA=1;
     size_t aB = (size_t)totalP*3*sizeof(float), mB = (size_t)totalP*sizeof(byte);
     float *tA = lightFloats; byte *tM = lightAlphaMask;

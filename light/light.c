@@ -31,12 +31,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define DEFAULT_SPOTLIGHT_TARGET_DISTANCE 64.0f
 
-float superSampleRadius = 0.0f;
-
+float pointScale = 7500;
 qboolean nodirect;
 qboolean patchshadows = qtrue;
-qboolean upscale;
-qboolean lightmapBorder;
+qboolean lightmapBorder = qfalse;
 
 qboolean debugLightmaps;
 qboolean debugLightmapsAlpha;
@@ -48,8 +46,6 @@ long long numTotalLuxels = 0;
 // for run time tweaking of all area sources in the level
 float areaScale = 0.25;
 
-// for run time tweaking of all point sources in the level
-float pointScale = 7500;
 int CompareSurfaces(const void *a, const void *b)
 {
     int i1 = *(int *)a;
@@ -888,7 +884,7 @@ void BuildLocalSurfaces(void)
     int numExtra;
     extraSurface_t *extra = LoadSurfaceExtraFile(mapName, &numExtra);
     
-    extern int rad_interval;
+    // rad_interval is now game->radiosityInterval
     for (i = 0; i < numDrawSurfaces; i++)
     {
         dsurface_t *ds = &drawSurfaces[i];
@@ -900,7 +896,7 @@ void BuildLocalSurfaces(void)
 
             localSurfaces[i].radInterval = ri;
         } else {
-            localSurfaces[i].radInterval = rad_interval;
+            localSurfaces[i].radInterval = game->radiosityInterval;
         }
         
         // Ensure trisoups have enough quality for radiosity unless -fast is active
@@ -982,21 +978,21 @@ void BuildLocalSurfaces(void)
 
         // Apply supersampling override
         localSurfaces[i].superSampleRadius = -1.0f; // Default
-        if (extra && i < numExtra)
-        {
+        if (extra && i < numExtra) {
             localSurfaces[i].superSampleRadius = extra[i].superSampleRadius;
         }
 
         // Incorporate global switch if not set in entity
-        if (localSurfaces[i].superSampleRadius < 0.0f)
-        {
-            localSurfaces[i].superSampleRadius = superSampleRadius;
+        if (localSurfaces[i].superSampleRadius < 0.0f) {
+            localSurfaces[i].superSampleRadius = game->superSampleRadius;
         }
 
         localSurfaces[i].upscale = 0;
-        if (extra && i < numExtra)
-        {
+        if (extra && i < numExtra) {
             localSurfaces[i].upscale = extra[i].upscale;
+        }
+        if (localSurfaces[i].upscale == 0) {
+            localSurfaces[i].upscale = game->upscale ? 2 : 1;
         }
     }
     if (extra)
@@ -1217,8 +1213,8 @@ void ExportAlphaMask(const char *filenamePrefix)
         color[1] = (i * 456) % 200 + 55;
         color[2] = (i * 789) % 200 + 55;
 
-        int scale = upscale ? 2 : 1;
-        int currentGutter = upscale ? (GUTTER * 2) : 0;
+        int scale = game->upscale ? 2 : 1;
+        int currentGutter = game->upscale ? (GUTTER * 2) : 0;
         int extW = ds->lightmapWidth * scale + currentGutter * 2;
         int extH = ds->lightmapHeight * scale + currentGutter * 2;
 
@@ -1458,13 +1454,10 @@ void LightMain(void)
     _printf("--- LightMain ---\n");
 
     // find the optional world ambient
-    const char *_color = ValueForKey(&entities[0], "color");
-    if (_color[0])
-    {
-        ParseColor(_color, ambientColor);
-    }
-    else
-    {
+    const char *color = ValueForKey(&entities[0], "color");
+    if (color[0]) {
+        ParseColor(color, ambientColor);
+    } else {
         VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
     }
 

@@ -50,7 +50,7 @@ LIGHT TRACING EXECUTION
 ===============================================================
 */
 
-float CalculateSpecificFalloff(float dot, falloff_t falloff, float bias)
+float CalculateSpecificFalloff(float dot, shadingModel_t falloff, float bias)
 {
     float val = (dot > 1.0f) ? 1.0f : dot;
 
@@ -59,21 +59,21 @@ float CalculateSpecificFalloff(float dot, falloff_t falloff, float bias)
     if (val < 0.0f)
         val = 0.0f;
 
-    if (falloff == FALLOFF_HALFLAMBERT)
+    if (falloff == SHADING_MODEL_HALFLAMBERT)
     {
         return val * val;
     }
-    else if (falloff == FALLOFF_UNREAL)
+    else if (falloff == SHADING_MODEL_UNREAL)
     {
         // Unreal angular part is standard Lambert
         return val;
     }
-    else if (falloff == FALLOFF_QUADRATIC)
+    else if (falloff == SHADING_MODEL_QUADRATIC)
     {
         val = 1.0f - val;
         return 1.0f - (val * val);
     }
-    else if (falloff == FALLOFF_DOUBLEQUADRATIC)
+    else if (falloff == SHADING_MODEL_DOUBLEQUADRATIC)
     {
         val = 1.0f - val;
         return 1.0f - (val * val * val);
@@ -81,9 +81,9 @@ float CalculateSpecificFalloff(float dot, falloff_t falloff, float bias)
     return val;
 }
 
-float CalculateFalloff(float dot)
+float CalculateShadingModel(float dot)
 {
-    return CalculateSpecificFalloff(dot, game->falloff, falloffSoftBias);
+    return CalculateSpecificFalloff(dot, game->shadingModel, shadingModelSoftBias);
 }
 
 /*
@@ -530,8 +530,8 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
             return qfalse; // facing away
         }
     }
-    else if (game->sunFalloff != FALLOFF_HALFLAMBERT &&
-             game->sunFalloff != FALLOFF_LAMBERT)
+    else if (game->sunShadingModel != SHADING_MODEL_HALFLAMBERT &&
+             game->sunShadingModel != SHADING_MODEL_LAMBERT)
     {
         if (DotProduct(normal, sunDirection) <= 0)
         {
@@ -539,7 +539,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
         }
     }
 
-    angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), game->sunFalloff, sunSoftBias);
+    angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), game->sunShadingModel, sunSoftBias);
     if (angle <= 0)
     {
         return qfalse; // facing away
@@ -899,7 +899,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         // surface falloff
         if (normal)
         {
-            surfaceAngle = CalculateFalloff(DotProduct(normal, out->dir));
+            surfaceAngle = CalculateShadingModel(DotProduct(normal, out->dir));
             if (surfaceAngle <= 0)
             {
                 return qfalse;
@@ -1191,8 +1191,8 @@ void PrecacheTexelGeometryThread(int i)
         return;
     }
 
-    int currentGutter = upscale ? (GUTTER * 2) : GUTTER;
-    int scale = upscale ? 2 : 1;
+    int currentGutter = game->upscale ? (GUTTER * 2) : GUTTER;
+    int scale = game->upscale ? 2 : 1;
 
     int sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
     int sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
@@ -1343,13 +1343,13 @@ void TraceLtm(int num)
     localLights = Q_Alloc(numLights * sizeof(light_t *));
     numLocalLights = 0;
 
-    if (falloffSoftBias > 0.0f && falloffSoftBias < 1.0f)
+    if (shadingModelSoftBias > 0.0f && shadingModelSoftBias < 1.0f)
     {
-        wrapThreshold = -falloffSoftBias / (1.0f - falloffSoftBias);
+        wrapThreshold = -shadingModelSoftBias / (1.0f - shadingModelSoftBias);
         if (wrapThreshold < -1.0f)
             wrapThreshold = -1.0f;
     }
-    else if (falloffSoftBias >= 1.0f)
+    else if (shadingModelSoftBias >= 1.0f)
     {
         wrapThreshold = -1.0f;
     }
@@ -1384,9 +1384,9 @@ void TraceLtm(int num)
                     VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
                     VectorScale(v, 1.0f / d, v); // Safely normalize using precomputed distance
 
-                    // Unified culling: use CalculateFalloff on the "best possible" dot product for this surface
+                    // Unified culling: use CalculateShadingModel on the "best possible" dot product for this surface
                     float bestDot = DotProduct(v, ds->lightmapVecs[2]) + (localSurfaces[realSurfIndex].radius / d);
-                    if (CalculateFalloff(bestDot) <= 0)
+                    if (CalculateShadingModel(bestDot) <= 0)
                     {
                         continue;
                     }
@@ -1432,7 +1432,7 @@ void TraceLtm(int num)
         return; // doesn't need lightmap lighting
     }
 
-    int use_upscale = upscale || localSurfaces[realSurfIndex].upscale;
+    int use_upscale = localSurfaces[realSurfIndex].upscale > 1;
     int isDilated = use_upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
 
     tw->patchshadows = patchshadows;
@@ -1628,7 +1628,7 @@ void TraceLtm(int num)
                 float v = (float)(j - currentGutter) + jdy + 0.5f;
                 float step = 1.0f / (float)scale;
 
-                int global_scale = upscale ? 2 : 1;
+                int global_scale = game->upscale ? 2 : 1;
                 if (ss == 0 && scale == global_scale)
                 {
                     int native_px = px / scale;
@@ -2054,7 +2054,7 @@ void TraceGrid(int num)
         float d;
         vec3_t tempColor;
         VectorScale(contributions[i].irradiance, contributions[i].angle, tempColor);
-        d = CalculateFalloff(DotProduct(contributions[i].dir, summedDir));
+        d = CalculateShadingModel(DotProduct(contributions[i].dir, summedDir));
         VectorMA(directedColor, d, tempColor, directedColor);
         d = 0.25 * (1.0 - d);
         VectorMA(color, d, tempColor, color);

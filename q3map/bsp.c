@@ -523,6 +523,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (samplesize < 1) samplesize = 1;
         _printf("Worldspawn override: default lightmap sample size = %dx%d units\n", samplesize, samplesize);
     }
+
+    val = ValueForKey(ent, "enforcesamplesize");
+    if (val[0] && !HasArg("-enforcesamplesize", argc, argv)) {
+        game->enforceSampleSize = atoi(val) != 0;
+        _printf("Worldspawn override: enforceSampleSize = %d\n", game->enforceSampleSize);
+    }
 }
 
 int main(int argc, char **argv)

@@ -231,6 +231,22 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->radiosityColorRatio = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!strcmp(key, "radiosityInterval") && val->type == json_type_number)
+        {
+            game->radiosityInterval = atoi(json_value_as_number(val)->number);
+        }
+        else if (!strcmp(key, "rad_ao_intensity") && val->type == json_type_number)
+        {
+            game->rad_ao_intensity = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!strcmp(key, "rad_ao_min") && val->type == json_type_number)
+        {
+            game->rad_ao_min = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!strcmp(key, "rad_ao_max") && val->type == json_type_number)
+        {
+            game->rad_ao_max = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!strcmp(key, "deluxeMap"))
         {
             if (val->type == json_type_true)
@@ -264,33 +280,44 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->antialiasingPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "falloff") && val->type == json_type_string)
+        else if (!strcmp(key, "superSampleRadius") && val->type == json_type_number)
         {
-            const char *f = json_value_as_string(val)->string;
-            if (!strcmp(f, "halflambert"))
-                game->falloff = FALLOFF_HALFLAMBERT;
-            else if (!strcmp(f, "quadratic"))
-                game->falloff = FALLOFF_QUADRATIC;
-            else if (!strcmp(f, "doublequadratic"))
-                game->falloff = FALLOFF_DOUBLEQUADRATIC;
-            else if (!strcmp(f, "unreal"))
-                game->falloff = FALLOFF_UNREAL;
-            else
-                game->falloff = FALLOFF_LAMBERT;
+            game->superSampleRadius = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "sunFalloff") && val->type == json_type_string)
+        else if (!strcmp(key, "upscale"))
+        {
+            if (val->type == json_type_true)
+                game->upscale = qtrue;
+            else if (val->type == json_type_false)
+                game->upscale = qfalse;
+        }
+        else if (!strcmp(key, "shading") && val->type == json_type_string)
         {
             const char *f = json_value_as_string(val)->string;
             if (!strcmp(f, "halflambert"))
-                game->sunFalloff = FALLOFF_HALFLAMBERT;
+                game->shadingModel = SHADING_MODEL_HALFLAMBERT;
             else if (!strcmp(f, "quadratic"))
-                game->sunFalloff = FALLOFF_QUADRATIC;
+                game->shadingModel = SHADING_MODEL_QUADRATIC;
             else if (!strcmp(f, "doublequadratic"))
-                game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
+                game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
             else if (!strcmp(f, "unreal"))
-                game->sunFalloff = FALLOFF_UNREAL;
+                game->shadingModel = SHADING_MODEL_UNREAL;
             else
-                game->sunFalloff = FALLOFF_LAMBERT;
+                game->shadingModel = SHADING_MODEL_LAMBERT;
+        }
+        else if (!strcmp(key, "sunShading") && val->type == json_type_string)
+        {
+            const char *f = json_value_as_string(val)->string;
+            if (!strcmp(f, "halflambert"))
+                game->sunShadingModel = SHADING_MODEL_HALFLAMBERT;
+            else if (!strcmp(f, "quadratic"))
+                game->sunShadingModel = SHADING_MODEL_QUADRATIC;
+            else if (!strcmp(f, "doublequadratic"))
+                game->sunShadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
+            else if (!strcmp(f, "unreal"))
+                game->sunShadingModel = SHADING_MODEL_UNREAL;
+            else
+                game->sunShadingModel = SHADING_MODEL_LAMBERT;
         }
         else if (!strcmp(key, "exposurefilter") && val->type == json_type_string)
         {
@@ -345,49 +372,49 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
 void JSON_ExportGame(const char *filename, game_t *game)
 {
     char buffer[4096];
-    const char *falloffStr;
-    switch (game->falloff)
+    const char *shadingModelStr;
+    switch (game->shadingModel)
     {
-    case FALLOFF_LAMBERT:
-        falloffStr = "lambert";
+    case SHADING_MODEL_LAMBERT:
+        shadingModelStr = "lambert";
         break;
-    case FALLOFF_HALFLAMBERT:
-        falloffStr = "halflambert";
+    case SHADING_MODEL_HALFLAMBERT:
+        shadingModelStr = "halflambert";
         break;
-    case FALLOFF_QUADRATIC:
-        falloffStr = "quadratic";
+    case SHADING_MODEL_QUADRATIC:
+        shadingModelStr = "quadratic";
         break;
-    case FALLOFF_DOUBLEQUADRATIC:
-        falloffStr = "doublequadratic";
+    case SHADING_MODEL_DOUBLEQUADRATIC:
+        shadingModelStr = "doublequadratic";
         break;
-    case FALLOFF_UNREAL:
-        falloffStr = "unreal";
+    case SHADING_MODEL_UNREAL:
+        shadingModelStr = "unreal";
         break;
     default:
-        falloffStr = "unknown";
+        shadingModelStr = "unknown";
         break;
     }
 
-    const char *sunFalloffStr;
-    switch (game->sunFalloff)
+    const char *sunShadingModelStr;
+    switch (game->sunShadingModel)
     {
-    case FALLOFF_LAMBERT:
-        sunFalloffStr = "lambert";
+    case SHADING_MODEL_LAMBERT:
+        sunShadingModelStr = "lambert";
         break;
-    case FALLOFF_HALFLAMBERT:
-        sunFalloffStr = "halflambert";
+    case SHADING_MODEL_HALFLAMBERT:
+        sunShadingModelStr = "halflambert";
         break;
-    case FALLOFF_QUADRATIC:
-        sunFalloffStr = "quadratic";
+    case SHADING_MODEL_QUADRATIC:
+        sunShadingModelStr = "quadratic";
         break;
-    case FALLOFF_DOUBLEQUADRATIC:
-        sunFalloffStr = "doublequadratic";
+    case SHADING_MODEL_DOUBLEQUADRATIC:
+        sunShadingModelStr = "doublequadratic";
         break;
-    case FALLOFF_UNREAL:
-        sunFalloffStr = "unreal";
+    case SHADING_MODEL_UNREAL:
+        sunShadingModelStr = "unreal";
         break;
     default:
-        sunFalloffStr = "unknown";
+        sunShadingModelStr = "unknown";
         break;
     }
 
@@ -447,14 +474,19 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"radiosityPasses\": %d,\n"
             "  \"radiosityIntensity\": %.2f,\n"
             "  \"radiosityColorRatio\": %.2f,\n"
+            "  \"radiosityInterval\": %d,\n"
+            "  \"rad_ao_intensity\": %.2f,\n"
+            "  \"rad_ao_min\": %.2f,\n"
+            "  \"rad_ao_max\": %.2f,\n"
             "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"deluxeMap\": %s,\n"
             "  \"deluxeMinAngle\": %.2f,\n"
             "  \"deluxeAmbientExaggerate\": %.2f,\n"
             "  \"deluxeRadiosityExaggerate\": %.2f,\n"
-
             "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
+            "  \"superSampleRadius\": %.2f,\n"
+            "  \"upscale\": %s,\n"
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
@@ -473,14 +505,20 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->radiosityPasses,
             game->radiosityIntensity,
             game->radiosityColorRatio,
-            falloffStr,
-            sunFalloffStr,
+            game->radiosityInterval,
+            game->rad_ao_intensity,
+            game->rad_ao_min,
+            game->rad_ao_max,
+            shadingModelStr,
+            sunShadingModelStr,
             game->deluxeMap ? "true" : "false",
             game->deluxeMinAngle,
             game->deluxeAmbientExaggerate,
             game->deluxeRadiosityExaggerate,
 
             game->antialiasingPasses,
+            game->superSampleRadius,
+            game->upscale ? "true" : "false",
             game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
             game->enforceSampleSize ? "true" : "false",
             game->flareShader,

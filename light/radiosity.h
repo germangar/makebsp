@@ -21,10 +21,6 @@ Call LightRadiosity() AFTER LightMain() and BEFORE SmoothLightmaps().
 
 
 extern float rad_min_energy;
-extern float rad_ao_min;
-extern float rad_ao_max;
-extern float rad_ao_intensity;
-extern int   rad_interval;
 extern float rad_voxel_size;
 extern float rad_angle_match; // Angle in degrees
 

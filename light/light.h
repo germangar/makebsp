@@ -238,7 +238,7 @@ extern skyBrush_t skyBrushes[];
 extern vec3_t gridMins, gridSize;
 extern int gridBounds[3], numGridPoints;
 
-float CalculateFalloff(float dot);
+float CalculateShadingModel(float dot);
 
 extern float *lightFloats;
 extern float *deluxeFloats;
@@ -342,12 +342,12 @@ typedef struct
 extern float areaScale;
 extern float pointScale;
 extern qboolean nodirect;
-extern qboolean upscale;
+
 extern qboolean lightmapBorder;
 extern int novertexlighting;
 extern int nogridlighting;
 
-extern float superSampleRadius;
+
 void SmoothLightmaps(float radius);
 void PostProcessLightmaps(void);
 

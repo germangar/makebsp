@@ -11,8 +11,8 @@ char source[1024];
 char name[1024];
 
 int numGames = 2;
-float falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
-float sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+float shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
+float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
@@ -39,14 +39,20 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // radiosityPasses
 		1.0f,       // radiosityIntensity
 		1.0f,       // radiosityColorRatio
-		FALLOFF_LAMBERT, // falloff
-		FALLOFF_LAMBERT, // sunFalloff
+        4,          // radiosityInterval
+        0.5f,       // rad_ao_intensity
+        0.0f,       // rad_ao_min
+        32.0f,      // rad_ao_max
+		SHADING_MODEL_LAMBERT, // falloff
+		SHADING_MODEL_LAMBERT, // sunFalloff
 		qtrue,      // deluxeMap
 		15.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
 
 
+		0.0f,       // superSampleRadius
+		qfalse,     // upscale
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
@@ -76,14 +82,20 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // radiosityPasses
 		1.0f,       // radiosityIntensity
 		0.75f,      // radiosityColorRatio
-		FALLOFF_LAMBERT, // falloff
-		FALLOFF_LAMBERT, // sunFalloff
+        4,          // radiosityInterval
+        0.5f,       // rad_ao_intensity
+        0.0f,       // rad_ao_min
+        32.0f,      // rad_ao_max
+		SHADING_MODEL_LAMBERT, // falloff
+		SHADING_MODEL_LAMBERT, // sunFalloff
 		qfalse,     // deluxeMap
 		40.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
 		1.0f,       // deluxeRadiosityExaggerate
 
 
+		0.0f,       // superSampleRadius
+		qfalse,     // upscale
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius

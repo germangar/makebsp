@@ -61,6 +61,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->lightSubdivide = -1.0f;
     ds->superSampleRadius = -1.0f;
     ds->upscale = 0;
+    ds->enforceSampleSize = game->enforceSampleSize;
 
     return ds;
 }
@@ -137,6 +138,11 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
         else
             ds->superSampleRadius = ssVal;
     }
+
+    // Resolve enforceSampleSize override
+    const char *enforceStr = ValueForKey(e, "enforcesamplesize");
+    if (enforceStr[0])
+        ds->enforceSampleSize = atoi(enforceStr);
 }
 
 /*
@@ -353,7 +359,7 @@ void MergeDrawSurfs(entity_t *e)
             {
                 continue;
             }
-            if (!game->enforceSampleSize || ds1->samplesize <= 0)
+            if (!ds1->enforceSampleSize || ds1->samplesize <= 0)
             {
                 continue;
             }
@@ -634,7 +640,7 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree)
         }
 
         // 2. Lightmap consistency subdivision (enforceSampleSize)
-        if (game->enforceSampleSize && ds->samplesize > 0)
+        if (ds->enforceSampleSize && ds->samplesize > 0)
         {
             // Filter out surfaces that don't receive lightmaps
             if (si->surfaceFlags & (SURF_NOLIGHTMAP | SURF_POINTLIGHT))
@@ -1867,8 +1873,11 @@ void GenerateHalos(entity_t *e)
             if (!intensity) intensity = 300;
 
             _color = ValueForKey(light, "color");
-            if (_color[0]) ParseColor(_color, color);
-            else VectorSet(color, 1, 1, 1);
+            if (_color[0]) {
+                ParseColor(_color, color);
+            } else {
+                VectorSet(color, 1, 1, 1);
+            }
 
             // Normalize luminance to 0.7 so faint colors become brighter, 
             // and pure white (1.0) drops down slightly to 0.7

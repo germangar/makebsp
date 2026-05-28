@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../libs/pakstuff.h"
 #endif
 
-extern qboolean upscale;
+extern qboolean nodirect;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
@@ -103,28 +103,28 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         else game->exposureFilter = TONEMAP_LINEAR;
     }
 
-    val = ValueForKey(ent, "falloff");
-    if (val[0] && !HasArg("-falloff", argc, argv)) {
+    val = ValueForKey(ent, "shading");
+    if (val[0] && !HasArg("-shading", argc, argv)) {
         if (!strcmp(val, "halflambert")) {
-            game->falloff = FALLOFF_HALFLAMBERT;
-            falloffSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
-            sunSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+            game->shadingModel = SHADING_MODEL_HALFLAMBERT;
+            shadingModelSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
+            sunSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
         } else if (!strcmp(val, "lambert")) {
-            game->falloff = FALLOFF_LAMBERT;
-            falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
-            sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+            game->shadingModel = SHADING_MODEL_LAMBERT;
+            shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
+            sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
         } else if (!strcmp(val, "quadratic")) {
-            game->falloff = FALLOFF_QUADRATIC;
-            falloffSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
-            sunSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
+            game->shadingModel = SHADING_MODEL_QUADRATIC;
+            shadingModelSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
+            sunSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
         } else if (!strcmp(val, "doublequadratic")) {
-            game->falloff = FALLOFF_DOUBLEQUADRATIC;
-            falloffSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
-            sunSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+            game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
+            shadingModelSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
+            sunSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
         } else if (!strcmp(val, "unreal")) {
-            game->falloff = FALLOFF_UNREAL;
-            falloffSoftBias = FALLOFF_UNREAL_SOFTBIAS;
-            sunSoftBias = FALLOFF_UNREAL_SOFTBIAS;
+            game->shadingModel = SHADING_MODEL_UNREAL;
+            shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
+            sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
         } else {
             Error("Unknown falloff type: %s", val);
         }
@@ -140,6 +140,45 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     if (val[0] && !HasArg("-rad_color_ratio", argc, argv)) {
         game->radiosityColorRatio = (float)atof(val);
     }
+
+    val = ValueForKey(ent, "deluxe");
+    if (val[0] && !HasArg("-deluxe", argc, argv)) {
+        game->deluxeMap = atoi(val) != 0;
+    }
+
+    val = ValueForKey(ent, "rad_interval");
+    if (val[0] && !HasArg("-rad_interval", argc, argv)) {
+        game->radiosityInterval = atoi(val);
+        if (game->radiosityInterval < 1) game->radiosityInterval = 1;
+    }
+
+    val = ValueForKey(ent, "rad_ao_intensity");
+    if (val[0] && !HasArg("-rad_ao_intensity", argc, argv)) {
+        game->rad_ao_intensity = atof(val);
+        if (game->rad_ao_intensity < 0.0f) game->rad_ao_intensity = 0.0f;
+        if (game->rad_ao_intensity > 1.0f) game->rad_ao_intensity = 1.0f;
+    }
+
+    val = ValueForKey(ent, "rad_ao_min");
+    if (val[0] && !HasArg("-rad_ao_min", argc, argv)) {
+        game->rad_ao_min = atof(val);
+    }
+
+    val = ValueForKey(ent, "rad_ao_max");
+    if (val[0] && !HasArg("-rad_ao_max", argc, argv)) {
+        game->rad_ao_max = atof(val);
+    }
+
+    val = ValueForKey(ent, "supersample");
+    if (val[0] && !HasArg("-supersample", argc, argv)) {
+        game->superSampleRadius = atof(val);
+        if (game->superSampleRadius < 0.0f) game->superSampleRadius = 0.0f;
+    }
+
+    val = ValueForKey(ent, "upscale");
+    if (val[0] && !HasArg("-upscale", argc, argv)) {
+        game->upscale = atoi(val) != 0;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -150,7 +189,6 @@ int main(int argc, char **argv) {
     _printf("----- Lighting (Ag Build v1.1) ----\n");
 
     verbose = qfalse;
-    upscale = qfalse;
     areaScale = 0.25;
     pointScale = 7500;
 
@@ -159,7 +197,7 @@ int main(int argc, char **argv) {
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
 
-    superSampleRadius = 0.0f;
+
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-tempname")) {
@@ -184,7 +222,7 @@ int main(int argc, char **argv) {
             nodirect = qtrue;
             _printf("No direct lighting\n");
         } else if (!strcmp(argv[i], "-upscale")) {
-            upscale = qtrue;
+            game->upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
         } else if (!strcmp(argv[i], "-novertex")) {
             novertexlighting = qtrue;
@@ -206,37 +244,37 @@ int main(int argc, char **argv) {
             i++; // Handled in pre-scan
         } else if (!strcmp(argv[i], "-sRGB")) {
             game->lightmapsRGB = qtrue;
-        } else if (!strcmp(argv[i], "-falloff")) {
+        } else if (!strcmp(argv[i], "-shading")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
-                game->falloff = FALLOFF_HALFLAMBERT;
-                falloffSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
-                sunSoftBias = FALLOFF_HALFLAMBERT_SOFTBIAS;
+                game->shadingModel = SHADING_MODEL_HALFLAMBERT;
+                shadingModelSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
+                sunSoftBias = SHADING_MODEL_HALFLAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "lambert")) {
-                game->falloff = FALLOFF_LAMBERT;
-                falloffSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
-                sunSoftBias = FALLOFF_LAMBERT_SOFTBIAS;
+                game->shadingModel = SHADING_MODEL_LAMBERT;
+                shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
+                sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
             } else if (!strcmp(arg, "quadratic")) {
-                game->falloff = FALLOFF_QUADRATIC;
-                falloffSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
-                sunSoftBias = FALLOFF_QUADRATIC_SOFTBIAS;
+                game->shadingModel = SHADING_MODEL_QUADRATIC;
+                shadingModelSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
+                sunSoftBias = SHADING_MODEL_QUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "doublequadratic")) {
-                game->falloff = FALLOFF_DOUBLEQUADRATIC;
-                falloffSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
-                sunSoftBias = FALLOFF_DOUBLEQUADRATIC_SOFTBIAS;
+                game->shadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
+                shadingModelSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
+                sunSoftBias = SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS;
             } else if (!strcmp(arg, "unreal")) {
-                game->falloff = FALLOFF_UNREAL;
-                falloffSoftBias = FALLOFF_UNREAL_SOFTBIAS;
-                sunSoftBias = FALLOFF_UNREAL_SOFTBIAS;
+                game->shadingModel = SHADING_MODEL_UNREAL;
+                shadingModelSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
+                sunSoftBias = SHADING_MODEL_UNREAL_SOFTBIAS;
             } else {
                 Error("Unknown falloff type: %s", arg);
             }
         } else if (!strcmp(argv[i], "-falloff_softbias")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_softbias requires a numeric value");
-            falloffSoftBias = (float)atof(argv[i + 1]);
-            if (falloffSoftBias < 0.0f) falloffSoftBias = 0.0f;
-            if (falloffSoftBias > 1.0f) falloffSoftBias = 1.0f;
+            shadingModelSoftBias = (float)atof(argv[i + 1]);
+            if (shadingModelSoftBias < 0.0f) shadingModelSoftBias = 0.0f;
+            if (shadingModelSoftBias > 1.0f) shadingModelSoftBias = 1.0f;
             i++;
         } else if (!strcmp(argv[i], "-falloff_sun_softbias")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun_softbias requires a numeric value");
@@ -248,15 +286,15 @@ int main(int argc, char **argv) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-falloff_sun requires a type (lambert, halflambert, etc.)");
             char *arg = argv[++i];
             if (!strcmp(arg, "halflambert")) {
-                game->sunFalloff = FALLOFF_HALFLAMBERT;
+                game->sunShadingModel = SHADING_MODEL_HALFLAMBERT;
             } else if (!strcmp(arg, "lambert")) {
-                game->sunFalloff = FALLOFF_LAMBERT;
+                game->sunShadingModel = SHADING_MODEL_LAMBERT;
             } else if (!strcmp(arg, "quadratic")) {
-                game->sunFalloff = FALLOFF_QUADRATIC;
+                game->sunShadingModel = SHADING_MODEL_QUADRATIC;
             } else if (!strcmp(arg, "doublequadratic")) {
-                game->sunFalloff = FALLOFF_DOUBLEQUADRATIC;
+                game->sunShadingModel = SHADING_MODEL_DOUBLEQUADRATIC;
             } else if (!strcmp(arg, "unreal")) {
-                game->sunFalloff = FALLOFF_UNREAL;
+                game->sunShadingModel = SHADING_MODEL_UNREAL;
             } else {
                 Error("Unknown sun falloff type: %s", arg);
             }
@@ -282,11 +320,11 @@ int main(int argc, char **argv) {
             _printf("Deluxe Radiosity Exaggerate multiplier set to %.2f\n", game->deluxeRadiosityExaggerate);
         } else if (!strcmp(argv[i], "-supersample")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersample requires a radius value (e.g. 0.5 or 1.0)");
-            superSampleRadius = atof(argv[i + 1]);
-            if (superSampleRadius < 0.0f)
-                superSampleRadius = 0.0f;
-            if (superSampleRadius > 0.0f) {
-                _printf("Super-sampling enabled: radius %.3f with 8x pattern\n", superSampleRadius);
+            game->superSampleRadius = atof(argv[i + 1]);
+            if (game->superSampleRadius < 0.0f)
+                game->superSampleRadius = 0.0f;
+            if (game->superSampleRadius > 0.0f) {
+                _printf("Super-sampling enabled: radius %.3f with 8x pattern\n", game->superSampleRadius);
             } else {
                 _printf("Super-sampling disabled\n");
             }
@@ -316,11 +354,11 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_ao_min")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_min requires a numeric value");
-            rad_ao_min = (float)atof(argv[i + 1]);
+            game->rad_ao_min = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_ao_max")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_max requires a numeric value");
-            rad_ao_max = (float)atof(argv[i + 1]);
+            game->rad_ao_max = (float)atof(argv[i + 1]);
             i++;
         } else if (!strcmp(argv[i], "-rad_min_energy")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_min_energy requires a numeric value");
@@ -328,8 +366,8 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_interval")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_interval requires a numeric value");
-            rad_interval = atoi(argv[i + 1]);
-            if (rad_interval < 1) rad_interval = 1;
+            game->radiosityInterval = atoi(argv[i + 1]);
+            if (game->radiosityInterval < 1) game->radiosityInterval = 1;
             i++;
         } else if (!strcmp(argv[i], "-rad_color_ratio")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_color_ratio requires a numeric value");
@@ -342,9 +380,9 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-rad_ao_intensity")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_ao_intensity requires a numeric value");
-            rad_ao_intensity = (float)atof(argv[i + 1]);
-            if (rad_ao_intensity < 0.0f) rad_ao_intensity = 0.0f;
-            if (rad_ao_intensity > 1.0f) rad_ao_intensity = 1.0f;
+            game->rad_ao_intensity = (float)atof(argv[i + 1]);
+            if (game->rad_ao_intensity < 0.0f) game->rad_ao_intensity = 0.0f;
+            if (game->rad_ao_intensity > 1.0f) game->rad_ao_intensity = 1.0f;
             i++;
         } else if (!strcmp(argv[i], "-mao_samples")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_samples requires a numeric value");
@@ -423,9 +461,9 @@ int main(int argc, char **argv) {
                 "   point <W>      = set the point light scale to W\n"
                 "   -nodirect      = skip direct lighting passes\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
-                "   falloff <type>  = set the falloff model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
-                "   falloff_softbias <F> = override the default soft bias for the falloff model\n"
-                "   falloff_sun <type> = override the sun falloff model\n"
+                "   falloff <type>  = set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
+                "   falloff_softbias <F> = override the default soft bias for the shading model\n"
+                "   falloff_sun <type> = override the sun shading model\n"
                 "   falloff_sun_softbias <F> = override the sun soft bias\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"

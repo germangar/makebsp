@@ -243,7 +243,7 @@ void TraceAmbient(int num)
             if (unreachableMask && BITMAP_TEST(unreachableMask, k))
                 continue;
 
-            int scale = upscale ? 2 : 1;
+            int scale = game->upscale ? 2 : 1;
             int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
 
             if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
@@ -310,12 +310,12 @@ void TraceAmbient(int num)
                         float NdotL = DotProduct(normal, dir);
                         if (NdotL <= 0.01f) continue; // Behind surface
 
-                        float falloff = 1.0f - (distSq / gatherRadiusSq);
+                        float shadingModel = 1.0f - (distSq / gatherRadiusSq);
                         
                         // Inverse-Square with Minimum Size (Offset Model)
                         // Gives a headstart of 32 units, as requested.
                         // float sizeSq = 32.0f * 32.0f;
-                        // float falloff = 1.0f / (distSq + sizeSq);
+                        // float shadingModel = 1.0f / (distSq + sizeSq);
 
                         float w = NdotL * falloff;
 

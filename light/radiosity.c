@@ -29,11 +29,8 @@ Architecture:
 static float rad_intensity;    // Energy per bounce (conserved)
 static float rad_color_ratio;     // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
-float rad_ao_min        = RAD_AO_MIN_DEFAULT;
-float rad_ao_max        = RAD_AO_MAX_DEFAULT;
-float rad_ao_intensity  = RAD_AO_INTENSITY_DEFAULT;
-int   rad_interval      = 4;      // Sparse grid resolution (4 = 4x4)
-float rad_voxel_size    = 0.0f;   // Adaptive default: samplesize * rad_interval
+float rad_voxel_size    = 0.0f;   // Adaptive default: samplesize * game->radiosityInterval
+static float active_rad_ao_intensity = 0.0f; // Track pass-specific AO intensity
 float rad_angle_match   = 60.0f;  // Angle in degrees (Default: 60)
 static float rad_angle_match_cos = 0.5f;
 
@@ -489,7 +486,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
-    int scale = upscale ? 2 : 1;
+    int scale = game->upscale ? 2 : 1;
     int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
 
     for (int ly = 0; ly < ds->lightmapHeight; ly += step) {
@@ -559,14 +556,14 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_ao_min ? rad_ao_min : dist;
+                        float distClamped = dist < game->rad_ao_min ? game->rad_ao_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
                         
-                        float factor = 1.0f - rad_ao_intensity;
-                        if (dist <= rad_ao_min) {
-                            formFactorBase *= factor;
-                        } else if (dist < rad_ao_min + rad_ao_max) {
-                            float lerp = rad_ao_max > 0.0f ? (dist - rad_ao_min) / rad_ao_max : 1.0f;
+                        float factor = 1.0f - active_rad_ao_intensity;
+                        if (dist <= game->rad_ao_min) {
+                            factor = 1.0f - active_rad_ao_intensity;
+                        } else if (dist < game->rad_ao_min + game->rad_ao_max) {
+                            float lerp = game->rad_ao_max > 0.0f ? (dist - game->rad_ao_min) / game->rad_ao_max : 1.0f;
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
@@ -637,13 +634,13 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float cosDst = DotProduct(dstNormal, rayDir);
                         if (cosDst <= 0.0f) continue;
 
-                        float distClamped = dist < rad_ao_min ? rad_ao_min : dist;
+                        float distClamped = dist < game->rad_ao_min ? game->rad_ao_min : dist;
                         float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
-                        float factor = 1.0f - rad_ao_intensity;
-                        if (dist <= rad_ao_min) {
+                        float factor = 1.0f - active_rad_ao_intensity;
+                        if (dist <= game->rad_ao_min) {
                             formFactorBase *= factor;
-                        } else if (dist < rad_ao_min + rad_ao_max) {
-                            float lerp = rad_ao_max > 0.0f ? (dist - rad_ao_min) / rad_ao_max : 1.0f;
+                        } else if (dist < game->rad_ao_min + game->rad_ao_max) {
+                            float lerp = game->rad_ao_max > 0.0f ? (dist - game->rad_ao_min) / game->rad_ao_max : 1.0f;
                             formFactorBase *= factor + (1.0f - factor) * lerp;
                         }
                         if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
@@ -951,7 +948,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
     int surf_rad_interval = localSurfaces[surfIdx].radInterval;
 
-    int scale = upscale ? 2 : 1;
+    int scale = game->upscale ? 2 : 1;
     int numPixels = ds->lightmapWidth * ds->lightmapHeight;
     if (numPixels <= 0) {
         return;
@@ -1207,14 +1204,14 @@ static void RadiosityMerge(const float *srcBuffer) {
 
 void LightRadiosity(void) {
     int radiosityPasses = game->radiosityPasses;
-    rad_intensity = game->radiosityIntensity * 0.5f;
+    rad_intensity = game->radiosityIntensity * 0.5f; // arbitrary rescaling so we default to 1.0
     rad_color_ratio = game->radiosityColorRatio;
 
     if (radiosityPasses <= 0 || rad_intensity <= 0.0f) return;
     _printf("--- Radiosity ---\n");
 
     if (rad_voxel_size <= 0.0f) {
-        rad_voxel_size = (float)(samplesize * rad_interval);
+        rad_voxel_size = (float)(samplesize * game->radiosityInterval);
     }
     if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
     rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));
@@ -1225,8 +1222,6 @@ void LightRadiosity(void) {
     AllocateRadiosityFloats();
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-    float saved_ao_intensity = rad_ao_intensity;
-
     for (int pnum = 1; pnum <= radiosityPasses; pnum++) {
         double passStart = I_FloatTime();
         _printf("Pass %d/%d:\n", pnum, radiosityPasses);
@@ -1234,7 +1229,7 @@ void LightRadiosity(void) {
         // AO Proximity-Fade Strategy: Keep AO on Pass 1 for sharp direct crevice shadows,
         // but bypass on Pass 2+ to let diffuse multi-bounce light naturally wash out
         // the corner crevices and prevent dark seams.
-        rad_ao_intensity = (pnum == 1) ? saved_ao_intensity : 0.0f;
+        active_rad_ao_intensity = (pnum == 1) ? game->rad_ao_intensity : 0.0f;
 
         const float *emitSource = (pnum == 1) ? lightFloats : radiosityFloats;
         _printf("  [emit]   ");
@@ -1275,8 +1270,6 @@ void LightRadiosity(void) {
         Q_Free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
     }
-
-    rad_ao_intensity = saved_ao_intensity;
 
     _printf("--- Radiosity Merge ---\n");
     RadiosityMerge(accumRadiosityFloats);

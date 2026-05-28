@@ -17,13 +17,13 @@ typedef struct {
     int upscale;
 } extraSurface_t;
 
-typedef enum { FALLOFF_LAMBERT, FALLOFF_HALFLAMBERT, FALLOFF_QUADRATIC, FALLOFF_DOUBLEQUADRATIC, FALLOFF_UNREAL } falloff_t;
+typedef enum { SHADING_MODEL_LAMBERT, SHADING_MODEL_HALFLAMBERT, SHADING_MODEL_QUADRATIC, SHADING_MODEL_DOUBLEQUADRATIC, SHADING_MODEL_UNREAL } shadingModel_t;
 
-#define FALLOFF_LAMBERT_SOFTBIAS 0.15f
-#define FALLOFF_HALFLAMBERT_SOFTBIAS 0.25f
-#define FALLOFF_QUADRATIC_SOFTBIAS 0.15f
-#define FALLOFF_DOUBLEQUADRATIC_SOFTBIAS 0.15f
-#define FALLOFF_UNREAL_SOFTBIAS 0.15f
+#define SHADING_MODEL_LAMBERT_SOFTBIAS 0.15f
+#define SHADING_MODEL_HALFLAMBERT_SOFTBIAS 0.25f
+#define SHADING_MODEL_QUADRATIC_SOFTBIAS 0.15f
+#define SHADING_MODEL_DOUBLEQUADRATIC_SOFTBIAS 0.15f
+#define SHADING_MODEL_UNREAL_SOFTBIAS 0.15f
 
 typedef enum {
     HDR_OFF = 0,
@@ -63,13 +63,19 @@ typedef struct {
 	int         radiosityPasses;
 	float       radiosityIntensity;
 	float       radiosityColorRatio;
-	falloff_t   falloff;
-	falloff_t   sunFalloff;
+    int         radiosityInterval;
+    float       rad_ao_intensity;
+    float       rad_ao_min;
+    float       rad_ao_max;
+	shadingModel_t   falloff;
+	shadingModel_t   sunFalloff;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
 	float       deluxeAmbientExaggerate;
 	float       deluxeRadiosityExaggerate;
 
+	float       superSampleRadius;
+	qboolean    upscale;
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
@@ -80,7 +86,7 @@ typedef struct {
 	const char	*haloShader;
 } game_t;
 
-extern float falloffSoftBias;
+extern float shadingModelSoftBias;
 extern float sunSoftBias;
 extern vec3_t blockSize;
 extern qboolean g_lowmem;

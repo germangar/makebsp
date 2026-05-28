@@ -19,8 +19,8 @@
   "radiosityPasses": 4,
   "radiosityIntensity": 1.00,
   "radiosityColorRatio": 0.75,
-  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "deluxeMap": false,
   "deluxeMinAngle": 40.00,
   "deluxeAmbientExaggerate": 1.00,

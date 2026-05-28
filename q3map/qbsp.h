@@ -180,6 +180,7 @@ typedef struct drawsurf_s
     float superSampleRadius;
     qboolean isHalo;
     int upscale;
+    int enforceSampleSize;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s
