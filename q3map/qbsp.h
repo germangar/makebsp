@@ -183,6 +183,8 @@ typedef struct drawsurf_s
     int enforceSampleSize;
     float cutoff;
     float fadeout;
+    qboolean hasAttenuationOverride;
+    int attenuationModel;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

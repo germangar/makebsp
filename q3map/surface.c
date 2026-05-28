@@ -121,6 +121,23 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             const char *fadeoutStr = ValueForKey(e, "fadeout");
             if (fadeoutStr[0])
                 ds->fadeout = atof(fadeoutStr);
+
+            const char *attStr = ValueForKey(e, "attenuation");
+            if (attStr[0])
+            {
+                ds->hasAttenuationOverride = qtrue;
+                if (!Q_stricmp(attStr, "soft"))
+                    ds->attenuationModel = ATTENUATION_INVERSE;
+                else if (!Q_stricmp(attStr, "linear"))
+                    ds->attenuationModel = ATTENUATION_LINEAR;
+                else if (!Q_stricmp(attStr, "standard"))
+                    ds->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+                else
+                {
+                    _printf("WARNING: Unknown attenuation mode '%s' on func_light entity\n", attStr);
+                    ds->hasAttenuationOverride = qfalse;
+                }
+            }
         }
     }
     // Resolve vertexcolor override (func_group, misc_model, etc)
@@ -1365,6 +1382,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
     drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
+    drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
+    drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
 
     numDrawSurfaces++;
 
@@ -1453,6 +1472,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
     drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
+    drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
+    drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
 
     numDrawSurfaces++;
 
@@ -1547,6 +1568,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
     drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
+    drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
+    drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
 
     numDrawSurfaces++;
 
@@ -1605,6 +1628,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
     drawExtraSurfaces[numDrawSurfaces].cutoff = ds->cutoff;
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
+    drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
+    drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
 
     numDrawSurfaces++;
 

@@ -4,6 +4,13 @@
 #include "../common/mathlib.h"
 #include "../common/qtypes.h"
 
+typedef enum {
+    ATTENUATION_INVERSE_SQUARE,
+    ATTENUATION_INVERSE_SQUARE_PI,
+    ATTENUATION_INVERSE,
+    ATTENUATION_LINEAR
+} attenuationModel_t;
+
 typedef struct {
     float smoothingRadius;
     float lightValue;
@@ -17,6 +24,8 @@ typedef struct {
     int upscale;
     float cutoff;
     float fadeout;
+    qboolean hasAttenuationOverride;
+    attenuationModel_t attenuationModel;
 } extraSurface_t;
 
 typedef enum { SHADING_MODEL_LAMBERT, SHADING_MODEL_HALFLAMBERT, SHADING_MODEL_QUADRATIC, SHADING_MODEL_DOUBLEQUADRATIC, SHADING_MODEL_UNREAL } shadingModel_t;
@@ -34,12 +43,6 @@ typedef enum {
     HDR_32BIT = 3
 } hdrFormat_t;
 
-typedef enum {
-    ATTENUATION_INVERSE_SQUARE,
-    ATTENUATION_INVERSE_SQUARE_PI,
-    ATTENUATION_INVERSE,
-    ATTENUATION_LINEAR
-} attenuationModel_t;
 
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
 

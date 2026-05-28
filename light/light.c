@@ -283,7 +283,10 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         else
             dl2->fadeout = 0.0f;
 
-        dl2->attenuationModel = game->attenuationModel;
+        if (ls->hasAttenuationOverride)
+            dl2->attenuationModel = ls->attenuationModel;
+        else
+            dl2->attenuationModel = game->attenuationModel;
         dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
         dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
     }
@@ -298,7 +301,10 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
     else
         dl->fadeout = 0.0f;
 
-    dl->attenuationModel = game->attenuationModel;
+    if (ls->hasAttenuationOverride)
+        dl->attenuationModel = ls->attenuationModel;
+    else
+        dl->attenuationModel = game->attenuationModel;
     dl->reach = CalculateLightReach(area, value * areaScale, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
     dl->attnSoftnessRange = dl->reach * dl->fadeout;
 }
@@ -619,6 +625,19 @@ void CreateEntityLights(void)
         if (spawnflags & 1)
         {
             dl->attenuationModel = ATTENUATION_LINEAR;
+        }
+
+        const char *attStr = ValueForKey(e, "attenuation");
+        if (attStr[0])
+        {
+            if (!Q_stricmp(attStr, "soft"))
+                dl->attenuationModel = ATTENUATION_INVERSE;
+            else if (!Q_stricmp(attStr, "linear"))
+                dl->attenuationModel = ATTENUATION_LINEAR;
+            else if (!Q_stricmp(attStr, "standard"))
+                dl->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+            else
+                _printf("WARNING: Unknown attenuation mode '%s' on light entity\n", attStr);
         }
 
         GetVectorForKey(e, "origin", dl->origin);
@@ -1008,6 +1027,10 @@ void BuildLocalSurfaces(void)
                 }
                 if (extra[i].fadeout > 0.0f) {
                     localSurfaces[i].si_override->fadeout = extra[i].fadeout;
+                }
+                if (extra[i].hasAttenuationOverride) {
+                    localSurfaces[i].si_override->hasAttenuationOverride = qtrue;
+                    localSurfaces[i].si_override->attenuationModel = extra[i].attenuationModel;
                 }
             }
         }

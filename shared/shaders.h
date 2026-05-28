@@ -40,6 +40,8 @@ typedef struct shaderInfo_s
     float lightSubdivide;     // default 120
     float cutoff;             // entity override
     float fadeout;            // entity override
+    qboolean hasAttenuationOverride; // entity override
+    int attenuationModel;     // entity override
     int lightmapSampleSize;   // lightmap sample size
 
     qboolean hasPasses; // false if the shader doesn't define any rendering passes
