@@ -1549,6 +1549,7 @@ void LightMain(void)
             VectorCopy(ambientColor, groundColor);
         }
 
+
         float skyLum    = skyColor[0]    * 0.299f + skyColor[1]    * 0.587f + skyColor[2]    * 0.114f;
         float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
         if (skyLum > 0.001f || groundLum > 0.001f)

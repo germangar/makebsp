@@ -70,6 +70,22 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     }
 
     // map keys
+    val = ValueForKey(ent, "cutoff");
+    if (val[0] && !HasArg("-cutoff", argc, argv)) {
+        game->minLightAdd = (float)atof(val);
+        if (game->minLightAdd < 0.001f)
+            game->minLightAdd = 0.001f;
+    }
+
+    val = ValueForKey(ent, "fadeout");
+    if (val[0] && !HasArg("-fadeout", argc, argv)) {
+        game->fadeout = (float)atof(val);
+        if (game->fadeout < 0.0f)
+            game->fadeout = 0.0f;
+        else if (game->fadeout > 1.0f)
+            game->fadeout = 1.0f;
+    }
+
     val = ValueForKey(ent, "smooth");
     if (val[0] && !HasArg("-smooth", argc, argv)) {
         game->defaultSmoothRadius = (float)atof(val);

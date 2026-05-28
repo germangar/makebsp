@@ -59,6 +59,7 @@ typedef struct {
 	int         lightmapSize;
 	int         writeLightmapSize;
     float       minLightAdd;
+    float       fadeout;
 
 	// Lighting flags
 	int         defaultSampleSize;

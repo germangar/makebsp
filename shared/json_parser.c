@@ -171,11 +171,19 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->writeLightmapSize = atoi(json_value_as_number(val)->number);
         }
-        else if (!strcmp(key, "minLightAdd") && val->type == json_type_number)
+        else if (!strcmp(key, "cutoff") && val->type == json_type_number)
         {
             game->minLightAdd = (float)atof(json_value_as_number(val)->number);
             if (game->minLightAdd < 0.001f)
                 game->minLightAdd = 0.001f;
+        }
+        else if (!strcmp(key, "fadeout") && val->type == json_type_number)
+        {
+            game->fadeout = (float)atof(json_value_as_number(val)->number);
+            if (game->fadeout < 0.0f)
+                game->fadeout = 0.0f;
+            else if (game->fadeout > 1.0f)
+                game->fadeout = 1.0f;
         }
         else if (!strcmp(key, "sampleSize") && val->type == json_type_number)
         {
@@ -470,30 +478,31 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"maxSurfaceIndexes\": %d,\n"
             "  \"lightmapSize\": %d,\n"
             "  \"writeLightmapSize\": %d,\n"
-            "  \"minLightAdd\": %f,\n"
-            "  \"sampleSize\": %d,\n"
+            "  \"sampleSize\": %i,\n"
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
             "  \"hdr8BitScale\": %.2f,\n"
             "  \"lightmapsRGB\": %s,\n"
             "  \"lightgridRGB\": %s,\n"
             "  \"texturesRGB\": %s,\n"
             "  \"colorsRGB\": %s,\n"
-            "  \"radiosityPasses\": %d,\n"
+            "  \"radiosityPasses\": %d, /* Number of times the light bounces */\n"
             "  \"radiosityIntensity\": %.2f,\n"
-            "  \"radiosityColorRatio\": %.2f,\n"
-            "  \"radiosityInterval\": %d,\n"
-            "  \"rad_ao_intensity\": %.2f,\n"
+            "  \"radiosityColorRatio\": %.2f, /* Percentage (0.0 to 1.0) of surface color transferred to the bounce light */\n"
+            "  \"radiosityInterval\": %d, /* Radiosity grid sample size */\n"
+            "  \"rad_ao_intensity\": %.2f, /* Intensity of ambient occlusion shadowing */\n"
             "  \"rad_ao_min\": %.2f,\n"
-            "  \"rad_ao_max\": %.2f,\n"
+            "  \"rad_ao_max\": %.2f, /* Distance of ambient occlusion shadowing */\n"
             "  \"falloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunFalloff\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
+            "  \"cutoff\": %f, /* Minimum remaining light energy to apply the contribution to a surface */\n"
+            "  \"fadeout\": %f, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */\n"
             "  \"deluxeMap\": %s,\n"
             "  \"deluxeMinAngle\": %.2f,\n"
             "  \"deluxeAmbientExaggerate\": %.2f,\n"
             "  \"deluxeRadiosityExaggerate\": %.2f,\n"
-            "  \"antialiasingPasses\": %d, /* post-process AA passes */\n"
+            "  \"antialiasingPasses\": %d, /*Number of post-process AA passes */\n"
             "  \"superSampleRadius\": %.2f,\n"
-            "  \"upscale\": %s,\n"
+            "  \"upscale\": %s, /* Raytrace surfaces at 2x resolution */\n"
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
@@ -504,7 +513,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->arg, game->gamePath, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
-            game->minLightAdd, game->defaultSampleSize, hdrStr, game->hdr8BitScale,
+            game->defaultSampleSize, hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",
             game->texturesRGB ? "true" : "false",
@@ -518,6 +527,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->rad_ao_max,
             shadingModelStr,
             sunShadingModelStr,
+            game->minLightAdd,
+            game->fadeout,
             game->deluxeMap ? "true" : "false",
             game->deluxeMinAngle,
             game->deluxeAmbientExaggerate,
