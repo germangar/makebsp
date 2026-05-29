@@ -301,8 +301,21 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
             break;
         case ATTENUATION_INVERSE:
             energy = light->photons / d;
+
             if (energy <= light->min_light_add)
+            {
                 return 0.0f;
+            }
+
+            if (light->attnSoftnessRange > 0.0f)
+            {
+                float fadeStartDist = light->reach - light->attnSoftnessRange;
+                if (dist > fadeStartDist)
+                {
+                    float fadeScale = (light->reach - dist) / light->attnSoftnessRange;
+                    energy *= fadeScale;
+                }
+            }
             break;
         case ATTENUATION_LINEAR:
             energy = (light->photons * 0.000125f) - d;
@@ -437,7 +450,6 @@ typedef struct
 } lightmap_t;
 
 extern float areaScale;
-extern float pointScale;
 extern qboolean nodirect;
 
 extern qboolean lightmapBorder;

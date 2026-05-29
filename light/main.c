@@ -90,6 +90,20 @@ static void ParseWorldspawnKeys(int argc, char **argv)
             game->fadeout = 1.0f;
     }
 
+    val = ValueForKey(ent, "backsplashspot");
+    if (val[0] && !HasArg("-backsplashspot", argc, argv)) {
+        game->backSplashSpot = (float)atof(val);
+        if (game->backSplashSpot < 0.0f) game->backSplashSpot = 0.0f;
+        else if (game->backSplashSpot > 1.0f) game->backSplashSpot = 1.0f;
+    }
+
+    val = ValueForKey(ent, "backsplashsurface");
+    if (val[0] && !HasArg("-backsplashsurface", argc, argv)) {
+        game->backSplashSurface = (float)atof(val);
+        if (game->backSplashSurface < 0.0f) game->backSplashSurface = 0.0f;
+        else if (game->backSplashSurface > 1.0f) game->backSplashSurface = 1.0f;
+    }
+
     val = ValueForKey(ent, "smooth");
     if (val[0] && !HasArg("-smooth", argc, argv)) {
         game->defaultSmoothRadius = (float)atof(val);
@@ -227,7 +241,6 @@ int main(int argc, char **argv) {
 
     verbose = qfalse;
     areaScale = 0.25;
-    pointScale = 7500;
 
     openclEnabled = qtrue;
 
@@ -256,10 +269,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-area")) {
             areaScale *= atof(argv[i + 1]);
             _printf("area light scaling at %f\n", areaScale);
-            i++;
-        } else if (!strcmp(argv[i], "-point")) {
-            pointScale *= atof(argv[i + 1]);
-            _printf("point light scaling at %f\n", pointScale);
             i++;
         } else if (!strcmp(argv[i], "-nodirect")) {
             nodirect = qtrue;
@@ -517,7 +526,6 @@ int main(int argc, char **argv) {
                 "   opencl <0|1>   = enable (1, default) or disable (0) GPU acceleration\n"
                 "   threads <X>    = set number of threads to X\n"
                 "   area <V>       = set the area light scale to V\n"
-                "   point <W>      = set the point light scale to W\n"
                 "   -nodirect      = skip direct lighting passes\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   falloff <type>  = set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"

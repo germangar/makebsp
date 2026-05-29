@@ -31,7 +31,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define DEFAULT_SPOTLIGHT_TARGET_DISTANCE 64.0f
 
-float pointScale = 7500;
+#define POINTSCALE 7500.0f
+#define POINTSCALE_SOFT 5.0f
+#define POINTSCALE_SMOOTHSTEP 50.0f
+
 qboolean nodirect;
 qboolean patchshadows = qtrue;
 qboolean lightmapBorder = qfalse;
@@ -273,22 +276,29 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         dl2->photons = dl->photons * ls->backsplashFraction;
         dl2->si = ls;
 
-        if (ls->cutoff > 0.0f)
-            dl2->min_light_add = ls->cutoff;
-        else
-            dl2->min_light_add = game->minLightAdd;
+        // Configure specific cutoff and fadeout for backsplash
+        dl2->min_light_add = 0.5f;
+        dl2->fadeout = 0.25f;
+#if 1
+        dl2->attenuationModel = ATTENUATION_INVERSE;
+        dl2->photons *= (POINTSCALE_SOFT / POINTSCALE);
 
-        if (ls->fadeout > 0.0f)
-            dl2->fadeout = ls->fadeout;
-        else
-            dl2->fadeout = 0.0f;
-
+        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
+        dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
+#else
         if (ls->hasAttenuationOverride)
             dl2->attenuationModel = ls->attenuationModel;
         else
             dl2->attenuationModel = game->attenuationModel;
+
+        if (dl2->attenuationModel == ATTENUATION_SMOOTHSTEP)
+            dl2->photons *= (POINTSCALE_SMOOTHSTEP / POINTSCALE);
+        else if (dl2->attenuationModel == ATTENUATION_INVERSE)
+            dl2->photons *= (POINTSCALE_SOFT / POINTSCALE);
+
         dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
         dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
+#endif
     }
 
     if (ls->cutoff > 0.0f)
@@ -305,7 +315,21 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         dl->attenuationModel = ls->attenuationModel;
     else
         dl->attenuationModel = game->attenuationModel;
-    dl->reach = CalculateLightReach(area, value * areaScale, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
+
+    float attenScale = 1.0f;
+    if (dl->attenuationModel == ATTENUATION_SMOOTHSTEP)
+    {
+        attenScale = POINTSCALE_SMOOTHSTEP / POINTSCALE;
+    }
+    else if (dl->attenuationModel == ATTENUATION_INVERSE)
+    {
+        attenScale = POINTSCALE_SOFT / POINTSCALE;
+    }
+
+    dl->photons *= attenScale;
+    VectorScale(dl->emitColor, attenScale, dl->emitColor);
+
+    dl->reach = CalculateLightReach(area, (value * areaScale) * attenScale, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
     dl->attnSoftnessRange = dl->reach * dl->fadeout;
 }
 
@@ -653,6 +677,8 @@ void CreateEntityLights(void)
         if (!intensity)
             intensity = 300;
 
+        float rawIntensity = intensity;
+
         _color = ValueForKey(e, "color");
         if (_color && _color[0])
         {
@@ -680,7 +706,18 @@ void CreateEntityLights(void)
             }
         }
 
-        intensity = intensity * pointScale;
+        if (dl->attenuationModel == ATTENUATION_SMOOTHSTEP)
+        {
+            intensity = intensity * POINTSCALE_SMOOTHSTEP;
+        }
+        else if (dl->attenuationModel == ATTENUATION_INVERSE)
+        {
+            intensity = intensity * POINTSCALE_SOFT;
+        }
+        else
+        {
+            intensity = intensity * POINTSCALE;
+        }
         dl->photons = intensity;
 
         dl->coneSoftness = FloatForKey(e, "softness");
@@ -768,24 +805,33 @@ void CreateEntityLights(void)
             dl->type = emit_spotlight;
 
             // Backlight / Backsplash implementation
-            float bsIntensity = 0.0f;
+            float bsFraction = game->backSplashSpot;
 
             const char *bsStr = ValueForKey(e, "backsplash");
             
             if (bsStr[0])
-                bsIntensity = atof(bsStr);
+            {
+                bsFraction = atof(bsStr);
+                if (bsFraction < 0.0f) bsFraction = 0.0f;
+                if (bsFraction > 1.0f) bsFraction = 1.0f;
+            }
 
-            if (bsIntensity > 0)
+            if (bsFraction > 0.0f)
             {
                 light_t *bl = malloc(sizeof(*bl));
                 memcpy(bl, dl, sizeof(*bl)); // Inherit color, style, flags, etc.
                 bl->next = lights;
                 lights = bl;
 
-                bl->photons = bsIntensity * pointScale;
-                VectorMA(dl->origin, 3.0f, dl->normal, bl->origin);
+                VectorMA(dl->origin, 4.0f, dl->normal, bl->origin);
                 bl->type = emit_point;
-                // attenuationModel inherited from dl via memcpy above
+                bl->attenuationModel = ATTENUATION_INVERSE; // backsplash lights are always soft
+                bl->photons = rawIntensity * bsFraction * POINTSCALE_SOFT;
+                
+                // Configure specific cutoff and fadeout for backsplash
+                bl->min_light_add = 0.3f;
+                bl->fadeout = 0.25f;
+                
                 bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET, bl->attenuationModel);
                 bl->attnSoftnessRange = bl->reach * bl->fadeout;
             }

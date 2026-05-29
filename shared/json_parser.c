@@ -185,6 +185,18 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             else if (game->fadeout > 1.0f)
                 game->fadeout = 1.0f;
         }
+        else if (!Q_stricmp(key, "backSplashSpot") && val->type == json_type_number)
+        {
+            game->backSplashSpot = (float)atof(json_value_as_number(val)->number);
+            if (game->backSplashSpot < 0.0f) game->backSplashSpot = 0.0f;
+            else if (game->backSplashSpot > 1.0f) game->backSplashSpot = 1.0f;
+        }
+        else if (!Q_stricmp(key, "backSplashSurface") && val->type == json_type_number)
+        {
+            game->backSplashSurface = (float)atof(json_value_as_number(val)->number);
+            if (game->backSplashSurface < 0.0f) game->backSplashSurface = 0.0f;
+            else if (game->backSplashSurface > 1.0f) game->backSplashSurface = 1.0f;
+        }
         else if (!Q_stricmp(key, "sampleSize") && val->type == json_type_number)
         {
             game->defaultSampleSize = atoi(json_value_as_number(val)->number);
@@ -521,6 +533,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
             "  \"cutoff\": %f, /* Minimum remaining light energy to apply the contribution to a surface */\n"
             "  \"fadeout\": %f, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */\n"
+            "  \"backSplashSpot\": %f, /* Default entity spotlight backsplash fraction (0.0 to 1.0) */\n"
+            "  \"backSplashSurface\": %f, /* Default surface light backsplash fraction (0.0 to 1.0) */\n"
             "  \"deluxeMap\": %s,\n"
             "  \"deluxeMinAngle\": %.2f,\n"
             "  \"deluxeAmbientExaggerate\": %.2f,\n"
@@ -555,6 +569,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             attenuationModelStr,
             game->minLightAdd,
             game->fadeout,
+            game->backSplashSpot,
+            game->backSplashSurface,
             game->deluxeMap ? "true" : "false",
             game->deluxeMinAngle,
             game->deluxeAmbientExaggerate,

@@ -31,6 +31,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		512,        // writeLightmapSize
         0.1f,       // cutoff
         0.0f,       // fadeout
+        0.1f,       // backSplashSpot
+        0.0f,       // backSplashSurface
 		4,          // defaultSampleSize
         HDR_8BIT,   // hdr
 		3.0f,       // hdr8BitScale
@@ -77,6 +79,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		128,        // writeLightmapSize
         0.1f,       // cutoff
         0.0f,       // fadeout
+        0.1f,       // backSplashSpot
+        0.0f,       // backSplashSurface
 		8,          // defaultSampleSize
         HDR_OFF,    // hdr
 		1.0f,       // hdr8BitScale

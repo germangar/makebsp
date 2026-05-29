@@ -28,6 +28,8 @@
   "attenuation": "standard",  /* [ standard, soft, linear ] */
   "cutoff": 0.100000, /* Minimum remaining light energy to apply the contribution to a surface */
   "fadeout": 0.000000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */
+  "backSplashSpot": 0.100000, /* Default entity spotlight backsplash fraction (0.0 to 1.0) */
+  "backSplashSurface": 0.000000, /* Default surface light backsplash fraction (0.0 to 1.0) */
   "deluxeMap": false,
   "deluxeMinAngle": 40.00,
   "deluxeAmbientExaggerate": 1.00,

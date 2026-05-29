@@ -31,12 +31,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/surfaceflags.h"
 
 #include "shaders.h"
+#include "globals.h"
 #ifdef _WIN32
 #include "../libs/pakstuff.h"
 #endif
 
 // Default backsplash is disabled unless explicitly requested
-#define DEFAULT_BACKSPLASH_FRACTION 0.0
 #define DEFAULT_BACKSPLASH_DISTANCE 24
 
 #define MAX_SURFACE_INFO 4096
@@ -266,7 +266,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     // set defaults
     si->contents = CONTENTS_SOLID;
 
-    si->backsplashFraction = DEFAULT_BACKSPLASH_FRACTION;
+    si->backsplashFraction = game->backSplashSurface;
     si->backsplashDistance = DEFAULT_BACKSPLASH_DISTANCE;
     si->surfaceLightGlow = -1.0f;
 
