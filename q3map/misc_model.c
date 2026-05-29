@@ -119,7 +119,7 @@ static const struct aiScene *GetCachedModel(const char *modelName)
         Error("MAX_MODEL_CACHE reached");
     }
 
-    sprintf(filename, "%s%s", gamedir, modelName);
+    sprintf(filename, "%s%s", gamePath, modelName);
 
     const struct aiScene *scene = aiImportFile(
         filename, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |

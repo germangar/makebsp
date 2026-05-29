@@ -294,6 +294,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-game")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
             i++; // Handled in pre-scan
+        } else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-basepath/-rootdir requires a directory path");
+            strcpy(rootDir, argv[++i]);
         } else if (!strcmp(argv[i], "-sRGB")) {
             game->lightmapsRGB = qtrue;
         } else if (!strcmp(argv[i], "-shading")) {
@@ -574,14 +577,17 @@ int main(int argc, char **argv) {
     
     start = I_FloatTime();
 
-    SetQdirFromPath(argv[i]);
-    if (game->gamePath[0] && strcmp(game->gamePath, ".")) {
-        strcat(gamedir, game->gamePath);
-        strcat(gamedir, "/");
+    if (!rootDir[0] && game->rootDir && game->rootDir[0]) {
+        strcpy(rootDir, game->rootDir);
+    }
+    SetRootDirFromPath(argv[i]);
+    if (game->gameDir[0] && strcmp(game->gameDir, ".")) {
+        strcat(gamePath, game->gameDir);
+        strcat(gamePath, "/");
     }
 
 #ifdef _WIN32
-    InitPakFile(gamedir, NULL);
+    InitPakFile(gamePath, NULL);
 #endif
 
     strcpy(source, ExpandArg(argv[i]));

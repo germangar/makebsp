@@ -241,58 +241,58 @@ char *va(const char *format, ...)
 
 /*
 
-qdir will hold the path up to the quake directory, including the slash
+rootDir will hold the path up to the root directory, including the slash
 
   f:\quake\
   /raid/quake/
 
-gamedir will hold qdir + the game directory (id1, id2, etc)
+gamePath will hold rootDir + the game directory (id1, id2, etc)
 
   */
 
-char qdir[1024];
-char gamedir[1024];
+char rootDir[1024];
+char gamePath[1024];
 char writedir[1024];
 
-void SetQdirFromPath(const char *path)
+void SetRootDirFromPath(const char *path)
 {
     int i;
 
     // If no directory is set, default to current directory
-    if (!qdir[0])
+    if (!rootDir[0])
     {
-        Q_getwd(qdir);
+        Q_getwd(rootDir);
     }
 
-    if (!gamedir[0])
+    if (!gamePath[0])
     {
-        strcpy(gamedir, qdir);
+        strcpy(gamePath, rootDir);
     }
 
     if (!writedir[0])
     {
-        strcpy(writedir, gamedir);
+        strcpy(writedir, gamePath);
     }
 
     // Ensure all paths use forward slashes for consistency
-    for (i = 0; i < strlen(qdir); i++)
+    for (i = 0; i < strlen(rootDir); i++)
     {
-        if (qdir[i] == '\\')
-            qdir[i] = '/';
+        if (rootDir[i] == '\\')
+            rootDir[i] = '/';
     }
-    if (qdir[0] && qdir[strlen(qdir) - 1] != '/')
+    if (rootDir[0] && rootDir[strlen(rootDir) - 1] != '/')
     {
-        strcat(qdir, "/");
+        strcat(rootDir, "/");
     }
 
-    for (i = 0; i < strlen(gamedir); i++)
+    for (i = 0; i < strlen(gamePath); i++)
     {
-        if (gamedir[i] == '\\')
-            gamedir[i] = '/';
+        if (gamePath[i] == '\\')
+            gamePath[i] = '/';
     }
-    if (gamedir[0] && gamedir[strlen(gamedir) - 1] != '/')
+    if (gamePath[0] && gamePath[strlen(gamePath) - 1] != '/')
     {
-        strcat(gamedir, "/");
+        strcat(gamePath, "/");
     }
 
     for (i = 0; i < strlen(writedir); i++)
@@ -305,8 +305,8 @@ void SetQdirFromPath(const char *path)
         strcat(writedir, "/");
     }
 
-    qprintf("qdir: %s\n", qdir);
-    qprintf("gamedir: %s\n", gamedir);
+    qprintf("rootDir: %s\n", rootDir);
+    qprintf("gamePath: %s\n", gamePath);
     qprintf("writedir: %s\n", writedir);
 }
 
@@ -327,28 +327,28 @@ char *ExpandArg(const char *path)
 char *ExpandPath(const char *path)
 {
     static char full[1024];
-    if (!qdir[0])
-        Error("ExpandPath called without qdir set");
+    if (!rootDir[0])
+        Error("ExpandPath called without rootDir set");
     if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
     {
         strcpy(full, path);
         return full;
     }
-    sprintf(full, "%s%s", qdir, path);
+    sprintf(full, "%s%s", rootDir, path);
     return full;
 }
 
 char *ExpandGamePath(const char *path)
 {
     static char full[1024];
-    if (!qdir[0])
-        Error("ExpandGamePath called without qdir set");
+    if (!rootDir[0])
+        Error("ExpandGamePath called without rootDir set");
     if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
     {
         strcpy(full, path);
         return full;
     }
-    sprintf(full, "%s%s", gamedir, path);
+    sprintf(full, "%s%s", gamePath, path);
     return full;
 }
 

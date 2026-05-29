@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // vis.c
 
 #include "vis.h"
+#include "../shared/globals.h"
 #include "../common/threads.h"
 #include "stdlib.h"
 #ifdef _WIN32
@@ -1131,6 +1132,12 @@ int VisMain(int argc, char **argv)
         {
             strcpy(outbase, "/tmp");
         }
+        else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-basepath/-rootdir requires a directory path");
+            strcpy(rootDir, argv[++i]);
+        }
         else if (argv[i][0] == '-')
         {
             Error("Unknown option \"%s\"", argv[i]);
@@ -1152,10 +1159,14 @@ int VisMain(int argc, char **argv)
 
     ThreadSetDefault();
 
-    SetQdirFromPath(argv[i]);
+    if (!rootDir[0] && game->rootDir && game->rootDir[0])
+    {
+        strcpy(rootDir, game->rootDir);
+    }
+    SetRootDirFromPath(argv[i]);
 
 #ifdef _WIN32
-    InitPakFile(gamedir, NULL);
+    InitPakFile(gamePath, NULL);
 #endif
 
     // load the bsp

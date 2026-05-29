@@ -9,7 +9,7 @@ Write-Host "MSYS2 Path: $msysPath"
 Write-Host ""
 
 # Kill running instances
-Get-Process q3map -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process makebsp -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process light -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Write-Host "[1/2] Running make clean && make..." -ForegroundColor Yellow
@@ -23,10 +23,10 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "----------------------------------------" -ForegroundColor Green
     
     Write-Host ""
-    Write-Host "[2/3] Running q3map -v maps/modeltest.map..." -ForegroundColor Cyan
+    Write-Host "[2/3] Running makebsp -v maps/modeltest.map..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./q3map.exe -v -samplesize 16 maps/modeltest.map
+    ./makebsp.exe -v -samplesize 16 maps/modeltest.map
     Write-Host ""
     Write-Host "[3/3] Running light -rad_passes 0 -v maps/modeltest.bsp..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray

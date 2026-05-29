@@ -537,7 +537,7 @@ int main(int argc, char **argv)
     double start, end;
     char path[1024];
 
-    _printf("Q3Map v1.0s (c) 1999 Id Software Inc.\n");
+    _printf("Makebsp v0.5 (c) 2026 Germán \"jal\" García and Id Software Inc.\nBased on the original q3map by Id Software.\n");
 
     if (argc < 2)
     {
@@ -693,11 +693,11 @@ int main(int argc, char **argv)
         {
             strcpy(outbase, "/tmp");
         }
-        else if (!strcmp(argv[i], "-basepath"))
+        else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
-                Error("-basepath requires a directory path");
-            strcpy(qdir, argv[++i]);
+                Error("-basepath/-rootdir requires a directory path");
+            strcpy(rootDir, argv[++i]);
         }
         else if (!strcmp(argv[i], "-game"))
         {
@@ -788,15 +788,19 @@ int main(int argc, char **argv)
     ThreadSetDefault();
     // numthreads = 1;		// multiple threads aren't helping because of
     // heavy malloc use
-    SetQdirFromPath(argv[i]);
-    if (game->gamePath[0] && strcmp(game->gamePath, "."))
+    if (!rootDir[0] && game->rootDir && game->rootDir[0])
     {
-        strcat(gamedir, game->gamePath);
-        strcat(gamedir, "/");
+        strcpy(rootDir, game->rootDir);
+    }
+    SetRootDirFromPath(argv[i]);
+    if (game->gameDir[0] && strcmp(game->gameDir, "."))
+    {
+        strcat(gamePath, game->gameDir);
+        strcat(gamePath, "/");
     }
 
 #ifdef _WIN32
-    InitPakFile(gamedir, NULL);
+    InitPakFile(gamePath, NULL);
 #endif
 
     strcpy(source, ExpandArg(argv[i]));

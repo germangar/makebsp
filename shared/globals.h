@@ -54,7 +54,8 @@ extern char name[1024];
 
 typedef struct {
 	const char	*arg;			/* -game x */
-	const char	*gamePath;		/* default base game data dir */
+	const char	*rootDir;		/* default root directory */
+	const char	*gameDir;		/* default base game data dir */
 	const char	*bspIdent;		/* bsp file ident (e.g. IBSP, RBSP, FBSP) */
 	int			bspVersion;		/* bsp file version (e.g. 46, 47, 1) */
 	int			lumpCount;		/* number of lumps in bsp file */

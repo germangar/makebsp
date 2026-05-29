@@ -132,9 +132,13 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->arg = copystring(json_value_as_string(val)->string);
         }
-        else if (!Q_stricmp(key, "gamePath") && val->type == json_type_string)
+        else if (!Q_stricmp(key, "rootDir") && val->type == json_type_string)
         {
-            game->gamePath = copystring(json_value_as_string(val)->string);
+            game->rootDir = copystring(json_value_as_string(val)->string);
+        }
+        else if (!Q_stricmp(key, "gameDir") && val->type == json_type_string)
+        {
+            game->gameDir = copystring(json_value_as_string(val)->string);
         }
         else if (!Q_stricmp(key, "bspIdent") && val->type == json_type_string)
         {
@@ -505,7 +509,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
     sprintf(buffer,
             "{\n"
             "  \"game\": \"%s\",\n"
-            "  \"gamePath\": \"%s\",\n"
+            "  \"rootDir\": \"%s\",\n"
+            "  \"gameDir\": \"%s\",\n"
             "  \"bspIdent\": \"%s\",\n"
             "  \"bspVersion\": %d,\n"
             "  \"lumpCount\": %d,\n"
@@ -549,7 +554,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"flareShader\": \"%s\",\n"
             "  \"haloShader\": \"%s\"\n"
             "}\n",
-            game->arg, game->gamePath, game->bspIdent, game->bspVersion,
+            game->arg, game->rootDir, game->gameDir, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
             game->defaultSampleSize, hdrStr, game->hdr8BitScale,

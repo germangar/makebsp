@@ -162,7 +162,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the lightimage if it is specified
     if (si->lightimage[0])
     {
-        sprintf(filename, "%s%s", gamedir, si->lightimage);
+        sprintf(filename, "%s%s", gamePath, si->lightimage);
         nLen = LoadImageFile(filename, &buffer, &bTGA);
         if (buffer != NULL)
         {
@@ -173,7 +173,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the editorimage if it is specified
     if (si->editorimage[0])
     {
-        sprintf(filename, "%s%s", gamedir, si->editorimage);
+        sprintf(filename, "%s%s", gamePath, si->editorimage);
         nLen = LoadImageFile(filename, &buffer, &bTGA);
         if (buffer != NULL)
         {
@@ -184,7 +184,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the materialImage if it is specified
     if (si->materialImage[0])
     {
-        sprintf(filename, "%s%s", gamedir, si->materialImage);
+        sprintf(filename, "%s%s", gamePath, si->materialImage);
         nLen = LoadImageFile(filename, &buffer, &bTGA);
         if (buffer != NULL)
         {
@@ -193,7 +193,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     }
 
     // try the shader name
-    sprintf(filename, "%s%s", gamedir, si->shader);
+    sprintf(filename, "%s%s", gamePath, si->shader);
     nLen = LoadImageFile(filename, &buffer, &bTGA);
     if (buffer != NULL)
     {
