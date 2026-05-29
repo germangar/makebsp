@@ -35,10 +35,11 @@ The project implements a custom three-phase radiosity system:
 - **Radiosity Ambient Blending**: If `rad_color_ratio` is less than 1.0 and ambient color is present, the system uses the ambient color as a replacement for the bounced color. This reduces color bleeding while preserving overall energy. Ambient is added after radiosity to prevent overblowing.
 - **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
 
-## 5. Geometry Processing: xatlas & CoACD
+## 5. Geometry Processing: xatlas, MeshLib & Convex Decompositions
 The BSP compiler (`q3map.exe`) leverages modern libraries for texture and collision:
 - **xatlas Integration**: Handles automatic lightmap UV unwrapping and atlas packing for complex 3D models and subdivided geometry, ensuring unique mappings for all surfaces.
-- **CoACD & MeshLib**: Performs Approximate Convex Decomposition and geometric decimation to convert complex triangle soup models into optimized convex collision brushes.
+- **MeshLib**: Performs geometric healing, decimation, and cleanup of complex triangle soup models to prepare them for physical collision hulls.
+- **CoACD & HACD**: Performs Approximate Convex Decomposition to convert meshes into optimized convex collision brushes. While CoACD handles general shape approximation, HACD is leveraged for `MC_WRAP` and `MC_OBJECT` profiles where tighter, non-voxelized wrapping is required.
 
 ## 6. Technical Stack
 - **Language**: C (some C++ wrappers for libraries).
