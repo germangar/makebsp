@@ -61,7 +61,7 @@ void AddScriptToStack(const char *filename)
     script++;
     if (script == &scriptstack[MAX_INCLUDES])
         Error("script file exceeded MAX_INCLUDES");
-    strcpy(script->filename, ExpandPath(filename));
+    strcpy(script->filename, ExpandGamePath(filename));
 
     if (FileExists(script->filename))
     {

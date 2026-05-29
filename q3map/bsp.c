@@ -298,6 +298,10 @@ void ProcessModels(void)
     }
 
     verbose = oldVerbose;
+
+    extern int totalLightmappedShaders;
+    _printf("%5i total lightmapped shaders\n", totalLightmappedShaders);
+    _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
 }
 
 /*
@@ -406,7 +410,7 @@ void InjectSunEntity(void)
     {
         if (ValueForKey(&entities[i], "sun")[0])
         {
-            _printf("Sun entity already exists, skipping shader injection.\n");
+            _printf("WARNING: Sun entity already exists, skipping shader injection.\n");
             return;
         }
     }

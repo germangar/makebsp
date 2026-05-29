@@ -23,14 +23,14 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "----------------------------------------" -ForegroundColor Green
     
     Write-Host ""
-    Write-Host "[2/3] Running makebsp -v maps/modeltest.map..." -ForegroundColor Cyan
+    Write-Host "[2/3] Running makebsp -v base/maps/modeltest.map..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./makebsp.exe -v -samplesize 16 maps/modeltest.map
+    ./makebsp.exe -v -samplesize 16 base/maps/modeltest.map
     Write-Host ""
-    Write-Host "[3/3] Running light -rad_passes 0 -v maps/modeltest.bsp..." -ForegroundColor Cyan
+    Write-Host "[3/3] Running light -rad_passes 0 -v base/maps/modeltest.bsp..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./light.exe -smoothpasses 1 -rad_passes 0 -v maps/modeltest.bsp
+    ./light.exe -smoothpasses 1 -rad_passes 0 -v base/maps/modeltest.bsp
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red

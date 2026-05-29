@@ -192,7 +192,7 @@ static void PrepareClipEntityGroups(void)
             models++;
         }
     }
-    _printf("Existing map models: %i. Starting clip models at *%i\n", models - 1,
+    qprintf("Existing map models: %i. Starting clip models at *%i\n", models - 1,
             models);
 
     // Step 2: Sort by density (descending)
@@ -726,7 +726,7 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
     // fall back to 3-point windings from the best CoACD triangles.
     if (!CreateBrushWindings(b))
     {
-        _printf("WARNING: CreateBrushWindings failed, using triangle fallback\n");
+        qprintf("WARNING: CreateBrushWindings failed, using triangle fallback\n");
         for (i = 0; i < numUniquePlanes; i++)
         {
             if (b->sides[i].winding)
@@ -1051,7 +1051,12 @@ void CreateCollisionTris(modelInstance_t *inst)
     if (inst->num_collision_meshes > 0)
     {
         char objPath[1024];
-        strcpy(objPath, inst->modelName);
+        if (writedir[0]) {
+            sprintf(objPath, "%s%s", writedir, inst->modelName);
+        } else {
+            strcpy(objPath, inst->modelName);
+        }
+        
         char *ext = strrchr(objPath, '.');
         if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL)
         {
@@ -1059,6 +1064,7 @@ void CreateCollisionTris(modelInstance_t *inst)
         }
         strcat(objPath, "_coltris.obj");
 
+        CreatePath(objPath);
         WriteCollisionOBJ(inst->collision_meshes, inst->num_collision_meshes, objPath);
     }
 }

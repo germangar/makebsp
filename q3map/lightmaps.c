@@ -30,6 +30,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 int numSortShaders;
 mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
+int totalLightmappedShaders = 0;
 
 #define MAX_LIGHTMAPS 2048
 #define MAX_LIGHTMAP_WIDTH 1024
@@ -863,8 +864,8 @@ void AllocateLightmaps(entity_t *e)
         Error("Failed to allocate %d bytes for lightBytes", numLightBytes);
     }
 
-    _printf("%5i unique shaders\n", numSortShaders);
-    _printf("%5i lightmaps allocated (%dx%d resolution)\n", numLightmaps, LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT);
+    extern int totalLightmappedShaders;
+    totalLightmappedShaders += numSortShaders;
 
     // Clear the lightmap buffer
     if (lightBytes) memset(lightBytes, 0, numLightBytes);

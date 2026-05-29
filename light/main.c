@@ -56,7 +56,7 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     const char *val = ValueForKey(ent, "__texelsize");
     if (val[0]) {
         samplesize = atoi(val);
-        _printf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
+        qprintf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
     }
 
     const char *lmSizeVal = ValueForKey(ent, "__lightmapImageSize");
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
     double start, end;
 
 
-    _printf("----- Lighting (Ag Build v1.1) ----\n");
+    _printf("\n----- Lighting (Ag Build v1.1) ----\n");
 
     verbose = qfalse;
     areaScale = 0.25;
@@ -521,13 +521,6 @@ int main(int argc, char **argv) {
             break;
         }
     }
-    
-
-
-    ThreadSetDefault();
-    if (openclEnabled) {
-        InitOpenCL();
-    }
 
     if (i != argc - 1) {
         if (i < argc) {
@@ -617,6 +610,7 @@ int main(int argc, char **argv) {
     _printf("writedir: %s\n", writedir);
 
 
+
 #ifdef _WIN32
     if (userPath[0]) {
         InitPakFile(userPath, NULL);
@@ -645,6 +639,12 @@ int main(int argc, char **argv) {
     if (samplesize <= 0) {
         samplesize = game->defaultSampleSize;
         _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
+    }
+
+    ThreadSetDefault();
+
+    if (openclEnabled) {
+        InitOpenCL();
     }
 
     // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)

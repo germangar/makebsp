@@ -319,6 +319,7 @@ void FixBrushSides(void) {
 			}
 		}
 	}
+	_printf("done.\n");
 }
 
 /*

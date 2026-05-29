@@ -1306,6 +1306,8 @@ void GenerateLightmapAlphaMask(void)
             }
         }
     }
+
+    _printf("done.\n");
 }
 
 /*
@@ -1666,9 +1668,9 @@ void LightMain(void)
         count++;
         numLightBytes = count * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
 
-        _printf("%5i drawSurfaces\n", numDrawSurfaces);
-        _printf("%5i lightmaps\n", count);
-        _printf("%5i lightmap samples\n", numSamples);
+        _printf("   %i drawSurfaces\n", numDrawSurfaces);
+        _printf("   %i lightmaps\n", count);
+        _printf("   %i lightmap samples\n", numSamples);
     }
 
     // Generate the base geometric mask

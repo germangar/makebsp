@@ -151,7 +151,7 @@ void ThreadSetDefault(void)
             numthreads = 1;
     }
 
-    qprintf("%i threads\n", numthreads);
+    _printf("%i threads\n", numthreads);
 }
 
 void ThreadLock(void)

@@ -442,6 +442,10 @@ void PatchMapDrawSurfs(entity_t *e);
 
 // lightmap.c
 
+extern int numLightBytes;
+extern byte *lightBytes;
+extern int numLightmaps;
+
 void AllocateLightmaps(entity_t *e);
 void AllocateLightmapForPatch(mapDrawSurface_t *ds);
 void FreeLightmaps(void);
