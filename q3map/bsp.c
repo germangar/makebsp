@@ -573,6 +573,20 @@ int main(int argc, char **argv)
     // Apply game defaults before parsing CLI
     samplesize = game->defaultSampleSize;
 
+    // Pre-scan CLI for path overrides
+    const char *cliUserDir = NULL;
+    for (i = 1; i < argc; i++)
+    {
+        if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) && i + 1 < argc)
+        {
+            strcpy(rootDir, argv[i + 1]);
+        }
+        else if (!strcmp(argv[i], "-userdir") && i + 1 < argc)
+        {
+            cliUserDir = argv[i + 1];
+        }
+    }
+
 
 
     tempsource[0] = '\0';
@@ -697,7 +711,13 @@ int main(int argc, char **argv)
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("-basepath/-rootdir requires a directory path");
-            strcpy(rootDir, argv[++i]);
+            i++; // Handled in pre-scan
+        }
+        else if (!strcmp(argv[i], "-userdir"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-userdir requires a directory path");
+            i++; // Handled in pre-scan
         }
         else if (!strcmp(argv[i], "-game"))
         {
@@ -792,14 +812,40 @@ int main(int argc, char **argv)
     {
         strcpy(rootDir, game->rootDir);
     }
-    SetRootDirFromPath(argv[i]);
-    if (game->gameDir[0] && strcmp(game->gameDir, "."))
+    
+    // Resolve base paths using game profile and CLI overrides
+    const char *finalUserDir = cliUserDir ? cliUserDir : (game->userDir ? game->userDir : "");
+    SetBasePaths(finalUserDir);
+
+    if (game->gameDir && game->gameDir[0] && strcmp(game->gameDir, "."))
     {
         strcat(gamePath, game->gameDir);
         strcat(gamePath, "/");
+        if (userPath[0])
+        {
+            strcat(userPath, game->gameDir);
+            strcat(userPath, "/");
+        }
+        if (writedir[0])
+        {
+            strcat(writedir, game->gameDir);
+            strcat(writedir, "/");
+        }
     }
 
+    _printf("rootDir: %s\n", rootDir);
+    _printf("gamePath: %s\n", gamePath);
+    if (userPath[0]) {
+        _printf("userPath: %s\n", userPath);
+    }
+    _printf("writedir: %s\n", writedir);
+
+
 #ifdef _WIN32
+    if (userPath[0])
+    {
+        InitPakFile(userPath, NULL);
+    }
     InitPakFile(gamePath, NULL);
 #endif
 

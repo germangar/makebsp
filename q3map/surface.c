@@ -1905,7 +1905,9 @@ void GenerateHalos(entity_t *e)
             const char *haloShader = ValueForKey(light, "haloshader");
             if (!haloShader[0]) {
                 haloShader = game->haloShader;
-            } else if (!Q_stricmp(haloShader, "none") || !strcmp(haloShader, "0")) {
+            }
+            
+            if (!haloShader || !haloShader[0] || !Q_stricmp(haloShader, "none") || !strcmp(haloShader, "0")) {
                 continue;
             }
 

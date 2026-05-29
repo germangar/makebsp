@@ -1,7 +1,8 @@
 {
   "game": "quake3",
   "rootDir": ".",
-  "gameDir": ".",
+  "userDir": "",
+  "gameDir": "baseq3",
   "bspIdent": "IBSP",
   "bspVersion": 46,
   "lumpCount": 17,

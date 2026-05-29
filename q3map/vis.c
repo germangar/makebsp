@@ -1071,6 +1071,24 @@ int VisMain(int argc, char **argv)
     _printf("---- vis ----\n");
 
     verbose = qfalse;
+
+    // Initialize game profile from JSON and CLI
+    game = InitGame(argc, argv);
+
+    // Pre-scan CLI for path overrides
+    const char *cliUserDir = NULL;
+    for (i = 1; i < argc; i++)
+    {
+        if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) && i + 1 < argc)
+        {
+            strcpy(rootDir, argv[i + 1]);
+        }
+        else if (!strcmp(argv[i], "-userdir") && i + 1 < argc)
+        {
+            cliUserDir = argv[i + 1];
+        }
+    }
+
     for (i = 1; i < argc; i++)
     {
         if (!strcmp(argv[i], "-threads"))
@@ -1136,7 +1154,19 @@ int VisMain(int argc, char **argv)
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("-basepath/-rootdir requires a directory path");
-            strcpy(rootDir, argv[++i]);
+            i++; // Handled in pre-scan
+        }
+        else if (!strcmp(argv[i], "-userdir"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-userdir requires a directory path");
+            i++; // Handled in pre-scan
+        }
+        else if (!strcmp(argv[i], "-game"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-game requires a profile name");
+            i++; // Handled in pre-scan
         }
         else if (argv[i][0] == '-')
         {
@@ -1163,9 +1193,32 @@ int VisMain(int argc, char **argv)
     {
         strcpy(rootDir, game->rootDir);
     }
-    SetRootDirFromPath(argv[i]);
+    
+    // Resolve base paths using game profile and CLI overrides
+    const char *finalUserDir = cliUserDir ? cliUserDir : (game->userDir ? game->userDir : "");
+    SetBasePaths(finalUserDir);
+
+    if (game->gameDir[0] && strcmp(game->gameDir, "."))
+    {
+        strcat(gamePath, game->gameDir);
+        strcat(gamePath, "/");
+        if (userPath[0])
+        {
+            strcat(userPath, game->gameDir);
+            strcat(userPath, "/");
+        }
+        if (writedir[0])
+        {
+            strcat(writedir, game->gameDir);
+            strcat(writedir, "/");
+        }
+    }
 
 #ifdef _WIN32
+    if (userPath[0])
+    {
+        InitPakFile(userPath, NULL);
+    }
     InitPakFile(gamePath, NULL);
 #endif
 

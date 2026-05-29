@@ -128,20 +128,13 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
         char testPath[1024];
         sprintf(testPath, "%s%s", base, exts[i]);
 
-        if (FileExists(testPath))
+        nLen = vfsLoadFile(testPath, (void **)&buffer);
+        if (nLen >= 0)
         {
-            nLen = LoadFileBlock(testPath, (void **)&buffer);
-        }
-#ifdef _WIN32
-        else
-        {
-            nLen = PakLoadAnyFile(testPath, (void **)&buffer);
-        }
-#endif
-
-        if (buffer != NULL)
-        {
-            *bTGA = (Q_stricmp(exts[i], ".tga") == 0) ? qtrue : qfalse;
+            if (bTGA)
+            {
+                *bTGA = (exts[i][1] == 't' || exts[i][1] == 'T');
+            }
             *bufferptr = buffer;
             return nLen;
         }
@@ -162,8 +155,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the lightimage if it is specified
     if (si->lightimage[0])
     {
-        sprintf(filename, "%s%s", gamePath, si->lightimage);
-        nLen = LoadImageFile(filename, &buffer, &bTGA);
+        nLen = LoadImageFile(si->lightimage, &buffer, &bTGA);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -173,8 +165,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the editorimage if it is specified
     if (si->editorimage[0])
     {
-        sprintf(filename, "%s%s", gamePath, si->editorimage);
-        nLen = LoadImageFile(filename, &buffer, &bTGA);
+        nLen = LoadImageFile(si->editorimage, &buffer, &bTGA);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -184,8 +175,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the materialImage if it is specified
     if (si->materialImage[0])
     {
-        sprintf(filename, "%s%s", gamePath, si->materialImage);
-        nLen = LoadImageFile(filename, &buffer, &bTGA);
+        nLen = LoadImageFile(si->materialImage, &buffer, &bTGA);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -193,8 +183,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     }
 
     // try the shader name
-    sprintf(filename, "%s%s", gamePath, si->shader);
-    nLen = LoadImageFile(filename, &buffer, &bTGA);
+    nLen = LoadImageFile(si->shader, &buffer, &bTGA);
     if (buffer != NULL)
     {
         goto loadTga;
@@ -760,15 +749,31 @@ static void ShaderPakCallback(const char *filename)
 
 void LoadShaderInfo(void)
 {
+    char searchPath[1024];
+
     _printf("Scanning for shaders...\n");
 
     numLoadedShaderFiles = 0;
 
-    // Scan loose files on disk (portable)
-    Sys_ListFiles(ExpandGamePath("scripts/"), "*.shader", ShaderLooseCallback);
+    // Priority 1: userPath unpacked (loose files)
+    if (userPath[0])
+    {
+        sprintf(searchPath, "%sscripts/", userPath);
+        Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
+    }
 
-    // Scan files in PAKs
-    ScanPakFiles(ShaderPakCallback);
+    // Priority 2: userPath packed (PAK/PK3 files)
+    if (userPath[0])
+    {
+        ScanPakFiles(userPath, ShaderPakCallback);
+    }
+
+    // Priority 3: gamePath unpacked (loose files)
+    sprintf(searchPath, "%sscripts/", gamePath);
+    Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
+
+    // Priority 4: gamePath packed (PAK/PK3 files)
+    ScanPakFiles(gamePath, ShaderPakCallback);
 
     _printf("%5i shader files parsed\n", numLoadedShaderFiles);
     _printf("%5i shaders found\n", numShaderInfo);

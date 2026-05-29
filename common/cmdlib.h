@@ -75,12 +75,17 @@ void Q_mkdir(const char *path);
 
 extern char rootDir[1024];
 extern char gamePath[1024];
+extern char userPath[1024];
 extern char writedir[1024];
-void SetRootDirFromPath(const char *path);
+void SetBasePaths(const char *userDirOverride);
 char *ExpandArg(const char *path);  // from cmd line
 char *ExpandPath(const char *path); // from scripts
 char *ExpandGamePath(const char *path);
 char *ExpandPathAndArchive(const char *path);
+
+// VFS: multi-path file resolution
+int vfsFindFile(const char *relativePath, char *outFullPath, int outSize);
+int vfsLoadFile(const char *relativePath, void **bufferptr);
 void Sys_ListFiles(const char *directory, const char *extension,
                    void (*callback)(const char *filename));
 

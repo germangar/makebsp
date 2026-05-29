@@ -116,6 +116,7 @@ typedef struct DirStruct {
 extern int m_nPAKIndex;
 extern FILE *pakfile[16];
 extern boolean pakopen;
+
 extern DIRECTORY *paktextures;
 
 void ClearFileList(FILELIST **);
@@ -130,7 +131,8 @@ void OpenPakFile(const char *);
 void ClosePakFile(void);
 int PakLoadAnyFile(const char *filename, void **bufferptr);
 void WINAPI InitPakFile(const char *pBasePath, const char *pName);
-void ScanPakFiles(void (*callback)(const char *filename));
+void ClearPakFiles(void);
+void ScanPakFiles(const char *basePath, void (*callback)(const char *filename));
 
 #ifdef __cplusplus
 }

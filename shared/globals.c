@@ -20,7 +20,9 @@ qboolean g_lowmem = qfalse;
 game_t gameTemplates[MAX_GAMES] = {
 	{
 		"qfusion",
-		".",
+		".",        // rootDir
+        "",         // userDir
+        "",         // gameDir
 		"FBSP",
 		1,
 		18,
@@ -68,7 +70,9 @@ game_t gameTemplates[MAX_GAMES] = {
 	},
 	{
 		"quake3",
-		".",
+		".",        // rootDir
+        "",         // userDir
+        "baseq3",   // gameDir
 		"IBSP",
 		46,
 		17,

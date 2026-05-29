@@ -52,10 +52,11 @@ char g_strBasePath[1024];
 struct PK3FileInfo {
   unzFile m_zFile;
   char *m_pName;
+  char *m_pBasePath;
   unz_s m_zInfo;
   long m_lSize;
-  PK3FileInfo() : m_zFile(NULL), m_pName(NULL), m_lSize(0) {}
-  ~PK3FileInfo() { delete[] m_pName; }
+  PK3FileInfo() : m_zFile(NULL), m_pName(NULL), m_pBasePath(NULL), m_lSize(0) {}
+  ~PK3FileInfo() { delete[] m_pName; delete[] m_pBasePath; }
   bool operator==(const PK3FileInfo &rhs) const {
     return strcmp(m_pName, rhs.m_pName) == 0;
   }
@@ -729,30 +730,38 @@ int PakLoadAnyFile(const char *filename, void **bufferptr) {
   char cWork[WORK_LEN];
   if (g_bPK3) {
     PK3FileInfo *pInfo;
-    Str strKey;
-    // need to lookup the file without the base/texture path on it
-    Str strBase(g_strBasePath);
-    AddSlash(strBase);
-    __ConvertDOSToUnixName(cWork, strBase);
+
+    // Convert incoming filename to unix-style lowercase for comparison
     Str strFile(filename);
     __ConvertDOSToUnixName(strFile, strFile);
     strFile.MakeLower();
-    strlwr(cWork);
-    FindReplace(strFile, cWork, "");
 
-    PK3FileInfo infoFind;
-    infoFind.m_pName = __StrDup(strFile.GetBuffer());
-    PK3List *pList = g_PK3Files.Find(&infoFind);
-    if (pList) {
+    // Walk the PK3 file list and try each record's own base path for prefix stripping
+    PK3List *pList = g_PK3Files.Next();
+    while (pList != NULL) {
       pInfo = pList->Ptr();
-      memcpy(pInfo->m_zFile, &pInfo->m_zInfo, sizeof(unz_s));
-      if (unzOpenCurrentFile(pInfo->m_zFile) == UNZ_OK) {
-        void *buffer = __qblockmalloc(pInfo->m_lSize + 1);
-        int n = unzReadCurrentFile(pInfo->m_zFile, buffer, pInfo->m_lSize);
-        *bufferptr = buffer;
-        unzCloseCurrentFile(pInfo->m_zFile);
-        return n;
+      if (pInfo->m_pBasePath) {
+        Str strBase(pInfo->m_pBasePath);
+        AddSlash(strBase);
+        __ConvertDOSToUnixName(cWork, strBase);
+        strlwr(cWork);
+
+        // Try to strip this record's base path from the filename
+        Str strKey(strFile);
+        FindReplace(strKey, cWork, "");
+
+        if (strcmp(strKey.GetBuffer(), pInfo->m_pName) == 0) {
+          memcpy(pInfo->m_zFile, &pInfo->m_zInfo, sizeof(unz_s));
+          if (unzOpenCurrentFile(pInfo->m_zFile) == UNZ_OK) {
+            void *buffer = __qblockmalloc(pInfo->m_lSize + 1);
+            int n = unzReadCurrentFile(pInfo->m_zFile, buffer, pInfo->m_lSize);
+            *bufferptr = buffer;
+            unzCloseCurrentFile(pInfo->m_zFile);
+            return n;
+          }
+        }
       }
+      pList = pList->Next();
     }
     return -1;
   }
@@ -827,6 +836,7 @@ boolean OpenPK3(const char *filename) {
       if (strstr(cWork, ".") != NULL) {
         PK3FileInfo *pInfo = new PK3FileInfo();
         pInfo->m_pName = __StrDup(cWork);
+        pInfo->m_pBasePath = __StrDup(g_strBasePath);
         memcpy(&pInfo->m_zInfo, (unz_s *)*zFile, sizeof(unz_s));
         pInfo->m_lSize = zInfo.uncompressed_size;
         pInfo->m_zFile = *zFile;
@@ -964,9 +974,6 @@ void ClosePakFile(void) {
 }
 
 void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
-  m_nPAKIndex = 0;
-  pakopen = false;
-  paktextures = NULL;
   strcpy(g_strBasePath, pBasePath);
   if (pName == NULL) {
     char cWork[WORK_LEN];
@@ -987,13 +994,24 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
   }
 }
 
-void ScanPakFiles(void (*callback)(const char *filename)) {
+void ClearPakFiles(void) {
+  ClosePakFile();
+}
+
+void ScanPakFiles(const char *basePath, void (*callback)(const char *filename)) {
   if (!g_bPK3)
     return;
 
   PK3List *p = g_PK3Files.Next();
   while (p != NULL) {
     PK3FileInfo *pKey = p->Ptr();
+    // If basePath is provided, skip entries from other base paths
+    if (basePath != NULL && pKey->m_pBasePath != NULL) {
+      if (strcmpi(pKey->m_pBasePath, basePath) != 0) {
+        p = p->Next();
+        continue;
+      }
+    }
     callback(pKey->m_pName);
     p = p->Next();
   }

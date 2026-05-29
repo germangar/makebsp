@@ -1,7 +1,8 @@
 {
   "game": "qfusion",
   "rootDir": ".",
-  "gameDir": ".",
+  "userDir": "",
+  "gameDir": "",
   "bspIdent": "FBSP",
   "bspVersion": 1,
   "lumpCount": 18,

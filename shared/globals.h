@@ -55,6 +55,7 @@ extern char name[1024];
 typedef struct {
 	const char	*arg;			/* -game x */
 	const char	*rootDir;		/* default root directory */
+	const char	*userDir;		/* default user directory (overrides rootDir for loading) */
 	const char	*gameDir;		/* default base game data dir */
 	const char	*bspIdent;		/* bsp file ident (e.g. IBSP, RBSP, FBSP) */
 	int			bspVersion;		/* bsp file version (e.g. 46, 47, 1) */
