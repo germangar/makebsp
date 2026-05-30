@@ -1076,36 +1076,52 @@ int VisMain(int argc, char **argv)
     game = InitGame(argc, argv);
 
     // Pre-scan CLI for VFS path construction
-    const char *cliUserDir  = NULL;
-    const char *cliBasePath = NULL;
-    const char *modGameDir  = NULL;
+    const char *cliUserDirs[MAX_VFS_PATHS];
+    int numCliUserDirs = 0;
+    const char *cliBasePaths[MAX_VFS_PATHS];
+    int numCliBasePaths = 0;
+    const char *modGameDirs[MAX_VFS_PATHS];
+    int numModGameDirs = 0;
     const char *baseGameDir = game->gameDir;
 
     for (i = 1; i < argc; i++)
     {
         if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
-            cliUserDir = argv[i + 1];
+        {
+            if (numCliUserDirs < MAX_VFS_PATHS) cliUserDirs[numCliUserDirs++] = argv[i + 1];
+        }
         else if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") || !strcmp(argv[i], "-fs_basepath")) && i + 1 < argc)
-            cliBasePath = argv[i + 1];
+        {
+            if (numCliBasePaths < MAX_VFS_PATHS) cliBasePaths[numCliBasePaths++] = argv[i + 1];
+        }
         else if ((!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game")) && i + 1 < argc)
-            modGameDir = argv[i + 1];
+        {
+            if (numModGameDirs < MAX_VFS_PATHS) modGameDirs[numModGameDirs++] = argv[i + 1];
+        }
     }
 
+    // Default fallbacks if no CLI arguments provided
+    if (numCliUserDirs == 0 && game->userDir && game->userDir[0])
+        cliUserDirs[numCliUserDirs++] = game->userDir;
+        
+    if (numCliBasePaths == 0)
+        cliBasePaths[numCliBasePaths++] = (game->rootDir && game->rootDir[0]) ? game->rootDir : ".";
+
     // 1. User Dir Layer (Write directory is always the first path added here)
-    const char *user = cliUserDir ? cliUserDir : ((game->userDir && game->userDir[0]) ? game->userDir : NULL);
-    if (user)
+    for (i = 0; i < numCliUserDirs; i++)
     {
-        if (modGameDir)
-            AddVFSPath(user, modGameDir);
-        AddVFSPath(user, baseGameDir);
+        for (int j = 0; j < numModGameDirs; j++)
+            AddVFSPath(cliUserDirs[i], modGameDirs[j]);
+        AddVFSPath(cliUserDirs[i], baseGameDir);
     }
 
     // 2. Base Path Layer
-    const char *base = cliBasePath ? cliBasePath : ((game->rootDir && game->rootDir[0]) ? game->rootDir : ".");
-    
-    if (modGameDir)
-        AddVFSPath(base, modGameDir);
-    AddVFSPath(base, baseGameDir);
+    for (i = 0; i < numCliBasePaths; i++)
+    {
+        for (int j = 0; j < numModGameDirs; j++)
+            AddVFSPath(cliBasePaths[i], modGameDirs[j]);
+        AddVFSPath(cliBasePaths[i], baseGameDir);
+    }
 
     InitVFSWriteDir();
 
