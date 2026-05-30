@@ -188,6 +188,9 @@ void *__qblockmalloc(size_t nSize) {
     nSize += MEM_BLOCKSIZE - nAllocSize;
   }
   b = malloc(nSize + 1);
+  if (!b) {
+      Error("Fatal: __qblockmalloc failed to allocate %zu bytes", nSize + 1);
+  }
   memset(b, 0, nSize);
   return b;
 }
@@ -195,6 +198,9 @@ void *__qblockmalloc(size_t nSize) {
 void *__qmalloc(size_t nSize) {
   void *b;
   b = malloc(nSize + 1);
+  if (!b) {
+      Error("Fatal: __qmalloc failed to allocate %zu bytes", nSize + 1);
+  }
   memset(b, 0, nSize);
   return b;
 }
@@ -751,14 +757,20 @@ int PakLoadAnyFile(const char *filename, void **bufferptr) {
         FindReplace(strKey, cWork, "");
 
         if (strcmp(strKey.GetBuffer(), pInfo->m_pName) == 0) {
+          unz_s savedState;
+          memcpy(&savedState, pInfo->m_zFile, sizeof(unz_s));
+
           memcpy(pInfo->m_zFile, &pInfo->m_zInfo, sizeof(unz_s));
           if (unzOpenCurrentFile(pInfo->m_zFile) == UNZ_OK) {
             void *buffer = __qblockmalloc(pInfo->m_lSize + 1);
             int n = unzReadCurrentFile(pInfo->m_zFile, buffer, pInfo->m_lSize);
             *bufferptr = buffer;
             unzCloseCurrentFile(pInfo->m_zFile);
+            
+            memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
             return n;
           }
+          memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
         }
       }
       pList = pList->Next();
@@ -981,7 +993,7 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
     AddSlash(strPath);
     strPath += "*.pk3";
     struct _finddata_t fileinfo;
-    int handle = _findfirst(strPath, &fileinfo);
+    intptr_t handle = _findfirst(strPath, &fileinfo);
     if (handle != -1) {
       do {
         sprintf(cWork, "%s\\%s", pBasePath, fileinfo.name);

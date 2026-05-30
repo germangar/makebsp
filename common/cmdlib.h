@@ -43,10 +43,18 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <string.h>
 #include <time.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef __BYTEBOOL__
+#define __BYTEBOOL__
+typedef enum { qfalse, qtrue } qboolean;
+typedef unsigned char byte;
+#endif
+
 #ifdef _MSC_VER
-
 #pragma intrinsic(memset, memcpy)
-
 #endif
 
 #include "qtypes.h"
@@ -160,5 +168,9 @@ typedef struct
     void *data;
     int count, width, height;
 } cblock_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

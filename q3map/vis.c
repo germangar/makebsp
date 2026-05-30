@@ -1076,6 +1076,8 @@ int VisMain(int argc, char **argv)
     game = InitGame(argc, argv);
 
     // Pre-scan CLI for VFS path construction
+    const char *cliPakPaths[MAX_VFS_PATHS];
+    int numCliPakPaths = 0;
     const char *cliUserDirs[MAX_VFS_PATHS];
     int numCliUserDirs = 0;
     const char *cliBasePaths[MAX_VFS_PATHS];
@@ -1086,7 +1088,11 @@ int VisMain(int argc, char **argv)
 
     for (i = 1; i < argc; i++)
     {
-        if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
+        if (!strcmp(argv[i], "-fs_pakpath") && i + 1 < argc)
+        {
+            if (numCliPakPaths < MAX_VFS_PATHS) cliPakPaths[numCliPakPaths++] = argv[i + 1];
+        }
+        else if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
         {
             if (numCliUserDirs < MAX_VFS_PATHS) cliUserDirs[numCliUserDirs++] = argv[i + 1];
         }
@@ -1107,7 +1113,15 @@ int VisMain(int argc, char **argv)
     if (numCliBasePaths == 0)
         cliBasePaths[numCliBasePaths++] = (game->rootDir && game->rootDir[0]) ? game->rootDir : ".";
 
-    // 1. User Dir Layer (Write directory is always the first path added here)
+    // 1. Pak Paths
+    for (i = 0; i < numCliPakPaths; i++)
+    {
+        for (int j = 0; j < numModGameDirs; j++)
+            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
+        AddVFSPath(cliPakPaths[i], baseGameDir);
+    }
+
+    // 2. User Dir Layer (Write directory is always the first path added here unless PakPaths exist)
     for (i = 0; i < numCliUserDirs; i++)
     {
         for (int j = 0; j < numModGameDirs; j++)
@@ -1115,7 +1129,7 @@ int VisMain(int argc, char **argv)
         AddVFSPath(cliUserDirs[i], baseGameDir);
     }
 
-    // 2. Base Path Layer
+    // 3. Base Path Layer
     for (i = 0; i < numCliBasePaths; i++)
     {
         for (int j = 0; j < numModGameDirs; j++)
@@ -1188,7 +1202,7 @@ int VisMain(int argc, char **argv)
                 Error("%s requires a directory path", argv[i]);
             i++; // Handled in pre-scan
         }
-        else if (!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath"))
+        else if (!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath") || !strcmp(argv[i], "-fs_pakpath"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("%s requires a directory path", argv[i]);
@@ -1200,11 +1214,21 @@ int VisMain(int argc, char **argv)
                 Error("%s requires a directory path", argv[i]);
             i++; // Handled in pre-scan
         }
+        else if (!strcmp(argv[i], "-connect"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("%s requires an IP address", argv[i]);
+            Broadcast_Setup(argv[++i]);
+        }
         else if (!strcmp(argv[i], "-game"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("-game requires a profile name");
             i++; // Handled in pre-scan
+        }
+        else if (!strcmp(argv[i], "-vis") || !strcmp(argv[i], "-bsp") || !strcmp(argv[i], "-light"))
+        {
+            // Handled by mode switcher
         }
         else if (argv[i][0] == '-')
         {

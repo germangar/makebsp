@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // cmdlib.c
 
 #include "cmdlib.h"
+#include "connect.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -70,7 +71,7 @@ char *ex_argv[MAX_EX_ARGC];
 void ExpandWildcards(int *argc, char ***argv)
 {
     struct _finddata_t fileinfo;
-    int handle;
+    intptr_t handle;
     int i;
     char filename[1024];
     char filebase[1024];
@@ -151,6 +152,15 @@ void Error(const char *error, ...)
     printf("\n************ ERROR ************\n");
     fprintf(stderr, "\n************ ERROR ************\n");
 
+    char errorBuf[4096];
+    va_start(argptr, error);
+    vsprintf(errorBuf, error, argptr);
+    va_end(argptr);
+    
+    char msg[4096];
+    snprintf(msg, sizeof(msg), "************ ERROR ************\n%s\n", errorBuf);
+    Broadcast_Print(3, msg);
+
     va_start(argptr, error);
     vprintf(error, argptr);
     va_end(argptr);
@@ -163,6 +173,8 @@ void Error(const char *error, ...)
     fprintf(stderr, "\n");
     fflush(stdout);
     fflush(stderr);
+
+    Broadcast_Shutdown();
 
     exit(1);
 }
@@ -200,6 +212,8 @@ void _printf(const char *format, ...)
 
     printf("%s", text);
     fflush(stdout);
+    
+    Broadcast_Print(1, text);
 
 #ifdef _WIN32
     if (!lookedForServer)
@@ -283,8 +297,25 @@ void AddVFSPath(const char *basePath, const char *gameDir)
 
     if (gameDir && gameDir[0] && strcmp(gameDir, ".") != 0)
     {
-        strncat(buf, gameDir, sizeof(buf) - strlen(buf) - 1);
-        strncat(buf, "/",     sizeof(buf) - strlen(buf) - 1);
+        qboolean alreadyEndsWith = qfalse;
+        char tempBuf[1024];
+        int gameLen = strlen(gameDir);
+        
+        strcpy(tempBuf, buf);
+        if (strlen(tempBuf) > 0 && tempBuf[strlen(tempBuf) - 1] == '/')
+            tempBuf[strlen(tempBuf) - 1] = '\0';
+            
+        if ((int)strlen(tempBuf) >= gameLen && !Q_stricmp(tempBuf + strlen(tempBuf) - gameLen, gameDir))
+        {
+            if ((int)strlen(tempBuf) == gameLen || tempBuf[strlen(tempBuf) - gameLen - 1] == '/')
+                alreadyEndsWith = qtrue;
+        }
+
+        if (!alreadyEndsWith)
+        {
+            strncat(buf, gameDir, sizeof(buf) - strlen(buf) - 1);
+            strncat(buf, "/",     sizeof(buf) - strlen(buf) - 1);
+        }
     }
 
     // Skip duplicates
@@ -1073,9 +1104,9 @@ void ExtractFileBase(const char *path, char *dest)
     src = path + strlen(path) - 1;
 
     //
-    // back up until a \ or the start
+    // back up until a slash or the start
     //
-    while (src != path && *(src - 1) != PATHSEPERATOR)
+    while (src != path && *(src - 1) != '/' && *(src - 1) != '\\')
         src--;
 
     while (*src && *src != '.')
@@ -1096,8 +1127,9 @@ void ExtractFileExtension(const char *path, char *dest)
     //
     while (src != path && *(src - 1) != '.')
         src--;
-    if (src == path)
-    {
+
+    // If we hit a slash before a dot, there is no extension
+    if (src == path) {
         *dest = 0; // no extension
         return;
     }

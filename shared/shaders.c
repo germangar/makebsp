@@ -39,7 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Default backsplash is disabled unless explicitly requested
 #define DEFAULT_BACKSPLASH_DISTANCE 24
 
-#define MAX_SURFACE_INFO 4096
+#define MAX_SURFACE_INFO 16384
 
 shaderInfo_t defaultInfo;
 shaderInfo_t shaderInfo[MAX_SURFACE_INFO];
@@ -287,7 +287,8 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
     char shader[MAX_QPATH];
 
     // strip off extension
-    strcpy(shader, shaderName);
+    strncpy(shader, shaderName, MAX_QPATH - 1);
+    shader[MAX_QPATH - 1] = '\0';
     StripExtension(shader);
 
     // search for it
@@ -333,7 +334,8 @@ static void ParseShaderFile(const char *filename)
         }
 
         si = AllocShaderInfo();
-        strcpy(si->shader, token);
+        strncpy(si->shader, token, MAX_QPATH - 1);
+        si->shader[MAX_QPATH - 1] = '\0';
         MatchToken("{");
         while (1)
         {
@@ -365,7 +367,8 @@ static void ParseShaderFile(const char *filename)
                     if (!Q_stricmp(token, "material") && !si->materialImage[0])
                     {
                         GetToken(qfalse);
-                        strcpy(si->materialImage, token);
+                        strncpy(si->materialImage, token, MAX_QPATH - 1);
+                        si->materialImage[MAX_QPATH - 1] = '\0';
                         DefaultExtension(si->materialImage, ".tga");
                     }
                 }
@@ -404,7 +407,8 @@ static void ParseShaderFile(const char *filename)
             if (!Q_stricmp(token, "qer_editorimage"))
             {
                 GetToken(qfalse);
-                strcpy(si->editorimage, token);
+                strncpy(si->editorimage, token, MAX_QPATH - 1);
+                si->editorimage[MAX_QPATH - 1] = '\0';
                 DefaultExtension(si->editorimage, ".tga");
                 continue;
             }
@@ -413,7 +417,8 @@ static void ParseShaderFile(const char *filename)
             if (!Q_stricmp(token, "q3map_lightimage"))
             {
                 GetToken(qfalse);
-                strcpy(si->lightimage, token);
+                strncpy(si->lightimage, token, MAX_QPATH - 1);
+                si->lightimage[MAX_QPATH - 1] = '\0';
                 DefaultExtension(si->lightimage, ".tga");
                 continue;
             }
@@ -581,7 +586,8 @@ static void ParseShaderFile(const char *filename)
             if (!Q_stricmp(token, "q3map_backshader"))
             {
                 GetToken(qfalse);
-                strcpy(si->backShader, token);
+                strncpy(si->backShader, token, MAX_QPATH - 1);
+                si->backShader[MAX_QPATH - 1] = '\0';
                 continue;
             }
 
@@ -589,7 +595,8 @@ static void ParseShaderFile(const char *filename)
             if (!Q_stricmp(token, "q3map_flare"))
             {
                 GetToken(qfalse);
-                strcpy(si->flareShader, token);
+                strncpy(si->flareShader, token, MAX_QPATH - 1);
+                si->flareShader[MAX_QPATH - 1] = '\0';
                 continue;
             }
 
@@ -702,8 +709,8 @@ static void ParseShaderFile(const char *filename)
 LoadShaderInfo
 ===============
 */
-#define MAX_SHADER_FILES 64
-static char loadedShaderFiles[MAX_SHADER_FILES][MAX_QPATH];
+#define MAX_SHADER_FILES 2048
+static char loadedShaderFiles[MAX_SHADER_FILES][MAX_OS_PATH];
 static int numLoadedShaderFiles;
 
 static void AddShaderFile(const char *filename)
@@ -735,7 +742,15 @@ static void AddShaderFile(const char *filename)
 static void ShaderLooseCallback(const char *filename)
 {
     char full[MAX_QPATH];
+    
+    // we need to make sure we don't have .bak files or other garbage
+    if (strstr(filename, ".shader") != filename + strlen(filename) - 7)
+    {
+        return;
+    }
+
     sprintf(full, "scripts/%s", filename);
+    _printf("  [Loose] Loading %s\n", full);
     AddShaderFile(full);
 }
 
@@ -743,6 +758,7 @@ static void ShaderPakCallback(const char *filename)
 {
     if (strstr(filename, "scripts/") && strstr(filename, ".shader"))
     {
+        _printf("  [PAK] Loading %s\n", filename);
         AddShaderFile(filename);
     }
 }
@@ -758,10 +774,12 @@ void LoadShaderInfo(void)
 
     for (p = 0; p < numVFSPaths; p++)
     {
+        _printf("Scanning VFS path %d: %s\n", p, vfsPaths[p]);
         // Loose files first (higher priority within each path)
         sprintf(searchPath, "%sscripts/", vfsPaths[p]);
         Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
 
+        _printf("Scanning PAK files in %s\n", vfsPaths[p]);
         // Then packed files
         ScanPakFiles(vfsPaths[p], ShaderPakCallback);
     }
