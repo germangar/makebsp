@@ -67,13 +67,11 @@ typedef struct {
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
 	int         writeLightmapSize;
-    float       minLightAdd;
-    float       fadeout;
-    float       backSplashSpot;
-    float       backSplashSurface;
 
 	// Lighting flags
 	int         defaultSampleSize;
+    qboolean    enforceSampleSize;
+    qboolean    forceUVGen;
     hdrFormat_t hdr;
     float       hdr8BitScale;
 	qboolean	lightmapsRGB;
@@ -90,6 +88,11 @@ typedef struct {
 	shadingModel_t   shadingModel;
 	shadingModel_t   sunShadingModel;
 	attenuationModel_t attenuationModel;
+    tonemap_t   exposureFilter;
+    float       minLightAdd;
+    float       fadeout;
+    float       backSplashSpot;
+    float       backSplashSurface;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
 	float       deluxeAmbientExaggerate;
@@ -100,8 +103,6 @@ typedef struct {
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
-    tonemap_t   exposureFilter;
-    qboolean    enforceSampleSize;
 
 	const char	*flareShader;
 	const char	*haloShader;

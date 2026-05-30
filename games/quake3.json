@@ -43,6 +43,7 @@
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "off", /* [ off, softknee, reinhard, filmic ] */
   "enforceSampleSize": true,
+  "forceUVGen": true,
   "flareShader": "",
   "haloShader": ""
 }

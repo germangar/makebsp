@@ -31,11 +31,10 @@ game_t gameTemplates[MAX_GAMES] = {
 		393210,     // maxSurfaceIndexes
 		512,
 		512,        // writeLightmapSize
-        0.1f,       // cutoff
-        0.0f,       // fadeout
-        0.1f,       // backSplashSpot
-        0.0f,       // backSplashSurface
+
 		4,          // defaultSampleSize
+        qtrue,      // enforceSampleSize
+        qtrue,      // forceUVGen
         HDR_8BIT,   // hdr
 		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
@@ -52,6 +51,11 @@ game_t gameTemplates[MAX_GAMES] = {
 		SHADING_MODEL_LAMBERT, // falloff
 		SHADING_MODEL_LAMBERT, // sunFalloff
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
+        TONEMAP_REINHARD, // exposureFilter
+        0.1f,       // cutoff
+        0.0f,       // fadeout
+        0.1f,       // backSplashSpot
+        0.0f,       // backSplashSurface
 		qtrue,      // deluxeMap
 		15.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
@@ -63,8 +67,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
-        TONEMAP_REINHARD, // exposureFilter
-        qtrue,      // enforceSampleSize
 		"",         // flareShader
 		"halo"      // haloShader
 	},
@@ -81,11 +83,10 @@ game_t gameTemplates[MAX_GAMES] = {
 		6000,
 		128,
 		128,        // writeLightmapSize
-        0.1f,       // cutoff
-        0.0f,       // fadeout
-        0.1f,       // backSplashSpot
-        0.0f,       // backSplashSurface
+
 		8,          // defaultSampleSize
+        qtrue,       // enforceSampleSize
+        qtrue,       // forceUVGen
         HDR_OFF,    // hdr
 		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
@@ -102,6 +103,11 @@ game_t gameTemplates[MAX_GAMES] = {
 		SHADING_MODEL_LAMBERT, // falloff
 		SHADING_MODEL_LAMBERT, // sunFalloff
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
+        TONEMAP_LINEAR, // exposureFilter
+        0.1f,       // cutoff
+        0.0f,       // fadeout
+        0.1f,       // backSplashSpot
+        0.0f,       // backSplashSurface
 		qfalse,     // deluxeMap
 		40.0f,      // deluxeMinAngle
 		1.0f,       // deluxeAmbientExaggerate
@@ -113,8 +119,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
-        TONEMAP_LINEAR, // exposureFilter
-        qtrue,       // enforceSampleSize
 		"",         // flareShader
 		""          // haloShader
 	}

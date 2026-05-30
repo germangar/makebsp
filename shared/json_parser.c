@@ -382,6 +382,13 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             else if (val->type == json_type_false)
                 game->enforceSampleSize = qfalse;
         }
+        else if (!Q_stricmp(key, "forceUVGen"))
+        {
+            if (val->type == json_type_true)
+                game->forceUVGen = qtrue;
+            else if (val->type == json_type_false)
+                game->forceUVGen = qfalse;
+        }
         else if (!Q_stricmp(key, "flareShader") && val->type == json_type_string)
         {
             game->flareShader = copystring(json_value_as_string(val)->string);
@@ -556,6 +563,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
             "  \"enforceSampleSize\": %s,\n"
+            "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
             "  \"haloShader\": \"%s\"\n"
             "}\n",
@@ -591,8 +599,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->upscale ? "true" : "false",
             game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
             game->enforceSampleSize ? "true" : "false",
-            game->flareShader,
-            game->haloShader);
+            game->forceUVGen ? "true" : "false",
+            game->flareShader ? game->flareShader : "",
+            game->haloShader ? game->haloShader : "");
     SaveFile(filename, buffer, strlen(buffer));
 }
 

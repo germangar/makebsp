@@ -1101,11 +1101,6 @@ int VisMain(int argc, char **argv)
             numthreads = atoi(argv[i + 1]);
             i++;
         }
-        else if (!strcmp(argv[i], "-threads"))
-        {
-            numthreads = atoi(argv[i + 1]);
-            i++;
-        }
         else if (!strcmp(argv[i], "-fast"))
         {
             _printf("fastvis = true\n");
