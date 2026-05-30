@@ -238,7 +238,7 @@ OSF1
 ===================================================================
 */
 
-#ifdef __osf__
+#if defined(__unix__) || defined(__linux__) || defined(__APPLE__)
 #define USED
 
 int numthreads = 4;

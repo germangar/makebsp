@@ -275,8 +275,8 @@ bspbrush_t *AllocBrush(int numsides);
 void FreeBrush(bspbrush_t *brushes);
 void FreeBrushList(bspbrush_t *brushes);
 bspbrush_t *CopyBrush(bspbrush_t *brush);
-void DrawBrushList(bspbrush_t *brush);
-void WriteBrushList(char *name, bspbrush_t *brush, qboolean onlyvis);
+
+
 void PrintBrush(bspbrush_t *brush);
 qboolean BoundBrush(bspbrush_t *brush);
 qboolean CreateBrushWindings(bspbrush_t *brush);
@@ -322,21 +322,7 @@ void MoveBrushesToWorld(entity_t *mapent);
 
 //=============================================================================
 
-//=============================================================================
 
-// draw.c
-
-extern vec3_t draw_mins, draw_maxs;
-extern qboolean drawflag;
-
-void Draw_ClearWindow(void);
-void DrawWinding(winding_t *w);
-
-void GLS_BeginScene(void);
-void GLS_Winding(winding_t *w, int code);
-void GLS_EndScene(void);
-
-//=============================================================================
 
 // csg
 
@@ -383,10 +369,6 @@ void MakeTreePortals(tree_t *tree);
 
 //=============================================================================
 
-// glfile.c
-
-void OutputWinding(winding_t *w, FILE *glview);
-void WriteGLView(tree_t *tree, char *source);
 
 //=============================================================================
 

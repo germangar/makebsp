@@ -22,7 +22,11 @@ game_t gameTemplates[MAX_GAMES] = {
 		"qfusion",
 		".",        // rootDir
         "",         // userDir
+#ifdef RELEASE_BUILD
+        "basewf",   // gameDir
+#else
         "",         // gameDir
+#endif
 		"FBSP",
 		1,
 		18,

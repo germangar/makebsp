@@ -30,14 +30,10 @@ extern HWND hwndOut;
 char tempsource[1024];
 
 vec_t microvolume = 1.0;
-qboolean glview;
 qboolean nodetail;
 qboolean fulldetail;
 qboolean onlyents;
-qboolean onlytextures;
 qboolean nowater;
-qboolean nofill;
-qboolean noopt;
 qboolean leaktest;
 qboolean verboseentities;
 qboolean noCurveBrushes;
@@ -129,11 +125,6 @@ void ProcessWorldModel(void)
     if (!leaked)
     {
         WritePortalFile(tree);
-    }
-    if (glview)
-    {
-        // dump the portals for debugging
-        WriteGLView(tree, source);
     }
     FloodAreas(tree);
 
@@ -365,31 +356,6 @@ void OnlyEnts(void)
     WriteBSPFile(out);
 }
 
-/*
-============
-OnlyTextures
-============
-*/
-void OnlyTextures(void)
-{ // FIXME!!!
-    char out[1024];
-    int i;
-
-    Error("-onlytextures isn't working now...");
-
-    sprintf(out, "%s.bsp", source);
-
-    LoadMapFile(name);
-
-    LoadBSPFile(out);
-
-    // replace all the drawsurface shader names
-    for (i = 0; i < numDrawSurfaces; i++)
-    {
-    }
-
-    WriteBSPFile(out);
-}
 
 /*
 ================
@@ -646,35 +612,6 @@ int main(int argc, char **argv)
             numthreads = atoi(argv[i + 1]);
             i++;
         }
-        else if (!strcmp(argv[i], "-glview"))
-        {
-            glview = qtrue;
-        }
-        else if (!strcmp(argv[i], "-v"))
-        {
-            _printf("verbose = true\n");
-            verbose = qtrue;
-        }
-        else if (!strcmp(argv[i], "-draw"))
-        {
-            _printf("drawflag = true\n");
-            drawflag = qtrue;
-        }
-        else if (!strcmp(argv[i], "-nowater"))
-        {
-            _printf("nowater = true\n");
-            nowater = qtrue;
-        }
-        else if (!strcmp(argv[i], "-noopt"))
-        {
-            _printf("noopt = true\n");
-            noopt = qtrue;
-        }
-        else if (!strcmp(argv[i], "-nofill"))
-        {
-            _printf("nofill = true\n");
-            nofill = qtrue;
-        }
         else if (!strcmp(argv[i], "-nodetail"))
         {
             _printf("nodetail = true\n");
@@ -689,11 +626,6 @@ int main(int argc, char **argv)
         {
             _printf("onlyents = true\n");
             onlyents = qtrue;
-        }
-        else if (!strcmp(argv[i], "-onlytextures"))
-        {
-            _printf("onlytextures = true\n"); // FIXME: make work again!
-            onlytextures = qtrue;
         }
         else if (!strcmp(argv[i], "-micro"))
         {
@@ -820,12 +752,9 @@ int main(int argc, char **argv)
                 "   v              = verbose output\n"
                 "   draw           = enable draw flag\n"
                 "   nowater        = don't process water surfaces\n"
-                "   noopt          = don't optimize the BSP tree\n"
-                "   nofill         = don't fill outside volumes\n"
                 "   nodetail       = ignore detail brushes\n"
                 "   fulldetail     = treat all brushes as structural\n"
                 "   onlyents       = only update entities in an existing BSP\n"
-                "   onlytextures   = only update textures in an existing BSP\n"
                 "   micro <V>      = set the micro volume threshold to V\n"
                 "   nofog          = don't process fog volumes\n"
                 "   nosubdivide    = don't subdivide large surfaces\n"
@@ -896,15 +825,6 @@ int main(int argc, char **argv)
     if (onlyents)
     {
         OnlyEnts();
-        return 0;
-    }
-
-    //
-    // if onlytextures, just grab the textures and resave
-    //
-    if (onlytextures)
-    {
-        OnlyTextures();
         return 0;
     }
 

@@ -1,9 +1,16 @@
+param(
+    [switch]$release
+)
+
 $msysPath = "E:\CODE\msys64\mingw64\bin"
 $env:PATH = "$msysPath;$env:PATH"
 
 Clear-Host
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "      Q3MAP & LIGHT POWERSHELL BUILD" -ForegroundColor Cyan
+if ($release) {
+    Write-Host "             (RELEASE BUILD)" -ForegroundColor Yellow
+}
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "MSYS2 Path: $msysPath"
 Write-Host ""
@@ -14,7 +21,12 @@ Get-Process light -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Write-Host "[1/2] Running make clean && make..." -ForegroundColor Yellow
 & make clean
-& make
+
+if ($release) {
+    & make RELEASE=1
+} else {
+    & make
+}
 
 Write-Host ""
 if ($LASTEXITCODE -eq 0) {
