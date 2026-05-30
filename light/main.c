@@ -226,10 +226,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->superSampleRadius < 0.0f) game->superSampleRadius = 0.0f;
     }
 
-    val = ValueForKey(ent, "upscale");
-    if (val[0] && !HasArg("-upscale", argc, argv)) {
-        game->upscale = atoi(val) != 0;
-    }
 }
 
 int main(int argc, char **argv) {
@@ -249,11 +245,14 @@ int main(int argc, char **argv) {
 
     // Pre-scan CLI for path overrides
     const char *cliUserDir = NULL;
+    const char *cliGameDir = NULL;
     for (i = 1; i < argc; i++) {
         if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) && i + 1 < argc) {
             strcpy(rootDir, argv[i + 1]);
         } else if (!strcmp(argv[i], "-userdir") && i + 1 < argc) {
             cliUserDir = argv[i + 1];
+        } else if (!strcmp(argv[i], "-gamedir") && i + 1 < argc) {
+            cliGameDir = argv[i + 1];
         }
     }
 
@@ -307,6 +306,9 @@ int main(int argc, char **argv) {
             i++; // Handled in pre-scan
         } else if (!strcmp(argv[i], "-userdir")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-userdir requires a directory path");
+            i++; // Handled in pre-scan
+        } else if (!strcmp(argv[i], "-gamedir")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-gamedir requires a directory path");
             i++; // Handled in pre-scan
         } else if (!strcmp(argv[i], "-sRGB")) {
             game->lightmapsRGB = qtrue;
@@ -587,6 +589,7 @@ int main(int argc, char **argv) {
     
     // Resolve base paths using game profile and CLI overrides
     const char *finalUserDir = cliUserDir ? cliUserDir : (game->userDir ? game->userDir : "");
+    if (cliGameDir) game->gameDir = cliGameDir;
     SetBasePaths(finalUserDir);
 
     if (game->gameDir[0] && strcmp(game->gameDir, ".")) {

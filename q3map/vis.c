@@ -1077,6 +1077,7 @@ int VisMain(int argc, char **argv)
 
     // Pre-scan CLI for path overrides
     const char *cliUserDir = NULL;
+    const char *cliGameDir = NULL;
     for (i = 1; i < argc; i++)
     {
         if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) && i + 1 < argc)
@@ -1086,6 +1087,10 @@ int VisMain(int argc, char **argv)
         else if (!strcmp(argv[i], "-userdir") && i + 1 < argc)
         {
             cliUserDir = argv[i + 1];
+        }
+        else if (!strcmp(argv[i], "-gamedir") && i + 1 < argc)
+        {
+            cliGameDir = argv[i + 1];
         }
     }
 
@@ -1162,6 +1167,12 @@ int VisMain(int argc, char **argv)
                 Error("-userdir requires a directory path");
             i++; // Handled in pre-scan
         }
+        else if (!strcmp(argv[i], "-gamedir"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-gamedir requires a directory path");
+            i++; // Handled in pre-scan
+        }
         else if (!strcmp(argv[i], "-game"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -1196,6 +1207,7 @@ int VisMain(int argc, char **argv)
     
     // Resolve base paths using game profile and CLI overrides
     const char *finalUserDir = cliUserDir ? cliUserDir : (game->userDir ? game->userDir : "");
+    if (cliGameDir) game->gameDir = cliGameDir;
     SetBasePaths(finalUserDir);
 
     if (game->gameDir[0] && strcmp(game->gameDir, "."))

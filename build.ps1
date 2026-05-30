@@ -23,14 +23,20 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "----------------------------------------" -ForegroundColor Green
     
     Write-Host ""
-    Write-Host "[2/3] Running makebsp -v base/maps/modeltest.map..." -ForegroundColor Cyan
+    $UserDir = "C:/Users/German/Documents/My Games/Warfork 2.1"
+    $GameDir = "basewf"
+    $MapName = "modeltest"
+    $MapFile = "$UserDir/$GameDir/maps/$MapName.map"
+    $BspFile = "$UserDir/$GameDir/maps/$MapName.bsp"
+
+    Write-Host "[2/3] Running makebsp -v $MapFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./makebsp.exe -v -samplesize 16 base/maps/modeltest.map
+    ./makebsp.exe -v -samplesize 16 -userdir "$UserDir" -gamedir "$GameDir" "$MapFile"
     Write-Host ""
-    Write-Host "[3/3] Running light -rad_passes 0 -v base/maps/modeltest.bsp..." -ForegroundColor Cyan
+    Write-Host "[3/3] Running light -rad_passes 0 -v $BspFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./light.exe -smoothpasses 1 -rad_passes 0 -v base/maps/modeltest.bsp
+    ./light.exe -smoothpasses 1 -rad_passes 0 -v -userdir "$UserDir" -gamedir "$GameDir" "$BspFile"
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red
