@@ -1956,6 +1956,14 @@ void GenerateHalos(entity_t *e)
             float physicalWidthAtEnd = 2.0f * length * (quadRadius / 64.0f);
             float width = physicalWidthAtEnd * haloScale;
             
+            float customHaloScale = FloatForKey(light, "haloscale");
+            if (customHaloScale == 0.0f) {
+                customHaloScale = 1.0f;
+            }
+            
+            length *= customHaloScale;
+            width *= customHaloScale;
+            
             // Ensure length is strictly greater than width so autosprite2 rotates around the correct axis
             if (width >= length) {
                 width = length - 1.0f;
