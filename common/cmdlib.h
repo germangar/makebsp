@@ -73,11 +73,13 @@ int FileTime(const char *path);
 
 void Q_mkdir(const char *path);
 
-extern char rootDir[1024];
-extern char gamePath[1024];
-extern char userPath[1024];
-extern char writedir[1024];
-void SetBasePaths(const char *userDirOverride);
+#define MAX_VFS_PATHS 16
+extern char  vfsPaths[MAX_VFS_PATHS][1024];
+extern int   numVFSPaths;
+extern char  writedir[1024];
+
+void AddVFSPath(const char *basePath, const char *gameDir);
+void InitVFSWriteDir(void);
 char *ExpandArg(const char *path);  // from cmd line
 char *ExpandPath(const char *path); // from scripts
 char *ExpandGamePath(const char *path);

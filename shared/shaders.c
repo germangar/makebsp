@@ -750,30 +750,21 @@ static void ShaderPakCallback(const char *filename)
 void LoadShaderInfo(void)
 {
     char searchPath[1024];
+    int p;
 
     _printf("Scanning for shaders...\n");
 
     numLoadedShaderFiles = 0;
 
-    // Priority 1: userPath unpacked (loose files)
-    if (userPath[0])
+    for (p = 0; p < numVFSPaths; p++)
     {
-        sprintf(searchPath, "%sscripts/", userPath);
+        // Loose files first (higher priority within each path)
+        sprintf(searchPath, "%sscripts/", vfsPaths[p]);
         Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
+
+        // Then packed files
+        ScanPakFiles(vfsPaths[p], ShaderPakCallback);
     }
-
-    // Priority 2: userPath packed (PAK/PK3 files)
-    if (userPath[0])
-    {
-        ScanPakFiles(userPath, ShaderPakCallback);
-    }
-
-    // Priority 3: gamePath unpacked (loose files)
-    sprintf(searchPath, "%sscripts/", gamePath);
-    Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
-
-    // Priority 4: gamePath packed (PAK/PK3 files)
-    ScanPakFiles(gamePath, ShaderPakCallback);
 
     _printf("%5i shader files parsed\n", numLoadedShaderFiles);
     _printf("%5i shaders found\n", numShaderInfo);

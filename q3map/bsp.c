@@ -577,24 +577,39 @@ int main(int argc, char **argv)
     // Apply game defaults before parsing CLI
     samplesize = game->defaultSampleSize;
 
-    // Pre-scan CLI for path overrides
-    const char *cliUserDir = NULL;
-    const char *cliGameDir = NULL;
+    // Pre-scan CLI for VFS path construction
+    const char *cliUserDir  = NULL;
+    const char *cliBasePath = NULL;
+    const char *modGameDir  = NULL;
+    const char *baseGameDir = game->gameDir;
+
     for (i = 1; i < argc; i++)
     {
-        if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir")) && i + 1 < argc)
-        {
-            strcpy(rootDir, argv[i + 1]);
-        }
-        else if (!strcmp(argv[i], "-userdir") && i + 1 < argc)
-        {
+        if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
             cliUserDir = argv[i + 1];
-        }
-        else if (!strcmp(argv[i], "-gamedir") && i + 1 < argc)
-        {
-            cliGameDir = argv[i + 1];
-        }
+        else if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") || !strcmp(argv[i], "-fs_basepath")) && i + 1 < argc)
+            cliBasePath = argv[i + 1];
+        else if ((!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game")) && i + 1 < argc)
+            modGameDir = argv[i + 1];
     }
+
+    // 1. User Dir Layer (Write directory is always the first path added here)
+    const char *user = cliUserDir ? cliUserDir : ((game->userDir && game->userDir[0]) ? game->userDir : NULL);
+    if (user)
+    {
+        if (modGameDir)
+            AddVFSPath(user, modGameDir);
+        AddVFSPath(user, baseGameDir);
+    }
+
+    // 2. Base Path Layer
+    const char *base = cliBasePath ? cliBasePath : ((game->rootDir && game->rootDir[0]) ? game->rootDir : ".");
+    
+    if (modGameDir)
+        AddVFSPath(base, modGameDir);
+    AddVFSPath(base, baseGameDir);
+
+    InitVFSWriteDir();
 
 
 
@@ -716,22 +731,23 @@ int main(int argc, char **argv)
         {
             strcpy(outbase, "/tmp");
         }
-        else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir"))
+        else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") ||
+                 !strcmp(argv[i], "-fs_basepath"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
-                Error("-basepath/-rootdir requires a directory path");
+                Error("%s requires a directory path", argv[i]);
             i++; // Handled in pre-scan
         }
-        else if (!strcmp(argv[i], "-userdir"))
+        else if (!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
-                Error("-userdir requires a directory path");
+                Error("%s requires a directory path", argv[i]);
             i++; // Handled in pre-scan
         }
-        else if (!strcmp(argv[i], "-gamedir"))
+        else if (!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
-                Error("-gamedir requires a directory path");
+                Error("%s requires a directory path", argv[i]);
             i++; // Handled in pre-scan
         }
         else if (!strcmp(argv[i], "-game"))
@@ -823,46 +839,20 @@ int main(int argc, char **argv)
     ThreadSetDefault();
     // numthreads = 1;		// multiple threads aren't helping because of
     // heavy malloc use
-    if (!rootDir[0] && game->rootDir && game->rootDir[0])
+    // Print active VFS paths
     {
-        strcpy(rootDir, game->rootDir);
+        int p;
+        for (p = 0; p < numVFSPaths; p++)
+            _printf("vfsPath[%d]: %s\n", p, vfsPaths[p]);
+        _printf("writedir: %s\n", writedir);
     }
-    
-    // Resolve base paths using game profile and CLI overrides
-    const char *finalUserDir = cliUserDir ? cliUserDir : (game->userDir ? game->userDir : "");
-    if (cliGameDir) game->gameDir = cliGameDir;
-    SetBasePaths(finalUserDir);
-
-    if (game->gameDir && game->gameDir[0] && strcmp(game->gameDir, "."))
-    {
-        strcat(gamePath, game->gameDir);
-        strcat(gamePath, "/");
-        if (userPath[0])
-        {
-            strcat(userPath, game->gameDir);
-            strcat(userPath, "/");
-        }
-        if (writedir[0])
-        {
-            strcat(writedir, game->gameDir);
-            strcat(writedir, "/");
-        }
-    }
-
-    _printf("rootDir: %s\n", rootDir);
-    _printf("gamePath: %s\n", gamePath);
-    if (userPath[0]) {
-        _printf("userPath: %s\n", userPath);
-    }
-    _printf("writedir: %s\n", writedir);
-
 
 #ifdef _WIN32
-    if (userPath[0])
     {
-        InitPakFile(userPath, NULL);
+        int p;
+        for (p = 0; p < numVFSPaths; p++)
+            InitPakFile(vfsPaths[p], NULL);
     }
-    InitPakFile(gamePath, NULL);
 #endif
 
     strcpy(source, ExpandArg(argv[i]));

@@ -241,20 +241,16 @@ char *va(const char *format, ...)
 }
 
 /*
+  vfsPaths[] holds all search paths in priority order.
+  Index 0 = highest priority (first user path or mod path).
+  Last index = lowest priority (base game path from game profile).
+  
+  Each entry is a fully resolved, normalized path ending in '/'.
+  writedir = vfsPaths[0], the single write destination.
+*/
 
-rootDir will hold the path up to the root directory, including the slash
-
-  f:\quake\
-  /raid/quake/
-
-gamePath will hold rootDir + the game directory (id1, id2, etc)
-userPath will hold userDir + the game directory (optional, for user content override)
-
-  */
-
-char rootDir[1024];
-char gamePath[1024];
-char userPath[1024];
+char vfsPaths[MAX_VFS_PATHS][1024];
+int  numVFSPaths = 0;
 char writedir[1024];
 
 static void NormalizePath(char *path)
@@ -271,69 +267,65 @@ static void NormalizePath(char *path)
     }
 }
 
-void SetBasePaths(const char *userDirOverride)
+void AddVFSPath(const char *basePath, const char *gameDir)
 {
-    // If no directory is set, default to current directory
-    if (!rootDir[0])
+    if (numVFSPaths >= MAX_VFS_PATHS)
     {
-        Q_getwd(rootDir);
+        _printf("WARNING: MAX_VFS_PATHS (%d) reached, ignoring path: %s\n",
+                MAX_VFS_PATHS, basePath);
+        return;
     }
 
-    if (!gamePath[0])
+    char buf[1024];
+    strncpy(buf, basePath, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    NormalizePath(buf);
+
+    if (gameDir && gameDir[0] && strcmp(gameDir, ".") != 0)
     {
-        strcpy(gamePath, rootDir);
+        strncat(buf, gameDir, sizeof(buf) - strlen(buf) - 1);
+        strncat(buf, "/",     sizeof(buf) - strlen(buf) - 1);
     }
 
-    // Build userPath from userDirOverride if provided and non-empty
-    userPath[0] = '\0';
-    if (userDirOverride && userDirOverride[0])
+    // Skip duplicates
+    for (int i = 0; i < numVFSPaths; i++)
     {
-        strcpy(userPath, userDirOverride);
+        if (!strcmp(vfsPaths[i], buf))
+            return;
     }
 
-    // Set writedir: prefer userPath if set, otherwise gamePath
-    if (userPath[0])
-    {
-        strcpy(writedir, userPath);
-    }
-    else if (!writedir[0])
-    {
-        strcpy(writedir, gamePath);
-    }
+    strcpy(vfsPaths[numVFSPaths], buf);
+    numVFSPaths++;
+}
 
-    // Normalize all paths
-    NormalizePath(rootDir);
-    NormalizePath(gamePath);
-    if (userPath[0])
+void InitVFSWriteDir(void)
+{
+    if (numVFSPaths > 0)
+        strcpy(writedir, vfsPaths[0]);
+    else
     {
-        NormalizePath(userPath);
+        Q_getwd(writedir);
+        NormalizePath(writedir);
     }
-    NormalizePath(writedir);
 }
 
 /*
 ==============
 vfsFindFile
 
-Tries to find a file at relativePath, checking userPath first then gamePath.
-Returns 1 if found and writes the full path to outFullPath. Returns 0 if not found.
+Searches all VFS paths in priority order for a loose file.
+Returns 1 if found (writes full path to outFullPath). Returns 0 if not found.
 ==============
 */
 int vfsFindFile(const char *relativePath, char *outFullPath, int outSize)
 {
-    // Try userPath first (if set)
-    if (userPath[0])
+    int i;
+    for (i = 0; i < numVFSPaths; i++)
     {
-        snprintf(outFullPath, outSize, "%s%s", userPath, relativePath);
+        snprintf(outFullPath, outSize, "%s%s", vfsPaths[i], relativePath);
         if (FileExists(outFullPath))
             return 1;
     }
-
-    // Try gamePath
-    snprintf(outFullPath, outSize, "%s%s", gamePath, relativePath);
-    if (FileExists(outFullPath))
-        return 1;
-
     return 0;
 }
 
@@ -341,7 +333,7 @@ int vfsFindFile(const char *relativePath, char *outFullPath, int outSize)
 ==============
 vfsLoadFile
 
-Load a file using VFS priority: loose in userPath, loose in gamePath, then PAK/PK3.
+Load a file using VFS priority: loose files across all paths, then PAK/PK3 across all paths.
 Returns file length on success, -1 on failure.
 ==============
 */
@@ -349,36 +341,24 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
 {
     char fullPath[1024];
     int length;
+    int i;
 
     *bufferptr = NULL;
 
-    // 1. Try loose file in userPath
-    if (userPath[0])
+    // 1. Try loose files in all VFS paths (priority order)
+    for (i = 0; i < numVFSPaths; i++)
     {
-        snprintf(fullPath, sizeof(fullPath), "%s%s", userPath, relativePath);
+        snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = TryLoadFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
     }
 
-    // 2. Try loose file in gamePath
-    snprintf(fullPath, sizeof(fullPath), "%s%s", gamePath, relativePath);
-    length = TryLoadFile(fullPath, bufferptr);
-    if (length >= 0)
-        return length;
-
-    // 3. Try PAK/PK3 archives (covers both mounted directories)
+    // 2. Try PAK/PK3 archives across all VFS paths
 #ifdef _WIN32
+    for (i = 0; i < numVFSPaths; i++)
     {
-        // PakLoadAnyFile expects a full path; try userPath first, then gamePath
-        if (userPath[0])
-        {
-            snprintf(fullPath, sizeof(fullPath), "%s%s", userPath, relativePath);
-            length = PakLoadAnyFile(fullPath, bufferptr);
-            if (length >= 0)
-                return length;
-        }
-        snprintf(fullPath, sizeof(fullPath), "%s%s", gamePath, relativePath);
+        snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = PakLoadAnyFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
@@ -405,36 +385,37 @@ char *ExpandArg(const char *path)
 char *ExpandPath(const char *path)
 {
     static char full[1024];
-    if (!rootDir[0])
-        Error("ExpandPath called without rootDir set");
+    if (numVFSPaths == 0)
+        Error("ExpandPath called before VFS is initialized");
     if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
     {
         strcpy(full, path);
         return full;
     }
-    sprintf(full, "%s%s", rootDir, path);
+    // Use lowest-priority (base game) path — equivalent to old rootDir+gameDir
+    sprintf(full, "%s%s", vfsPaths[numVFSPaths - 1], path);
     return full;
 }
 
 char *ExpandGamePath(const char *path)
 {
     static char full[1024];
-    if (!rootDir[0])
-        Error("ExpandGamePath called without rootDir set");
+    if (numVFSPaths == 0)
+        Error("ExpandGamePath called before VFS is initialized");
     if (path[0] == '/' || path[0] == '\\' || path[1] == ':')
     {
         strcpy(full, path);
         return full;
     }
-    
-    // Check if it exists in the VFS (userPath overrides gamePath)
+
+    // Search VFS in priority order
     if (vfsFindFile(path, full, sizeof(full)))
     {
         return full;
     }
-    
-    // Fallback to gamePath if not found (e.g., for writing, though writedir should be used)
-    sprintf(full, "%s%s", gamePath, path);
+
+    // Fallback: lowest-priority path (base game)
+    sprintf(full, "%s%s", vfsPaths[numVFSPaths - 1], path);
     return full;
 }
 
