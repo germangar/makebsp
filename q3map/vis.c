@@ -1243,7 +1243,7 @@ int VisMain(int argc, char **argv)
             // Handled in main pre-scan
             i++;
         }
-        else if (!strcmp(argv[i], "-vis") || !strcmp(argv[i], "-bsp") || !strcmp(argv[i], "-light"))
+        else if (!strcmp(argv[i], "-visonly") || !strcmp(argv[i], "-bsp"))
         {
             // Handled by mode switcher
         }

@@ -352,8 +352,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-game")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-game requires a profile name");
             i++; // Handled in pre-scan
-        } else if (!strcmp(argv[i], "-vis") || !strcmp(argv[i], "-bsp") || !strcmp(argv[i], "-light")) {
-            // Handled by mode switcher
         } else if (!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") ||
                    !strcmp(argv[i], "-fs_basepath")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("%s requires a directory path", argv[i]);

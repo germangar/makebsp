@@ -645,7 +645,7 @@ int main(int argc, char **argv)
 
     // Check for tool modes after VFS is ready
     for (i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "-vis")) {
+        if (!strcmp(argv[i], "-visonly")) {
             VisMain(argc, argv);
             return 0;
         }
@@ -780,7 +780,7 @@ int main(int argc, char **argv)
                 Error("-game requires a profile name");
             i++; // Handled in pre-scan
         }
-        else if (!strcmp(argv[i], "-vis") || !strcmp(argv[i], "-bsp") || !strcmp(argv[i], "-light"))
+        else if (!strcmp(argv[i], "-visonly") || !strcmp(argv[i], "-bsp"))
         {
             // Handled by mode switcher
         }
@@ -855,6 +855,8 @@ int main(int argc, char **argv)
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
                 "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n"
+                "   visonly        = run visibility calculation only (requires .prt file)\n"
+                "   novis          = skip inline visibility calculation\n"
                 "   tmpout         = write output files to /tmp\n"
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
