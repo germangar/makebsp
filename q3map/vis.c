@@ -52,7 +52,6 @@ int leaflongs;
 
 int portalbytes, portallongs;
 
-qboolean fastvis;
 qboolean noPassageVis;
 qboolean passageVisOnly;
 qboolean mergevis;
@@ -287,23 +286,6 @@ void CalcPassagePortalVis(void)
 
 /*
 ==================
-CalcFastVis
-==================
-*/
-void CalcFastVis(void)
-{
-    int i;
-
-    // fastvis just uses mightsee for a very loose bound
-    for (i = 0; i < v_numportals * 2; i++)
-    {
-        v_portals[i].portalvis = v_portals[i].portalflood;
-        v_portals[i].status = stat_done;
-    }
-}
-
-/*
-==================
 CalcVis
 ==================
 */
@@ -316,11 +298,7 @@ void CalcVis(void)
 
     SortPortals();
 
-    if (fastvis)
-    {
-        CalcFastVis();
-    }
-    else if (noPassageVis)
+    if (noPassageVis)
     {
         CalcPortalVis();
     }
@@ -403,10 +381,19 @@ int Winding_PlanesConcave(winding_t *w1, winding_t *w2, vec3_t normal1,
     // winding 1
     for (i = 0; i < w2->numpoints; i++)
     {
-        if (DotProduct(normal1, w2->points[i]) - dist1 > WCONV          l1 = &v_leafs[l1num];
-        else
-            l1 = &faceleafs[l1num];
-        for (i = 0; i < l1->numportals_in_let TryMergeLeaves(int l1num, int l2num)
+        if (DotProduct(normal1, w2->points[i]) - dist1 > WCONVEX_EPSILON)
+            return qtrue;
+    }
+
+    return qfalse;
+}
+
+/*
+============
+TryMergeLeaves
+============
+*/
+int TryMergeLeaves(int l1num, int l2num)
 {
     int i, j, k, n, v_numportals;
     plane_t plane1, plane2;
@@ -649,7 +636,26 @@ winding_t *TryMergeWinding(winding_t *f1, winding_t *f2, vec3_t planenormal)
     // copy second polygon
     for (l = (j + 1) % f2->numpoints; l != j; l = (l + 1) % f2->numpoints)
     {
-      
+        if (l == (j + 1) % f2->numpoints && !keep1)
+            continue;
+        VectorCopy(f2->points[l], newf->points[newf->numpoints]);
+        newf->numpoints++;
+    }
+
+    return newf;
+}
+
+/*
+============
+MergeLeafPortals
+============
+*/
+void MergeLeafPortals(void)
+{
+    int i, j, k, nummerges, hintsmerged;
+    leaf_t *leaf;
+    vportal_t *p1, *p2;
+    winding_t *w;
 
     nummerges = 0;
     hintsmerged = 0;
@@ -660,19 +666,18 @@ winding_t *TryMergeWinding(winding_t *f1, winding_t *f2, vec3_t planenormal)
             continue;
         for (j = 0; j < leaf->numportals_in_leaf; j++)
         {
-        MergeLeafPortals(void)
-{
-    int i, j, k, nummerges, hintsmerg
+            p1 = leaf->portals_in_leaf[j];
+            if (p1->removed)
                 continue;
             for (k = j + 1; k < leaf->numportals_in_leaf; k++)
             {
                 p2 = leaf->portals_in_leaf[k];
                 if (p2->removed)
                     continue;
-                if (p1->leaf == p2-or (j = 0; j < leaf->numportals_in_leaf; j++)
-        {
-            p1 = leaf->portals_in_leaf[j];
-            if (p1->remove     if (w)
+                if (p1->leaf == p2->leaf)
+                {
+                    w = TryMergeWinding(p1->winding, p2->winding, p1->plane.normal);
+                    if (w)
                     {
                         FreeWinding(p1->winding);
                         p1->winding = w;
@@ -793,33 +798,6 @@ void WritePortals(char *filename)
                     fprintf (pf,") ");
             }
             fprintf (pf,"\n");
-    }*/
-
-    fclose(pf);
-}
-
-/*
-============
-LoadPortals
-============
-*/
-void LoadPortals(char *name)
-{
-    int i, j, hint;
-    vportal_t *p;
-    leaf_t *l;
-    char magic[80];
-    FILE *f;
-    int numpoints;
-    winding_t *w;
-    int leafnums[2];
-    plane_t plane;
-
-    if (!strcmp(name, "-"))
-        f = stdin;
-    else
-    {
-        f = fopntf (pf,"\n");
     }*/
 
     fclose(pf);
@@ -1109,7 +1087,15 @@ int VisMain(int argc, char **argv)
         {
             _printf("nopassage = true\n");
             noPassageVis = qtrue;
-        rgv[i + 1]);
+        }
+        else if (!strcmp(argv[i], "-passageOnly"))
+        {
+            _printf("passageOnly = true\n");
+            passageVisOnly = qtrue;
+        }
+        else if (!strcmp(argv[i], "-level"))
+        {
+            testlevel = atoi(argv[i + 1]);
             _printf("testlevel = %i\n", testlevel);
             i++;
         }
@@ -1189,7 +1175,7 @@ int VisMain(int argc, char **argv)
     }
 
     if (i != argc - 1)
-        Error("usage: vis [-threads #] [-level 0-4] [-fast] [-v] bspfile");
+        Error("usage: vis [-threads #] [-level 0-4] [-v] bspfile");
 
 #ifdef MREDEBUG
     start = clock();
@@ -1247,25 +1233,6 @@ int VisMain(int argc, char **argv)
 #ifdef MREDEBUG
     end = clock();
     _printf("%5.2f seconds elapsed\n", (end - start) / CLK_TCK);
-#else
-    end = I_FloatTime();
-    _printf("%5.2f seconds elapsed\n", end - start);
-#endif
-    return 0;
-}
-);
-    WriteBSPFile(name);
-
-#ifdef MREDEBUG
-    end = clock();
-    _printf("%5.2f seconds elapsed\n", (end - start) / CLK_TCK);
-#else
-    end = I_FloatTime();
-    _printf("%5.2f seconds elapsed\n", end - start);
-#endif
-    return 0;
-}
-TCK);
 #else
     end = I_FloatTime();
     _printf("%5.2f seconds elapsed\n", end - start);
