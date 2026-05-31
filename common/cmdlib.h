@@ -101,6 +101,9 @@ void Sys_ListFiles(const char *directory, const char *extension,
 
 double I_FloatTime(void);
 
+#include <setjmp.h>
+extern jmp_buf *fatal_error_jmp;
+
 void Error(const char *error, ...);
 int CheckParm(const char *check);
 

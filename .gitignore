@@ -75,3 +75,5 @@ shaders.txt
 studies/custominfoparms_implementation.txt
 CLI.txt
 description.txt
+ammobox.shader
+concrete.shader

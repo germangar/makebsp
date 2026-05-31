@@ -31,32 +31,42 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 char *__StrDup(char *pStr);
 char *__StrDup(const char *pStr);
 
-static char *g_pStrWork = NULL;
-
 class Str {
 protected:
   bool m_bIgnoreCase;
   char *m_pStr;
+  char *m_pWork;
 
 public:
   Str() {
     m_bIgnoreCase = true;
     m_pStr = NULL;
+    m_pWork = NULL;
   }
 
   Str(char *p) {
     m_bIgnoreCase = true;
     m_pStr = __StrDup(p);
+    m_pWork = NULL;
   }
 
   Str(const char *p) {
     m_bIgnoreCase = true;
     m_pStr = __StrDup(p);
+    m_pWork = NULL;
+  }
+
+  Str(const Str &rhs) {
+    m_bIgnoreCase = rhs.m_bIgnoreCase;
+    m_pStr = __StrDup(rhs.m_pStr);
+    m_pWork = NULL;
   }
 
   void Deallocate() {
     delete[] m_pStr;
     m_pStr = NULL;
+    delete[] m_pWork;
+    m_pWork = NULL;
   }
 
   void Allocate(int n) {
@@ -73,8 +83,6 @@ public:
 
   ~Str() {
     Deallocate();
-    delete[] g_pStrWork;
-    g_pStrWork = NULL;
   }
 
   void MakeLower() {
@@ -84,36 +92,40 @@ public:
   }
 
   int Find(const char *p) {
+    if (!m_pStr || !p) return -1;
     char *pf = strstr(m_pStr, p);
-    return (pf) ? (pf - m_pStr) : -1;
+    return (pf) ? (int)(pf - m_pStr) : -1;
   }
 
-  int GetLength() { return (m_pStr) ? strlen(m_pStr) : 0; }
+  int GetLength() { return (m_pStr) ? (int)strlen(m_pStr) : 0; }
 
   const char *Left(int n) {
-    delete[] g_pStrWork;
+    delete[] m_pWork;
+    m_pWork = NULL;
     if (n > 0) {
-      g_pStrWork = new char[n + 1];
-      strncpy(g_pStrWork, m_pStr, n);
+      m_pWork = new char[n + 1];
+      strncpy(m_pWork, m_pStr, n);
+      m_pWork[n] = '\0';
     } else {
-      g_pStrWork = new char[1];
-      g_pStrWork[0] = '\0';
+      m_pWork = new char[1];
+      m_pWork[0] = '\0';
     }
-    return g_pStrWork;
+    return m_pWork;
   }
 
   const char *Right(int n) {
-    delete[] g_pStrWork;
+    delete[] m_pWork;
+    m_pWork = NULL;
     if (n > 0) {
-      g_pStrWork = new char[n + 1];
+      m_pWork = new char[n + 1];
       int nStart = GetLength() - n;
-      strncpy(g_pStrWork, &m_pStr[nStart], n);
-      g_pStrWork[n] = '\0';
+      strncpy(m_pWork, &m_pStr[nStart], n);
+      m_pWork[n] = '\0';
     } else {
-      g_pStrWork = new char[1];
-      g_pStrWork[0] = '\0';
+      m_pWork = new char[1];
+      m_pWork[0] = '\0';
     }
-    return g_pStrWork;
+    return m_pWork;
   }
 
   char &operator*() { return *m_pStr; }
@@ -129,7 +141,8 @@ public:
   }
   Str &operator=(const Str &rhs) {
     if (&rhs != this) {
-      delete[] m_pStr;
+      Deallocate();
+      m_bIgnoreCase = rhs.m_bIgnoreCase;
       m_pStr = __StrDup(rhs.m_pStr);
     }
     return *this;
@@ -137,7 +150,7 @@ public:
 
   Str &operator=(const char *pStr) {
     if (m_pStr != pStr) {
-      delete[] m_pStr;
+      Deallocate();
       m_pStr = __StrDup(pStr);
     }
     return *this;

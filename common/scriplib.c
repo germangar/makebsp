@@ -61,18 +61,16 @@ void AddScriptToStack(const char *filename)
     script++;
     if (script == &scriptstack[MAX_INCLUDES])
         Error("script file exceeded MAX_INCLUDES");
-    strcpy(script->filename, ExpandGamePath(filename));
 
-    if (FileExists(script->filename))
-    {
-        size = LoadFile(script->filename, (void **)&script->buffer);
-    }
-    else
-    {
-        size = PakLoadAnyFile(filename, (void **)&script->buffer);
-        if (size < 0)
-            Error("Couldn't load %s", filename);
-    }
+    size = vfsLoadFile(filename, (void **)&script->buffer);
+    if (size < 0)
+        Error("Couldn't load %s", filename);
+
+    _printf("  DEBUG: Loaded %s, size %d bytes\n", filename, size);
+
+    // Store the relative path for reference
+    strncpy(script->filename, filename, sizeof(script->filename) - 1);
+    script->filename[sizeof(script->filename) - 1] = '\0';
 
     script->line = 1;
 
@@ -135,7 +133,7 @@ void UnGetToken(void) { tokenready = qtrue; }
 qboolean EndOfScript(qboolean crossline)
 {
     if (!crossline)
-        Error("Line %i is incomplete\n", scriptline);
+        Error("In file %s: Line %i is incomplete (hit end of file)", script->filename, scriptline);
 
     if (!strcmp(script->filename, "memory buffer"))
     {
@@ -172,7 +170,6 @@ qboolean GetToken(qboolean crossline)
     if (tokenready) // is a token allready waiting?
     {
         tokenready = qfalse;
-        // _printf("GetToken: returning ready token '%s'\n", token);
         return qtrue;
     }
 
@@ -181,54 +178,67 @@ qboolean GetToken(qboolean crossline)
         return EndOfScript(crossline);
     }
 
-    //
-    // skip space
-    //
+//
+// skip space
+//
 skipspace:
-    while (*script->script_p <= 32)
+    while (script->script_p < script->end_p && *script->script_p <= 32)
     {
-        if (script->script_p >= script->end_p)
-            return EndOfScript(crossline);
-        if (*script->script_p++ == '\n')
+        if (*script->script_p == '\n')
         {
             if (!crossline)
-                Error("Line %i is incomplete\n", scriptline);
+            {
+                // We've hit a newline when we weren't allowed to.
+                // Note: we don't increment script_p yet so Error can report correctly.
+                Error("In file %s: Line %i is incomplete (hit newline)", script->filename, scriptline);
+            }
+            script->script_p++;
             scriptline = script->line++;
+        }
+        else
+        {
+            script->script_p++;
         }
     }
 
     if (script->script_p >= script->end_p)
+    {
         return EndOfScript(crossline);
+    }
 
     // // comments
-    if (script->script_p[0] == '/' && script->script_p[1] == '/')
+    if (script->script_p + 1 < script->end_p && script->script_p[0] == '/' && script->script_p[1] == '/')
     {
         if (!crossline)
-            Error("Line %i is incomplete\n", scriptline);
-        while (*script->script_p++ != '\n')
-            if (script->script_p >= script->end_p)
-                return EndOfScript(crossline);
-        scriptline = script->line++;
+            Error("In file %s: Line %i is incomplete (hit // comment)", script->filename, scriptline);
+        
+        while (script->script_p < script->end_p && *script->script_p != '\n')
+            script->script_p++;
+        
         goto skipspace;
     }
 
     // /* */ comments
-    if (script->script_p[0] == '/' && script->script_p[1] == '*')
+    if (script->script_p + 1 < script->end_p && script->script_p[0] == '/' && script->script_p[1] == '*')
     {
         if (!crossline)
-            Error("Line %i is incomplete\n", scriptline);
+            Error("In file %s: Line %i is incomplete (hit /* comment)", script->filename, scriptline);
+            
         script->script_p += 2;
-        while (script->script_p[0] != '*' && script->script_p[1] != '/')
+        while (script->script_p + 1 < script->end_p && (script->script_p[0] != '*' || script->script_p[1] != '/'))
         {
             if (*script->script_p == '\n')
             {
-                scriptline = script->line++;
+                script->line++;
+                scriptline = script->line;
             }
             script->script_p++;
-            if (script->script_p >= script->end_p)
-                return EndOfScript(crossline);
         }
-        script->script_p += 2;
+        if (script->script_p + 1 < script->end_p)
+            script->script_p += 2;
+        else
+            script->script_p = script->end_p;
+            
         goto skipspace;
     }
 
@@ -241,25 +251,24 @@ skipspace:
     {
         // quoted token
         script->script_p++;
-        while (*script->script_p != '"')
+        while (script->script_p < script->end_p && *script->script_p != '"')
         {
             *token_p++ = *script->script_p++;
-            if (script->script_p == script->end_p)
-                break;
-            if (token_p == &token[MAXTOKEN])
-                Error("Token too large on line %i\n", scriptline);
+            if (token_p == &token[MAXTOKEN-1])
+                Error("In file %s: Token too large on line %i", script->filename, scriptline);
         }
-        script->script_p++;
+        if (script->script_p < script->end_p)
+            script->script_p++;
     }
     else // regular token
-        while (*script->script_p > 32 && *script->script_p != ';')
+    {
+        while (script->script_p < script->end_p && *script->script_p > 32 && *script->script_p != ';')
         {
             *token_p++ = *script->script_p++;
-            if (script->script_p == script->end_p)
-                break;
-            if (token_p == &token[MAXTOKEN])
-                Error("Token too large on line %i\n", scriptline);
+            if (token_p == &token[MAXTOKEN-1])
+                Error("In file %s: Token too large on line %i", script->filename, scriptline);
         }
+    }
 
     *token_p = 0;
 
@@ -320,7 +329,7 @@ void Parse1DMatrix(int x, vec_t *m)
 
     for (i = 0; i < x; i++)
     {
-        GetToken(qfalse);
+        GetToken(qtrue);
         m[i] = atof(token);
     }
 

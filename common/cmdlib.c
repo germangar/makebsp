@@ -145,34 +145,29 @@ Error
 For abnormal program terminations in console apps
 =================
 */
+jmp_buf *fatal_error_jmp = NULL;
+
 void Error(const char *error, ...)
 {
     va_list argptr;
 
-    printf("\n************ ERROR ************\n");
-    fprintf(stderr, "\n************ ERROR ************\n");
-
     char errorBuf[4096];
     va_start(argptr, error);
-    vsprintf(errorBuf, error, argptr);
+    vsnprintf(errorBuf, sizeof(errorBuf), error, argptr);
     va_end(argptr);
-    
-    char msg[4096];
-    snprintf(msg, sizeof(msg), "************ ERROR ************\n%s\n", errorBuf);
+
+    char msg[8192];
+    snprintf(msg, sizeof(msg), "\n************ ERROR ************\n%s\n", errorBuf);
     Broadcast_Print(3, msg);
 
-    va_start(argptr, error);
-    vprintf(error, argptr);
-    va_end(argptr);
-
-    va_start(argptr, error);
-    vfprintf(stderr, error, argptr);
-    va_end(argptr);
-
-    printf("\n");
-    fprintf(stderr, "\n");
+    printf("%s", msg);
     fflush(stdout);
+    fprintf(stderr, "%s", msg);
     fflush(stderr);
+
+    if (fatal_error_jmp) {
+        longjmp(*fatal_error_jmp, 1);
+    }
 
     Broadcast_Shutdown();
 
@@ -207,7 +202,7 @@ void _printf(const char *format, ...)
     ATOM a;
 
     va_start(argptr, format);
-    vsprintf(text, format, argptr);
+    vsnprintf(text, sizeof(text), format, argptr);
     va_end(argptr);
 
     printf("%s", text);
@@ -375,6 +370,14 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     int i;
 
     *bufferptr = NULL;
+
+    // 0. Try absolute path directly if it looks like one
+    if (relativePath[0] == '/' || relativePath[0] == '\\' || (relativePath[0] && relativePath[1] == ':'))
+    {
+        length = TryLoadFile(relativePath, bufferptr);
+        if (length >= 0)
+            return length;
+    }
 
     // 1. Try loose files in all VFS paths (priority order)
     for (i = 0; i < numVFSPaths; i++)

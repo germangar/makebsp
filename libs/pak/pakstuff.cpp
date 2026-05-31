@@ -151,6 +151,7 @@ public:
       p = p->m_pNext;
       delete p2;
     }
+    m_pNext = NULL;
   }
 };
 
@@ -278,13 +279,16 @@ void __ExtractFileExtension(const char *path, char *dest) {
 }
 
 void __ConvertDOSToUnixName(char *dst, const char *src) {
-  while (*src) {
+  if (!src || !dst) return;
+  int count = 0;
+  while (*src && count < WORK_LEN - 1) {
     if (*src == '\\')
       *dst = '/';
     else
       *dst = *src;
     dst++;
     src++;
+    count++;
   }
   *dst = 0;
 }
@@ -292,17 +296,19 @@ void __ConvertDOSToUnixName(char *dst, const char *src) {
 void AddSlash(Str &str) {
   int nLen = str.GetLength();
   if (nLen > 0) {
-    if (str[nLen - 1] != '\\' && str[nLen - 1] != '/')
+    const char *buffer = str.GetBuffer();
+    if (buffer && buffer[nLen - 1] != '\\' && buffer[nLen - 1] != '/')
       str += '\\';
   }
 }
 
 void FindReplace(Str &strContents, const char *pTag, const char *pValue) {
+  if (!pTag || !pTag[0]) return;
   if (strcmp(pTag, pValue) == 0)
     return;
   for (int nPos = strContents.Find(pTag); nPos >= 0;
        nPos = strContents.Find(pTag)) {
-    int nRightLen = strContents.GetLength() - strlen(pTag) - nPos;
+    int nRightLen = strContents.GetLength() - (int)strlen(pTag) - nPos;
     Str strLeft(strContents.Left(nPos));
     Str strRight(strContents.Right(nRightLen));
     strLeft += pValue;
@@ -318,11 +324,13 @@ void ProgError(const char *errstr, ...) {
   printf("\nProgram Error: *** ");
   vprintf(errstr, args);
   printf(" ***\n");
+  fflush(stdout);
   va_end(args);
   exit(5);
 }
 
 boolean ReadBytes(FILE *file, void *addr, UInt32 size) {
+  if (!file || !addr) return false;
   while (size > 0x8000) {
     if (fread(addr, 1, 0x8000, file) != 0x8000)
       return false;
@@ -733,45 +741,71 @@ boolean PakLoadFile(const char *filename, void **bufferptr) {
 }
 
 int PakLoadAnyFile(const char *filename, void **bufferptr) {
-  char cWork[WORK_LEN];
   if (g_bPK3) {
     PK3FileInfo *pInfo;
 
     // Convert incoming filename to unix-style lowercase for comparison
-    Str strFile(filename);
-    __ConvertDOSToUnixName(strFile, strFile);
-    strFile.MakeLower();
+    char unixFile[WORK_LEN];
+    __ConvertDOSToUnixName(unixFile, filename);
+    strlwr(unixFile);
 
-    // Walk the PK3 file list and try each record's own base path for prefix stripping
+    // Walk the PK3 file list
     PK3List *pList = g_PK3Files.Next();
     while (pList != NULL) {
       pInfo = pList->Ptr();
-      if (pInfo->m_pBasePath) {
-        Str strBase(pInfo->m_pBasePath);
-        AddSlash(strBase);
-        __ConvertDOSToUnixName(cWork, strBase);
-        strlwr(cWork);
+      if (!pInfo || !pInfo->m_pName) {
+        pList = pList->Next();
+        continue;
+      }
 
-        // Try to strip this record's base path from the filename
-        Str strKey(strFile);
-        FindReplace(strKey, cWork, "");
+      qboolean match = qfalse;
 
-        if (strcmp(strKey.GetBuffer(), pInfo->m_pName) == 0) {
-          unz_s savedState;
-          memcpy(&savedState, pInfo->m_zFile, sizeof(unz_s));
-
-          memcpy(pInfo->m_zFile, &pInfo->m_zInfo, sizeof(unz_s));
-          if (unzOpenCurrentFile(pInfo->m_zFile) == UNZ_OK) {
-            void *buffer = __qblockmalloc(pInfo->m_lSize + 1);
-            int n = unzReadCurrentFile(pInfo->m_zFile, buffer, pInfo->m_lSize);
-            *bufferptr = buffer;
-            unzCloseCurrentFile(pInfo->m_zFile);
-            
-            memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
-            return n;
-          }
-          memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
+      // 1. Try relative match
+      if (stricmp(unixFile, pInfo->m_pName) == 0) {
+        match = qtrue;
+      }
+      // 2. Try absolute match
+      else if (pInfo->m_pBasePath) {
+        char unixBase[WORK_LEN];
+        __ConvertDOSToUnixName(unixBase, pInfo->m_pBasePath);
+        strlwr(unixBase);
+        int baseLen = strlen(unixBase);
+        if (baseLen > 0 && unixBase[baseLen - 1] != '/') {
+          strcat(unixBase, "/");
+          baseLen++;
         }
+
+        if (strnicmp(unixFile, unixBase, baseLen) == 0) {
+          if (stricmp(unixFile + baseLen, pInfo->m_pName) == 0) {
+            match = qtrue;
+          }
+        }
+      }
+
+      if (match) {
+        if (!pInfo->m_zFile) {
+          pList = pList->Next();
+          continue;
+        }
+        unz_s savedState;
+        memcpy(&savedState, pInfo->m_zFile, sizeof(unz_s));
+        memcpy(pInfo->m_zFile, &pInfo->m_zInfo, sizeof(unz_s));
+
+        if (unzOpenCurrentFile(pInfo->m_zFile) == UNZ_OK) {
+          void *buffer = __qblockmalloc(pInfo->m_lSize + 1);
+          int n = unzReadCurrentFile(pInfo->m_zFile, buffer, pInfo->m_lSize);
+          
+          if (n < pInfo->m_lSize) {
+              Error("Incomplete read from archive for file %s (expected %ld, got %d)", pInfo->m_pName, pInfo->m_lSize, n);
+          }
+
+          *bufferptr = buffer;
+          unzCloseCurrentFile(pInfo->m_zFile);
+
+          memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
+          return n;
+        }
+        memcpy(pInfo->m_zFile, &savedState, sizeof(unz_s));
       }
       pList = pList->Next();
     }
@@ -836,8 +870,8 @@ boolean OpenPK3(const char *filename) {
   char cWork[WORK_LEN];
   unz_file_info zInfo;
   unzFile *zFile = new unzFile(unzOpen(filename));
-  g_zFiles.Add(zFile);
-  if (zFile != NULL) {
+  if (zFile != NULL && *zFile != NULL) {
+    g_zFiles.Add(zFile);
     int nStatus = unzGoToFirstFile(*zFile);
     while (nStatus == UNZ_OK) {
       cFilename[0] = '\0';

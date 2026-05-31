@@ -65,12 +65,12 @@ void Broadcast_Setup(const char *dest) {
 void Broadcast_Print(int level, const char *msg) {
     if (broadcastSocket < 0 || !msg) return;
     
-    char buffer[4096];
+    char buffer[8192];
     
     // Convert angle brackets to prevent breaking XML
-    char safeMsg[2048];
+    char safeMsg[4096];
     int j = 0;
-    for (int i = 0; msg[i] && j < sizeof(safeMsg) - 5; i++) {
+    for (int i = 0; msg[i] && j < sizeof(safeMsg) - 10; i++) {
         if (msg[i] == '<') {
             safeMsg[j++] = '&'; safeMsg[j++] = 'l'; safeMsg[j++] = 't'; safeMsg[j++] = ';';
         } else if (msg[i] == '>') {
@@ -86,8 +86,8 @@ void Broadcast_Print(int level, const char *msg) {
     snprintf(buffer, sizeof(buffer), "<message level=\"%d\">%s</message>", level, safeMsg);
     
     int len = strlen(buffer);
-    send(broadcastSocket, (const char *)&len, 4, 0);
-    send(broadcastSocket, buffer, len, 0);
+    if (send(broadcastSocket, (const char *)&len, 4, 0) <= 0) return;
+    if (send(broadcastSocket, buffer, len, 0) <= 0) return;
 }
 
 void Broadcast_Shutdown(void) {

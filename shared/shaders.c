@@ -146,7 +146,6 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
 
 static void LoadShaderImage(shaderInfo_t *si)
 {
-    char filename[1024];
     int i, count, nLen;
     float color[4];
     byte *buffer;
@@ -299,6 +298,7 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
         {
             if (!si->width)
             {
+                // _printf("  DEBUG: LoadShaderImage for existing %s\n", si->shader);
                 LoadShaderImage(si);
             }
             return si;
@@ -308,6 +308,7 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
     si = AllocShaderInfo();
     strcpy(si->shader, shader);
 
+    // _printf("  DEBUG: LoadShaderImage for new %s\n", si->shader);
     LoadShaderImage(si);
 
     return si;
@@ -323,9 +324,19 @@ static void ParseShaderFile(const char *filename)
     int i;
     int numInfoParms = sizeof(infoParms) / sizeof(infoParms[0]);
     shaderInfo_t *si;
+    jmp_buf parse_jmp;
 
-    //	qprintf( "shaderFile: %s\n", filename );
     LoadScriptFile(filename);
+
+    // Set up error recovery for this file
+    fatal_error_jmp = &parse_jmp;
+    if (setjmp(parse_jmp))
+    {
+        _printf("WARNING: Parsing of shader file %s aborted due to errors. Skipping remaining content.\n", filename);
+        fatal_error_jmp = NULL;
+        return;
+    }
+
     while (1)
     {
         if (!GetToken(qtrue))
@@ -333,45 +344,60 @@ static void ParseShaderFile(const char *filename)
             break;
         }
 
+        // Handle possible stray endif/else at top level (unlikely but possible)
+        if (!Q_stricmp(token, "endif") || !Q_stricmp(token, "else"))
+        {
+            continue;
+        }
+
         si = AllocShaderInfo();
         strncpy(si->shader, token, MAX_QPATH - 1);
         si->shader[MAX_QPATH - 1] = '\0';
+        
         MatchToken("{");
-        while (1)
+        int shaderDepth = 1;
+
+        while (shaderDepth > 0)
         {
             if (!GetToken(qtrue))
             {
                 break;
             }
+
             if (!strcmp(token, "}"))
             {
-                break;
+                shaderDepth--;
+                continue;
             }
-
-            // skip internal braced sections
             if (!strcmp(token, "{"))
             {
                 si->hasPasses = qtrue;
-                while (1)
+                int passDepth = 1;
+                while (passDepth > 0)
                 {
-                    if (!GetToken(qtrue))
-                    {
-                        break;
-                    }
-                    if (!strcmp(token, "}"))
-                    {
-                        break;
-                    }
+                    if (!GetToken(qtrue)) break;
+                    if (!strcmp(token, "{")) passDepth++;
+                    else if (!strcmp(token, "}")) passDepth--;
 
                     // QFusion: scan for material keyword inside passes
-                    if (!Q_stricmp(token, "material") && !si->materialImage[0])
+                    if (passDepth == 1 && !Q_stricmp(token, "material") && !si->materialImage[0])
                     {
-                        GetToken(qfalse);
-                        strncpy(si->materialImage, token, MAX_QPATH - 1);
-                        si->materialImage[MAX_QPATH - 1] = '\0';
-                        DefaultExtension(si->materialImage, ".tga");
+                        if (TokenAvailable())
+                        {
+                            GetToken(qfalse);
+                            strncpy(si->materialImage, token, MAX_QPATH - 1);
+                            si->materialImage[MAX_QPATH - 1] = '\0';
+                            DefaultExtension(si->materialImage, ".tga");
+                        }
                     }
                 }
+                continue;
+            }
+
+            // Handle QFusion logic keywords
+            if (!Q_stricmp(token, "if") || !Q_stricmp(token, "else") || !Q_stricmp(token, "endif"))
+            {
+                while (TokenAvailable()) GetToken(qfalse);
                 continue;
             }
 
@@ -393,8 +419,6 @@ static void ParseShaderFile(const char *filename)
                 }
                 if (i == numInfoParms)
                 {
-                    // we will silently ignore all tokens beginning with qer,
-                    // which are QuakeEdRadient parameters
                     if (Q_strncasecmp(token, "qer", 3))
                     {
                         _printf("Unknown surfaceparm: \"%s\"\n", token);
@@ -610,23 +634,21 @@ static void ParseShaderFile(const char *filename)
             }
 
             // q3map_sun <red> <green> <blue> <intensity> <degrees> <elivation>
-            // color will be normalized, so it doesn't matter what range you use
-            // intensity falls off with angle but not distance 100 is a fairly bright
-            // sun degree of 0 = from the east, 90 = north, etc.  altitude of 0 =
-            // sunrise/set, 90 = noon
             if (!Q_stricmp(token, "q3map_sun") || !Q_stricmp(token, "q3map_sunExt"))
             {
                 float a, b;
                 qboolean isExt = !Q_stricmp(token, "q3map_sunExt");
 
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 si->sunLight[0] = atof(token);
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 si->sunLight[1] = atof(token);
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 si->sunLight[2] = atof(token);
 
-                // Detect if the color was provided in 0-255 scale
                 if (si->sunLight[0] > 1.0001f || si->sunLight[1] > 1.0001f || si->sunLight[2] > 1.0001f)
                 {
                     VectorScale(si->sunLight, 1.0f / 255.0f, si->sunLight);
@@ -634,14 +656,17 @@ static void ParseShaderFile(const char *filename)
 
                 VectorNormalize(si->sunLight, si->sunLight);
 
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 a = atof(token);
                 VectorScale(si->sunLight, a, si->sunLight);
 
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 a = atof(token);
                 a = a / 180 * Q_PI;
 
+                if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 b = atof(token);
                 b = b / 180 * Q_PI;
@@ -650,11 +675,10 @@ static void ParseShaderFile(const char *filename)
                 si->sunDirection[1] = sin(a) * cos(b);
                 si->sunDirection[2] = sin(b);
 
-                // Consume extra parameters for sunExt without storing them
                 if (isExt)
                 {
-                    GetToken(qfalse); // deviance
-                    GetToken(qfalse); // samples
+                    if (TokenAvailable()) GetToken(qfalse); // deviance
+                    if (TokenAvailable()) GetToken(qfalse); // samples
                 }
 
                 si->surfaceFlags |= SURF_SKY;
@@ -681,8 +705,6 @@ static void ParseShaderFile(const char *filename)
             }
 
             // deformVertexes autosprite[2]
-            // we catch this so autosprited surfaces become point
-            // lights instead of area lights
             if (!Q_stricmp(token, "deformVertexes"))
             {
                 GetToken(qfalse);
@@ -695,13 +717,14 @@ static void ParseShaderFile(const char *filename)
             }
 
             // ignore all other tokens on the line
-
             while (TokenAvailable())
             {
                 GetToken(qfalse);
             }
         }
     }
+
+    fatal_error_jmp = NULL;
 }
 
 /*
@@ -715,8 +738,10 @@ static int numLoadedShaderFiles;
 
 static void AddShaderFile(const char *filename)
 {
-    char base[MAX_QPATH];
+    char base[1024];
     int i;
+
+    _printf("  DEBUG: AddShaderFile(%s)\n", filename);
 
     ExtractFileBase(filename, base);
 
@@ -733,9 +758,11 @@ static void AddShaderFile(const char *filename)
         Error("MAX_SHADER_FILES");
     }
 
-    strcpy(loadedShaderFiles[numLoadedShaderFiles], base);
+    memset(loadedShaderFiles[numLoadedShaderFiles], 0, MAX_OS_PATH);
+    strncpy(loadedShaderFiles[numLoadedShaderFiles], base, MAX_OS_PATH - 1);
     numLoadedShaderFiles++;
 
+    // _printf("  DEBUG: Calling ParseShaderFile(%s)\n", filename);
     ParseShaderFile(filename);
 }
 
@@ -756,7 +783,15 @@ static void ShaderLooseCallback(const char *filename)
 
 static void ShaderPakCallback(const char *filename)
 {
-    if (strstr(filename, "scripts/") && strstr(filename, ".shader"))
+    // we need to make sure we don't have .bak files or other garbage
+    // extension must be exactly .shader
+    const char *ext = strstr(filename, ".shader");
+    if (!ext || strcmp(ext, ".shader") != 0)
+    {
+        return;
+    }
+
+    if (strstr(filename, "scripts/"))
     {
         _printf("  [PAK] Loading %s\n", filename);
         AddShaderFile(filename);
