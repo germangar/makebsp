@@ -66,8 +66,6 @@ void AddScriptToStack(const char *filename)
     if (size < 0)
         Error("Couldn't load %s", filename);
 
-    _printf("  DEBUG: Loaded %s, size %d bytes\n", filename, size);
-
     // Store the relative path for reference
     strncpy(script->filename, filename, sizeof(script->filename) - 1);
     script->filename[sizeof(script->filename) - 1] = '\0';

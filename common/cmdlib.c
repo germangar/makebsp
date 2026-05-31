@@ -357,6 +357,36 @@ int vfsFindFile(const char *relativePath, char *outFullPath, int outSize)
 
 /*
 ==============
+TryLoadFile
+
+Allows failure
+==============
+*/
+int TryLoadFile(const char *filename, void **bufferptr)
+{
+    FILE *f;
+    int length;
+    void *buffer;
+
+    *bufferptr = NULL;
+
+    f = fopen(filename, "rb");
+    if (!f)
+    {
+        return -1;
+    }
+    length = Q_filelength(f);
+    buffer = malloc(length + 1);
+    ((char *)buffer)[length] = 0;
+    SafeRead(f, buffer, length);
+    fclose(f);
+
+    *bufferptr = buffer;
+    return length;
+}
+
+/*
+==============
 vfsLoadFile
 
 Load a file using VFS priority: loose files across all paths, then PAK/PK3 across all paths.
@@ -977,34 +1007,6 @@ int LoadFileBlock(const char *filename, void **bufferptr)
 
     *bufferptr = buffer;
 
-    return length;
-}
-
-/*
-==============
-TryLoadFile
-
-Allows failure
-==============
-*/
-int TryLoadFile(const char *filename, void **bufferptr)
-{
-    FILE *f;
-    int length;
-    void *buffer;
-
-    *bufferptr = NULL;
-
-    f = fopen(filename, "rb");
-    if (!f)
-        return -1;
-    length = Q_filelength(f);
-    buffer = malloc(length + 1);
-    ((char *)buffer)[length] = 0;
-    SafeRead(f, buffer, length);
-    fclose(f);
-
-    *bufferptr = buffer;
     return length;
 }
 

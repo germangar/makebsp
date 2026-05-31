@@ -103,9 +103,9 @@ cl_program BuildOpenCLProgram(const char *filename, const char *options) {
     if (!useOpenCL) return NULL;
 
     sprintf(fullPath, "kernels/%s", filename);
-    fileSize = LoadFile(fullPath, (void **)&src);
+    fileSize = vfsLoadFile(fullPath, (void **)&src);
     if (fileSize <= 0) {
-        _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
+        _printf("BuildOpenCLProgram: Could not load %s (searched all VFS paths)\n", fullPath);
         return NULL;
     }
 
@@ -329,5 +329,8 @@ void GpuLightmapState_Download(void) {
         if (dtemp2x) free(dtemp2x);
         if (ntemp2x) free(ntemp2x);
         free(mask2x);
+    }
+}
+   free(mask2x);
     }
 }

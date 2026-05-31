@@ -298,7 +298,6 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
         {
             if (!si->width)
             {
-                // _printf("  DEBUG: LoadShaderImage for existing %s\n", si->shader);
                 LoadShaderImage(si);
             }
             return si;
@@ -308,7 +307,6 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
     si = AllocShaderInfo();
     strcpy(si->shader, shader);
 
-    // _printf("  DEBUG: LoadShaderImage for new %s\n", si->shader);
     LoadShaderImage(si);
 
     return si;
@@ -741,8 +739,6 @@ static void AddShaderFile(const char *filename)
     char base[1024];
     int i;
 
-    _printf("  DEBUG: AddShaderFile(%s)\n", filename);
-
     ExtractFileBase(filename, base);
 
     for (i = 0; i < numLoadedShaderFiles; i++)
@@ -762,7 +758,6 @@ static void AddShaderFile(const char *filename)
     strncpy(loadedShaderFiles[numLoadedShaderFiles], base, MAX_OS_PATH - 1);
     numLoadedShaderFiles++;
 
-    // _printf("  DEBUG: Calling ParseShaderFile(%s)\n", filename);
     ParseShaderFile(filename);
 }
 
