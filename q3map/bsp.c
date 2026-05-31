@@ -44,10 +44,15 @@ qboolean nofog;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
+qboolean novis;
 
 qboolean guessUVs = qfalse;
 
 char outbase[32];
+
+// Visibility bridge prototypes
+void LoadPortals(char *name);
+void CalculateVisibility(qboolean mergeportals);
 
 int entity_num;
 
@@ -125,6 +130,32 @@ void ProcessWorldModel(void)
     if (!leaked)
     {
         WritePortalFile(tree);
+
+        if (!novis)
+        {
+            char portalfile[1024];
+            sprintf(portalfile, "%s.prt", source);
+            _printf("--- Inline VIS ---\n");
+
+            // 0. Explicitly set healthy defaults for VIS engine switches
+            extern qboolean noPassageVis, passageVisOnly, mergevis, nosort;
+            extern int testlevel;
+            
+            noPassageVis = qfalse;
+            passageVisOnly = qfalse;
+            mergevis = qfalse; // Default is no merging
+            nosort = qfalse;
+            testlevel = 2;     // Default test level
+
+            // 1. Load the flat graph data from the just-written .prt file
+            LoadPortals(portalfile);
+
+            // 2. Execute the core visibility math with the default merge setting
+            CalculateVisibility(mergevis);
+
+            // 3. Clean up the bridge file (matching standard VisMain behavior)
+            remove(portalfile); 
+        }
     }
     FloodAreas(tree);
 
@@ -745,6 +776,11 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-vis") || !strcmp(argv[i], "-bsp") || !strcmp(argv[i], "-light"))
         {
             // Handled by mode switcher
+        }
+        else if (!strcmp(argv[i], "-novis"))
+        {
+            novis = qtrue;
+            _printf("Inline visibility calculation disabled.\n");
         }
         else if (!strcmp(argv[i], "-fakemap"))
         {
