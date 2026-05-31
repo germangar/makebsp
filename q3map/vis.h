@@ -28,7 +28,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/cmdlib.h"
 #include "../common/mathlib.h"
 
-#define MAX_PORTALS 32768
+#define MAX_PORTALS 65536
 
 #define PORTALFILE "PRT1"
 
