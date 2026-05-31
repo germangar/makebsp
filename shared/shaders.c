@@ -298,14 +298,12 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
         {
             if (!si->width)
             {
-                if (verbose) _printf("  Resolving shader %s (Found in definition list)\n", shader);
                 LoadShaderImage(si);
             }
             return si;
         }
     }
 
-    if (verbose) _printf("  Resolving shader %s (Definition not found, using default)\n", shader);
     si = AllocShaderInfo();
     strcpy(si->shader, shader);
 

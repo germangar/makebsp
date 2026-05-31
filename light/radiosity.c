@@ -204,8 +204,8 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
 // ---------------------------------------------------------------------------
 
 static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
-    struct RTCRayHit rayhit;
-    struct RTCIntersectArguments iargs;
+    struct RTCRay ray;
+    struct RTCOccludedArguments oargs;
     vec3_t  dir;
     float   len;
 
@@ -215,30 +215,29 @@ static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
     if (len < 0.001f)
         return qfalse; // degenerate
 
-    rayhit.ray.org_x  = from[0];
-    rayhit.ray.org_y  = from[1];
-    rayhit.ray.org_z  = from[2];
-    rayhit.ray.dir_x  = dir[0] / len;
-    rayhit.ray.dir_y  = dir[1] / len;
-    rayhit.ray.dir_z  = dir[2] / len;
-    rayhit.ray.tnear  = RAD_ORIGIN_NUDGE * 0.5f;
-    rayhit.ray.tfar   = len - RAD_ORIGIN_NUDGE * 0.5f;
-    rayhit.ray.mask   = 0xFFFFFFFF;
-    rayhit.ray.flags  = 0;
-    rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
-    rayhit.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
+    ray.org_x  = from[0];
+    ray.org_y  = from[1];
+    ray.org_z  = from[2];
+    ray.dir_x  = dir[0] / len;
+    ray.dir_y  = dir[1] / len;
+    ray.dir_z  = dir[2] / len;
+    ray.tnear  = RAD_ORIGIN_NUDGE * 0.5f;
+    ray.tfar   = len - RAD_ORIGIN_NUDGE * 0.5f;
+    ray.mask   = 0xFFFFFFFF;
+    ray.flags  = 0;
 
     struct MyRayQueryContext context;
     rtcInitRayQueryContext(&context.context);
     context.tw = NULL;
     context.patchshadows = patchshadows;
 
-    rtcInitIntersectArguments(&iargs);
-    iargs.context = &context.context;
+    rtcInitOccludedArguments(&oargs);
+    oargs.context = &context.context;
 
-    rtcIntersect1(g_scene, &rayhit, &iargs);
+    rtcOccluded1(g_scene, &ray, &oargs);
 
-    return (rayhit.hit.geomID == RTC_INVALID_GEOMETRY_ID) ? qtrue : qfalse;
+    // If occluded, tfar becomes -infinity in Embree 4
+    return (ray.tfar >= 0.0f) ? qtrue : qfalse;
 }
 
 // ---------------------------------------------------------------------------

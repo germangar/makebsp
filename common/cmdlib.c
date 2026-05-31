@@ -421,10 +421,8 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     if (relativePath[0] == '/' || relativePath[0] == '\\' || (relativePath[0] && relativePath[1] == ':'))
     {
         length = TryLoadFile(relativePath, bufferptr);
-        if (length >= 0) {
-            if (verbose) _printf("  VFS: Found absolute file: %s\n", relativePath);
+        if (length >= 0)
             return length;
-        }
     }
 
     // 1. Try loose files in all VFS paths (priority order)
@@ -432,10 +430,8 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     {
         snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = TryLoadFile(fullPath, bufferptr);
-        if (length >= 0) {
-            if (verbose) _printf("  VFS: Found %s in %s\n", relativePath, vfsPaths[i]);
+        if (length >= 0)
             return length;
-        }
     }
 
     // 2. Try PAK/PK3 archives across all VFS paths
@@ -444,10 +440,8 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     {
         snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = PakLoadAnyFile(fullPath, bufferptr);
-        if (length >= 0) {
-            if (verbose) _printf("  VFS: Found %s in PAK at %s\n", relativePath, vfsPaths[i]);
+        if (length >= 0)
             return length;
-        }
     }
 #endif
 

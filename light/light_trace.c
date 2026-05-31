@@ -93,7 +93,13 @@ void InitTracingGeometry(void)
                                             dsurf->firstVert);
             }
 
-            rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+            qboolean needsFilter = qfalse;
+            if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+
+            if (needsFilter) {
+                rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+                rtcSetGeometryOccludedFilterFunction(geom, AlphaFilter);
+            }
             rtcCommitGeometry(geom);
             rtcAttachGeometryByID(g_scene, geom, i);
             rtcReleaseGeometry(geom);
@@ -144,7 +150,13 @@ void InitTracingGeometry(void)
 
             FreeMesh(subdivided);
 
-            rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+            qboolean needsFilter = qfalse;
+            if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+
+            if (needsFilter) {
+                rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
+                rtcSetGeometryOccludedFilterFunction(geom, AlphaFilter);
+            }
             rtcCommitGeometry(geom);
             rtcAttachGeometryByID(g_scene, geom, i);
             rtcReleaseGeometry(geom);

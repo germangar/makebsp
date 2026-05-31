@@ -80,3 +80,5 @@ concrete.shader
 inline_vis_specs.txt
 compile.log
 testvfs.bat
+compile_userdir.log
+testvfs_fast.bat
