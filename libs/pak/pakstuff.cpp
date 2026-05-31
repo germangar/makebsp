@@ -1020,12 +1020,23 @@ void ClosePakFile(void) {
 }
 
 void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
-  strcpy(g_strBasePath, pBasePath);
+  strncpy(g_strBasePath, pBasePath, sizeof(g_strBasePath) - 1);
+  g_strBasePath[sizeof(g_strBasePath) - 1] = '\0';
+
   if (pName == NULL) {
     char cWork[WORK_LEN];
     Str strPath(pBasePath);
     AddSlash(strPath);
     strPath += "*.pk3";
+
+    // Convert forward slashes to backslashes for Windows _findfirst
+    char *p = (char *)strPath.GetBuffer();
+    if (p) {
+        for (; *p; p++) {
+            if (*p == '/') *p = '\\';
+        }
+    }
+
     struct _finddata_t fileinfo;
     intptr_t handle = _findfirst(strPath, &fileinfo);
     if (handle != -1) {

@@ -21,6 +21,8 @@ void Broadcast_Setup(const char *dest) {
     int port = 39000;
     struct sockaddr_in server;
 
+    if (broadcastSocket >= 0) return;
+
     if (!dest || !dest[0]) return;
 
     strncpy(address, dest, sizeof(address) - 1);

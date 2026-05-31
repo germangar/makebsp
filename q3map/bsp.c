@@ -524,17 +524,7 @@ int main(int argc, char **argv)
             ExportModels(argc - 2, argv + 2);
             return 0;
         }
-        if (!strcmp(argv[i], "-vis")) {
-            VisMain(argc, argv);
-            return 0;
-        }
     }
-
-    // do a bsp if nothing else was specified
-
-    _printf("---- q3map ----\n");
-
-    ClearCacheDirectory();
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
@@ -558,18 +548,27 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "-fs_pakpath") && i + 1 < argc)
         {
             if (numCliPakPaths < MAX_VFS_PATHS) cliPakPaths[numCliPakPaths++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
         {
             if (numCliUserDirs < MAX_VFS_PATHS) cliUserDirs[numCliUserDirs++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") || !strcmp(argv[i], "-fs_basepath")) && i + 1 < argc)
         {
             if (numCliBasePaths < MAX_VFS_PATHS) cliBasePaths[numCliBasePaths++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game")) && i + 1 < argc)
         {
             if (numModGameDirs < MAX_VFS_PATHS) modGameDirs[numModGameDirs++] = argv[i + 1];
+            i++;
+        }
+        else if (!strcmp(argv[i], "-connect") && i + 1 < argc)
+        {
+            Broadcast_Setup(argv[i + 1]);
+            i++;
         }
     }
 
@@ -605,6 +604,16 @@ int main(int argc, char **argv)
     }
 
     InitVFSWriteDir();
+
+    // Check for tool modes after VFS is ready
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-vis")) {
+            VisMain(argc, argv);
+            return 0;
+        }
+    }
+
+    // do a bsp if nothing else was specified
 
 
 

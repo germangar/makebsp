@@ -222,8 +222,11 @@ void _printf(const char *format, ...)
     }
     if (hwndOut)
     {
-        a = GlobalAddAtom(text);
-        PostMessage(hwndOut, wm_BroadcastCommand, 0, (LPARAM)a);
+        if (strlen(text) < 255)
+        {
+            a = GlobalAddAtom(text);
+            PostMessage(hwndOut, wm_BroadcastCommand, (WPARAM)a, 0);
+        }
     }
 #endif
 }
@@ -1417,6 +1420,12 @@ void Sys_ListFiles(const char *directory, const char *extension,
         sprintf(search, "%s/%s", directory, extension);
     else
         sprintf(search, "%s%s", directory, extension);
+    
+    // Convert forward slashes to backslashes for Windows API
+    for (int j = 0; search[j]; j++) {
+        if (search[j] == '/') search[j] = '\\';
+    }
+
     handle = _findfirst(search, &fileinfo);
     if (handle == -1)
         return;

@@ -772,7 +772,6 @@ static void ShaderLooseCallback(const char *filename)
     }
 
     sprintf(full, "scripts/%s", filename);
-    _printf("  [Loose] Loading %s\n", full);
     AddShaderFile(full);
 }
 
@@ -788,7 +787,6 @@ static void ShaderPakCallback(const char *filename)
 
     if (strstr(filename, "scripts/"))
     {
-        _printf("  [PAK] Loading %s\n", filename);
         AddShaderFile(filename);
     }
 }
@@ -797,23 +795,36 @@ void LoadShaderInfo(void)
 {
     char searchPath[1024];
     int p;
+    int start;
 
     _printf("Scanning for shaders...\n");
 
     numLoadedShaderFiles = 0;
+    numShaderInfo = 0;
 
     for (p = 0; p < numVFSPaths; p++)
     {
         _printf("Scanning VFS path %d: %s\n", p, vfsPaths[p]);
-        // Loose files first (higher priority within each path)
+        
+        // Loose files first
+        start = numLoadedShaderFiles;
         sprintf(searchPath, "%sscripts/", vfsPaths[p]);
         Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
+        if (numLoadedShaderFiles > start)
+        {
+            _printf("  %d loose shader files parsed\n", numLoadedShaderFiles - start);
+        }
 
-        _printf("Scanning PAK files in %s\n", vfsPaths[p]);
         // Then packed files
+        start = numLoadedShaderFiles;
+        _printf("Scanning PAK files in %s\n", vfsPaths[p]);
         ScanPakFiles(vfsPaths[p], ShaderPakCallback);
+        if (numLoadedShaderFiles > start)
+        {
+            _printf("  %d shader files parsed from PAKs\n", numLoadedShaderFiles - start);
+        }
     }
 
-    _printf("%5i shader files parsed\n", numLoadedShaderFiles);
+    _printf("%5i total shader files parsed\n", numLoadedShaderFiles);
     _printf("%5i shaders found\n", numShaderInfo);
 }
