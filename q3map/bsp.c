@@ -153,7 +153,10 @@ void ProcessWorldModel(void)
             // 2. Execute the core visibility math with the default merge setting
             CalculateVisibility(mergevis);
 
-            // 3. Clean up the bridge file (matching standard VisMain behavior)
+            // 3. Cleanup VIS memory
+            FreeVisibility();
+
+            // 4. Clean up the bridge file (matching standard VisMain behavior)
             remove(portalfile); 
         }
     }

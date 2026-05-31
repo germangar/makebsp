@@ -54,7 +54,7 @@ int portalbytes, portallongs;
 
 qboolean noPassageVis;
 qboolean passageVisOnly;
-qboolean mergevis;
+qboolean mergevis = qfalse;
 qboolean nosort;
 qboolean saveprt;
 
@@ -1056,6 +1056,94 @@ void CalculateVisibility(qboolean mergeportals)
 }
 
 /*
+==================
+FreeVisibility
+==================
+*/
+void FreeVisibility(void)
+{
+    int i;
+
+    // Free main portals
+    if (v_portals)
+    {
+        for (i = 0; i < v_numportals * 2; i++)
+        {
+            vportal_t *p = &v_portals[i];
+            if (p->winding)
+                FreeWinding(p->winding);
+            if (p->portalfront)
+                free(p->portalfront);
+            if (p->portalflood)
+                free(p->portalflood);
+            if (p->portalvis)
+                free(p->portalvis);
+            
+            // Free passages
+            passage_t *ps = p->passages;
+            while (ps)
+            {
+                passage_t *next = ps->next;
+                free(ps);
+                ps = next;
+            }
+        }
+        free(v_portals);
+        v_portals = NULL;
+    }
+
+    // Free leafs
+    if (v_leafs)
+    {
+        free(v_leafs);
+        v_leafs = NULL;
+    }
+
+    // Free solid faces
+    if (faces)
+    {
+        for (i = 0; i < v_numfaces * 2; i++)
+        {
+            vportal_t *p = &faces[i];
+            if (p->winding)
+                FreeWinding(p->winding);
+            if (p->portalfront)
+                free(p->portalfront);
+            if (p->portalflood)
+                free(p->portalflood);
+            if (p->portalvis)
+                free(p->portalvis);
+            
+            passage_t *ps = p->passages;
+            while (ps)
+            {
+                passage_t *next = ps->next;
+                free(ps);
+                ps = next;
+            }
+        }
+        free(faces);
+        faces = NULL;
+    }
+
+    // Free faceleafs
+    if (faceleafs)
+    {
+        free(faceleafs);
+        faceleafs = NULL;
+    }
+
+    // Reset counters
+    v_numportals = 0;
+    v_portalclusters = 0;
+    v_numfaces = 0;
+    totalvis = 0;
+    c_portaltest = 0;
+    c_portalpass = 0;
+    c_portalcheck = 0;
+}
+
+/*
 ===========
 VisMain
 ===========
@@ -1077,11 +1165,6 @@ int VisMain(int argc, char **argv)
         {
             numthreads = atoi(argv[i + 1]);
             i++;
-        }
-        else if (!strcmp(argv[i], "-merge"))
-        {
-            _printf("merge = true\n");
-            mergevis = qtrue;
         }
         else if (!strcmp(argv[i], "-nopassage"))
         {
@@ -1229,6 +1312,8 @@ int VisMain(int argc, char **argv)
     // write the bsp file
     _printf("writing %s\n", name);
     WriteBSPFile(name);
+
+    FreeVisibility();
 
 #ifdef MREDEBUG
     end = clock();
