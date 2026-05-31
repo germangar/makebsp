@@ -45,6 +45,7 @@ qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
 qboolean novis;
+extern qboolean saveprt;
 
 qboolean guessUVs = qfalse;
 
@@ -157,7 +158,10 @@ void ProcessWorldModel(void)
             FreeVisibility();
 
             // 4. Clean up the bridge file (matching standard VisMain behavior)
-            remove(portalfile); 
+            if (!saveprt)
+            {
+                remove(portalfile);
+            }
         }
     }
     FloodAreas(tree);
@@ -785,6 +789,11 @@ int main(int argc, char **argv)
             novis = qtrue;
             _printf("Inline visibility calculation disabled.\n");
         }
+        else if (!strcmp(argv[i], "-saveprt"))
+        {
+            saveprt = qtrue;
+            _printf("saveprt = true\n");
+        }
         else if (!strcmp(argv[i], "-fakemap"))
         {
             fakemap = qtrue;
@@ -850,6 +859,7 @@ int main(int argc, char **argv)
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
+                "   saveprt        = do not delete the .prt file after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
 
                 "   enforceSampleSize <0|1> = strictly follow shader/global sample size\n");
