@@ -298,7 +298,7 @@ void AddSlash(Str &str) {
   if (nLen > 0) {
     const char *buffer = str.GetBuffer();
     if (buffer && buffer[nLen - 1] != '\\' && buffer[nLen - 1] != '/')
-      str += '\\';
+      str += '/';
   }
 }
 
@@ -1020,29 +1020,50 @@ void ClosePakFile(void) {
 }
 
 void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
-  strncpy(g_strBasePath, pBasePath, sizeof(g_strBasePath) - 1);
+  char normalizedBasePath[1024];
+  strncpy(normalizedBasePath, pBasePath, sizeof(normalizedBasePath) - 1);
+  normalizedBasePath[sizeof(normalizedBasePath) - 1] = '\0';
+  
+  // Normalize slashes to forward slashes for internal consistency
+  for (int i = 0; normalizedBasePath[i]; i++) {
+    if (normalizedBasePath[i] == '\\') normalizedBasePath[i] = '/';
+  }
+
+  strncpy(g_strBasePath, normalizedBasePath, sizeof(g_strBasePath) - 1);
   g_strBasePath[sizeof(g_strBasePath) - 1] = '\0';
 
   if (pName == NULL) {
     char cWork[WORK_LEN];
-    Str strPath(pBasePath);
+    Str strPath(normalizedBasePath);
     AddSlash(strPath);
     strPath += "*.pk3";
 
-    // Convert forward slashes to backslashes for Windows _findfirst
-    char *p = (char *)strPath.GetBuffer();
-    if (p) {
-        for (; *p; p++) {
-            if (*p == '/') *p = '\\';
-        }
+    _printf("  Scanning for archives in: %s\n", strPath.GetBuffer());
+
+    // Create a working copy for _findfirst with backslashes
+    char winPath[WORK_LEN];
+    strncpy(winPath, strPath.GetBuffer(), sizeof(winPath) - 1);
+    winPath[sizeof(winPath) - 1] = '\0';
+    for (int i = 0; winPath[i]; i++) {
+        if (winPath[i] == '/') winPath[i] = '\\';
     }
 
     struct _finddata_t fileinfo;
-    intptr_t handle = _findfirst(strPath, &fileinfo);
+    intptr_t handle = _findfirst(winPath, &fileinfo);
     if (handle != -1) {
       do {
-        sprintf(cWork, "%s\\%s", pBasePath, fileinfo.name);
-        OpenPakFile(cWork);
+        // Construct clean path with forward slashes
+        char cleanPath[WORK_LEN];
+        strncpy(cleanPath, normalizedBasePath, sizeof(cleanPath) - 1);
+        cleanPath[sizeof(cleanPath) - 1] = '\0';
+        int len = strlen(cleanPath);
+        if (len > 0 && cleanPath[len-1] != '/') {
+            strncat(cleanPath, "/", sizeof(cleanPath) - len - 1);
+        }
+        strncat(cleanPath, fileinfo.name, sizeof(cleanPath) - strlen(cleanPath) - 1);
+        
+        _printf("    Found archive: %s\n", cleanPath);
+        OpenPakFile(cleanPath);
       } while (_findnext(handle, &fileinfo) != -1);
       _findclose(handle);
     }
@@ -1059,12 +1080,28 @@ void ScanPakFiles(const char *basePath, void (*callback)(const char *filename)) 
   if (!g_bPK3)
     return;
 
+  // Normalize incoming basePath for comparison
+  char normPath[1024];
+  strncpy(normPath, basePath, sizeof(normPath) - 1);
+  normPath[sizeof(normPath) - 1] = '\0';
+  for (int i = 0; normPath[i]; i++) {
+    if (normPath[i] == '\\') normPath[i] = '/';
+  }
+  // Ensure trailing slash for robust comparison
+  int len = strlen(normPath);
+  if (len > 0 && normPath[len-1] != '/') {
+      if (len < sizeof(normPath) - 1) {
+          normPath[len] = '/';
+          normPath[len+1] = '\0';
+      }
+  }
+
   PK3List *p = g_PK3Files.Next();
   while (p != NULL) {
     PK3FileInfo *pKey = p->Ptr();
     // If basePath is provided, skip entries from other base paths
     if (basePath != NULL && pKey->m_pBasePath != NULL) {
-      if (strcmpi(pKey->m_pBasePath, basePath) != 0) {
+      if (strcmpi(pKey->m_pBasePath, normPath) != 0) {
         p = p->Next();
         continue;
       }

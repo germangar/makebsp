@@ -78,3 +78,5 @@ description.txt
 ammobox.shader
 concrete.shader
 inline_vis_specs.txt
+compile.log
+testvfs.bat

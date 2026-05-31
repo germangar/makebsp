@@ -259,18 +259,22 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "-fs_pakpath") && i + 1 < argc)
         {
             if (numCliPakPaths < MAX_VFS_PATHS) cliPakPaths[numCliPakPaths++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-userdir") || !strcmp(argv[i], "-fs_homepath")) && i + 1 < argc)
         {
             if (numCliUserDirs < MAX_VFS_PATHS) cliUserDirs[numCliUserDirs++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-basepath") || !strcmp(argv[i], "-rootdir") || !strcmp(argv[i], "-fs_basepath")) && i + 1 < argc)
         {
             if (numCliBasePaths < MAX_VFS_PATHS) cliBasePaths[numCliBasePaths++] = argv[i + 1];
+            i++;
         }
         else if ((!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game")) && i + 1 < argc)
         {
             if (numModGameDirs < MAX_VFS_PATHS) modGameDirs[numModGameDirs++] = argv[i + 1];
+            i++;
         }
     }
 

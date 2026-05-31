@@ -1090,11 +1090,13 @@ void BuildLocalSurfaces(void)
             shaderInfo_t *si = localSurfaces[i].si_override ? localSurfaces[i].si_override : ShaderInfoForShader(dshaders[ds->shaderNum].shader);
             if (si && si->hasVertexColor)
             {
+                if (verbose) _printf("  Surface %d resolved shader %s (VertexColor: YES)\n", i, si->shader);
                 localSurfaces[i].hasVertexColor = qtrue;
                 VectorCopy(si->vertexColor, localSurfaces[i].vertexColor);
             }
             else
             {
+                if (verbose && ds->surfaceType == MST_TRIANGLE_SOUP) _printf("  Surface %d resolved shader %s (VertexColor: NO)\n", i, si->shader);
                 localSurfaces[i].hasVertexColor = qfalse;
                 VectorClear(localSurfaces[i].vertexColor);
             }

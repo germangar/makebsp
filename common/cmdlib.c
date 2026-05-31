@@ -295,31 +295,44 @@ void AddVFSPath(const char *basePath, const char *gameDir)
 
     if (gameDir && gameDir[0] && strcmp(gameDir, ".") != 0)
     {
-        qboolean alreadyEndsWith = qfalse;
-        char tempBuf[1024];
+        // For absolute paths or specific mounts, we check if the gameDir is ALREADY the last component.
+        // We do this by checking if the path ends with /gameDir or is exactly gameDir.
         int gameLen = strlen(gameDir);
+        int pathLen = strlen(buf);
         
-        strcpy(tempBuf, buf);
-        if (strlen(tempBuf) > 0 && tempBuf[strlen(tempBuf) - 1] == '/')
-            tempBuf[strlen(tempBuf) - 1] = '\0';
-            
-        if ((int)strlen(tempBuf) >= gameLen && !Q_stricmp(tempBuf + strlen(tempBuf) - gameLen, gameDir))
-        {
-            if ((int)strlen(tempBuf) == gameLen || tempBuf[strlen(tempBuf) - gameLen - 1] == '/')
-                alreadyEndsWith = qtrue;
+        // Remove trailing slash for comparison
+        if (pathLen > 0 && buf[pathLen - 1] == '/') {
+            buf[pathLen - 1] = '\0';
+            pathLen--;
         }
 
-        if (!alreadyEndsWith)
-        {
+        qboolean needsAppend = qtrue;
+        if (pathLen >= gameLen) {
+            const char *lastComponent = buf + pathLen - gameLen;
+            if (!Q_stricmp(lastComponent, gameDir)) {
+                if (pathLen == gameLen || *(lastComponent - 1) == '/') {
+                    needsAppend = qfalse;
+                }
+            }
+        }
+
+        if (needsAppend) {
+            // Restore slash if we removed it and didn't find the gameDir
+            strncat(buf, "/", sizeof(buf) - strlen(buf) - 1);
             strncat(buf, gameDir, sizeof(buf) - strlen(buf) - 1);
-            strncat(buf, "/",     sizeof(buf) - strlen(buf) - 1);
+        }
+        
+        // Ensure it ends with a slash for the VFS standard
+        int finalLen = strlen(buf);
+        if (finalLen > 0 && buf[finalLen-1] != '/') {
+             strncat(buf, "/", sizeof(buf) - finalLen - 1);
         }
     }
 
     // Skip duplicates
     for (int i = 0; i < numVFSPaths; i++)
     {
-        if (!strcmp(vfsPaths[i], buf))
+        if (!Q_stricmp(vfsPaths[i], buf))
             return;
     }
 
@@ -408,8 +421,10 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     if (relativePath[0] == '/' || relativePath[0] == '\\' || (relativePath[0] && relativePath[1] == ':'))
     {
         length = TryLoadFile(relativePath, bufferptr);
-        if (length >= 0)
+        if (length >= 0) {
+            if (verbose) _printf("  VFS: Found absolute file: %s\n", relativePath);
             return length;
+        }
     }
 
     // 1. Try loose files in all VFS paths (priority order)
@@ -417,8 +432,10 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     {
         snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = TryLoadFile(fullPath, bufferptr);
-        if (length >= 0)
+        if (length >= 0) {
+            if (verbose) _printf("  VFS: Found %s in %s\n", relativePath, vfsPaths[i]);
             return length;
+        }
     }
 
     // 2. Try PAK/PK3 archives across all VFS paths
@@ -427,8 +444,10 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     {
         snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = PakLoadAnyFile(fullPath, bufferptr);
-        if (length >= 0)
+        if (length >= 0) {
+            if (verbose) _printf("  VFS: Found %s in PAK at %s\n", relativePath, vfsPaths[i]);
             return length;
+        }
     }
 #endif
 

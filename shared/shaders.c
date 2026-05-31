@@ -189,15 +189,15 @@ static void LoadShaderImage(shaderInfo_t *si)
     }
 
     // couldn't load anything
-    _printf("WARNING: Missing image for material: %s\n", si->shader);
+    _printf("WARNING: Missing image for material: %s (Defaulting to 0.5 grey albedo)\n", si->shader);
 
-    si->color[0] = 1;
-    si->color[1] = 1;
-    si->color[2] = 1;
+    si->color[0] = 0.5f;
+    si->color[1] = 0.5f;
+    si->color[2] = 0.5f;
     si->width = 64;
     si->height = 64;
     si->pixels = malloc(si->width * si->height * 4);
-    memset(si->pixels, 255, si->width * si->height * 4);
+    memset(si->pixels, 127, si->width * si->height * 4);
     return;
 
 // load the image to get dimensions and color
@@ -298,12 +298,14 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
         {
             if (!si->width)
             {
+                if (verbose) _printf("  Resolving shader %s (Found in definition list)\n", shader);
                 LoadShaderImage(si);
             }
             return si;
         }
     }
 
+    if (verbose) _printf("  Resolving shader %s (Definition not found, using default)\n", shader);
     si = AllocShaderInfo();
     strcpy(si->shader, shader);
 
@@ -324,6 +326,7 @@ static void ParseShaderFile(const char *filename)
     shaderInfo_t *si;
     jmp_buf parse_jmp;
 
+    _printf("  Parsing shader file: %s\n", filename);
     LoadScriptFile(filename);
 
     // Set up error recovery for this file
@@ -348,9 +351,38 @@ static void ParseShaderFile(const char *filename)
             continue;
         }
 
+        char shaderName[MAX_QPATH];
+        strncpy(shaderName, token, MAX_QPATH - 1);
+        shaderName[MAX_QPATH - 1] = '\0';
+
+        // Check if this shader is already defined
+        qboolean redefined = qfalse;
+        for (i = 0; i < numShaderInfo; i++)
+        {
+            if (!Q_stricmp(shaderInfo[i].shader, shaderName))
+            {
+                redefined = qtrue;
+                break;
+            }
+        }
+
+        if (redefined)
+        {
+            // _printf("    Shader '%s' redefined in %s (already defined). Skipping.\n", shaderName, filename);
+            // We must skip the block to continue parsing the file
+            MatchToken("{");
+            int depth = 1;
+            while (depth > 0 && GetToken(qtrue))
+            {
+                if (!strcmp(token, "{")) depth++;
+                else if (!strcmp(token, "}")) depth--;
+            }
+            continue;
+        }
+
         si = AllocShaderInfo();
-        strncpy(si->shader, token, MAX_QPATH - 1);
-        si->shader[MAX_QPATH - 1] = '\0';
+        strcpy(si->shader, shaderName);
+        // _printf("    Defining shader: %s\n", si->shader);
         
         MatchToken("{");
         int shaderDepth = 1;
