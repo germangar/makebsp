@@ -736,14 +736,11 @@ static int numLoadedShaderFiles;
 
 static void AddShaderFile(const char *filename)
 {
-    char base[1024];
     int i;
-
-    ExtractFileBase(filename, base);
 
     for (i = 0; i < numLoadedShaderFiles; i++)
     {
-        if (!Q_stricmp(loadedShaderFiles[i], base))
+        if (!Q_stricmp(loadedShaderFiles[i], filename))
         {
             return;
         }
@@ -755,7 +752,7 @@ static void AddShaderFile(const char *filename)
     }
 
     memset(loadedShaderFiles[numLoadedShaderFiles], 0, MAX_OS_PATH);
-    strncpy(loadedShaderFiles[numLoadedShaderFiles], base, MAX_OS_PATH - 1);
+    strncpy(loadedShaderFiles[numLoadedShaderFiles], filename, MAX_OS_PATH - 1);
     numLoadedShaderFiles++;
 
     ParseShaderFile(filename);
