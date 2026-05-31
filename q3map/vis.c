@@ -1057,6 +1057,27 @@ void CalcPHS(void)
 }
 
 /*
+==================
+CalculateVisibility
+==================
+*/
+void CalculateVisibility(qboolean mergeportals)
+{
+    if (mergeportals)
+    {
+        MergeLeaves();
+        MergeLeafPortals();
+    }
+
+    CountActivePortals();
+    //	WritePortals("maps/hints.prs");
+
+    _printf("visdatasize:%i\n", numVisBytes);
+
+    CalcVis();
+}
+
+/*
 ===========
 VisMain
 ===========
@@ -1222,18 +1243,7 @@ int VisMain(int argc, char **argv)
     _printf("reading %s\n", portalfile);
     LoadPortals(portalfile);
 
-    if (mergevis)
-    {
-        MergeLeaves();
-        MergeLeafPortals();
-    }
-
-    CountActivePortals();
-    //	WritePortals("maps/hints.prs");
-
-    _printf("visdatasize:%i\n", numVisBytes);
-
-    CalcVis();
+    CalculateVisibility(mergevis);
 
     //	CalcPHS ();
 

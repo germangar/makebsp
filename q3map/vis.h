@@ -162,4 +162,5 @@ void PassageFlow(int portalnum);
 extern vportal_t *sorted_portals[MAX_MAP_PORTALS * 2];
 
 int CountBits(byte *bits, int numbits);
+void CalculateVisibility(qboolean mergeportals);
 #endif
