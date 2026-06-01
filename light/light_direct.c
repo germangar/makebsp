@@ -1299,10 +1299,10 @@ void PrecacheTexelGeometry(void)
 
 /*
 =============
-TraceLtm
+TraceLights
 =============
 */
-void TraceLtm(int num)
+void TraceLights(int num)
 {
     int i, j, k;
     int realSurfIndex;
@@ -1328,7 +1328,7 @@ void TraceLtm(int num)
 
     tw = Q_Alloc(sizeof(traceWork_t));
     if (!tw)
-        Error("Failed to allocate TraceLtm memory (traceWork_t)");
+        Error("Failed to allocate TraceLights memory (traceWork_t)");
     memset(tw, 0, sizeof(traceWork_t));
     tw->ignoreSurface = -1;
 
@@ -1517,7 +1517,7 @@ void TraceLtm(int num)
 
     if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data)
     {
-        _printf("WARNING: Failed to allocate TraceLtm memory for surface %d (%dx%d)\n", realSurfIndex, extW, extH);
+        _printf("WARNING: Failed to allocate TraceLights memory for surface %d (%dx%d)\n", realSurfIndex, extW, extH);
         if (occluded)
             free(occluded);
         if (occluded_data)
@@ -2109,12 +2109,12 @@ void LightWorld(void)
         _printf("%5.0f seconds elapsed in TraceGrid\n", end - start);
     }
 
-    _printf("--- TraceLtm ---\n");
+    _printf("--- TraceLights ---\n");
     start = I_FloatTime();
-    RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceLtm);
+    RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceLights);
     end = I_FloatTime();
     _printf("\n");
-    _printf("%5.0f seconds elapsed in TraceLtm\n", end - start);
+    _printf("%5.0f seconds elapsed in TraceLights\n", end - start);
 }
 
 void DilateDeluxeDirections(void)

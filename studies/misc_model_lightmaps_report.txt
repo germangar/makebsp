@@ -54,7 +54,7 @@ brushes), they require a UV-to-World-Space rasterizer.
 3. RADIOSITY LIGHTING PROCESS (light.exe)
 --------------------------------------------------------------------------------
 File: light/light.c
-Function: `TraceLtm` (Triangle Soup branch)
+Function: `TraceLights` (Triangle Soup branch)
 
 METHODOLOGY:
 The lighting for these surfaces is "omnidirectional" in the context of 

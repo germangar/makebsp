@@ -262,7 +262,7 @@ A simple, portable implementation of uniform sphere point distribution:
   InitTracingGeometry()       // Embree BVH built
   RunMAOPass()                // NEW: fire sphere rays per grid point, populate maoGrid
   TraceGrid()                 // Existing: accumulate lights, then apply maoGrid factor
-  TraceLtm()                  // Existing: lightmap texel tracing (unchanged)
+  TraceLights()                  // Existing: lightmap texel tracing (unchanged)
   LightRadiosity()            // Existing: radiosity bounce (unchanged)
   ```
 
@@ -404,7 +404,7 @@ for every grid point, so doing it once per point in `ComputeMAOPoint` is correct
 To answer this correctly, we must first understand where each system lives:
 
   LIGHTMAP TEXELS (lightFloats / deluxeFloats):
-    - Computed by TraceLtm → LightingAtSample.
+    - Computed by TraceLights → LightingAtSample.
     - Contains: direct lighting (point lights, area lights, sun).
     - Deluxemaps store the DOMINANT DIRECTION of this direct light per texel.
     - `LightingAtSample` initializes `dir = surface_normal` as a seed, then the
@@ -421,8 +421,8 @@ The lightmap texture itself does NOT contain ambient energy. The two systems are
 
 ### The Critical Consequence: Ambient Has No Deluxemap Direction
 
-The deluxemap (deluxeFloats) is written per-texel only during TraceLtm. Ambient energy
-is NOT written into TraceLtm at all — `LightingAtSample` only processes the `lights`
+The deluxemap (deluxeFloats) is written per-texel only during TraceLights. Ambient energy
+is NOT written into TraceLights at all — `LightingAtSample` only processes the `lights`
 list (point, area, spotlight, sun). The `ambientColor` / `maoAmbient` is applied
 exclusively in `TraceGrid`, which writes to `gridData32[num].ambient`, not to
 `lightFloats` or `deluxeFloats`.
@@ -504,7 +504,7 @@ That is still needed. But world geometry reads its lighting from the lightmap te
   - Purpose: ambient for all lightmapped world surfaces
   - Computed in: a new dedicated function `TraceAmbient(int num)` per surface
   - Granularity: one value per lightmap texel (~8-16 wu, depending on samplesize)
-  - Runs AFTER `TraceLtm` (direct lights), BEFORE or AFTER `LightRadiosity`
+  - Runs AFTER `TraceLights` (direct lights), BEFORE or AFTER `LightRadiosity`
 
 ## TraceAmbient() — Design
 
@@ -512,7 +512,7 @@ That is still needed. But world geometry reads its lighting from the lightmap te
 
 For each surface, for each lightmap texel:
   1. Reconstruct the world-space `origin` and `normal` using the same coordinate math
-     as `TraceLtm`. This code is shared verbatim — same surface-type branches
+     as `TraceLights`. This code is shared verbatim — same surface-type branches
      (MST_PLANAR, MST_PATCH, MST_TRIANGLE_SOUP), same gutter handling.
   2. Fire N sphere rays (Hammersley distribution) of length `mao_radius`.
   3. Classify each ray: upper hemisphere (dir.z > 0) or lower hemisphere (dir.z < 0).
@@ -529,7 +529,7 @@ For each surface, for each lightmap texel:
 
 ### Coordinate Reconstruction
 
-`TraceAmbient()` reuses the same geometry setup as `TraceLtm()` verbatim:
+`TraceAmbient()` reuses the same geometry setup as `TraceLights()` verbatim:
   - Same lightmapOrigin, lightmapVecs reconstruction
   - Same MST_PLANAR / MST_PATCH / MST_TRIANGLE_SOUP branches
   - Same entity origin offset
@@ -537,7 +537,7 @@ For each surface, for each lightmap texel:
   - Same call to `PointInSolid()` is NOT needed per-texel (it's baked lightmap space)
 
 The inner ray loop is the NEW part. Everything above the per-texel sample point
-reconstruction is identical to TraceLtm.
+reconstruction is identical to TraceLights.
 
 ### Sample Count
 
@@ -555,7 +555,7 @@ reconstruction is identical to TraceLtm.
   In practice with thread overhead and cache pressure: 0.5-2 seconds.
 
   This is strictly within the "not fast, but not extremely slow" budget.
-  TraceLtm with 100 lights and 500K texels does ~50M rays already.
+  TraceLights with 100 lights and 500K texels does ~50M rays already.
 
 ### Call Site in LightWorld()
 
@@ -564,13 +564,13 @@ reconstruction is identical to TraceLtm.
   {
       ...
       TraceGrid();          // existing: direct light grid + maoAmbient injection
-      TraceLtm();           // existing: direct lighting into lightFloats
+      TraceLights();           // existing: direct lighting into lightFloats
       TraceAmbient();       // NEW: per-texel ambient into lightFloats
       LightRadiosity();     // existing: radiosity bounce
   }
   ```
 
-  TraceAmbient runs after TraceLtm so that when we merge the ambient direction into
+  TraceAmbient runs after TraceLights so that when we merge the ambient direction into
   deluxeFloats, the direct lighting direction is already there to blend against.
 
 ---
@@ -607,8 +607,8 @@ a bump map lit by the bent normal direction shows correct highlights toward the 
 
 ### Blending With the Direct Light Direction
 
-`TraceAmbient()` runs AFTER `TraceLtm()`, so `deluxeFloats[k]` already contains the
-direct lighting direction from `TraceLtm`. We must BLEND, not overwrite.
+`TraceAmbient()` runs AFTER `TraceLights()`, so `deluxeFloats[k]` already contains the
+direct lighting direction from `TraceLights`. We must BLEND, not overwrite.
 
 The correct blending function is `MergeAccumulatedState()` — the same luminance-weighted
 direction merge that all other passes already use (line 562 of light_direct.c):

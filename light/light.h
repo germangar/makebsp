@@ -472,7 +472,7 @@ void RunMAOPass(void);
 void LightAmbient(void);
 void DilateDeluxeDirections(void);
 void PrecacheTexelGeometry(void);
-void TraceLtm(int num);
+void TraceLights(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
 					  vec3_t dir, vec3_t energy,
