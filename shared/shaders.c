@@ -39,8 +39,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Default backsplash is disabled unless explicitly requested
 #define DEFAULT_BACKSPLASH_DISTANCE 24
 
-#define MAX_SURFACE_INFO 32768
-
 shaderInfo_t defaultInfo;
 shaderInfo_t shaderInfo[MAX_SURFACE_INFO];
 int numShaderInfo;
@@ -780,7 +778,6 @@ static void ParseShaderFile(const char *filename)
 LoadShaderInfo
 ===============
 */
-#define MAX_SHADER_FILES 4096
 static char loadedShaderFiles[MAX_SHADER_FILES][MAX_OS_PATH];
 static int numLoadedShaderFiles;
 
@@ -796,8 +793,9 @@ static void AddShaderFile(const char *filename)
         }
     }
 
-    if (numLoadedShaderFiles == MAX_SHADER_FILES)
+    if (numLoadedShaderFiles >= MAX_SHADER_FILES)
     {
+        _printf("ERROR: MAX_SHADER_FILES exceeded (%d)\n", MAX_SHADER_FILES);
         Error("MAX_SHADER_FILES");
     }
 
@@ -844,13 +842,16 @@ void LoadShaderInfo(void)
     int p;
     int start;
 
-    _printf("Scanning for shaders...\n");
+    _printf("Scanning for shaders (%s, numVFSPaths: %d)...\n", MAKEBSP_VERSION, numVFSPaths);
 
     numLoadedShaderFiles = 0;
     numShaderInfo = 0;
 
     for (p = 0; p < numVFSPaths; p++)
     {
+        if (p >= MAX_VFS_PATHS) break;
+        if (!vfsPaths[p][0]) continue;
+
         _printf("Scanning VFS path %d: %s\n", p, vfsPaths[p]);
         
         // Loose files first
@@ -859,16 +860,20 @@ void LoadShaderInfo(void)
         Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
         if (numLoadedShaderFiles > start)
         {
-            _printf("  %d loose shader files parsed\n", numLoadedShaderFiles - start);
+            _printf("  %d loose shader files parsed from %s\n", numLoadedShaderFiles - start, vfsPaths[p]);
         }
 
         // Then packed files
         start = numLoadedShaderFiles;
-        _printf("Scanning PAK files in %s\n", vfsPaths[p]);
+        _printf("Scanning PAK files in %s...\n", vfsPaths[p]);
         ScanPakFiles(vfsPaths[p], ShaderPakCallback);
         if (numLoadedShaderFiles > start)
         {
-            _printf("  %d shader files parsed from PAKs\n", numLoadedShaderFiles - start);
+            _printf("  %d shader files parsed from PAKs in %s\n", numLoadedShaderFiles - start, vfsPaths[p]);
+        }
+        else
+        {
+            _printf("  No shader files found in PAKs in %s\n", vfsPaths[p]);
         }
     }
 

@@ -54,6 +54,8 @@ char outbase[32];
 // Visibility bridge prototypes
 void LoadPortals(char *name);
 void CalculateVisibility(qboolean mergeportals);
+void Broadcast_Setup(const char *dest);
+void Broadcast_Shutdown(void);
 
 int entity_num;
 
@@ -553,7 +555,8 @@ int main(int argc, char **argv)
 
     GetExecutablePath(argv[0]);
 
-    _printf("Makebsp v0.5 (c) 2026 Germán \"jal\" García and Id Software Inc.\nBased on the original q3map by Id Software.\n");
+    _printf("Makebsp %s (%s) (c) 2026 Germán \"jal\" García and Id Software Inc.\n", MAKEBSP_VERSION, BUILD_INFO);
+    _printf("Based on the original q3map by Id Software.\n");
 
     if (argc < 2)
     {
@@ -978,6 +981,8 @@ int main(int argc, char **argv)
     }
 
     FreeLightmaps();
+
+    Broadcast_Shutdown();
 
     return 0;
 }

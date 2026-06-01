@@ -81,7 +81,7 @@ int FileTime(const char *path);
 
 void Q_mkdir(const char *path);
 
-#define MAX_VFS_PATHS 16
+#define MAX_VFS_PATHS 128
 extern char  vfsPaths[MAX_VFS_PATHS][1024];
 extern int   numVFSPaths;
 extern char  writedir[1024];

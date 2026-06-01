@@ -88,12 +88,25 @@ void Broadcast_Print(int level, const char *msg) {
     snprintf(buffer, sizeof(buffer), "<message level=\"%d\">%s</message>", level, safeMsg);
     
     int len = strlen(buffer);
-    if (send(broadcastSocket, (const char *)&len, 4, 0) <= 0) return;
-    if (send(broadcastSocket, buffer, len, 0) <= 0) return;
+    if (send(broadcastSocket, (const char *)&len, 4, 0) <= 0) {
+        Broadcast_Shutdown();
+        return;
+    }
+    if (send(broadcastSocket, buffer, len, 0) <= 0) {
+        Broadcast_Shutdown();
+        return;
+    }
 }
 
 void Broadcast_Shutdown(void) {
     if (broadcastSocket >= 0) {
+        // Send closing tag
+        const char *closeStr = "</q3map_feedback>";
+        int len = strlen(closeStr);
+        // We ignore errors here because we are shutting down anyway
+        send(broadcastSocket, (const char *)&len, 4, 0); 
+        send(broadcastSocket, closeStr, len, 0);
+
 #ifdef _WIN32
         shutdown(broadcastSocket, SD_SEND);
         Sleep(100);

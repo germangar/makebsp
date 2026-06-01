@@ -174,9 +174,20 @@ game_t *InitGame(int argc, char **argv) {
 
 void GetMapOutputDir(const char *source, char *out) {
     char baseName[256];
-    ExtractFileBase(source, baseName);
+    char tempSource[1024];
+
+    // Work on a copy and normalize it first
+    strncpy(tempSource, source, sizeof(tempSource) - 1);
+    tempSource[sizeof(tempSource) - 1] = '\0';
+    NormalizePath(tempSource);
+
+    // Extract the map name regardless of extension or leading path
+    ExtractFileBase(tempSource, baseName);
+    
     // User wants: writedir/maps/<mapname>/
     sprintf(out, "%smaps/%s/", writedir, baseName);
+    
+    // Final normalization to ensure consistent slashes
     NormalizePath(out);
 }
 

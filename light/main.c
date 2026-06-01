@@ -713,5 +713,6 @@ int main(int argc, char **argv) {
     }
 
     ShutdownOpenCL();
+    Broadcast_Shutdown();
     return 0;
 }

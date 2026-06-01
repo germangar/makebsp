@@ -23,6 +23,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/qfiles.h"
 #include "../common/qtypes.h"
 
+#define MAX_SURFACE_INFO 65536
+#define MAX_SHADER_FILES 8192
+
+#define MAKEBSP_VERSION "v0.5-Hardened"
+#define BUILD_INFO __DATE__ " " __TIME__
+
 typedef struct shaderInfo_s
 {
     char shader[MAX_QPATH];
@@ -82,6 +88,9 @@ typedef struct shaderInfo_s
 
     float surfaceLightGlow; // backface glow fraction (default depends on contents)
 } shaderInfo_t;
+
+extern shaderInfo_t shaderInfo[MAX_SURFACE_INFO];
+extern int numShaderInfo;
 
 void LoadShaderInfo(void);
 shaderInfo_t *ShaderInfoForShader(const char *shader);
