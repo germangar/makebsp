@@ -184,7 +184,7 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
 
     if (!commonSrc) {
         char commonPath[MAX_OS_PATH];
-        sprintf(commonPath, "%skernels/lm_common.cl", executablePath);
+        sprintf(commonPath, "%smakebsp/kernels/lm_common.cl", executablePath);
         commonSize = LoadFile(commonPath, (void **)&commonSrc);
         if (commonSize <= 0) {
             _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", commonPath);
@@ -195,7 +195,7 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
 
     if (!filterSrc) {
         char filterPath[MAX_OS_PATH];
-        sprintf(filterPath,  "%skernels/%s", executablePath, filename);
+        sprintf(filterPath,  "%smakebsp/kernels/%s", executablePath, filename);
         filterSize = LoadFile(filterPath, (void **)&filterSrc);
         if (filterSize <= 0) {
             _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", filterPath);

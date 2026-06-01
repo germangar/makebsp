@@ -4,7 +4,7 @@
 > **Purpose of this Document**: This is NOT a log, a status report, or a change history. It is a high-level technical summary of the project's architecture, characteristics, and non-obvious logic. It is designed to provide AI coding assistants with immediate, high-fidelity context about the codebase before starting work.
 
 ## 1. Project Overview
-This project is a heavily modernized fork of the Quake III Arena BSP toolchain (`q3map.exe` and `makelight.exe`) which primary target is the FBSP format used by the QFusion engine. The primary goal is to achieve high-fidelity, cinema-grade lighting for legacy engines (QFusion, etc.) by replacing 1990s integer-based arithmetic with modern 32-bit floating-point ray tracing and advanced geometry libraries.
+This project is a heavily modernized fork of the Quake III Arena BSP toolchain (`makebsp.exe` and `makelight.exe`) which primary target is the FBSP format used by the QFusion engine. The primary goal is to achieve high-fidelity, cinema-grade lighting for legacy engines (QFusion, etc.) by replacing 1990s integer-based arithmetic with modern 32-bit floating-point ray tracing and advanced geometry libraries.
 
 ## 2. Core Architecture: High-Precision Lighting
 The most significant architectural change is the transition from the legacy 8-bit integer lighting pipeline to a full **32-bit Floating Point Pipeline**.
@@ -36,14 +36,14 @@ The project implements a custom three-phase radiosity system:
 - **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
 
 ## 5. Geometry Processing: xatlas, MeshLib & Convex Decompositions
-The BSP compiler (`q3map.exe`) leverages modern libraries for texture and collision:
+The BSP compiler (`makebsp.exe`) leverages modern libraries for texture and collision:
 - **xatlas Integration**: Handles automatic lightmap UV unwrapping and atlas packing for complex 3D models and subdivided geometry, ensuring unique mappings for all surfaces.
 - **MeshLib**: Performs geometric healing, decimation, and cleanup of complex triangle soup models to prepare them for physical collision hulls.
 - **CoACD & HACD**: Performs Approximate Convex Decomposition to convert meshes into optimized convex collision brushes. While CoACD handles general shape approximation, HACD is leveraged for `MC_WRAP` and `MC_OBJECT` profiles where tighter, non-voxelized wrapping is required.
 
 ## 6. Technical Stack
 - **Language**: C (some C++ wrappers for libraries).
-- **Parallelism**: OpenMP is used extensively in both `q3map` and `light` for multi-core scaling.
+- **Parallelism**: OpenMP is used extensively in both `makebsp` and `light` for multi-core scaling.
 - **File Formats**: Primary support for **FBSP** (QFusion/Xonotic) and **IBSP** (Quake 3).
 
 ## 7. Developer Conventions
@@ -61,9 +61,9 @@ The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-sp
 - **Multi-threaded Performance**: The per-surface spatial hashes are lock-free and allocated on-the-fly, allowing for perfect parallel scaling and minimal memory usage.
 
 ## 9. Cross-Tool Metadata (Sidecar Pipeline)
-Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata between the compiler (q3map.exe) and the lighting tool (makelight.exe).
+Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata between the compiler (makebsp.exe) and the lighting tool (makelight.exe).
 
-- **Mechanism**: q3map serializes per-surface overrides into a lightweight binary array (extraSurface_t) at cache/[mapname].srf, which is then re-loaded by light during surface initialization.
+- **Mechanism**: makebsp serializes per-surface overrides into a lightweight binary array (extraSurface_t) at maps/[mapname]/cache/[mapname].srf, which is then re-loaded by light during surface initialization.
 - **Precedence**: Sidecar data acts as a selective override for global game_t defaults.
 
 ## 10. Unified Distance Attenuation
