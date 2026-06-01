@@ -1016,7 +1016,11 @@ VOXEL CACHE SERVICE
 
 void VoxelCache_BakeAll(void)
 {
-    Q_mkdir("cache");
+    char baseDir[1024];
+    char cacheDir[1024];
+    GetMapOutputDir(source, baseDir);
+    sprintf(cacheDir, "%scache/", baseDir);
+    CreatePath(cacheDir);
 
     int numBaked = 0;
     double start = I_FloatTime();
@@ -1046,8 +1050,8 @@ void VoxelCache_BakeAll(void)
             continue;
         }
 
-        char path[256];
-        sprintf(path, "cache/surf_%d.vxl", i);
+        char path[1024];
+        sprintf(path, "%ssurf_%d.vxl", cacheDir, i);
         FILE *f_test = fopen(path, "rb");
         if (f_test)
         {
@@ -1235,8 +1239,10 @@ void VoxelCache_BakeAll(void)
 
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
 {
-    char path[256];
-    sprintf(path, "cache/surf_%d.vxl", surfIdx);
+    char baseDir[1024];
+    char path[1024];
+    GetMapOutputDir(source, baseDir);
+    sprintf(path, "%scache/surf_%d.vxl", baseDir, surfIdx);
 
     FILE *f = fopen(path, "rb");
     if (!f)

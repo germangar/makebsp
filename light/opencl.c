@@ -102,7 +102,7 @@ cl_program BuildOpenCLProgram(const char *filename, const char *options) {
 
     if (!useOpenCL) return NULL;
 
-    sprintf(fullPath, "kernels/%s", filename);
+    sprintf(fullPath, "%skernels/%s", executablePath, filename);
     fileSize = LoadFile(fullPath, (void **)&src);
     if (fileSize <= 0) {
         _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
@@ -150,12 +150,12 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
     cl_program prog = NULL;
     cl_int  err;
 
-    sprintf(commonPath, "kernels/lm_common.cl");
-    sprintf(filterPath,  "kernels/%s", filename);
+    sprintf(commonPath, "%skernels/lm_common.cl", executablePath);
+    sprintf(filterPath,  "%skernels/%s", executablePath, filename);
 
     commonSize = LoadFile(commonPath, (void **)&commonSrc);
     if (commonSize <= 0) {
-        _printf("BuildOpenCLProgramWithCommon: Could not load lm_common.cl\n");
+        _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", commonPath);
         return NULL;
     }
 

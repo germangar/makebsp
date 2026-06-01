@@ -262,10 +262,40 @@ char *va(const char *format, ...)
 */
 
 char vfsPaths[MAX_VFS_PATHS][1024];
-int  numVFSPaths = 0;
-char writedir[1024];
+int   numVFSPaths;
+char  writedir[1024];
+char  executablePath[1024];
 
-static void NormalizePath(char *path)
+/*
+==============
+GetExecutablePath
+
+Determines the directory where the executable is located.
+Uses GetModuleFileName on Windows for absolute robustness.
+==============
+*/
+void GetExecutablePath(const char *argv0)
+{
+#ifdef _WIN32
+    char path[1024];
+    if (GetModuleFileName(NULL, path, sizeof(path)))
+    {
+        ExtractFilePath(path, executablePath);
+        NormalizePath(executablePath);
+        return;
+    }
+#endif
+
+    // Fallback to argv[0] parsing
+    ExtractFilePath(argv0, executablePath);
+    if (executablePath[0] == '\0')
+    {
+        strcpy(executablePath, "./");
+    }
+    NormalizePath(executablePath);
+}
+
+void NormalizePath(char *path)
 {
     int i;
     for (i = 0; i < strlen(path); i++)

@@ -85,8 +85,11 @@ void Q_mkdir(const char *path);
 extern char  vfsPaths[MAX_VFS_PATHS][1024];
 extern int   numVFSPaths;
 extern char  writedir[1024];
+extern char  executablePath[1024];
 
+void GetExecutablePath(const char *argv0);
 void AddVFSPath(const char *basePath, const char *gameDir);
+void NormalizePath(char *path);
 void InitVFSWriteDir(void);
 char *ExpandArg(const char *path);  // from cmd line
 char *ExpandPath(const char *path); // from scripts

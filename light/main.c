@@ -232,6 +232,7 @@ int main(int argc, char **argv) {
     int i;
     double start, end;
 
+    GetExecutablePath(argv[0]);
 
     _printf("\n----- Lighting (Ag Build v1.1) ----\n");
 
@@ -285,20 +286,20 @@ int main(int argc, char **argv) {
     if (numCliBasePaths == 0)
         cliBasePaths[numCliBasePaths++] = (game->rootDir && game->rootDir[0]) ? game->rootDir : ".";
 
-    // 1. Pak Paths
-    for (i = 0; i < numCliPakPaths; i++)
-    {
-        for (int j = 0; j < numModGameDirs; j++)
-            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
-        AddVFSPath(cliPakPaths[i], baseGameDir);
-    }
-
-    // 2. User Dir Layer (Write directory is always the first path added here unless PakPaths exist)
+    // 1. User Dir Layer (Highest priority for searching and preferred write destination)
     for (i = 0; i < numCliUserDirs; i++)
     {
         for (int j = 0; j < numModGameDirs; j++)
             AddVFSPath(cliUserDirs[i], modGameDirs[j]);
         AddVFSPath(cliUserDirs[i], baseGameDir);
+    }
+
+    // 2. Pak Paths
+    for (i = 0; i < numCliPakPaths; i++)
+    {
+        for (int j = 0; j < numModGameDirs; j++)
+            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
+        AddVFSPath(cliPakPaths[i], baseGameDir);
     }
 
     // 3. Base Path Layer

@@ -140,8 +140,11 @@ Unified game profile initialization logic for both q3map and light tools.
 ============
 */
 game_t *InitGame(int argc, char **argv) {
-    // 1. Export standard profiles if missing (ensures games/qfusion.json exists)
-    JSON_ExportStandardPackages("games");
+    char gamesDir[1024];
+    sprintf(gamesDir, "%sgames", executablePath);
+
+    // 1. Export standard profiles if missing (ensures [exeDir]/games/qfusion.json exists)
+    JSON_ExportStandardPackages(gamesDir);
 
     // 2. Initialize the local 'activeGame' struct by copying the default game_t into it.
     memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
@@ -157,7 +160,7 @@ game_t *InitGame(int argc, char **argv) {
 
     // 4. Load the specific game JSON to override defaults in the local struct
     char gameJsonPath[1024];
-    sprintf(gameJsonPath, "games/%s.json", gameName);
+    sprintf(gameJsonPath, "%s/%s.json", gamesDir, gameName);
     if (FileExists(gameJsonPath)) {
         _printf("Loading game profile: %s\n", gameJsonPath);
         JSON_LoadGame(gameJsonPath, &activeGame);
@@ -169,11 +172,27 @@ game_t *InitGame(int argc, char **argv) {
     return game;
 }
 
+void GetMapOutputDir(const char *source, char *out) {
+    char baseName[256];
+    ExtractFileBase(source, baseName);
+    // User wants: writedir/maps/<mapname>/
+    sprintf(out, "%smaps/%s/", writedir, baseName);
+    NormalizePath(out);
+}
+
 void ClearCacheDirectory(void) {
-    _printf("Clearing cache directory...\n");
+    char baseDir[1024];
+    char cachePath[1024];
+    GetMapOutputDir(source, baseDir);
+    sprintf(cachePath, "%scache", baseDir);
+    _printf("Clearing cache directory: %s\n", cachePath);
 #ifdef _WIN32
-    system("powershell -NoProfile -Command \"if (Test-Path cache) { Get-ChildItem cache | Remove-Item -Force -Recurse }\"");
+    char cmd[2048];
+    sprintf(cmd, "powershell -NoProfile -Command \"if (Test-Path '%s') { Get-ChildItem '%s' | Remove-Item -Force -Recurse }\"", cachePath, cachePath);
+    system(cmd);
 #else
-    system("rm -rf cache/*");
+    char cmd[2048];
+    sprintf(cmd, "rm -rf %s/*", cachePath);
+    system(cmd);
 #endif
 }

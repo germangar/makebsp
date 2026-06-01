@@ -1050,20 +1050,14 @@ void CreateCollisionTris(modelInstance_t *inst)
     /* Unified OBJ export at the end */
     if (inst->num_collision_meshes > 0)
     {
+        char baseDir[1024];
         char objPath[1024];
-        if (writedir[0]) {
-            sprintf(objPath, "%s%s", writedir, inst->modelName);
-        } else {
-            strcpy(objPath, inst->modelName);
-        }
-        
-        char *ext = strrchr(objPath, '.');
-        if (ext && strchr(ext, '/') == NULL && strchr(ext, '\\') == NULL)
-        {
-            *ext = '\0';
-        }
-        strcat(objPath, "_coltris.obj");
+        char coltrisDir[1024];
+        GetMapOutputDir(source, baseDir);
+        sprintf(coltrisDir, "%scoltris/", baseDir);
+        CreatePath(coltrisDir);
 
+        sprintf(objPath, "%s%s_coltris.obj", coltrisDir, inst->modelName);
         CreatePath(objPath);
         WriteCollisionOBJ(inst->collision_meshes, inst->num_collision_meshes, objPath);
     }
@@ -1251,8 +1245,10 @@ void CreateTriangleModelCollision(void)
 
     if (WRITE_COLLISION_MAP)
     {
+        char baseDir[1024];
         char debugName[1024];
-        sprintf(debugName, "%s_collision.map", source);
+        GetMapOutputDir(source, baseDir);
+        sprintf(debugName, "%scollision.map", baseDir);
         WriteCollisionMap(debugName);
     }
 

@@ -120,6 +120,7 @@ extern game_t gameTemplates[MAX_GAMES];
 
 game_t *InitGame(int argc, char **argv);
 void ClearCacheDirectory(void);
+void GetMapOutputDir(const char *source, char *out);
 
 #define LIGHTMAP_WIDTH  (game->lightmapSize)
 #define LIGHTMAP_HEIGHT (game->lightmapSize)

@@ -901,17 +901,22 @@ Loads per-surface metadata from a binary .srf sidecar file.
 static extraSurface_t *LoadSurfaceExtraFile(const char *path, int *numSurfaces)
 {
     char srfPath[1024];
+    char baseDir[1024];
     char baseName[256];
     FILE *f;
     int count;
     extraSurface_t *extra;
 
     ExtractFileBase(path, baseName);
-    sprintf(srfPath, "cache/%s.srf", baseName);
+    GetMapOutputDir(path, baseDir);
+    sprintf(srfPath, "%scache/%s.srf", baseDir, baseName);
 
     f = fopen(srfPath, "rb");
     if (!f)
+    {
+        _printf("WARNING: Could not load surface extra file %s\n", srfPath);
         return NULL;
+    }
 
     if (fread(&count, sizeof(int), 1, f) != 1)
     {
@@ -1383,9 +1388,15 @@ void ExportAlphaMask(const char *filenamePrefix)
     }
     numPages++;
 
+    char baseDir[1024];
+    char outDir[1024];
+    GetMapOutputDir(source, baseDir);
+    sprintf(outDir, "%slightmaps/", baseDir);
+    CreatePath(outDir);
+
     for (i = 0; i < numPages; i++)
     {
-        sprintf(filename, "%s%d.bmp", filenamePrefix, i);
+        sprintf(filename, "%s%s%d.bmp", outDir, filenamePrefix, i);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }
@@ -1566,9 +1577,15 @@ void ExportUVmaps(const char *filenamePrefix)
     }
     numPages++;
 
+    char baseDir[1024];
+    char outDir[1024];
+    GetMapOutputDir(source, baseDir);
+    sprintf(outDir, "%slightmaps/", baseDir);
+    CreatePath(outDir);
+
     for (i = 0; i < numPages; i++)
     {
-        sprintf(filename, "%s%d.bmp", filenamePrefix, i);
+        sprintf(filename, "%s%s%d.bmp", outDir, filenamePrefix, i);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }

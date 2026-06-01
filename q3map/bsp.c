@@ -493,12 +493,18 @@ into a binary .srf sidecar file for the light.exe tool.
 static void WriteSurfaceExtraFile(const char *path)
 {
     char srfPath[1024];
+    char baseDir[1024];
+    char cacheDir[1024];
     char baseName[256];
     FILE *f;
 
     ExtractFileBase(path, baseName);
-    sprintf(srfPath, "cache/%s.srf", baseName);
-    Q_mkdir("cache");
+    GetMapOutputDir(path, baseDir);
+    
+    sprintf(cacheDir, "%scache/", baseDir);
+    CreatePath(cacheDir);
+
+    sprintf(srfPath, "%s%s.srf", cacheDir, baseName);
 
     f = fopen(srfPath, "wb");
     if (!f)
@@ -544,6 +550,8 @@ int main(int argc, char **argv)
     int i;
     double start, end;
     char path[1024];
+
+    GetExecutablePath(argv[0]);
 
     _printf("Makebsp v0.5 (c) 2026 Germán \"jal\" García and Id Software Inc.\nBased on the original q3map by Id Software.\n");
 
@@ -617,20 +625,20 @@ int main(int argc, char **argv)
     if (numCliBasePaths == 0)
         cliBasePaths[numCliBasePaths++] = (game->rootDir && game->rootDir[0]) ? game->rootDir : ".";
 
-    // 1. Pak Paths
-    for (i = 0; i < numCliPakPaths; i++)
-    {
-        for (int j = 0; j < numModGameDirs; j++)
-            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
-        AddVFSPath(cliPakPaths[i], baseGameDir);
-    }
-
-    // 2. User Dir Layer (Write directory is always the first path added here unless PakPaths exist)
+    // 1. User Dir Layer (Highest priority for searching and preferred write destination)
     for (i = 0; i < numCliUserDirs; i++)
     {
         for (int j = 0; j < numModGameDirs; j++)
             AddVFSPath(cliUserDirs[i], modGameDirs[j]);
         AddVFSPath(cliUserDirs[i], baseGameDir);
+    }
+
+    // 2. Pak Paths
+    for (i = 0; i < numCliPakPaths; i++)
+    {
+        for (int j = 0; j < numModGameDirs; j++)
+            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
+        AddVFSPath(cliPakPaths[i], baseGameDir);
     }
 
     // 3. Base Path Layer
