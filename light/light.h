@@ -235,6 +235,7 @@ typedef struct light_s
 	float attnSoftnessRange; // distance-based fade range for attenuation
 	float min_light_add; // specific cutoff energy limit for this light
 	float fadeout; // percentage of reach to fade (0.0 to 1.0)
+	float prestep; // singularity offset (distance)
 
 	qboolean twosided; // fog lights both sides
 

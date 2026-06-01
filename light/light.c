@@ -836,7 +836,21 @@ void CreateEntityLights(void)
                 bl->attnSoftnessRange = bl->reach * bl->fadeout;
             }
         }
-        dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
+        const char *prestepStr = ValueForKey(e, "prestep");
+        if (!prestepStr[0])
+            prestepStr = ValueForKey(e, "rampoffset");
+        if (!prestepStr[0])
+            prestepStr = ValueForKey(e, "extradist");
+        
+        if (prestepStr[0])
+            dl->prestep = atof(prestepStr);
+        else
+            dl->prestep = DEFAULT_ATTN_OFFSET;
+
+        if (dl->prestep < 0.0f)
+            dl->prestep = 0.0f;
+
+        dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, dl->prestep, dl->attenuationModel);
         dl->attnSoftnessRange = dl->reach * dl->fadeout;
     }
 }

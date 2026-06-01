@@ -108,6 +108,11 @@ Command-line arguments should be treated as **build-specific modifiers**. Use th
 
 By following this hierarchy, your map source files (`.map`) remain portable and consistent, while you retain the flexibility to control the compile-time/quality tradeoff on a per-build basis.
 
+### **A Note on Sky Shaders and Lighting**
+It is **highly recommended not to configure lighting directly inside your sky shaders** (e.g., using `q3map_surfacelight` or `q3map_sun`). 
+- **Ambient Overlap:** The tool automatically calculates directional ambient irradiance from surfaces exposed to the sky (via the `ambient_sky` worldspawn key). If your sky shader also emits surface light, these two systems will overlap and blow out your lighting.
+- **Sun Entities:** For sunlight, use a standard `light` entity and set the `sun` key to `1` (or add `-sun` to the entity name/class depending on your editor's setup). This produces the exact same result as a shader-based sun but allows you to control the sun's direction, color, and intensity on a per-map basis without needing to duplicate and modify shader files for every new map.
+
 ---
 
 ## 🎨 Shader Modifications
@@ -115,12 +120,12 @@ By following this hierarchy, your map source files (`.map`) remain portable and 
 List of additions and modifications made to shader parsing and features compared to the original makebsp.
 
 ### New Shader Directives
-- **makebsp_vertexcolor <R G B>**: Overrides the vertex color for the surface.
-- **makebsp_surfacelight_glow <value>**: Sets the backface glow fraction for surface lights (enabled by default in CONTENTS_LAVA and CONTENTS_SLIME).
-- **makebsp_lightColor <R G B>**: Alias for `makebsp_lightRGB`. Sets the light emission color for the surface.
+- **q3map_vertexcolor <R G B>**: Overrides the vertex color for the surface.
+- **q3map_surfacelight_glow <value>**: Sets the backface glow fraction for surface lights (enabled by default in CONTENTS_LAVA and CONTENTS_SLIME).
+- **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
 
 ### Color Handling
-- **Global Application:** The new color processing pipeline applies globally. It works for shader commands (e.g., `makebsp_lightRGB`, `makebsp_lightColor`, `makebsp_vertexcolor`) as well as entity keys (e.g., `color`, `_color`).
+- **Global Application:** The new color processing pipeline applies globally. It works for shader commands (e.g., `q3map_lightRGB`, `q3map_lightColor`, `q3map_vertexcolor`) as well as entity keys (e.g., `color`, `_color`).
 - **Format Autodetection:** The compiler automatically detects and parses colors provided in three formats:
   - Standard floating-point RGB (0.0 to 1.0)
   - Integer RGB (0 to 255)
@@ -128,10 +133,10 @@ List of additions and modifications made to shader parsing and features compared
 - **No Color Normalization:** The compiler no longer automatically normalizes color vectors. The color values you specify are used exactly as intended, preserving the original brightness and artistic intent rather than artificially brightening the light emission.
 
 ### General Changes
-- **Default Backsplash:** The default light backsplash for surface lights is now disabled (0.0) unless explicitly requested by the game profile, via the `makebsp_backsplash` directive or the entity key 'backsplash'. Backsplash is enabled by default for spotlights.
+- **Default Backsplash:** The default light backsplash for surface lights is now disabled (0.0) unless explicitly requested by the game profile, via the `q3map_backsplash` directive or the entity key 'backsplash'. Backsplash is enabled by default for spotlights.
 
 ### Stage / Pass Directives
-- **material <image>**: Scanned inside rendering passes. This QFusion-specific keyword is recognized and its image will be used as a fallback to derive average surface colors and light colors if `qer_editorimage` or `makebsp_lightimage` are not specified.
+- **material <image>**: Scanned inside rendering passes. This QFusion-specific keyword is recognized and its image will be used as a fallback to derive average surface colors and light colors if `qer_editorimage` or `q3map_lightimage` are not specified.
 
 ### Surface Parameters (`surfaceparm <parameter>`)
 - **nosolid**: Acts as an alias for `nonsolid`. Clears the solid flag from the surface.
@@ -182,13 +187,6 @@ List of additions and modifications made to shader parsing and features compared
 
 ### Entity: misc_model
 
-**Editor keys**
-- **model**: The path to the 3D model file to load.
-- **origin**: The base translation/position of the model in the world (X Y Z).
-- **angles**: The rotation of the model (Pitch Yaw Roll).
-- **modelscale**: A uniform scaling factor applied to all axes (defaults to 1.0).
-- **modelscale_vec**: A non-uniform scaling vector (X Y Z). If set to 0 0 0, it falls back to modelscale.
-
 **User keys**
 - **smooth**: lightmap smooth filter radius to use on this model.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this model instance.
@@ -196,7 +194,14 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the model's lightmaps.
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
 - **forceuvgen**: Enable (default) or disable to force generating new lightmap UVs from scratch. Disabled uses the model UVs.
-- **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude (buggy), none (alias nosolid / nonsolid).
+- **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude (buggy), none (alias nosolid / nonsolid). More to come.
+
+**Editor keys**
+- **model**: The path to the 3D model file to load.
+- **origin**: The base translation/position of the model in the world (X Y Z).
+- **angles**: The rotation of the model (Pitch Yaw Roll).
+- **modelscale**: A uniform scaling factor applied to all axes (defaults to 1.0).
+- **modelscale_vec**: A non-uniform scaling vector (X Y Z). If set to 0 0 0, it falls back to modelscale.
 
 ### Entity: func_group
 
@@ -207,7 +212,7 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the group's lightmaps.
 - **enforcesamplesize**: Subividide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 
-**Terrain** *(This is the original untouched makebsp feature.)*
+**Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.
 - **shader**: Specifies the base shader to use for terrain generation (required if terrain is "1").
 - **alphamap**: Path to the image file used to blend terrain layers (required if terrain is "1").
@@ -223,7 +228,8 @@ List of additions and modifications made to shader parsing and features compared
 - **backsplash**: Backsplash percentage for surface lights and spotlights (how much light bounces back). Default: surface 0.0/spot 0.1.
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
 - **cutoff**: Minimum energy threshold before the light is completely culled. Defaults to the global game.json minLightAdd value.
-- **fadeout**: Percentage of the light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
+- **fadeout**: Percentage of the light's reach to use for a softness fade at the cutoff (0.0 to 1.0). Defaults to 0.0 (hard cut).
+- **prestep**: (Aliases: `rampoffset`, `extradist`). Distance offset applied to the core of the light to prevent infinite brightness at the origin. Defaults to 16.0. (Ignored for surface lights).
 
 **Surfacelights**
 - **subdivide**: Controls how finely surface lights are subdivided.
@@ -232,8 +238,8 @@ List of additions and modifications made to shader parsing and features compared
 - **radius**: Radius of the spotlight cone at the target distance (defaults to 64).
 - **softness**: Spotlight cone softness multiplier (defaults to 1.0).
 - **target**: Target entity name to aim the spotlight at.
-- **dir**: Explicit direction vector (X Y Z) for the spotlight.
-- **angles**: Rotation angles (Pitch Yaw Roll) for the spotlight.
+- **dir**: Explicit direction vector (X Y Z) for the spotlight (when not using a target).
+- **angles**: Rotation angles (Pitch Yaw Roll) for the spotlight (when not using a target).
 - **haloshader**: Specific shader to use for the volumetric halo. Set to "none" or "0" to disable the halo for this light.
 - **haloscale**: Scales the size of the generated halo surface. Defaults to 1.0.
 
@@ -252,7 +258,7 @@ List of additions and modifications made to shader parsing and features compared
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
 - **cutoff**: Minimum energy threshold before the light is completely culled. Defaults to the global game minLightAdd value (0.1).
 - **fadeout**: Percentage of the light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
-- **haloshader**: Specific shader to use for the volumetric halo. Set to "none" or "0" to disable the halo for this light.
+- **prestep**: (Aliases: `rampoffset`, `extradist`). Distance offset applied to the core of the light to prevent infinite brightness at the origin. Defaults to 16.0.
 - **style**: [currently broken] Light style index for dynamic lighting (e.g. flickering, pulsing).
 - **lightimage**: If color is not specified, uses the average color of this shader.
 
@@ -263,6 +269,7 @@ List of additions and modifications made to shader parsing and features compared
 - **target**: Target entity name to aim the spotlight at.
 - **dir**: Explicit direction vector (X Y Z) for the spotlight (when not using a target).
 - **angles**: Rotation angles (Pitch Yaw Roll) for the spotlight (when not using a target).
+- **haloshader**: Specific shader to use for the volumetric halo. Set to "none" or "0" to disable the halo for this light.
 - **haloscale**: Scales the size of the generated halo surface. Defaults to 1.0.
 
 ---
@@ -275,15 +282,15 @@ Makebsp is the primary tool for BSP compilation, visibility calculation, and uti
 **BSP Compilation (Default Mode)**
 Used to compile a `.map` file into a `.bsp` file.
 *New or relevant to makebsp:*
-- `-game <G>`: Load a specific game profile (e.g., quake3, qfusion) from `games/<G>.json`.
+- `-game <G>`: Load a specific game profile (e.g., quake3, qfusion) from `makebsp/<G>.json`.
 - `-samplesize <N>`: Sets the default lightmap sample size (e.g., 4, 8, 16). Lower values = higher resolution.
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.
-- `-guessuvs`: Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
+- `-guessuvs`: [Experimental] Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
 - `-rootdir / -basepath / -fs_basepath <P>`: Set the engine root directory path. Can be specified multiple times to build layered search paths.
 - `-userdir / -fs_homepath <P>`: Set the user/home directory path (where the compiled BSP will be written). Can be specified multiple times.
 - `-gamedir / -fs_game <P>`: Set the active mod/game directory name. Can be specified multiple times.
 
-*From makebsp:*
+*From q3map:*
 - `-onlyents`: Only update the entities lump in an existing BSP file.
 - `-onlytextures`: Only update the texture info in an existing BSP file.
 - `-micro <V>`: Set the threshold volume for "microbrushes" to be ignored (default is very small).
@@ -292,17 +299,18 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nowater`: Skip processing of water surfaces.
 - `-nofill`: Skip the outside-filling stage (can be used for "leaky" maps during development).
 - `-nofog`: Skip processing of fog volumes.
+- `-novis`: Skip inline visibility calculation.
 - `-nosubdivide`: Disable subdivision of large surfaces.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.
+- `-saveprt`: Do not delete the .prt file after processing.
 - `-leaktest`: Abort immediately if a leak is found.
 - `-v`: Enable verbose output.
 - `-threads <N>`: Manually set the number of worker threads.
 
 **Other Main Switches**
 These switches change the primary mode of the executable.
-- `-vis`: Enables Visibility calculation mode.
-  - `-fast`: Performs a simplified, faster visibility check.
+- `-visonly`: [Notice: The standard visibility is already calculated with the bsp] Standalone Visibility calculation (requires .prt file).
   - `-merge`: Merges adjacent visibility data (can reduce file size).
   - `-nopassage`: Disables the passage-flow visibility optimization.
 - `-exportmodels <bspname>`: Exports all `misc_model` (Triangle Soup) geometry from a BSP into `.obj` files. Models processed with -meta/forcemeta will be split in multple mini-meshes and unusable. Only useful for models originally compiled for vertex lighting.
