@@ -32,7 +32,7 @@ METHODOLOGY:
     their allocated atlas block.
 
 --------------------------------------------------------------------------------
-2. LUXEL RASTERIZATION (light.exe)
+2. LUXEL RASTERIZATION (makelight.exe)
 --------------------------------------------------------------------------------
 File: light/light.c
 Function: `TriSoupSamplePoint`
@@ -51,7 +51,7 @@ brushes), they require a UV-to-World-Space rasterizer.
     - Result: This provides a 3D origin and a 3D vector for the lighting rays.
 
 --------------------------------------------------------------------------------
-3. RADIOSITY LIGHTING PROCESS (light.exe)
+3. RADIOSITY LIGHTING PROCESS (makelight.exe)
 --------------------------------------------------------------------------------
 File: light/light.c
 Function: `TraceLights` (Triangle Soup branch)

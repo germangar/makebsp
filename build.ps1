@@ -17,7 +17,7 @@ Write-Host ""
 
 # Kill running instances
 Get-Process makebsp -ErrorAction SilentlyContinue | Stop-Process -Force
-Get-Process light -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process makelight -ErrorAction SilentlyContinue | Stop-Process -Force
 
 Write-Host "[1/2] Running make clean && make..." -ForegroundColor Yellow
 & make clean
@@ -46,9 +46,9 @@ if ($LASTEXITCODE -eq 0) {
     # Run the map and show relevant optimization stats
     ./makebsp.exe -v -samplesize 16 -userdir "$UserDir" -gamedir "$GameDir" "$MapFile"
     Write-Host ""
-    Write-Host "[3/3] Running light -rad_passes 0 -v $BspFile..." -ForegroundColor Cyan
+    Write-Host "[3/3] Running makelight -rad_passes 0 -v $BspFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./light.exe -smoothpasses 1 -rad_passes 0 -v -userdir "$UserDir" -gamedir "$GameDir" "$BspFile"
+    ./makelight.exe -smoothpasses 1 -rad_passes 0 -v -userdir "$UserDir" -gamedir "$GameDir" "$BspFile"
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red

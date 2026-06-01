@@ -8,8 +8,7 @@ set "DESTDIR=E:\CODE\warsow_21\basewsw\maps"
 
 echo Compiling: %MAPNAME%
 makebsp.exe -userdir "%USERDIR%" -gamedir "%GAMEDIR%" "%MAPFILE%"
-//makebsp.exe -vis -userdir "%USERDIR%" -gamedir "%GAMEDIR%" "%BSPFILE%"
-light.exe -userdir "%USERDIR%" -gamedir "%GAMEDIR%" "%BSPFILE%"
+makelight.exe -userdir "%USERDIR%" -gamedir "%GAMEDIR%" "%BSPFILE%"
 
 echo.
 echo Copying %MAPNAME%.bsp to %DESTDIR%...

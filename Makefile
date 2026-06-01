@@ -118,7 +118,7 @@ ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/
 
 Q3MAP_TARGET = makebsp.exe
 Q3LIGHT_TARGET = q3light.exe
-LIGHT_TARGET = light.exe
+LIGHT_TARGET = makelight.exe
 KERNELS_HEADER = light/kernels_embedded.h
 
 all: $(KERNELS_HEADER) $(Q3MAP_TARGET) $(LIGHT_TARGET)

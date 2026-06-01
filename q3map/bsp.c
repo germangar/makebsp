@@ -487,7 +487,7 @@ int VisMain(int argc, char **argv);
 WriteSurfaceExtraFile
 
 Writes per-surface metadata (radiosity fill mode, smoothing radius)
-into a binary .srf sidecar file for the light.exe tool.
+into a binary .srf sidecar file for the makelight.exe tool.
 ================
 */
 static void WriteSurfaceExtraFile(const char *path)
@@ -952,7 +952,7 @@ int main(int argc, char **argv)
 
     ProcessModels();
 
-    // Store the lightmap texel resolution in worldspawn for light.exe
+    // Store the lightmap texel resolution in worldspawn for makelight.exe
     if (num_entities > 0)
     {
         char buf[16];

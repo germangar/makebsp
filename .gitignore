@@ -43,6 +43,7 @@ libMRMeshC.dll
 libMRMesh.dll
 
 light.exe
+makelight.exe
 q3light.exe
 EMBREE_PROGRESS.txt
 current_plan.txt

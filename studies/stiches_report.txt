@@ -24,11 +24,11 @@ The discovery happens in q3map/misc_model.c during or after triangle model loadi
 3. TRANSPORT PHASE (The Worldspawn Cheat)
    - q3map.exe writes the string to the worldspawn entity (entities[0]).
    - The BSP is written normally.
-   - light.exe reads the "__stiches" key during initialization (light/main.c).
+   - makelight.exe reads the "__stiches" key during initialization (light/main.c).
    - The string is parsed into a global `stitchEdge_t` array.
    - The key is immediately deleted from memory to keep the entity structure clean.
 
-4. INTEGRATION PHASE (light.exe)
+4. INTEGRATION PHASE (makelight.exe)
 The stitching occurs in light/radiosity.c between Phase 2 (Integrate) and Phase 3 (Reconstruct).
 
    A. Proximity Search:
