@@ -39,7 +39,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // Default backsplash is disabled unless explicitly requested
 #define DEFAULT_BACKSPLASH_DISTANCE 24
 
-#define MAX_SURFACE_INFO 16384
+#define MAX_SURFACE_INFO 32768
 
 shaderInfo_t defaultInfo;
 shaderInfo_t shaderInfo[MAX_SURFACE_INFO];
@@ -243,13 +243,17 @@ static shaderInfo_t *AllocShaderInfo(void)
 {
     shaderInfo_t *si;
 
-    if (numShaderInfo == MAX_SURFACE_INFO)
+    if (numShaderInfo >= MAX_SURFACE_INFO)
     {
+        _printf("ERROR: MAX_SURFACE_INFO exceeded (%d). Increase the limit in shaders.c.\n", MAX_SURFACE_INFO);
         Error("MAX_SURFACE_INFO");
     }
 
     si = &shaderInfo[numShaderInfo];
     numShaderInfo++;
+
+    // clear the structure
+    memset(si, 0, sizeof(shaderInfo_t));
 
     // set defaults
     si->contents = CONTENTS_SOLID;
@@ -324,20 +328,21 @@ static void ParseShaderFile(const char *filename)
     shaderInfo_t *si;
     jmp_buf parse_jmp;
 
-    _printf("  Parsing shader file: %s\n", filename);
-    LoadScriptFile(filename);
-
-    // Set up error recovery for this file
+    // Set up error recovery for this entire file process
     fatal_error_jmp = &parse_jmp;
     if (setjmp(parse_jmp))
     {
-        _printf("WARNING: Parsing of shader file %s aborted due to errors. Skipping remaining content.\n", filename);
+        _printf("WARNING: Parsing of shader file %s aborted. Skipping remaining content.\n", filename);
         fatal_error_jmp = NULL;
         return;
     }
 
+    // _printf("  Parsing shader file: %s\n", filename);
+    LoadScriptFile(filename);
+
     while (1)
     {
+
         if (!GetToken(qtrue))
         {
             break;
@@ -349,9 +354,18 @@ static void ParseShaderFile(const char *filename)
             continue;
         }
 
+        // QFusion: Skip 'template' at top level
+        if (!Q_stricmp(token, "template"))
+        {
+            while (TokenAvailable()) GetToken(qfalse);
+            continue;
+        }
+
         char shaderName[MAX_QPATH];
         strncpy(shaderName, token, MAX_QPATH - 1);
         shaderName[MAX_QPATH - 1] = '\0';
+        
+        // _printf("    Defining shader: %s\n", shaderName);
 
         // Check if this shader is already defined
         qboolean redefined = qfalse;
@@ -422,6 +436,13 @@ static void ParseShaderFile(const char *filename)
 
             // Handle QFusion logic keywords
             if (!Q_stricmp(token, "if") || !Q_stricmp(token, "else") || !Q_stricmp(token, "endif"))
+            {
+                while (TokenAvailable()) GetToken(qfalse);
+                continue;
+            }
+
+            // Explicitly skip 'template' line
+            if (!Q_stricmp(token, "template"))
             {
                 while (TokenAvailable()) GetToken(qfalse);
                 continue;
@@ -751,6 +772,7 @@ static void ParseShaderFile(const char *filename)
     }
 
     fatal_error_jmp = NULL;
+    // _printf("  Finished parsing shader file: %s\n", filename);
 }
 
 /*
@@ -758,7 +780,7 @@ static void ParseShaderFile(const char *filename)
 LoadShaderInfo
 ===============
 */
-#define MAX_SHADER_FILES 2048
+#define MAX_SHADER_FILES 4096
 static char loadedShaderFiles[MAX_SHADER_FILES][MAX_OS_PATH];
 static int numLoadedShaderFiles;
 
@@ -850,6 +872,7 @@ void LoadShaderInfo(void)
         }
     }
 
+    _printf("--- Shader Scanning Complete ---\n");
     _printf("%5i total shader files parsed\n", numLoadedShaderFiles);
     _printf("%5i shaders found\n", numShaderInfo);
 }

@@ -108,10 +108,10 @@ Command-line arguments should be treated as **build-specific modifiers**. Use th
 
 By following this hierarchy, your map source files (`.map`) remain portable and consistent, while you retain the flexibility to control the compile-time/quality tradeoff on a per-build basis.
 
-### **A Note on Sky Shaders and Lighting**
-It is **highly recommended not to configure lighting directly inside your sky shaders** (e.g., using `q3map_surfacelight` or `q3map_sun`). 
-- **Ambient Overlap:** The tool automatically calculates directional ambient irradiance from surfaces exposed to the sky (via the `ambient_sky` worldspawn key). If your sky shader also emits surface light, these two systems will overlap and blow out your lighting.
-- **Sun Entities:** For sunlight, use a standard `light` entity and set the `sun` key to `1` (or add `-sun` to the entity name/class depending on your editor's setup). This produces the exact same result as a shader-based sun but allows you to control the sun's direction, color, and intensity on a per-map basis without needing to duplicate and modify shader files for every new map.
+> **A Note on Sky Shaders and Lighting**<br>
+> It is **highly recommended not to configure lighting directly inside your sky shaders** (e.g., using `q3map_surfacelight` or `q3map_sun`). 
+> - **Ambient Overlap:** The tool automatically calculates directional ambient irradiance from surfaces exposed to the sky (via the `ambient_sky` worldspawn key). If your sky shader also emits surface light, these two systems will overlap and blow out your lighting.
+> - **Sun Entities:** For sunlight, use a standard `light` entity and set the `sun` key to `1` (or add `-sun` to the entity name/class depending on your editor's setup). This produces the exact same result as a shader-based sun but allows you to control the sun's direction, color, and intensity on a per-map basis without needing to duplicate and modify shader files for every new map.
 
 ---
 

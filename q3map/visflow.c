@@ -1309,7 +1309,8 @@ void CreatePassages(int portalnum)
 	passage_t	*passage, *lastpassage;
 	plane_t seperators[MAX_SEPERATORS*2];
 	winding_t *w;
-	winding_t in, out, *res;
+	winding_t in, out;
+	winding_t *res;
 
 #ifdef MREDEBUG
 	_printf("\r%6d", portalnum);
@@ -1375,12 +1376,20 @@ void CreatePassages(int portalnum)
 			}
 			if (k < numseperators)
 				continue;
-			memcpy(&in, p->winding, sizeof(winding_t));
+			
+			// Safe copy of winding to fixed buffer
+			in.numpoints = p->winding->numpoints;
+			if (in.numpoints > MAX_POINTS_ON_FIXED_WINDING) in.numpoints = MAX_POINTS_ON_FIXED_WINDING;
+			for (n = 0; n < in.numpoints; n++) VectorCopy(p->winding->points[n], in.points[n]);
+
 			for (k = 0; k < numseperators; k++)
 			{
-				res = PassageChopWinding(&in, &out, &seperators[k]);
-				if (res == &out)
-					memcpy(&in, &out, sizeof(winding_t));
+				res = PassageChopWinding((winding_t *)&in, (winding_t *)&out, &seperators[k]);
+				if (res == (winding_t *)&out)
+				{
+					in.numpoints = out.numpoints;
+					for (n = 0; n < in.numpoints; n++) VectorCopy(out.points[n], in.points[n]);
+				}
 				if (res == NULL)
 					break;
 			}
