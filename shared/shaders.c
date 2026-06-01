@@ -366,7 +366,6 @@ static void ParseShaderFile(const char *filename)
 
         if (redefined)
         {
-            // _printf("    Shader '%s' redefined in %s (already defined). Skipping.\n", shaderName, filename);
             // We must skip the block to continue parsing the file
             MatchToken("{");
             int depth = 1;
@@ -380,7 +379,6 @@ static void ParseShaderFile(const char *filename)
 
         si = AllocShaderInfo();
         strcpy(si->shader, shaderName);
-        // _printf("    Defining shader: %s\n", si->shader);
         
         MatchToken("{");
         int shaderDepth = 1;

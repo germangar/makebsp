@@ -1033,7 +1033,7 @@ void BuildLocalSurfaces(void)
                 localSurfaces[i].radInterval /= 2;
             }
             if (verbose && localSurfaces[i].radInterval != oldInterval) {
-                _printf("  Surface %d (Trisoup): rad_interval reduced from %d to %d (ssize: %d)\n", i, oldInterval, localSurfaces[i].radInterval, ssize);
+                qprintf("  Surface %d (Trisoup): rad_interval reduced from %d to %d (ssize: %d)\n", i, oldInterval, localSurfaces[i].radInterval, ssize);
             }
         }
 

@@ -2022,5 +2022,5 @@ void GenerateHalos(entity_t *e)
         }
     }
     
-    qprintf("%5i halos generated\n", count);
+    _printf("%5i halos generated\n", count);
 }
