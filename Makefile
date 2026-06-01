@@ -119,8 +119,12 @@ ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/
 Q3MAP_TARGET = makebsp.exe
 Q3LIGHT_TARGET = q3light.exe
 LIGHT_TARGET = light.exe
+KERNELS_HEADER = light/kernels_embedded.h
 
-all: $(Q3MAP_TARGET) $(LIGHT_TARGET)
+all: $(KERNELS_HEADER) $(Q3MAP_TARGET) $(LIGHT_TARGET)
+
+$(KERNELS_HEADER): kernels/*.cl stringify_kernels.ps1
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File stringify_kernels.ps1
 
 $(ML_LITE_LIB): $(ML_LITE_OBJ)
 	echo Building persistent MeshLib-Lite library...
@@ -180,7 +184,7 @@ $(OBJ_LITE_DIR)/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
 
 clean:
 	rm -rf $(OBJ_DIR)
-	rm -f $(Q3MAP_TARGET) $(Q3LIGHT_TARGET) $(LIGHT_TARGET)
+	rm -f $(Q3MAP_TARGET) $(Q3LIGHT_TARGET) $(LIGHT_TARGET) $(KERNELS_HEADER)
 
 clean-all: clean
 	rm -rf $(OBJ_LITE_DIR)

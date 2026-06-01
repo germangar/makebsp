@@ -3,6 +3,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef RELEASE_BUILD
+#include "kernels_embedded.h"
+
+/* Returns the embedded source string for a kernel filename, or NULL if not found. */
+static const char *GetEmbeddedKernel(const char *filename) {
+    if (!strcmp(filename, "aa_filter.cl")) return kernel_source_aa_filter;
+    if (!strcmp(filename, "lm_common.cl")) return kernel_source_lm_common;
+    if (!strcmp(filename, "smooth_filter.cl")) return kernel_source_smooth_filter;
+    if (!strcmp(filename, "trisoup_filter.cl")) return kernel_source_trisoup_filter;
+    return NULL;
+}
+#endif
+
 cl_platform_id g_clPlatform;
 cl_device_id   g_clDevice;
 cl_context     g_clContext;
@@ -85,33 +98,38 @@ void ShutdownOpenCL(void) {
     useOpenCL = qfalse;
 }
 
-/*
-================
-BuildOpenCLProgram
-
-Loads and compiles a single .cl file from the kernels/ directory.
-================
-*/
 cl_program BuildOpenCLProgram(const char *filename, const char *options) {
     cl_program prog;
     cl_int     err;
-    char      *src;
-    int        fileSize;
+    char      *src = NULL;
+    int        fileSize = 0;
     size_t     size;
-    char       fullPath[MAX_OS_PATH];
+    qboolean   isFreeNeeded = qfalse;
 
     if (!useOpenCL) return NULL;
 
-    sprintf(fullPath, "%skernels/%s", executablePath, filename);
-    fileSize = LoadFile(fullPath, (void **)&src);
-    if (fileSize <= 0) {
-        _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
-        return NULL;
+#ifdef RELEASE_BUILD
+    const char *embedded = GetEmbeddedKernel(filename);
+    if (embedded) {
+        src = (char *)embedded;
+        fileSize = strlen(src);
+    }
+#endif
+
+    if (!src) {
+        char fullPath[MAX_OS_PATH];
+        sprintf(fullPath, "%skernels/%s", executablePath, filename);
+        fileSize = LoadFile(fullPath, (void **)&src);
+        if (fileSize <= 0) {
+            _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
+            return NULL;
+        }
+        isFreeNeeded = qtrue;
     }
 
     size = (size_t)fileSize;
     prog = clCreateProgramWithSource(g_clContext, 1, (const char **)&src, &size, &err);
-    free(src);
+    if (isFreeNeeded) free(src);
 
     if (err != CL_SUCCESS) {
         _printf("BuildOpenCLProgram: Failed to create program from %s\n", filename);
@@ -144,34 +162,55 @@ This is the standard builder for all lightmap post-processing filters.
 cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *options) {
     if (!useOpenCL) return NULL;
 
-    char   commonPath[MAX_OS_PATH], filterPath[MAX_OS_PATH];
     char  *commonSrc = NULL, *filterSrc = NULL;
-    int    commonSize, filterSize;
+    int    commonSize = 0, filterSize = 0;
     cl_program prog = NULL;
     cl_int  err;
+    qboolean commonFreeNeeded = qfalse;
+    qboolean filterFreeNeeded = qfalse;
 
-    sprintf(commonPath, "%skernels/lm_common.cl", executablePath);
-    sprintf(filterPath,  "%skernels/%s", executablePath, filename);
+#ifdef RELEASE_BUILD
+    const char *embeddedCommon = GetEmbeddedKernel("lm_common.cl");
+    const char *embeddedFilter = GetEmbeddedKernel(filename);
+    if (embeddedCommon) {
+        commonSrc = (char *)embeddedCommon;
+        commonSize = strlen(commonSrc);
+    }
+    if (embeddedFilter) {
+        filterSrc = (char *)embeddedFilter;
+        filterSize = strlen(filterSrc);
+    }
+#endif
 
-    commonSize = LoadFile(commonPath, (void **)&commonSrc);
-    if (commonSize <= 0) {
-        _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", commonPath);
-        return NULL;
+    if (!commonSrc) {
+        char commonPath[MAX_OS_PATH];
+        sprintf(commonPath, "%skernels/lm_common.cl", executablePath);
+        commonSize = LoadFile(commonPath, (void **)&commonSrc);
+        if (commonSize <= 0) {
+            _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", commonPath);
+            return NULL;
+        }
+        commonFreeNeeded = qtrue;
     }
 
-    filterSize = LoadFile(filterPath, (void **)&filterSrc);
-    if (filterSize <= 0) {
-        _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", filterPath);
-        free(commonSrc);
-        return NULL;
+    if (!filterSrc) {
+        char filterPath[MAX_OS_PATH];
+        sprintf(filterPath,  "%skernels/%s", executablePath, filename);
+        filterSize = LoadFile(filterPath, (void **)&filterSrc);
+        if (filterSize <= 0) {
+            _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", filterPath);
+            if (commonFreeNeeded) free(commonSrc);
+            return NULL;
+        }
+        filterFreeNeeded = qtrue;
     }
 
     const char *sources[2] = { commonSrc, filterSrc };
     size_t      sizes[2]   = { (size_t)commonSize, (size_t)filterSize };
 
     prog = clCreateProgramWithSource(g_clContext, 2, sources, sizes, &err);
-    free(commonSrc);
-    free(filterSrc);
+    if (commonFreeNeeded) free(commonSrc);
+    if (filterFreeNeeded) free(filterSrc);
 
     if (err != CL_SUCCESS) {
         _printf("BuildOpenCLProgramWithCommon: clCreateProgramWithSource failed (%d)\n", err);
