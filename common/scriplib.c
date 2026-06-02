@@ -38,6 +38,7 @@ typedef struct
     char filename[1024];
     char *buffer, *script_p, *end_p;
     int line;
+    qboolean freeOnEnd;
 } script_t;
 
 #define MAX_INCLUDES 8
@@ -95,16 +96,17 @@ void LoadScriptFile(const char *filename)
 ParseFromMemory
 ==============
 */
-void ParseFromMemory(char *buffer, int size)
+void ParseFromMemory(char *buffer, int size, const char *name, qboolean freeOnEnd)
 {
     script = scriptstack;
     script++;
     if (script == &scriptstack[MAX_INCLUDES])
         Error("script file exceeded MAX_INCLUDES");
-    strcpy(script->filename, "memory buffer");
+    strcpy(script->filename, name);
 
     script->buffer = buffer;
     script->line = 1;
+    script->freeOnEnd = freeOnEnd;
     script->script_p = script->buffer;
     script->end_p = script->buffer + size;
 
@@ -133,13 +135,11 @@ qboolean EndOfScript(qboolean crossline)
     if (!crossline)
         Error("In file %s: Line %i is incomplete (hit end of file)", script->filename, scriptline);
 
-    if (!strcmp(script->filename, "memory buffer"))
+    if (script->freeOnEnd)
     {
-        endofscript = qtrue;
-        return qfalse;
+        free(script->buffer);
     }
 
-    free(script->buffer);
     if (script == scriptstack + 1)
     {
         endofscript = qtrue;

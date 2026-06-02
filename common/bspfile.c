@@ -737,7 +737,7 @@ Parses the dentdata string into entities
 void ParseEntities(void)
 {
     num_entities = 0;
-    ParseFromMemory(dentdata, entdatasize);
+    ParseFromMemory(dentdata, entdatasize, "BSP Entities", qfalse);
 
     while (ParseEntity())
     {

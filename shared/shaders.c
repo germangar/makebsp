@@ -319,7 +319,7 @@ shaderInfo_t *ShaderInfoForShader(const char *shaderName)
 ParseShaderFile
 ===============
 */
-static void ParseShaderFile(const char *filename)
+static void ParseShaderFile(const char *filename, void *buffer, int size)
 {
     int i;
     int numInfoParms = sizeof(infoParms) / sizeof(infoParms[0]);
@@ -335,8 +335,7 @@ static void ParseShaderFile(const char *filename)
         return;
     }
 
-    // _printf("  Parsing shader file: %s\n", filename);
-    LoadScriptFile(filename);
+    ParseFromMemory((char *)buffer, size, filename, qtrue);
 
     while (1)
     {
@@ -780,15 +779,19 @@ LoadShaderInfo
 */
 static char loadedShaderFiles[MAX_SHADER_FILES][MAX_OS_PATH];
 static int numLoadedShaderFiles;
+static char current_vfs_path[1024];
 
-static void AddShaderFile(const char *filename)
+static void ParseShaderFile(const char *filename, void *buffer, int size);
+
+static void AddShaderFile(const char *identifier, const char *filename, void *buffer, int size)
 {
     int i;
 
     for (i = 0; i < numLoadedShaderFiles; i++)
     {
-        if (!Q_stricmp(loadedShaderFiles[i], filename))
+        if (!Q_stricmp(loadedShaderFiles[i], identifier))
         {
+            free(buffer);
             return;
         }
     }
@@ -800,15 +803,18 @@ static void AddShaderFile(const char *filename)
     }
 
     memset(loadedShaderFiles[numLoadedShaderFiles], 0, MAX_OS_PATH);
-    strncpy(loadedShaderFiles[numLoadedShaderFiles], filename, MAX_OS_PATH - 1);
+    strncpy(loadedShaderFiles[numLoadedShaderFiles], identifier, MAX_OS_PATH - 1);
     numLoadedShaderFiles++;
 
-    ParseShaderFile(filename);
+    ParseShaderFile(filename, buffer, size);
 }
 
 static void ShaderLooseCallback(const char *filename)
 {
     char full[MAX_QPATH];
+    char absolute[MAX_OS_PATH];
+    void *buffer;
+    int size;
     
     // we need to make sure we don't have .bak files or other garbage
     if (strstr(filename, ".shader") != filename + strlen(filename) - 7)
@@ -817,11 +823,21 @@ static void ShaderLooseCallback(const char *filename)
     }
 
     sprintf(full, "scripts/%s", filename);
-    AddShaderFile(full);
+    sprintf(absolute, "%s%s", current_vfs_path, full);
+
+    size = LoadFile(absolute, &buffer);
+    if (size == -1) return;
+
+    AddShaderFile(absolute, full, buffer, size);
 }
 
 static void ShaderPakCallback(const char *filename)
 {
+    char identifier[MAX_OS_PATH];
+    char absolute[MAX_OS_PATH];
+    void *buffer;
+    int size;
+
     // we need to make sure we don't have .bak files or other garbage
     // extension must be exactly .shader
     const char *ext = strstr(filename, ".shader");
@@ -832,7 +848,15 @@ static void ShaderPakCallback(const char *filename)
 
     if (strstr(filename, "scripts/"))
     {
-        AddShaderFile(filename);
+        sprintf(identifier, "%s:%s", current_vfs_path, filename);
+        sprintf(absolute, "%s%s", current_vfs_path, filename);
+        
+#ifdef _WIN32
+        size = PakLoadAnyFile(absolute, &buffer);
+        if (size == -1) return;
+
+        AddShaderFile(identifier, filename, buffer, size);
+#endif
     }
 }
 
@@ -851,6 +875,8 @@ void LoadShaderInfo(void)
     {
         if (p >= MAX_VFS_PATHS) break;
         if (!vfsPaths[p][0]) continue;
+
+        strcpy(current_vfs_path, vfsPaths[p]);
 
         _printf("Scanning VFS path %d: %s\n", p, vfsPaths[p]);
         

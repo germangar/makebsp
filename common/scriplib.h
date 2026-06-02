@@ -38,7 +38,7 @@ extern	qboolean	endofscript;
 
 
 void LoadScriptFile( const char *filename );
-void ParseFromMemory (char *buffer, int size);
+void ParseFromMemory (char *buffer, int size, const char *name, qboolean freeOnEnd);
 
 qboolean GetToken (qboolean crossline);
 void UnGetToken (void);

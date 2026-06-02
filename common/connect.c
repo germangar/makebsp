@@ -107,13 +107,23 @@ void Broadcast_Shutdown(void) {
         send(broadcastSocket, (const char *)&len, 4, 0); 
         send(broadcastSocket, closeStr, len, 0);
 
+        // Graceful shutdown to ensure the final tag is actually sent
 #ifdef _WIN32
         shutdown(broadcastSocket, SD_SEND);
-        Sleep(100);
+        
+        // Drain the socket to wait for the peer to acknowledge the close
+        char discardBuf[256];
+        while (recv(broadcastSocket, discardBuf, sizeof(discardBuf), 0) > 0) {
+            // Do nothing, just drain
+        }
         closesocket(broadcastSocket);
 #else
         shutdown(broadcastSocket, SHUT_WR);
-        usleep(100000);
+        
+        char discardBuf[256];
+        while (recv(broadcastSocket, discardBuf, sizeof(discardBuf), 0) > 0) {
+            // Do nothing, just drain
+        }
         close(broadcastSocket);
 #endif
         broadcastSocket = -1;

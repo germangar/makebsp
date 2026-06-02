@@ -102,11 +102,9 @@ public:
   PtrList *Next() { return m_pNext; }
 
   void Add(T *ip) {
-    PtrList *pl = this;
-    while (pl && pl->m_pNext) {
-      pl = pl->Next();
-    }
-    pl->m_pNext = new PtrList(ip);
+    PtrList *newNode = new PtrList(ip);
+    newNode->m_pNext = m_pNext;
+    m_pNext = newNode;
   }
 
   void Remove() {

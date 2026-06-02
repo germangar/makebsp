@@ -91,6 +91,10 @@ void GetExecutablePath(const char *argv0);
 void AddVFSPath(const char *basePath, const char *gameDir);
 void NormalizePath(char *path);
 void InitVFSWriteDir(void);
+
+void Broadcast_Setup(const char *dest);
+void Broadcast_Shutdown(void);
+void Broadcast_Print(int level, const char *msg);
 char *ExpandArg(const char *path);  // from cmd line
 char *ExpandPath(const char *path); // from scripts
 char *ExpandGamePath(const char *path);
