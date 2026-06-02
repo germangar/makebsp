@@ -254,6 +254,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
                 dl->emitColor);
 
     dl->si = ls;
+    dl->noDeluxeInfluence = ls->noDeluxeInfluence;
 
     if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME))
     {
@@ -275,6 +276,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
         dl2->photons = dl->photons * ls->backsplashFraction;
         dl2->si = ls;
+        dl2->noDeluxeInfluence = ls->noDeluxeInfluenceBacksplash;
 
         // Configure specific cutoff and fadeout for backsplash
         dl2->min_light_add = 0.5f;

@@ -1027,6 +1027,11 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
             light = lightList[i];
             if (LightContributionToPoint(light, origin, normal, &cont, tw))
             {
+                if (game->deluxeMap && light->noDeluxeInfluence && dir)
+                {
+                    VectorCopy(dir, cont.dir);
+                    cont.isGlow = qfalse;
+                }
                 AccumulateContribution(color, dir, energy, &cont, normal);
             }
         }
@@ -1037,6 +1042,11 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
         {
             if (LightContributionToPoint(light, origin, normal, &cont, tw))
             {
+                if (game->deluxeMap && light->noDeluxeInfluence && dir)
+                {
+                    VectorCopy(dir, cont.dir);
+                    cont.isGlow = qfalse;
+                }
                 AccumulateContribution(color, dir, energy, &cont, normal);
             }
         }

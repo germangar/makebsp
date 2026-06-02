@@ -238,6 +238,7 @@ typedef struct light_s
 	float prestep; // singularity offset (distance)
 
 	qboolean twosided; // fog lights both sides
+	qboolean noDeluxeInfluence;
 
 	winding_t *w;
 	float area;		  // pre-calculated winding area (for seam fix)

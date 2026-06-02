@@ -87,6 +87,8 @@ typedef struct shaderInfo_s
     vec3_t sunDirection;
 
     float surfaceLightGlow; // backface glow fraction (default depends on contents)
+    qboolean noDeluxeInfluence;
+    qboolean noDeluxeInfluenceBacksplash;
 } shaderInfo_t;
 
 extern shaderInfo_t shaderInfo[MAX_SURFACE_INFO];

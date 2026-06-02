@@ -266,6 +266,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->vertexShadows = qfalse;
     si->noVertexShadows = qfalse;
     si->forceSunLight = qfalse;
+    si->noDeluxeInfluence = qfalse;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
@@ -564,6 +565,20 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             {
                 GetToken(qfalse);
                 si->surfaceLightGlow = atof(token);
+                continue;
+            }
+
+            // q3map_surfacelight_nodeluxe
+            if (!Q_stricmp(token, "q3map_surfacelight_nodeluxe"))
+            {
+                si->noDeluxeInfluence = qtrue;
+                continue;
+            }
+
+            // q3map_backsplash_nodeluxe
+            if (!Q_stricmp(token, "q3map_backsplash_nodeluxe"))
+            {
+                si->noDeluxeInfluenceBacksplash = qtrue;
                 continue;
             }
 
