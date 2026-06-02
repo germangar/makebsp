@@ -22,7 +22,13 @@ Legacy BSP facet testing has been completely replaced with **Intel Embree 4.4.0*
 - **Selective Shadowing**: `AlphaFilter` logic in `light/light_trace.c` allows complex geometry (TriSoups) to shadow themselves (Self-Shadowing) while preventing artifacts on planar map geometry using the `MST_PLANAR` check.
 - **Ray Nudging**: A unified `tnear` (nudge) of `0.0001f` is used to prevent self-intersection artifacts.
 
-## 4. Radiosity Pipeline (Global Illumination)
+## 4. Asset Discovery & Virtual File System (VFS)
+The toolchain implements a Quake-standard VFS with modernized search and shadowing rules.
+- **Executable-Relative Paths**: To ensure stability when launched from external editors (like NetRadiant), the tools locate their own binary directory via Windows API. Global assets (game JSON profiles and OpenCL kernels) are searched for in the `makebsp/` namespace folder sibling to the executables.
+- **Shader-Level Shadowing**: Unlike legacy tools that shadow at the file level, `makebsp` parses every discovered `.shader` file across the VFS. Redundancy is handled at the individual shader block level: the first definition found (in the highest priority path) is preserved, while subsequent definitions of the same shader name are skipped.
+- **Embedded Kernels**: For release builds, OpenCL `.cl` source files are stringified and baked directly into the binary, making the toolchain self-contained and portable.
+
+## 5. Radiosity Pipeline (Global Illumination)
 The project implements a custom three-phase radiosity system:
 1.  **Phase 1 (Emit)**: Luxels from the direct pass spawn virtual emitters.
 2.  **Phase 2 (Integrate)**: Analytical area form-factors are used to simulate light bounce.
@@ -41,16 +47,16 @@ The BSP compiler (`makebsp.exe`) leverages modern libraries for texture and coll
 - **MeshLib**: Performs geometric healing, decimation, and cleanup of complex triangle soup models to prepare them for physical collision hulls.
 - **CoACD & HACD**: Performs Approximate Convex Decomposition to convert meshes into optimized convex collision brushes. While CoACD handles general shape approximation, HACD is leveraged for `MC_WRAP` and `MC_OBJECT` profiles where tighter, non-voxelized wrapping is required.
 
-## 6. Technical Stack
+## 7. Technical Stack
 - **Language**: C (some C++ wrappers for libraries).
-- **Parallelism**: OpenMP is used extensively in both `makebsp` and `light` for multi-core scaling.
+- **Parallelism**: OpenMP is used extensively for multi-core scaling. All light filtering is GPU-accelerated via OpenCL.
 - **File Formats**: Primary support for **FBSP** (QFusion/Xonotic) and **IBSP** (Quake 3).
 
-## 7. Developer Conventions
+## 8. Developer Conventions
 - **Nomenclature**: Prefix `rad_` for radiosity, `lm_` for lightmap post-processing.
 - **Architecture**: Global settings are derived from `game_t` templates in `shared/globals.c`, while runtime overrides are handled via CLI switches in `main.c`.
 
-## 8. Lightmap Post-Processing
+## 9. Lightmap Post-Processing
 The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-space and world-space filters to the high-precision `lightFloats` buffer. The architecture provides three decoupled choices for the mapper: **Trace-time Supersampling**, **Post-process Anti-Aliasing**, and **Gaussian Smoothing**.
 
 - **Geometric Adjacency**: For planar world surfaces, the system builds a world-space index of partners by hashing snapped vertex coordinates (128-unit precision) to detect shared physical edges. A universal `GetFilteredTexel` helper allows filters to cross these boundaries seamlessly.
@@ -60,19 +66,19 @@ The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-sp
 - **Mathematical Parity**: To unify the "feel" between surface types, Trisoup smoothing uses true 3D Gaussian weights and a radius "cheat factor" (1.25x) to compensate for the volume difference between spherical (3D) and square (2D) kernels.
 - **Multi-threaded Performance**: The per-surface spatial hashes are lock-free and allocated on-the-fly, allowing for perfect parallel scaling and minimal memory usage.
 
-## 9. Cross-Tool Metadata (Sidecar Pipeline)
+## 10. Cross-Tool Metadata (Sidecar Pipeline)
 Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata between the compiler (makebsp.exe) and the lighting tool (makelight.exe).
 
 - **Mechanism**: makebsp serializes per-surface overrides into a lightweight binary array (extraSurface_t) at maps/[mapname]/cache/[mapname].srf, which is then re-loaded by light during surface initialization.
 - **Precedence**: Sidecar data acts as a selective override for global game_t defaults.
 
-## 10. Unified Distance Attenuation
+## 11. Unified Distance Attenuation
 The lighting math utilizes a centralized `CalculateAttenuation` pipeline designed to prevent hotspots while maintaining aggressive culling:
-- **Singularity Offsets**: An `offset` parameter (e.g., `DEFAULT_ATTN_OFFSET`) shifts the inverse-square curve, ensuring $1 / d^2$ never explodes to infinity near the source.
-- **Decoupled Soft Fades**: The visual fade of a light is decoupled from its broad-phase culling. `MIN_LIGHT_ADD` acts as the strict, high-performance geometry cutoff. However, a soft fade is applied *before* this cutoff via `MIN_SOFTNESS_FADE_ADD` and `ATTN_SOFTNESS_RANGE`, allowing the light energy to smoothly slope toward zero visually, without bloating the broad-phase culling bounding spheres.
+- **Singularity Offsets**: The system utilizes a `prestep` (alias `rampoffset`) parameter to shift the inverse-square curve, ensuring $1 / d^2$ never explodes to infinity near the source. This is now mapper-configurable per-light entity, defaulting to `16.0`.
+- **Decoupled Soft Fades**: The visual fade of a light is decoupled from its broad-phase culling. `MIN_LIGHT_ADD` acts as the strict, high-performance geometry cutoff. However, a soft fade is applied *before* this cutoff, allowing the light energy to smoothly slope toward zero visually, without bloating the broad-phase culling bounding spheres.
 - **Early-Out Optimizations**: Spotlights perform expensive vector operations. The distance attenuation is explicitly calculated *first*; if distance alone culls the texel, the system bypasses the spotlight math entirely.
 
-## 11. Entity Parsing & Nomenclature
+## 12. Entity Parsing & Nomenclature
 The toolchain features a highly modernized entity parsing system for mappers:
 - **Agnostic Keys**: Entity keys are entirely case-insensitive and completely ignore the legacy Quake `_` prefix (e.g., `_color` and `Color` are treated identically).
 - **Nomenclature Shift**: The term `falloff` has been explicitly replaced with `shading` in the codebase and CLI to clarify that it refers to angle/surface shading, distinguishing it from distance-based "attenuation".

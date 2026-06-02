@@ -31,7 +31,6 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
 
 ### 1. High-Performance Ray Tracing (Intel Embree)
 The legacy BSP-traversal ray caster has been replaced with the industry-standard **Intel Embree 4.4.0** BVH builder and intersection kernels.
-- **Selective Shadowing:** Alpha-tested surfaces (foliage, grates) now cast accurate, per-pixel shadows via a custom `AlphaFilter` integration.
 - **Unified Data Cache:** To maximize performance, the toolchain pre-calculates and caches the world-space origin and normal of every lightmap texel and volumetric voxel. This cached geometry is shared across all lighting stages (Direct, Radiosity, and Ambient), eliminating redundant coordinate reconstruction.
 - **Intelligent Light Culling:** The tool uses an advanced culling system that calculates a light's physical "reach" based on energy intensity and a configurable `cutoff` threshold. This allows the ray tracer to ignore surfaces outside a light's influence radius with zero overhead.
 - **Performance Gain:** The combination of Intel's highly optimized BVH kernels and our internal geometric caching results in a 10x performance gain during the ray tracing phase compared to traditional tools.
