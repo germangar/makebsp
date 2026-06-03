@@ -310,7 +310,10 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
             }
 
             // Sample the filter
-            if (Trace_SampleFilter(si, s, t, tw->trace->filter))
+            vec3_t dummyFilter = {1.0f, 1.0f, 1.0f};
+            float *filterPtr = (tw && tw->trace) ? tw->trace->filter : dummyFilter;
+
+            if (Trace_SampleFilter(si, s, t, filterPtr))
             {
                 // Opaque hit - keep the valid flag (blocks)
             }
