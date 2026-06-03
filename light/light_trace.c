@@ -571,6 +571,14 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     context.tw = tw;
     context.patchshadows = tw ? tw->patchshadows : patchshadows;
 
+    if (tw) {
+        tw->trace = trace;
+    }
+
+    trace->filter[0] = 1.0f;
+    trace->filter[1] = 1.0f;
+    trace->filter[2] = 1.0f;
+
     vec3_t dir;
     float length;
 
@@ -580,7 +588,6 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     {
         trace->hitFraction = 1.0f;
         VectorCopy(start, trace->hit);
-        VectorSet(trace->filter, 1, 1, 1);
         return;
     }
     VectorScale(dir, 1.0f / length, dir);
@@ -621,9 +628,6 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
         }
     }
 
-    trace->filter[0] = 1.0;
-    trace->filter[1] = 1.0;
-    trace->filter[2] = 1.0;
     trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
     trace->hitFraction = rayhit.ray.tfar / length;
 

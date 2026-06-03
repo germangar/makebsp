@@ -844,12 +844,11 @@ static void ShaderLooseCallback(const char *filename)
     size = LoadFile(absolute, &buffer);
     if (size == -1) return;
 
-    AddShaderFile(absolute, full, buffer, size);
+    AddShaderFile(full, full, buffer, size);
 }
 
 static void ShaderPakCallback(const char *filename)
 {
-    char identifier[MAX_OS_PATH];
     char absolute[MAX_OS_PATH];
     void *buffer;
     int size;
@@ -864,14 +863,13 @@ static void ShaderPakCallback(const char *filename)
 
     if (strstr(filename, "scripts/"))
     {
-        sprintf(identifier, "%s:%s", current_vfs_path, filename);
         sprintf(absolute, "%s%s", current_vfs_path, filename);
         
 #ifdef _WIN32
         size = PakLoadAnyFile(absolute, &buffer);
         if (size == -1) return;
 
-        AddShaderFile(identifier, filename, buffer, size);
+        AddShaderFile(filename, filename, buffer, size);
 #endif
     }
 }

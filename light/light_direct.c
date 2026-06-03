@@ -2171,7 +2171,10 @@ void LightWorld(void)
 
     if (!nogridlighting)
     {
-        RunMAOPass();
+        if (!directonly)
+        {
+            RunMAOPass();
+        }
 
         _printf("--- TraceGrid ---\n");
         start = I_FloatTime();
