@@ -1367,8 +1367,71 @@ void TraceLights(int num)
         wrapThreshold = 0.0f;
     }
 
+    // Pass 1: Lights that are processed first
     for (light = lights; light; light = light->next)
     {
+        // If deluxeSort is ENABLED: Process standard lights first, no-influence lights LATER
+        // If deluxeSort is DISABLED: Process no-influence lights first (Legacy/Anchor behavior)
+        if (deluxeSort)
+        {
+            if (light->noDeluxeInfluence) continue;
+        }
+        else
+        {
+            if (!light->noDeluxeInfluence) continue;
+        }
+
+        // 1. Distance check
+        VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
+        d = VectorLength(v);
+        if (d > light->reach + localSurfaces[realSurfIndex].radius)
+        {
+            continue;
+        }
+
+        // 2. Normal check (terminator)
+        if (ds->surfaceType == MST_PLANAR || ds->surfaceType == MST_TRIANGLE_SOUP)
+        {
+            // If we have a constant or average normal, we can cull
+            // For now, let's use the surface normal for MST_PLANAR
+            if (ds->surfaceType == MST_PLANAR)
+            {
+                if (light->type == emit_area)
+                {
+                    // Area lights always use standard lambertian falloff.
+                }
+                else if (d > 0.001f)
+                {
+                    VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
+                    VectorScale(v, 1.0f / d, v); // Safely normalize using precomputed distance
+
+                    // Unified culling: use CalculateShadingModel on the "best possible" dot product for this surface
+                    float bestDot = DotProduct(v, ds->lightmapVecs[2]) + (localSurfaces[realSurfIndex].radius / d);
+                    if (CalculateShadingModel(bestDot) <= 0)
+                    {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        localLights[numLocalLights++] = light;
+    }
+
+    // Pass 2: Lights that are processed last
+    for (light = lights; light; light = light->next)
+    {
+        // If deluxeSort is ENABLED: Process no-influence lights now
+        // If deluxeSort is DISABLED: Process standard lights now
+        if (deluxeSort)
+        {
+            if (!light->noDeluxeInfluence) continue;
+        }
+        else
+        {
+            if (light->noDeluxeInfluence) continue;
+        }
+
         // 1. Distance check
         VectorSubtract(light->origin, localSurfaces[realSurfIndex].origin, v);
         d = VectorLength(v);

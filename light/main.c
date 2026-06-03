@@ -33,6 +33,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 extern qboolean nodirect;
+qboolean deluxeSort = qfalse;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
@@ -462,6 +463,9 @@ int main(int argc, char **argv) {
             game->deluxeRadiosityExaggerate = atof(argv[++i]);
             if (game->deluxeRadiosityExaggerate < 0.0f) game->deluxeRadiosityExaggerate = 0.0f;
             _printf("Deluxe Radiosity Exaggerate multiplier set to %.2f\n", game->deluxeRadiosityExaggerate);
+        } else if (!strcmp(argv[i], "-deluxesort")) {
+            deluxeSort = qtrue;
+            _printf("Deluxe sorting enabled (no-influence lights processed last)\n");
         } else if (!strcmp(argv[i], "-supersample")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-supersample requires a radius value (e.g. 0.5 or 1.0)");
             game->superSampleRadius = atof(argv[i + 1]);
