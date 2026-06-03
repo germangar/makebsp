@@ -185,6 +185,8 @@ typedef struct drawsurf_s
     float fadeout;
     qboolean hasAttenuationOverride;
     int attenuationModel;
+    int noDeluxeInfluence;
+    int noDeluxeInfluenceBacksplash;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

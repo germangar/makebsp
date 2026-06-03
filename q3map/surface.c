@@ -62,6 +62,8 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->superSampleRadius = -1.0f;
     ds->upscale = 0;
     ds->enforceSampleSize = game->enforceSampleSize;
+    ds->noDeluxeInfluence = -1;
+    ds->noDeluxeInfluenceBacksplash = -1;
 
     return ds;
 }
@@ -121,6 +123,14 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
             const char *fadeoutStr = ValueForKey(e, "fadeout");
             if (fadeoutStr[0])
                 ds->fadeout = atof(fadeoutStr);
+
+            const char *nodeluxeStr = ValueForKey(e, "nodeluxe");
+            if (nodeluxeStr[0])
+                ds->noDeluxeInfluence = atoi(nodeluxeStr);
+
+            const char *bsNodeluxeStr = ValueForKey(e, "backsplash_nodeluxe");
+            if (bsNodeluxeStr[0])
+                ds->noDeluxeInfluenceBacksplash = atoi(bsNodeluxeStr);
 
             const char *attStr = ValueForKey(e, "attenuation");
             if (attStr[0])
@@ -1388,6 +1398,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
     drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
 
     numDrawSurfaces++;
 
@@ -1478,6 +1490,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
     drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
 
     numDrawSurfaces++;
 
@@ -1574,6 +1588,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
     drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
 
     numDrawSurfaces++;
 
@@ -1634,6 +1650,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].fadeout = ds->fadeout;
     drawExtraSurfaces[numDrawSurfaces].hasAttenuationOverride = ds->hasAttenuationOverride;
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
+    drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
 
     numDrawSurfaces++;
 

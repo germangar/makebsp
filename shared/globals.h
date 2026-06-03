@@ -28,6 +28,8 @@ typedef struct {
     float fadeout;
     qboolean hasAttenuationOverride;
     attenuationModel_t attenuationModel;
+    int noDeluxeInfluence;
+    int noDeluxeInfluenceBacksplash;
 } extraSurface_t;
 
 typedef enum { SHADING_MODEL_LAMBERT, SHADING_MODEL_HALFLAMBERT, SHADING_MODEL_QUADRATIC, SHADING_MODEL_DOUBLEQUADRATIC, SHADING_MODEL_UNREAL } shadingModel_t;

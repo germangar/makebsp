@@ -748,10 +748,8 @@ void CreateEntityLights(void)
             dl->fadeout = 0.0f;
 
         const char *nodeluxeStr = ValueForKey(e, "nodeluxe");
-        if (nodeluxeStr[0] && atoi(nodeluxeStr)) {
+        if (nodeluxeStr[0] && atoi(nodeluxeStr))
             dl->noDeluxeInfluence = qtrue;
-            _printf("          LIGHT assigned NODELUXE\n");
-        }
 
         dl->type = emit_point;
 
@@ -1084,6 +1082,9 @@ void BuildLocalSurfaces(void)
             if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
                 shaderOverride = qtrue;
             }
+            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1) {
+                shaderOverride = qtrue;
+            }
 
             if (shaderOverride)
             {
@@ -1111,6 +1112,12 @@ void BuildLocalSurfaces(void)
                 if (extra[i].hasAttenuationOverride) {
                     localSurfaces[i].si_override->hasAttenuationOverride = qtrue;
                     localSurfaces[i].si_override->attenuationModel = extra[i].attenuationModel;
+                }
+                if (extra[i].noDeluxeInfluence != -1) {
+                    localSurfaces[i].si_override->noDeluxeInfluence = extra[i].noDeluxeInfluence ? qtrue : qfalse;
+                }
+                if (extra[i].noDeluxeInfluenceBacksplash != -1) {
+                    localSurfaces[i].si_override->noDeluxeInfluenceBacksplash = extra[i].noDeluxeInfluenceBacksplash ? qtrue : qfalse;
                 }
             }
         }
