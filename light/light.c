@@ -348,9 +348,6 @@ void CreateSurfaceLights(void)
     dsurface_t *ds;
     shaderInfo_t *ls;
     winding_t *w;
-    light_t *dl;
-    vec3_t origin;
-    drawVert_t *dv;
     int c_lightSurfaces;
     float lightSubdivide;
     vec3_t normal;
@@ -750,6 +747,12 @@ void CreateEntityLights(void)
         else
             dl->fadeout = 0.0f;
 
+        const char *nodeluxeStr = ValueForKey(e, "nodeluxe");
+        if (nodeluxeStr[0] && atoi(nodeluxeStr)) {
+            dl->noDeluxeInfluence = qtrue;
+            _printf("          LIGHT assigned NODELUXE\n");
+        }
+
         dl->type = emit_point;
 
         // spotlights
@@ -824,6 +827,12 @@ void CreateEntityLights(void)
                 memcpy(bl, dl, sizeof(*bl)); // Inherit color, style, flags, etc.
                 bl->next = lights;
                 lights = bl;
+
+                const char *bsNodeluxeStr = ValueForKey(e, "backsplash_nodeluxe");
+                if (bsNodeluxeStr[0] && atoi(bsNodeluxeStr))
+                    bl->noDeluxeInfluence = qtrue;
+                else
+                    bl->noDeluxeInfluence = qfalse; // Reset inherited flag from primary light
 
                 VectorMA(dl->origin, 4.0f, dl->normal, bl->origin);
                 bl->type = emit_point;
