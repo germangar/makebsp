@@ -267,6 +267,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->noVertexShadows = qfalse;
     si->forceSunLight = qfalse;
     si->noDeluxeInfluence = qfalse;
+    si->noDeluxeInfluenceBacksplash = qfalse;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
