@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define DEFAULT_SPOTLIGHT_TARGET_DISTANCE 64.0f
 
 #define POINTSCALE 7500.0f
-#define POINTSCALE_SOFT 5.0f
+#define POINTSCALE_SOFT 10.0f
 #define POINTSCALE_SMOOTHSTEP 50.0f
 
 qboolean nodirect;
