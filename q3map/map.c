@@ -279,13 +279,13 @@ void SetBrushContents(bspbrush_t *b)
     int contents, c2;
     side_t *s;
     int i;
-    qboolean mixed;
+
     int allFlags;
 
     s = &b->sides[0];
     contents = s->contents;
     b->contentShader = s->shaderInfo;
-    mixed = qfalse;
+
 
     allFlags = 0;
 
@@ -299,19 +299,12 @@ void SetBrushContents(bspbrush_t *b)
         }
 
         c2 = s->contents;
-        if (c2 != contents)
-        {
-            mixed = qtrue;
-        }
+
 
         allFlags |= s->surfaceFlags;
     }
 
-    if (mixed)
-    {
-        qprintf("Entity %i, Brush %i: mixed face contents\n", b->entitynum,
-                b->brushnum);
-    }
+
 
     if ((contents & CONTENTS_DETAIL) && (contents & CONTENTS_STRUCTURAL))
     {

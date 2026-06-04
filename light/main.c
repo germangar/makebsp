@@ -287,27 +287,33 @@ int main(int argc, char **argv) {
     if (numCliBasePaths == 0)
         cliBasePaths[numCliBasePaths++] = (game->rootDir && game->rootDir[0]) ? game->rootDir : ".";
 
-    // 1. User Dir Layer (Highest priority for searching and preferred write destination)
-    for (i = 0; i < numCliUserDirs; i++)
-    {
-        for (int j = 0; j < numModGameDirs; j++)
-            AddVFSPath(cliUserDirs[i], modGameDirs[j]);
-        AddVFSPath(cliUserDirs[i], baseGameDir);
-    }
-
-    // 2. Pak Paths
+    // 1. Pak Paths (Highest priority for searching and preferred write destination)
     for (i = 0; i < numCliPakPaths; i++)
     {
-        for (int j = 0; j < numModGameDirs; j++)
-            AddVFSPath(cliPakPaths[i], modGameDirs[j]);
-        AddVFSPath(cliPakPaths[i], baseGameDir);
+        AddVFSPath(cliPakPaths[i], "");
     }
 
-    // 3. Base Path Layer
+    // 2. Mod GameDirs Layer
+    // Mod directories take precedence over the base game directory, across both user and base paths
+    for (int j = 0; j < numModGameDirs; j++)
+    {
+        for (i = 0; i < numCliUserDirs; i++)
+            AddVFSPath(cliUserDirs[i], modGameDirs[j]);
+        for (i = 0; i < numCliBasePaths; i++)
+            AddVFSPath(cliBasePaths[i], modGameDirs[j]);
+    }
+
+    // 3. Base GameDir Layer (Deepest fallback)
+    // Only add userdir/baseGameDir if we are not working on a mod.
+    if (numModGameDirs == 0)
+    {
+        for (i = 0; i < numCliUserDirs; i++)
+            AddVFSPath(cliUserDirs[i], baseGameDir);
+    }
+    
+    // Always add the rootdir/baseGameDir as the final fallback for base game assets
     for (i = 0; i < numCliBasePaths; i++)
     {
-        for (int j = 0; j < numModGameDirs; j++)
-            AddVFSPath(cliBasePaths[i], modGameDirs[j]);
         AddVFSPath(cliBasePaths[i], baseGameDir);
     }
 

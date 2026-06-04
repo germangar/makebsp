@@ -187,7 +187,12 @@ static void LoadShaderImage(shaderInfo_t *si)
     }
 
     // couldn't load anything
-    _printf("WARNING: Missing image for material: %s (Defaulting to 0.5 grey albedo)\n", si->shader);
+    _printf("WARNING: Missing image for material: %s\n", si->shader);
+    if (si->materialImage[0] && strcmp(si->materialImage, si->shader) != 0) {
+        _printf("  -> Looked for texture images: '%s' and '%s'\n", si->materialImage, si->shader);
+    } else {
+        _printf("  -> Looked for texture image: '%s'\n", si->shader);
+    }
 
     si->color[0] = 0.5f;
     si->color[1] = 0.5f;
@@ -844,7 +849,7 @@ static void ShaderLooseCallback(const char *filename)
     size = LoadFile(absolute, &buffer);
     if (size == -1) return;
 
-    AddShaderFile(full, full, buffer, size);
+    AddShaderFile(absolute, full, buffer, size);
 }
 
 static void ShaderPakCallback(const char *filename)
@@ -869,7 +874,7 @@ static void ShaderPakCallback(const char *filename)
         size = PakLoadAnyFile(absolute, &buffer);
         if (size == -1) return;
 
-        AddShaderFile(filename, filename, buffer, size);
+        AddShaderFile(absolute, filename, buffer, size);
 #endif
     }
 }

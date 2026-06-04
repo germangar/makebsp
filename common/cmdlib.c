@@ -455,25 +455,22 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
             return length;
     }
 
-    // 1. Try loose files in all VFS paths (priority order)
+    // 1. Scan VFS paths in priority order
     for (i = 0; i < numVFSPaths; i++)
     {
+        // a. Try loose files in this path
         snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = TryLoadFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
-    }
 
-    // 2. Try PAK/PK3 archives across all VFS paths
+        // b. Try PAK/PK3 archives in this path
 #ifdef _WIN32
-    for (i = 0; i < numVFSPaths; i++)
-    {
-        snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
         length = PakLoadAnyFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
-    }
 #endif
+    }
 
     return -1;
 }
