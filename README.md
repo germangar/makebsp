@@ -163,6 +163,7 @@ List of additions and modifications made to shader parsing and features compared
 - **fadeout**: Percentage of a light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
 - **backsplashspot**: Default entity spotlight backsplash fraction (0.0 to 1.0).
 - **backsplashsurface**: Default surface light backsplash fraction (0.0 to 1.0).
+- **haloshader**: Global default shader to use for light halos. Set to "none" or "0" to disable them.
 - **_lightingIntensity**: [qfusion engine key] Custom fixed normalization scale for 8-bit LDR lightmap output.Defaults to 3.0
 
 **Lightmaps & Rendering Passes**

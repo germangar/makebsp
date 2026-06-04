@@ -758,11 +758,15 @@ int PakLoadAnyFile(const char *filename, void **bufferptr) {
 
       qboolean match = qfalse;
 
-      // 1. Try relative match
-      if (stricmp(unixFile, pInfo->m_pName) == 0) {
+      // 1. Try relative match — only when the incoming path is truly bare (no directory prefix).
+      // If unixFile contains a '/', it's an absolute-style path assembled by vfsLoadFile as
+      // (vfsPaths[i] + relativePath). In that case we must NOT match against PK3 entries from
+      // a different VFS path, so we fall through to the basePath-scoped absolute match below.
+      if (strchr(unixFile, '/') == NULL && stricmp(unixFile, pInfo->m_pName) == 0) {
         match = qtrue;
       }
-      // 2. Try absolute match
+      // 2. Try absolute match — path-scoped: only matches entries whose basePath is a prefix
+      // of the incoming absolute path, ensuring VFS priority order is respected.
       else if (pInfo->m_pBasePath) {
         char unixBase[WORK_LEN];
         __ConvertDOSToUnixName(unixBase, pInfo->m_pBasePath);

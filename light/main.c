@@ -118,6 +118,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->defaultSmoothPasses < 0) game->defaultSmoothPasses = 0;
     }
 
+    val = ValueForKey(ent, "haloshader");
+    if (val[0]) {
+        game->haloShader = copystring(val);
+        _printf("Worldspawn override: haloShader = %s\n", game->haloShader);
+    }
+
     val = ValueForKey(ent, "antialiasing");
     if (val[0] && !HasArg("-antialiasing", argc, argv)) {
         game->antialiasingPasses = atoi(val);

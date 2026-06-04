@@ -545,6 +545,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         game->enforceSampleSize = atoi(val) != 0;
         _printf("Worldspawn override: enforceSampleSize = %d\n", game->enforceSampleSize);
     }
+
+    val = ValueForKey(ent, "haloshader");
+    if (val[0]) {
+        game->haloShader = copystring(val);
+        _printf("Worldspawn override: haloShader = %s\n", game->haloShader);
+    }
 }
 
 int main(int argc, char **argv)
