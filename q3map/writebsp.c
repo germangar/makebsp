@@ -324,6 +324,95 @@ void FixBrushSides(void) {
 
 /*
 ============
+NudgeLightEntities
+
+Pushes light entities off BSP leaf boundary planes to avoid 
+floating-point indeterminism during raytracing.
+============
+*/
+#define LIGHT_PLANE_DETECT 0.250f
+#define LIGHT_PLANE_PUSH 0.5f
+
+void NudgeLightEntities(void) {
+	int i, nodeNum;
+	entity_t *e;
+	const char *classname;
+	const char *origin_str;
+	vec3_t origin;
+	dnode_t *node;
+	dplane_t *plane;
+	float d;
+	int nudged_count = 0;
+
+	int b_num;
+	bspbrush_t *b;
+	side_t *s, *touch_side;
+	float max_d;
+
+	_printf("--- NudgeLightEntities ---\n");
+
+	for (i = 1; i < num_entities; i++) {
+		e = &entities[i];
+		classname = ValueForKey(e, "classname");
+		
+		if (Q_strncasecmp(classname, "light", 5)) {
+			continue;
+		}
+
+		origin_str = ValueForKey(e, "origin");
+		if (!origin_str[0]) {
+			continue;
+		}
+
+		GetVectorForKey(e, "origin", origin);
+
+		// Check against ALL brushes in ALL entities (including detail brushes in worldspawn)
+		for (b_num = 0; b_num < num_entities; b_num++) {
+			for (b = entities[b_num].brushes; b; b = b->next) {
+				max_d = -999999.0f;
+				touch_side = NULL;
+
+				// Find the plane the point is closest to being "outside" of
+				for (int j = 0; j < b->numsides; j++) {
+					s = &b->sides[j];
+					plane_t *p = &mapplanes[s->planenum];
+					d = DotProduct(origin, p->normal) - p->dist;
+					
+					if (d > max_d) {
+						max_d = d;
+						touch_side = s;
+					}
+				}
+
+				// If max_d > LIGHT_PLANE_DETECT, the point is strictly outside the brush.
+				// If max_d < -LIGHT_PLANE_DETECT, the point is deep inside the brush.
+				// If it's between those, it's touching the face of touch_side!
+				if (max_d > -LIGHT_PLANE_DETECT && max_d < LIGHT_PLANE_DETECT && touch_side) {
+					plane_t *p = &mapplanes[touch_side->planenum];
+					
+					if (max_d >= 0) {
+						VectorMA(origin, LIGHT_PLANE_PUSH - max_d, p->normal, origin);
+					} else {
+						VectorMA(origin, LIGHT_PLANE_PUSH - max_d, p->normal, origin); 
+					}
+					nudged_count++;
+				}
+			}
+		}
+
+		// Write the nudged origin back to the entity as a float string
+		{
+			char buf[64];
+			sprintf(buf, "%f %f %f", origin[0], origin[1], origin[2]);
+			SetKeyValue(e, "origin", buf);
+		}
+	}
+
+	_printf("%d light entities nudged off planes.\n", nudged_count);
+}
+
+/*
+============
 EndBSPFile
 ============
 */
@@ -332,6 +421,9 @@ void EndBSPFile( void ) {
 
 	FixBrushSides ();
 	EmitPlanes ();
+
+	NudgeLightEntities();
+
 	UnparseEntities ();
 
 	// write the map
