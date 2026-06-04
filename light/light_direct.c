@@ -477,9 +477,9 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
         b = &skyBrushes[i];
 
         // this assumes that sky brushes are axial...
-        if (trace.hit[0] < b->bounds[0][0] || trace.hit[0] > b->bounds[1][0] ||
-            trace.hit[1] < b->bounds[0][1] || trace.hit[1] > b->bounds[1][1] ||
-            trace.hit[2] < b->bounds[0][2] || trace.hit[2] > b->bounds[1][2])
+        if (trace.hit[0] < b->bounds[0][0] - SUN_BOUNDS_NUDGE || trace.hit[0] > b->bounds[1][0] + SUN_BOUNDS_NUDGE ||
+            trace.hit[1] < b->bounds[0][1] - SUN_BOUNDS_NUDGE || trace.hit[1] > b->bounds[1][1] + SUN_BOUNDS_NUDGE ||
+            trace.hit[2] < b->bounds[0][2] - SUN_BOUNDS_NUDGE || trace.hit[2] > b->bounds[1][2] + SUN_BOUNDS_NUDGE)
         {
             continue;
         }

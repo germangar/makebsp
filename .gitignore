@@ -84,3 +84,4 @@ testvfs.bat
 compile_userdir.log
 testvfs_fast.bat
 bomb_gfx.shader
+DM1_user.bat

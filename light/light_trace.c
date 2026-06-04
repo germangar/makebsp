@@ -493,6 +493,7 @@ PointInTrisoup
 qboolean PointInTrisoup(vec3_t origin, vec3_t normal)
 {
     struct RTCRayHit rayhit;
+    memset(&rayhit, 0, sizeof(rayhit));
     struct RTCIntersectArguments iargs;
     struct MyRayQueryContext context;
     rtcInitRayQueryContext(&context.context);
@@ -569,6 +570,7 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
 {
     int i;
     struct RTCRayHit rayhit;
+    memset(&rayhit, 0, sizeof(rayhit));
     struct MyRayQueryContext context;
     rtcInitRayQueryContext(&context.context);
     context.tw = tw;
