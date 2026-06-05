@@ -17,6 +17,8 @@ AGENTS.md
 .vscode/settings.json
 
 *.bmp
+*.bsp 
+wfdm6_models
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/

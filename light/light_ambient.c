@@ -91,7 +91,7 @@ void ComputeMAOPoint(int num)
     memset(tw, 0, sizeof(traceWork_t));
     tw->ignoreSurface = -1;
 
-    samples = mao_ambient_samples;
+    samples = ambient_samples;
 
     // Per-point random seed for jitter — uses the grid index hashed with
     // a large prime so neighbouring grid points get uncorrelated jitter.
@@ -110,9 +110,9 @@ void ComputeMAOPoint(int num)
 
         StratifiedUniformDir(i, skyN, jU, jV, dir);  // dir.z >= 0
 
-        end[0] = origin[0] + dir[0] * mao_radius;
-        end[1] = origin[1] + dir[1] * mao_radius;
-        end[2] = origin[2] + dir[2] * mao_radius;
+        end[0] = origin[0] + dir[0] * ambient_testradius;
+        end[1] = origin[1] + dir[1] * ambient_testradius;
+        end[2] = origin[2] + dir[2] * ambient_testradius;
 
         // Half-lambert weight: pow(NdotL * 0.5 + 0.5, 2.0)
         float NdotL = dir[2];
@@ -141,9 +141,9 @@ void ComputeMAOPoint(int num)
         StratifiedUniformDir(i, groundN, jU, jV, dir);
         dir[2] = -dir[2];  // flip to lower hemisphere
 
-        end[0] = origin[0] + dir[0] * mao_radius;
-        end[1] = origin[1] + dir[1] * mao_radius;
-        end[2] = origin[2] + dir[2] * mao_radius;
+        end[0] = origin[0] + dir[0] * ambient_testradius;
+        end[1] = origin[1] + dir[1] * ambient_testradius;
+        end[2] = origin[2] + dir[2] * ambient_testradius;
 
         // Half-lambert weight: pow(NdotL * 0.5 + 0.5, 2.0)
         float NdotL = -dir[2]; // Normal is down (0, 0, -1), dir is down
@@ -177,7 +177,7 @@ RunMAOPass
 */
 void RunMAOPass(void)
 {
-    if (!mao_enabled)
+    if (!ambient_enabled)
         return;
 
     if (numGridPoints <= 0)
@@ -262,7 +262,7 @@ void TraceAmbient(int num)
             }
 
             // --- Volumetric Irradiance Gathering ---
-            float gatherRadius = mao_gather_radius;
+            float gatherRadius = ambient_gatheradius;
             float gatherRadiusSq = gatherRadius * gatherRadius;
 
             int ix_min = (int)((origin[0] - gatherRadius - gridMins[0]) / gridSize[0]);
@@ -440,9 +440,9 @@ void TraceAmbient(int num)
 void LightAmbient(void)
 {
     double start, end;
-    if (!mao_enabled)
+    if (!ambient_enabled)
         return;
-    _printf("--- TraceAmbient (%i samples/texel) ---\n", mao_ambient_samples);
+    _printf("--- TraceAmbient (%i samples/texel) ---\n", ambient_samples);
     start = I_FloatTime();
     RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceAmbient);
     end = I_FloatTime();

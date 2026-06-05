@@ -339,11 +339,11 @@ extern vec3_t sunDirection, sunLight, ambientColor;
 extern qboolean hasSun;
 extern vec3_t skyColor, groundColor;    // hemisphere ambient colors
 extern float  *maoAmbient;             // [numGridPoints*3] pre-baked ambient RGB
-extern int     mao_grid_samples;        // rays per grid point (default 48)
-extern int     mao_ambient_samples;     // rays per lightmap texel (default 32)
-extern float   mao_radius;             // max ray length in world units (default 512)
-extern float   mao_gather_radius;      // radius for gathering from irradiance probes (default 256)
-extern qboolean mao_enabled;           // true if sky/ground color is non-zero
+extern int     ambient_grid_samples;    // rays per grid point (default 48)
+extern int     ambient_samples;         // rays per lightmap texel (default 32)
+extern float   ambient_testradius;      // max ray length in world units (default 512)
+extern float   ambient_gatheradius;   // radius for gathering from irradiance probes (default 256)
+extern qboolean ambient_enabled;         // true if sky/ground color is non-zero
 extern int numSkyBrushes;
 extern int *surfaceWorkOrder;
 extern int numLights;

@@ -426,7 +426,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                 }
 
                 // Apply sky tint to the incident light before it hits the wall
-                if (mao_enabled && rad_color_ratio < 1.0f) {
+                if (ambient_enabled && rad_color_ratio < 1.0f) {
                     float srcLum = em->color[0] * 0.299f + em->color[1] * 0.587f + em->color[2] * 0.114f;
                     vec3_t tintedLight;
                     float skyLum = skyColor[0] * 0.299f + skyColor[1] * 0.587f + skyColor[2] * 0.114f;

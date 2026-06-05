@@ -233,6 +233,18 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->superSampleRadius < 0.0f) game->superSampleRadius = 0.0f;
     }
 
+    val = ValueForKey(ent, "ambient_testradius");
+    if (val[0] && !HasArg("-ambient_testradius", argc, argv)) {
+        ambient_testradius = (float)atof(val);
+        if (ambient_testradius < 32.0f) ambient_testradius = 32.0f;
+    }
+
+    val = ValueForKey(ent, "ambient_gatheradius");
+    if (val[0] && !HasArg("-ambient_gatheradius", argc, argv)) {
+        ambient_gatheradius = (float)atof(val);
+        if (ambient_gatheradius < 32.0f) ambient_gatheradius = 32.0f;
+    }
+
 }
 
 int main(int argc, char **argv) {
@@ -544,29 +556,29 @@ int main(int argc, char **argv) {
             if (game->rad_ao_intensity < 0.0f) game->rad_ao_intensity = 0.0f;
             if (game->rad_ao_intensity > 1.0f) game->rad_ao_intensity = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-mao_samples")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_samples requires a numeric value");
-            mao_grid_samples = atoi(argv[i + 1]);
-            if (mao_grid_samples < 4)   mao_grid_samples = 4;
-            if (mao_grid_samples > 512) mao_grid_samples = 512;
+        } else if (!strcmp(argv[i], "-ambient_grid_samples")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_grid_samples requires a numeric value");
+            ambient_grid_samples = atoi(argv[i + 1]);
+            if (ambient_grid_samples < 4)   ambient_grid_samples = 4;
+            if (ambient_grid_samples > 512) ambient_grid_samples = 512;
             i++;
-        } else if (!strcmp(argv[i], "-mao_ambient_samples")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_ambient_samples requires a numeric value");
-            mao_ambient_samples = atoi(argv[i + 1]);
-            if (mao_ambient_samples < 4)   mao_ambient_samples = 4;
-            if (mao_ambient_samples > 512) mao_ambient_samples = 512;
+        } else if (!strcmp(argv[i], "-ambient_samples")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_samples requires a numeric value");
+            ambient_samples = atoi(argv[i + 1]);
+            if (ambient_samples < 4)   ambient_samples = 4;
+            if (ambient_samples > 512) ambient_samples = 512;
             i++;
-        } else if (!strcmp(argv[i], "-mao_radius")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_radius requires a numeric value");
-            mao_radius = (float)atof(argv[i + 1]);
-            if (mao_radius < 32.0f) mao_radius = 32.0f;
-            _printf("MAO radius set to %.1f wu\n", mao_radius);
+        } else if (!strcmp(argv[i], "-ambient_testradius")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_testradius requires a numeric value");
+            ambient_testradius = (float)atof(argv[i + 1]);
+            if (ambient_testradius < 32.0f) ambient_testradius = 32.0f;
+            _printf("Ambient test radius set to %.1f wu\n", ambient_testradius);
             i++;
-        } else if (!strcmp(argv[i], "-mao_gather_radius")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-mao_gather_radius requires a numeric value");
-            mao_gather_radius = (float)atof(argv[i + 1]);
-            if (mao_gather_radius < 32.0f) mao_gather_radius = 32.0f;
-            _printf("MAO gather radius set to %.1f wu\n", mao_gather_radius);
+        } else if (!strcmp(argv[i], "-ambient_gatheradius")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_gatheradius requires a numeric value");
+            ambient_gatheradius = (float)atof(argv[i + 1]);
+            if (ambient_gatheradius < 32.0f) ambient_gatheradius = 32.0f;
+            _printf("Ambient gather radius set to %.1f wu\n", ambient_gatheradius);
             i++;
         } else if (!strcmp(argv[i], "-rad_voxelsize")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_voxelsize requires a numeric value");
@@ -644,10 +656,10 @@ int main(int argc, char **argv) {
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
                 "   radiosity <F>       = set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
-                "   mao_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
-                "   mao_ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"
-                "   mao_radius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
-                "   mao_gather_radius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
+                "   ambient_grid_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
+                "   ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"
+                "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
+                "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
                 "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
                 "                         Worldspawn: _ambient_sky <R G B>, _ambient_ground <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"

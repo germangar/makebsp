@@ -164,6 +164,8 @@ List of additions and modifications made to shader parsing and features compared
 - **backsplashspot**: Default entity spotlight backsplash fraction (0.0 to 1.0).
 - **backsplashsurface**: Default surface light backsplash fraction (0.0 to 1.0).
 - **haloshader**: Global default shader to use for light halos. Set to "none" or "0" to disable them.
+- **ambient_testradius**: Radius in world units to test for solid in macro-ambient occlusion (default: 512).
+- **ambient_gatheradius**: Gather radius of light probes for spherical interpolation (default: 256).
 - **_lightingIntensity**: [qfusion engine key] Custom fixed normalization scale for 8-bit LDR lightmap output.Defaults to 3.0
 
 **Lightmaps & Rendering Passes**
@@ -333,9 +335,10 @@ These switches change the primary mode of the executable.
 - `-rad_ao_min / -rad_ao_max`: Define the distance range for the radiosity ambient occlusion effect.
 
 **Ambient lighting**
-- `-mao_samples <N>`: Hemisphere ray count per Light Grid point for macro ambient.
-- `-mao_ambient_samples <N>`: Hemisphere ray count per Lightmap Texel for macro ambient.
-- `-mao_radius <F>`: Maximum ray length for macro-ambient occlusion in world units.
+- `-ambient_grid_samples <N>`: Hemisphere ray count per Light Grid point for macro ambient.
+- `-ambient_samples <N>`: Hemisphere ray count per Lightmap Texel for macro ambient.
+- `-ambient_testradius <F>`: Maximum ray length for macro-ambient occlusion in world units.
+- `-ambient_gatheradius <F>`: Gather radius for spherical interpolation in world units.
 
 **Attenuation (Shading is angle attenuation)**
 - `-shading <type>`: Set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal).

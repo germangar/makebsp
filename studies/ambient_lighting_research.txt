@@ -99,7 +99,7 @@ for fully enclosed points). The openness factor is:
 
     openness = (unoccluded_rays) / (total_rays)
 
-Ray length = `mao_radius` (CLI parameter, default ~512 wu). Rays that exit the radius
+Ray length = `ambient_testradius` (CLI parameter, default ~512 wu). Rays that exit the radius
 without hitting solid geometry count as "open". Rays that hit solid count as "occluded".
 
 **Sample count**: 32-64 rays per grid point is sufficient. At 64 rays, with say 10,000
@@ -137,13 +137,13 @@ point-in-solid-geometry safety.
       }
 
       int hits = 0;
-      for (int i = 0; i < MAO_SAMPLES; i++)
+      for (int i = 0; i < ambient_grid_samples; i++)
       {
           vec3_t dir;
-          HammersleySphericalDir(i, MAO_SAMPLES, dir);  // uniform sphere
+          HammersleySphericalDir(i, ambient_grid_samples, dir);  // uniform sphere
 
           vec3_t end;
-          VectorMA(origin, mao_radius, dir, end);
+          VectorMA(origin, ambient_testradius, dir, end);
 
           trace_t trace;
           TraceLine(origin, end, &trace, qfalse, tw);
@@ -152,7 +152,7 @@ point-in-solid-geometry safety.
               hits++;
       }
 
-      maoGrid[num] = 1.0f - ((float)hits / (float)MAO_SAMPLES);
+      maoGrid[num] = 1.0f - ((float)hits / (float)ambient_grid_samples);
   }
   ```
 
@@ -165,15 +165,15 @@ point-in-solid-geometry safety.
 
   ```c
   // After all light contributions are accumulated:
-  float maoFactor = 1.0f;
+  float ambient_factor = 1.0f;
   if (maoGrid)
   {
-      // Lerp: mao_intensity = 0 means no effect, 1 = full effect
-      maoFactor = 1.0f - mao_intensity * (1.0f - maoGrid[num]);
-  }
+      // Lerp: ambient_intensity = 0 means no effect, 1 = full effect
+      ambient_factor = 1.0f - ambient_intensity * (1.0f - maoGrid[num]);
+      }
 
-  // Scale the ambient component only, not the directed component
-  VectorScale(gridData32[num].ambient[0], maoFactor, gridData32[num].ambient[0]);
+      // Scale the ambient component only, not the directed component
+      VectorScale(gridData32[num].ambient[0], ambient_factor, gridData32[num].ambient[0]);
   ```
 
   This preserves direct lighting (from point lights, sun, area lights) and only
@@ -184,15 +184,15 @@ point-in-solid-geometry safety.
   New switches to add in `main.c`:
 
   ```
-  -mao_samples <N>    = number of hemisphere rays per grid point (default: 48)
-  -mao_radius <F>     = max ray length in world units (default: 512.0)
-  -mao_intensity <F>  = blend factor 0.0 = no effect, 1.0 = full darkening (default: 0.75)
+  -ambient_grid_samples <N>    = number of hemisphere rays per grid point (default: 48)
+  -ambient_testradius <F>     = max ray length in world units (default: 512.0)
+  -ambient_intensity <F>  = blend factor 0.0 = no effect, 1.0 = full darkening (default: 0.75)
   ```
 
   New worldspawn keys (read in `LightMain()`, analogous to `ambient`):
   ```
-  _mao_radius <F>
-  _mao_intensity <F>
+  _ambient_testradius <F>
+  _ambient_intensity <F>
   ```
 
 ### Data Structures
@@ -275,9 +275,9 @@ A simple, portable implementation of uniform sphere point distribution:
 ### Files to Modify
   - `light/light_direct.c`: Add `ComputeMAOPoint()`, `RunMAOPass()`, modify `TraceGrid()`
     to apply `maoGrid` factor.
-  - `light/light.h`: Declare `maoGrid`, `mao_samples`, `mao_radius`, `mao_intensity`.
-  - `light/main.c`: Add CLI switch parsing for `-mao_samples`, `-mao_radius`, `-mao_intensity`.
-  - `light/light.c` (`LightMain`): Read worldspawn keys `_mao_radius`, `_mao_intensity`.
+  - `light/light.h`: Declare `maoGrid`, `ambient_grid_samples`, `ambient_testradius`, `ambient_intensity`.
+  - `light/main.c`: Add CLI switch parsing for `-ambient_grid_samples`, `-ambient_testradius`, `-ambient_intensity`.
+  - `light/light.c` (`LightMain`): Read worldspawn keys `_ambient_testradius`, `_ambient_intensity`.
     Allocate and free `maoGrid`.
   - `light/light_direct.c` (`LightWorld`): Call `RunMAOPass()` before `TraceGrid()`.
 
@@ -303,12 +303,12 @@ A simple, portable implementation of uniform sphere point distribution:
      modulate ambient. Modulating directed would make enclosed spaces lose their sense
      of directional light too, which may be undesirable. Keep it ambient-only for V1.
 
-  2. Should `mao_radius` auto-scale with `gridSize`? A map with 128-unit grid spacing
+  2. Should `ambient_testradius` auto-scale with `gridSize`? A map with 128-unit grid spacing
      might want a different default than one with 64-unit spacing. Could expose a
-     multiplier `_mao_radius_grid_factor` as a future tuning knob.
+     multiplier `_ambient_testradius_grid_factor` as a future tuning knob.
 
   3. Interaction with `-fast`: In fast mode, MAO could run with fewer samples (e.g.,
-     MAO_SAMPLES / 4) controlled by the existing `g_fast` flag.
+     ambient_grid_samples / 4) controlled by the existing `g_fast` flag.
 
 ---
 
@@ -389,10 +389,10 @@ for every grid point, so doing it once per point in `ComputeMAOPoint` is correct
 
 ### New CLI Parameters (updated)
 
-  -mao_samples <N>      = sphere ray count per grid point (default: 48)
-  -mao_radius <F>       = max ray length in world units (default: 512.0)
+  -ambient_grid_samples <N>      = sphere ray count per grid point (default: 48)
+  -ambient_testradius <F>       = max ray length in world units (default: 512.0)
 
-  (Note: the old -mao_intensity scalar is replaced by the color tuning via worldspawn.
+  (Note: the old -ambient_intensity scalar is replaced by the color tuning via worldspawn.
    The mapper directly controls the result by setting sky/ground colors.)
 
 ---
@@ -514,7 +514,7 @@ For each surface, for each lightmap texel:
   1. Reconstruct the world-space `origin` and `normal` using the same coordinate math
      as `TraceLights`. This code is shared verbatim — same surface-type branches
      (MST_PLANAR, MST_PATCH, MST_TRIANGLE_SOUP), same gutter handling.
-  2. Fire N sphere rays (Hammersley distribution) of length `mao_radius`.
+  2. Fire N sphere rays (Hammersley distribution) of length `ambient_testradius`.
   3. Classify each ray: upper hemisphere (dir.z > 0) or lower hemisphere (dir.z < 0).
      Count: sky_unoccluded, sky_total, ground_unoccluded, ground_total.
   4. Compute per-texel ambient color:
@@ -541,7 +541,7 @@ reconstruction is identical to TraceLights.
 
 ### Sample Count
 
-  mao_ambient_samples (default: 32)  — sphere rays per texel
+  ambient_samples (default: 32)  — sphere rays per texel
 
   This is less than the grid pass because lightmap texels provide spatial averaging
   from many adjacent samples. 32 rays gives sufficient quality.
@@ -690,8 +690,8 @@ shading tilt toward the room's opening even without any point lights present.
   ### Modified:
     - `light/light_direct.c` (`LightWorld`): Add `LightAmbient()` after `LightWorld`.
     - `light/light.h`: Declare `vec3_t sky_color`, `vec3_t ground_color`,
-      `float *maoAmbient`, `int mao_ambient_samples`.
-    - `light/main.c`: Parse `-mao_ambient_samples`, worldspawn `_ambient_sky`,
+      `float *maoAmbient`, `int ambient_samples`.
+    - `light/main.c`: Parse `-ambient_samples`, worldspawn `_ambient_sky`,
       `_ambient_ground`. Allocate/free `maoAmbient`.
     - `light/light.c` (`LightMain`): Read sky/ground worldspawn keys.
 
@@ -712,3 +712,6 @@ shading tilt toward the room's opening even without any point lights present.
 #   4. In purely ambient texels: deluxe direction = bent normal (not surface normal).
 #   5. In mixed texels: deluxe direction = luminance-weighted blend of all contributions.
 #   6. latLong in gridData32 continues to point to strongest direct light source.
+ce.
+ight source.
+ce.

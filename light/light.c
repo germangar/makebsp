@@ -95,11 +95,11 @@ vec3_t ambientColor;
 vec3_t    skyColor;
 vec3_t    groundColor;
 float    *maoAmbient        = NULL;
-int       mao_grid_samples   = 48;
-int       mao_ambient_samples = 32;
-float     mao_radius         = 512.0f;
-float     mao_gather_radius  = 256.0f;
-qboolean  mao_enabled        = qfalse;
+int       ambient_grid_samples   = 48;
+int       ambient_samples = 32;
+float     ambient_testradius         = 512.0f;
+float     ambient_gatheradius  = 256.0f;
+qboolean  ambient_enabled        = qfalse;
 
 localSurface_t *localSurfaces;
 
@@ -1684,7 +1684,7 @@ void LightMain(void)
         float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
         if (skyLum > 0.001f || groundLum > 0.001f)
         {
-            mao_enabled = qtrue;
+            ambient_enabled = qtrue;
         }
     }
 
@@ -1762,7 +1762,7 @@ void LightMain(void)
         qprintf("%5i gridPoints\n", numGridPoints);
 
         // Allocate per-grid-point MAO ambient array now that numGridPoints is known
-        if (mao_enabled)
+        if (ambient_enabled)
         {
             maoAmbient = calloc(numGridPoints * 3, sizeof(float));
             if (!maoAmbient)
