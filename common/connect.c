@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -64,9 +65,13 @@ void Broadcast_Setup(const char *dest) {
     send(broadcastSocket, initStr, len, 0);
 }
 
+static time_t lastBroadcastTime = 0;
+
 void Broadcast_Print(int level, const char *msg) {
     if (broadcastSocket < 0 || !msg) return;
     
+    lastBroadcastTime = time(NULL);
+
     char buffer[8192];
     
     // Convert angle brackets to prevent breaking XML
@@ -127,5 +132,13 @@ void Broadcast_Shutdown(void) {
         close(broadcastSocket);
 #endif
         broadcastSocket = -1;
+    }
+}
+
+void Broadcast_KeepAlive(void) {
+    if (broadcastSocket < 0) return;
+    time_t now = time(NULL);
+    if (now - lastBroadcastTime >= 3) {
+        Broadcast_Print(1, "");
     }
 }

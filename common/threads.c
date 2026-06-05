@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "threads.h"
 #include "cmdlib.h"
+#include "connect.h"
 
 #define MAX_THREADS 64
 
@@ -75,7 +76,13 @@ void ThreadCompletedWeighted(int weight)
     {
         oldf = f;
         if (pacifier)
+        {
             _printf("%i...", f);
+        }
+    }
+    else
+    {
+        Broadcast_KeepAlive();
     }
     ThreadUnlock();
 }

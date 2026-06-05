@@ -1,0 +1,70 @@
+===========================================================================
+Atmospheric Fog Research: QFusion and q3map2
+===========================================================================
+
+Overview
+--------
+This document outlines how atmospheric (global) fog is handled in QFusion-based
+engines and the q3map2 compiler. It serves as a reference for implementing
+automated fog hull generation in makebsp.
+
+How QFusion handles Atmospheric Fog
+----------------------------------
+In QFusion (Warsow/Xonotic), atmospheric fog is almost strictly shader-based.
+You generally cannot set it up with just numbers in worldspawn; you need a
+shader that uses the 'fogparms' directive.
+
+The engine looks for a specific worldspawn key:
+*   Key: "_fog"
+*   Value: "textures/path/to/shader" (Standard QFusion/Warsow default: "textures/fogs/fog")
+
+When this is set, the engine applies that shader's fog properties to the entire
+rendered world. This is the most efficient method because it doesn't require
+extra geometry; the engine simply applies the fog math to every surface.
+
+How q3map2 handles Atmospheric Fog & Hulls
+------------------------------------------
+q3map2 introduced a feature to avoid the tedious task of manually creating a
+giant "hollow box" brush to cover your map for fog.
+
+1. Automated Hull Generation (_foghull)
+   By adding the "_foghull" key to worldspawn, you tell the compiler to look at
+   the total bounds of your map and wrap the entire thing in a giant 6-sided box.
+   *   Key: "_foghull"
+   *   Value: "textures/skies/my_sky_shader"
+   *   Result: A giant axial brush is injected into the map during the BSP phase.
+
+2. Distance Culling (_farplanedist)
+   To optimize performance, you can tell the engine to stop rendering geometry 
+   beyond a certain point.
+   *   Key: "_farplanedist"
+   *   Value: "2048"
+   *   Note: You usually pair this with a fog shader that becomes 100% opaque 
+       at a distance slightly shorter (e.g., 1800) so the player never sees 
+       the geometry disappearing.
+
+Current Status in makebsp
+-------------------------
+Right now, makebsp does NOT support these keys. If you add "_foghull" or "_fog" 
+to your map's worldspawn, the compiler will simply ignore them.
+
+The parsing logic is located in:
+*   q3map/bsp.c -> ParseWorldspawnKeys()
+
+Implementation Strategy for makebsp
+-----------------------------------
+If we want to add support for autogenerating the fog hull, the path is fairly 
+straightforward:
+
+1.  Detection: Update ParseWorldspawnKeys() in q3map/bsp.c to check for the 
+    "_foghull" key.
+2.  Geometry Injection: We already calculate the total map bounds (map_mins 
+    and map_maxs) in LoadMapFile(). 
+3.  Brush Creation: We would need to create a new bspbrush_t, set its 6 sides 
+    to form an axial box based on those bounds (expanded by a small buffer like 
+    128 units), and apply the shader specified in the "_foghull" value.
+4.  Placement: This new brush should be added to entities[0].brushes (worldspawn) 
+    before the models are processed.
+
+This would allow you to simply type a shader name into worldspawn and have the 
+entire map instantly "encased" in fog/sky geometry.
