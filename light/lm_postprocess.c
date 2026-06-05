@@ -437,7 +437,7 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
     if (g2nrm) Q_Free(g2nrm); if (b2nrm) Q_Free(b2nrm);
 }
 
-static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses) {
+static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses, cl_kernel dK, cl_kernel fK) {
     dsurface_t *ds = &drawSurfaces[surfIdx]; if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return; if (aaPasses <= 0 && smoothPasses <= 0) return;
     float tS = GetSurfaceTexelSize(ds), eR = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius, sR = eR * tS; if (sR < 0.1f) return;
     float vS = sR, mDSq = sR*sR, sig = sR/3.0f, tS2 = 2*sig*sig; if (sig < 0.1f) sig = 0.1f;
@@ -472,83 +472,77 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     size_t nB=(size_t)gD[0]*gD[1]*gD[2], gS1=(size_t)gD[1]*gD[2], gS2=(size_t)gD[2];
     int *bC=calloc(nB, 4), *bS=Q_Alloc(nB*4), *sT=Q_Alloc(N*4), *wP=Q_Alloc(nB*4);
     if (!bC||!bS||!sT||!wP) { 
-        Q_Free(bC);Q_Free(bS);Q_Free(sT);Q_Free(wP);Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV);Q_Free(cP); 
+        if(bC) free(bC); Q_Free(bS); Q_Free(sT); Q_Free(wP); Q_Free(tP); Q_Free(tN); Q_Free(tC); Q_Free(vL); Q_Free(tX); Q_Free(tY); Q_Free(jP); Q_Free(jN); Q_Free(jV); Q_Free(cP); 
         if(tD)Q_Free(tD);if(tNr)Q_Free(tNr);
         return; 
     }
     for (int i=0; i<N; i++) { int v[3]; for(int k=0;k<3;k++) v[k]=(int)((tP[i*3+k]-gMin[k])/vS); if(v[0]>=0&&v[0]<gD[0]&&v[1]>=0&&v[1]<gD[1]&&v[2]>=0&&v[2]<gD[2]) bC[(size_t)v[0]*gS1+v[1]*gS2+v[2]]++; }
     bS[0]=0; for(size_t i=1;i<nB;i++) bS[i]=bS[i-1]+bC[i-1]; memcpy(wP, bS, nB*4);
     for (int i=0; i<N; i++) { int v[3]; for(int k=0;k<3;k++) v[k]=(int)((tP[i*3+k]-gMin[k])/vS); if(v[0]>=0&&v[0]<gD[0]&&v[1]>=0&&v[1]<gD[1]&&v[2]>=0&&v[2]<gD[2]) sT[wP[(size_t)v[0]*gS1+v[1]*gS2+v[2]]++]=i; }
-    cl_int err; cl_program prog=BuildOpenCLProgram("trisoup_filter.cl", "");
-    if (prog) {
-        cl_kernel dK=clCreateKernel(prog,"trisoup_density",&err), fK=clCreateKernel(prog,"trisoup_filter",&err);
-        if (dK && fK) {
-            size_t aBy=(size_t)(numLightBytes/3)*3*4, nf3=(size_t)N*3*4, bBy=nB*4;
-            cl_mem btP=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,nf3,tP,&err);
-            cl_mem btN=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,nf3,tN,&err);
-            cl_mem bjP=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS*3*4,jP,&err);
-            cl_mem bjN=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS*3*4,jN,&err);
-            cl_mem bjV=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS,jV,&err);
-            cl_mem bbS=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,bBy,bS,&err);
-            cl_mem bbC=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,bBy,bC,&err);
-            cl_mem bsT=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,sT,&err);
-            cl_mem bOut=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,lightFloats,&err);
-            cl_mem bOutD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,deluxeFloats,&err):NULL;
-            cl_mem bOutN=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE|CL_MEM_COPY_HOST_PTR,aBy,normalFloats,&err):NULL;
-            cl_mem bvL=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,vL,&err);
-            cl_mem btC=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err);
-            cl_mem btD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err):NULL;
-            cl_mem btNr=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_ONLY,nf3,NULL,&err):NULL;
-            cl_mem bDen=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,(size_t)N*4,NULL,&err);
-            
-            for (int p=0; p<aaPasses+smoothPasses; p++) {
-                int smp=(p<aaPasses)?8:1; 
-                for(int i=0;i<N;i++) { 
-                    VectorCopy(&lightFloats[vL[i]*3],&tC[i*3]); 
-                    if(deluxeFloats) VectorCopy(&deluxeFloats[vL[i]*3],&tD[i*3]);
-                    if(normalFloats) VectorCopy(&normalFloats[vL[i]*3],&tNr[i*3]);
-                }
-                clEnqueueWriteBuffer(g_clQueue,btC,CL_TRUE,0,nf3,tC,0,NULL,NULL);
-                if(deluxeFloats) clEnqueueWriteBuffer(g_clQueue,btD,CL_TRUE,0,nf3,tD,0,NULL,NULL);
-                if(normalFloats) clEnqueueWriteBuffer(g_clQueue,btNr,CL_TRUE,0,nf3,tNr,0,NULL,NULL);
-                
-                int da=0; clSetKernelArg(dK,da++,sizeof(cl_mem),&btP); clSetKernelArg(dK,da++,sizeof(cl_mem),&btN); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbS); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbC);
-                clSetKernelArg(dK,da++,sizeof(cl_mem),&bsT); clSetKernelArg(dK,da++,sizeof(cl_mem),&bDen); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gMin[k]);
-                clSetKernelArg(dK,da++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gD[k]); clSetKernelArg(dK,da++,4,&mDSq); clSetKernelArg(dK,da++,4,&tS2);
-                float aM=AA_ANGLE_MATCH_COS; clSetKernelArg(dK,da++,4,&aM); clSetKernelArg(dK,da++,4,&N);
-                size_t gS=(size_t)N; clEnqueueNDRangeKernel(g_clQueue,dK,1,NULL,&gS,NULL,0,NULL,NULL); clFinish(g_clQueue);
-                
-                int fa=0; clSetKernelArg(fK,fa++,sizeof(cl_mem),&btP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btN); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjN);
-                clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjV); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bDen); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbS);
-                clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bsT); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOut); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bvL);
-                for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gMin[k]); clSetKernelArg(fK,fa++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gD[k]);
-                clSetKernelArg(fK,fa++,4,&mDSq); clSetKernelArg(fK,fa++,4,&tS2); clSetKernelArg(fK,fa++,4,&aM); clSetKernelArg(fK,fa++,4,&smp); clSetKernelArg(fK,fa++,4,&N);
-                // Extra args for directions
-                cl_mem dNULL=NULL;
-                if(deluxeFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btD); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutD);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
-                if(normalFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btNr);clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutN);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
-                
-                clEnqueueNDRangeKernel(g_clQueue,fK,1,NULL,&gS,NULL,0,NULL,NULL); clFinish(g_clQueue);
-                
-                if (p<aaPasses+smoothPasses-1) {
-                    clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,aBy,lightFloats,0,NULL,NULL);
-                    if(deluxeFloats) clEnqueueReadBuffer(g_clQueue,bOutD,CL_TRUE,0,aBy,deluxeFloats,0,NULL,NULL);
-                    if(normalFloats) clEnqueueReadBuffer(g_clQueue,bOutN,CL_TRUE,0,aBy,normalFloats,0,NULL,NULL);
-                }
+    
+    cl_int err;
+    size_t nf3=(size_t)N*3*4, bBy=nB*4;
+    cl_mem btP=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,nf3,tP,&err);
+    cl_mem btN=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,nf3,tN,&err);
+    cl_mem bjP=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS*3*4,jP,&err);
+    cl_mem bjN=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS*3*4,jN,&err);
+    cl_mem bjV=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*nS,jV,&err);
+    cl_mem bbS=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,bBy,bS,&err);
+    cl_mem bbC=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,bBy,bC,&err);
+    cl_mem bsT=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,sT,&err);
+    cl_mem bOut=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err);
+    cl_mem bOutD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err):NULL;
+    cl_mem bOutN=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err):NULL;
+    cl_mem bvL=clCreateBuffer(g_clContext,CL_MEM_READ_ONLY|CL_MEM_COPY_HOST_PTR,(size_t)N*4,vL,&err);
+    cl_mem btC=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err);
+    cl_mem btD=deluxeFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err):NULL;
+    cl_mem btNr=normalFloats?clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,nf3,NULL,&err):NULL;
+    cl_mem bDen=clCreateBuffer(g_clContext,CL_MEM_READ_WRITE,(size_t)N*4,NULL,&err);
+    
+    if (btP && btN && bjP && bjN && bjV && bbS && bbC && bsT && bOut && bvL && btC && bDen) {
+        for (int p=0; p<aaPasses+smoothPasses; p++) {
+            int smp=(p<aaPasses)?8:1; 
+            for(int i=0;i<N;i++) { 
+                float *src = (p == 0) ? tempFloats : lightFloats;
+                VectorCopy(&src[vL[i]*3],&tC[i*3]); 
+                if(deluxeFloats) VectorCopy(&deluxeFloats[vL[i]*3],&tD[i*3]);
+                if(normalFloats) VectorCopy(&normalFloats[vL[i]*3],&tNr[i*3]);
             }
-            clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,aBy,lightFloats,0,NULL,NULL);
-            if(deluxeFloats) clEnqueueReadBuffer(g_clQueue,bOutD,CL_TRUE,0,aBy,deluxeFloats,0,NULL,NULL);
-            if(normalFloats) clEnqueueReadBuffer(g_clQueue,bOutN,CL_TRUE,0,aBy,normalFloats,0,NULL,NULL);
+            clEnqueueWriteBuffer(g_clQueue,btC,CL_TRUE,0,nf3,tC,0,NULL,NULL);
+            if(deluxeFloats) clEnqueueWriteBuffer(g_clQueue,btD,CL_TRUE,0,nf3,tD,0,NULL,NULL);
+            if(normalFloats) clEnqueueWriteBuffer(g_clQueue,btNr,CL_TRUE,0,nf3,tNr,0,NULL,NULL);
             
-            clReleaseMemObject(btP); clReleaseMemObject(btN); clReleaseMemObject(bjP); clReleaseMemObject(bjN); clReleaseMemObject(bjV);
-            clReleaseMemObject(bbS); clReleaseMemObject(bbC); clReleaseMemObject(bsT); clReleaseMemObject(bOut); clReleaseMemObject(bvL); clReleaseMemObject(btC); clReleaseMemObject(bDen);
-            if(bOutD)clReleaseMemObject(bOutD); if(bOutN)clReleaseMemObject(bOutN);
-            if(btD)clReleaseMemObject(btD); if(btNr)clReleaseMemObject(btNr);
-            clReleaseKernel(fK); clReleaseKernel(dK);
+            int da=0; clSetKernelArg(dK,da++,sizeof(cl_mem),&btP); clSetKernelArg(dK,da++,sizeof(cl_mem),&btN); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbS); clSetKernelArg(dK,da++,sizeof(cl_mem),&bbC);
+            clSetKernelArg(dK,da++,sizeof(cl_mem),&bsT); clSetKernelArg(dK,da++,sizeof(cl_mem),&bDen); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gMin[k]);
+            clSetKernelArg(dK,da++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(dK,da++,4,&gD[k]); clSetKernelArg(dK,da++,4,&mDSq); clSetKernelArg(dK,da++,4,&tS2);
+            float aM=AA_ANGLE_MATCH_COS; clSetKernelArg(dK,da++,4,&aM); clSetKernelArg(dK,da++,4,&N);
+            size_t gS=(size_t)N; clEnqueueNDRangeKernel(g_clQueue,dK,1,NULL,&gS,NULL,0,NULL,NULL);
+            
+            int fa=0; clSetKernelArg(fK,fa++,sizeof(cl_mem),&btP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btN); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjP); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjN);
+            clSetKernelArg(fK,fa++,sizeof(cl_mem),&bjV); clSetKernelArg(fK,fa++,sizeof(cl_mem),&btC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bDen); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbS);
+            clSetKernelArg(fK,fa++,sizeof(cl_mem),&bbC); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bsT); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOut); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bvL);
+            for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gMin[k]); clSetKernelArg(fK,fa++,4,&vS); for(int k=0;k<3;k++) clSetKernelArg(fK,fa++,4,&gD[k]);
+            clSetKernelArg(fK,fa++,4,&mDSq); clSetKernelArg(fK,fa++,4,&tS2); clSetKernelArg(fK,fa++,4,&aM); clSetKernelArg(fK,fa++,4,&smp); clSetKernelArg(fK,fa++,4,&N);
+            cl_mem dNULL=NULL;
+            if(deluxeFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btD); clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutD);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
+            if(normalFloats){clSetKernelArg(fK,fa++,sizeof(cl_mem),&btNr);clSetKernelArg(fK,fa++,sizeof(cl_mem),&bOutN);} else {clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);clSetKernelArg(fK,fa++,sizeof(cl_mem),&dNULL);}
+            
+            clEnqueueNDRangeKernel(g_clQueue,fK,1,NULL,&gS,NULL,0,NULL,NULL); clFinish(g_clQueue);
+            
+            clEnqueueReadBuffer(g_clQueue,bOut,CL_TRUE,0,nf3,tC,0,NULL,NULL);
+            for(int i=0;i<N;i++) VectorCopy(&tC[i*3],&lightFloats[vL[i]*3]);
+            if(deluxeFloats) { clEnqueueReadBuffer(g_clQueue,bOutD,CL_TRUE,0,nf3,tD,0,NULL,NULL); for(int i=0;i<N;i++) VectorCopy(&tD[i*3],&deluxeFloats[vL[i]*3]); }
+            if(normalFloats) { clEnqueueReadBuffer(g_clQueue,bOutN,CL_TRUE,0,nf3,tNr,0,NULL,NULL); for(int i=0;i<N;i++) VectorCopy(&tNr[i*3],&normalFloats[vL[i]*3]); }
         }
-        clReleaseProgram(prog);
     }
-    Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV);Q_Free(bC);Q_Free(bS);Q_Free(sT);Q_Free(wP);Q_Free(cP);
+    
+    if(btP)clReleaseMemObject(btP); if(btN)clReleaseMemObject(btN); if(bjP)clReleaseMemObject(bjP); if(bjN)clReleaseMemObject(bjN); if(bjV)clReleaseMemObject(bjV);
+    if(bbS)clReleaseMemObject(bbS); if(bbC)clReleaseMemObject(bbC); if(bsT)clReleaseMemObject(bsT); if(bOut)clReleaseMemObject(bOut); if(bvL)clReleaseMemObject(bvL); 
+    if(btC)clReleaseMemObject(btC); if(bDen)clReleaseMemObject(bDen);
+    if(bOutD)clReleaseMemObject(bOutD); if(bOutN)clReleaseMemObject(bOutN);
+    if(btD)clReleaseMemObject(btD); if(btNr)clReleaseMemObject(btNr);
+    
+    Q_Free(tP);Q_Free(tN);Q_Free(tC);Q_Free(vL);Q_Free(tX);Q_Free(tY);Q_Free(jP);Q_Free(jN);Q_Free(jV); if(bC) free(bC); Q_Free(bS);Q_Free(sT);Q_Free(wP);Q_Free(cP);
     if(tD)Q_Free(tD);if(tNr)Q_Free(tNr);
 }
 static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, int aaP, int smP) {
@@ -660,15 +654,27 @@ void PostProcessLightmaps(void) {
         }
     }
     if (lightmapAA>0 || lightmapSmoothPasses>0) {
-        float r=lightmapSmoothRadius; _printf("  Volumetric Filtering: "); float *tF=Q_Alloc((size_t)numLightBytes*4);
-        memcpy(tF,lightFloats,(size_t)numLightBytes*4); int prg=0;
+        float r=lightmapSmoothRadius; _printf("  Volumetric Filtering: "); 
+        size_t bytes = (size_t)numLightBytes * 4;
+        float *tF=Q_Alloc(bytes);
+        memcpy(tF,lightFloats,bytes); int prg=0;
         if(useOpenCL) {
-            for(int s=0;s<numDrawSurfaces;s++){
-                float r = localSurfaces[s].smoothingRadius;
-                if (r > 0.0f) {
-                    ProcessTrisoupVolumetricGPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
+            cl_int err; cl_program prog=BuildOpenCLProgram("trisoup_filter.cl", "");
+            if (prog) {
+                cl_kernel dK=clCreateKernel(prog,"trisoup_density",&err);
+                cl_kernel fK=clCreateKernel(prog,"trisoup_filter",&err);
+                if (dK && fK) {
+                    for(int s=0;s<numDrawSurfaces;s++){
+                        float r = localSurfaces[s].smoothingRadius;
+                        if (r > 0.0f) {
+                            ProcessTrisoupVolumetricGPU(s,r,tF,lightmapAA,lightmapSmoothPasses, dK, fK);
+                        }
+                        int c=++prg; if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    }
                 }
-                int c=++prg; if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                if (fK) clReleaseKernel(fK);
+                if (dK) clReleaseKernel(dK);
+                clReleaseProgram(prog);
             }
         } else {
             #pragma omp parallel for schedule(dynamic,1)

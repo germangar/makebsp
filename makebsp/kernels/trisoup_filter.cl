@@ -225,18 +225,18 @@ __kernel void trisoup_filter(
     }
 
     if (finalWeight > 0.0001f) {
-        int atlasIdx = validList[tid] * 3;
-        output[atlasIdx + 0] = finalR / finalWeight;
-        output[atlasIdx + 1] = finalG / finalWeight;
-        output[atlasIdx + 2] = finalB / finalWeight;
+        int outIdx = tid * 3;
+        output[outIdx + 0] = finalR / finalWeight;
+        output[outIdx + 1] = finalG / finalWeight;
+        output[outIdx + 2] = finalB / finalWeight;
         
         if (texelDir && outputDir) {
             if (finalDWeight > 0.0001f) {
                 float len = sqrt(finalDx*finalDx + finalDy*finalDy + finalDz*finalDz);
                 if (len > 0.001f) {
-                    outputDir[atlasIdx + 0] = finalDx / len;
-                    outputDir[atlasIdx + 1] = finalDy / len;
-                    outputDir[atlasIdx + 2] = finalDz / len;
+                    outputDir[outIdx + 0] = finalDx / len;
+                    outputDir[outIdx + 1] = finalDy / len;
+                    outputDir[outIdx + 2] = finalDz / len;
                 }
             }
         }
@@ -244,9 +244,9 @@ __kernel void trisoup_filter(
             if (finalDWeight > 0.0001f) {
                 float len = sqrt(finalNx*finalNx + finalNy*finalNy + finalNz*finalNz);
                 if (len > 0.001f) {
-                    outputNrm[atlasIdx + 0] = finalNx / len;
-                    outputNrm[atlasIdx + 1] = finalNy / len;
-                    outputNrm[atlasIdx + 2] = finalNz / len;
+                    outputNrm[outIdx + 0] = finalNx / len;
+                    outputNrm[outIdx + 1] = finalNy / len;
+                    outputNrm[outIdx + 2] = finalNz / len;
                 }
             }
         }
