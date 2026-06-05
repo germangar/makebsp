@@ -22,10 +22,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../common/cmdlib.h"
 #include "light.h"
-#include "../shared/json_parser.h"
 #include "radiosity.h"
 
-#include <stdio.h>
 #include <string.h>
 
 #ifdef _WIN32

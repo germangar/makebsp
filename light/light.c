@@ -1030,7 +1030,7 @@ void BuildLocalSurfaces(void)
     strcpy(mapName, source);
     StripExtension(mapName);
     
-    int numExtra;
+    int numExtra = 0;
     extraSurface_t *extra = LoadSurfaceExtraFile(mapName, &numExtra);
     
     // rad_interval is now game->radiosityInterval

@@ -67,7 +67,7 @@ static hacdSettings_t hacd_settings_object = {
 };
 
 /* Settings for walkable models (stairs, floors, smooth terrain) */
-static hacdSettings_t hacd_settings_walkable = {
+static __attribute__((unused)) hacdSettings_t hacd_settings_walkable = {
     1.0,      // scaleFactor (Standard, diagonal becomes 2.0)
     qfalse,   // disableNormalize (Normalize the mesh so size doesn't skew math)
     0.0001,      // compacity

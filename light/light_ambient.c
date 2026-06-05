@@ -18,6 +18,7 @@ The result is a direction in the UPPER hemisphere (z >= 0).
 Callers must negate z for ground-hemisphere rays.
 ================
 */
+#if 0
 static void StratifiedCosineDir(int i, int N, float randU, float randV, vec3_t out)
 {
     // Stratified azimuth: divide [0, 2pi) into N equal slices,
@@ -36,6 +37,7 @@ static void StratifiedCosineDir(int i, int N, float randU, float randV, vec3_t o
     out[1] = sinf(phi) * sinTheta;
     out[2] = cosTheta;  // always >= 0 (upper hemisphere)
 }
+#endif
 
 static void StratifiedUniformDir(int i, int N, float randU, float randV, vec3_t out)
 {
@@ -273,9 +275,14 @@ void TraceAmbient(int num)
             int iz_max = (int)((origin[2] + gatherRadius - gridMins[2]) / gridSize[2]);
 
             // clamp to bounds
-            if (ix_min < 0) ix_min = 0; if (ix_max > gridBounds[0] - 1) ix_max = gridBounds[0] - 1;
-            if (iy_min < 0) iy_min = 0; if (iy_max > gridBounds[1] - 1) iy_max = gridBounds[1] - 1;
-            if (iz_min < 0) iz_min = 0; if (iz_max > gridBounds[2] - 1) iz_max = gridBounds[2] - 1;
+            if (ix_min < 0) ix_min = 0; 
+            if (ix_max > gridBounds[0] - 1) ix_max = gridBounds[0] - 1;
+            
+            if (iy_min < 0) iy_min = 0; 
+            if (iy_max > gridBounds[1] - 1) iy_max = gridBounds[1] - 1;
+            
+            if (iz_min < 0) iz_min = 0; 
+            if (iz_max > gridBounds[2] - 1) iz_max = gridBounds[2] - 1;
 
             vec3_t ambColor;
             VectorClear(ambColor);

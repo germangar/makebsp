@@ -460,7 +460,7 @@ static void AllocateLightmapForPlanarPatch(mapDrawSurface_t *ds, vec3_t planeNor
 
 void AllocateLightmapForPatch(mapDrawSurface_t *ds)
 {
-    int i, j, k;
+    int i, j;
     drawVert_t *verts;
     int w, h;
     int x, y;

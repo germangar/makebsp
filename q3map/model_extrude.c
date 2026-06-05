@@ -302,10 +302,6 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 ====================
 ExtrudeFanToBrush
 
-/*
-====================
-ExtrudeFanToBrush
-
 Diamond/bipyramid approach: the hub vertex is the front tip, and a
 computed back point is the rear tip. The ring vertices form the equator.
   - N front faces: each original fan triangle (hub, ring[i], ring[i+1])
@@ -317,7 +313,7 @@ equal to the farthest ring vertex from the hub. This ensures the
 brush is geometrically bounded and never spikes.
 ====================
 */
-static bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
+static __attribute__((unused)) bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ringVerts, int ringCount,
                                      clipTri_t *tris, int *fanTriIndices, int fanTriCount,
                                      float *verts, float extrudeDist, shaderInfo_t *si)
 {
@@ -486,7 +482,7 @@ Returns qtrue and fills ringVerts/orderedTriIdx if a ring of 3+ is found.
 *pFanTriCount is updated to the actual number of triangles in the ring.
 ====================
 */
-static qboolean OrderFanRing(int hubIdx, clipTri_t *tris,
+static __attribute__((unused)) qboolean OrderFanRing(int hubIdx, clipTri_t *tris,
                              int *fanTriIdx, int *pFanTriCount, float *verts,
                              int *ringVerts, int *orderedTriIdx)
 {
@@ -627,7 +623,7 @@ the "front" (positive) side of any of its bounding planes, it is concave
 and cannot be a valid BSP brush.
 ====================
 */
-static qboolean ValidateFanConvexity(int hubIdx, int *ringVerts, int ringCount,
+static __attribute__((unused)) qboolean ValidateFanConvexity(int hubIdx, int *ringVerts, int ringCount,
                                      clipTri_t *tris, int *fanTriIdx, int fanTriCount,
                                      float *verts, float extrudeDist)
 {

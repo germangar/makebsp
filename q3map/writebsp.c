@@ -334,13 +334,11 @@ floating-point indeterminism during raytracing.
 #define LIGHT_PLANE_PUSH 0.5f
 
 void NudgeLightEntities(void) {
-	int i, nodeNum;
+	int i;
 	entity_t *e;
 	const char *classname;
 	const char *origin_str;
 	vec3_t origin;
-	dnode_t *node;
-	dplane_t *plane;
 	float d;
 	int nudged_count = 0;
 

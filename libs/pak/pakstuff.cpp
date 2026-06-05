@@ -1035,7 +1035,6 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
   g_strBasePath[sizeof(g_strBasePath) - 1] = '\0';
 
   if (pName == NULL) {
-    char cWork[WORK_LEN];
     Str strPath(normalizedBasePath);
     AddSlash(strPath);
     strPath += "*.pk3";

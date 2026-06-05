@@ -276,7 +276,7 @@ Sets contentsShader, contents, opaque, and detail
 */
 void SetBrushContents(bspbrush_t *b)
 {
-    int contents, c2;
+    int contents;
     side_t *s;
     int i;
 
@@ -297,9 +297,6 @@ void SetBrushContents(bspbrush_t *b)
         {
             continue;
         }
-
-        c2 = s->contents;
-
 
         allFlags |= s->surfaceFlags;
     }

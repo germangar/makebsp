@@ -150,6 +150,8 @@ void ProcessWorldModel(void)
             nosort = qfalse;
             testlevel = 2;     // Default test level
 
+            void FreeVisibility(void);
+
             // 1. Load the flat graph data from the just-written .prt file
             LoadPortals(portalfile);
 
