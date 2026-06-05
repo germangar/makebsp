@@ -572,11 +572,11 @@ int main(int argc, char **argv)
     // check for general program options
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-info")) {
-            Bspinfo(argc - 2, argv + 2);
+            Bspinfo(argc - (i + 1), argv + (i + 1));
             return 0;
         }
         if (!strcmp(argv[i], "-exportmodels")) {
-            ExportModels(argc - 2, argv + 2);
+            ExportModels(argc - (i + 1), argv + (i + 1));
             return 0;
         }
     }
