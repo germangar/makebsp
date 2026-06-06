@@ -1748,6 +1748,15 @@ void LightMain(void)
                     gridSize[2]);
         }
 
+        if (g_fast)
+        {
+            gridSize[0] *= 2.0f;
+            gridSize[1] *= 2.0f;
+            if (gridSize[0] < 128.0f) gridSize[0] = 128.0f;
+            if (gridSize[1] < 128.0f) gridSize[1] = 128.0f;
+            _printf("Fast mode enabled: scaled horizontal grid size to {%1.1f, %1.1f, %1.1f}\n", gridSize[0], gridSize[1], gridSize[2]);
+        }
+
         for (i = 0; i < 3; i++)
         {
             gridMins[i] = gridSize[i] * ceil(dmodels[0].mins[i] / gridSize[i]);

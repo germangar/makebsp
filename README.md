@@ -322,6 +322,7 @@ These switches change the primary mode of the executable.
   - `-merge`: Merges adjacent visibility data (can reduce file size).
   - `-nopassage`: Disables the passage-flow visibility optimization.
 - `-exportmodels <bspname>`: Exports all `misc_model` (Triangle Soup) geometry from a BSP into `.obj` files. Models processed with -meta/forcemeta will be split in multple mini-meshes and unusable. Only useful for models originally compiled for vertex lighting.
+    - `-ignoreplanar 1|0`: When enabled (default 1), skips exporting trisoup surfaces that are perfectly flat/planar (useful to avoid exporting standard wall geometry that was meta'd).
 - `-info <bspname>`: Displays detailed statistics and lump information for the specified BSP file.
 
 ---
