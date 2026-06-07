@@ -311,17 +311,32 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
                 if (v > 1.0f)
                     v = 1.0f;
 
+                float norm_u = u;
+                float norm_v = v;
+                float wX = maxs[0] - mins[0];
+                float wY = maxs[1] - mins[1];
+                
+                if (mx == 0 && wX > 0.0f && norm_u < 0.6f / wX) norm_u = 0.0f;
+                if (mx == mesh->width - 2 && wX > 0.0f && norm_u > 1.0f - 0.6f / wX) norm_u = 1.0f;
+                if (my == 0 && wY > 0.0f && norm_v < 0.6f / wY) norm_v = 0.0f;
+                if (my == mesh->height - 2 && wY > 0.0f && norm_v > 1.0f - 0.6f / wY) norm_v = 1.0f;
+
                 for (k = 0; k < 3; k++)
                 {
-                    origin[k] = (1.0f - u) * (1.0f - v) * v00->xyz[k] +
-                                u * (1.0f - v) * v10->xyz[k] +
-                                (1.0f - u) * v * v01->xyz[k] +
-                                u * v * v11->xyz[k];
+                    if (v > u) {
+                        origin[k] = (1.0f - v) * v00->xyz[k] +
+                                    (v - u) * v01->xyz[k] +
+                                    u * v11->xyz[k];
+                    } else {
+                        origin[k] = (1.0f - u) * v00->xyz[k] +
+                                    (u - v) * v10->xyz[k] +
+                                    v * v11->xyz[k];
+                    }
 
-                    normal[k] = (1.0f - u) * (1.0f - v) * v00->normal[k] +
-                                u * (1.0f - v) * v10->normal[k] +
-                                (1.0f - u) * v * v01->normal[k] +
-                                u * v * v11->normal[k];
+                    normal[k] = (1.0f - norm_u) * (1.0f - norm_v) * v00->normal[k] +
+                                norm_u * (1.0f - norm_v) * v10->normal[k] +
+                                (1.0f - norm_u) * norm_v * v01->normal[k] +
+                                norm_u * norm_v * v11->normal[k];
                 }
                 found = qtrue;
                 break;
@@ -338,17 +353,32 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
                 float u = (maxs[0] > mins[0]) ? (st[0] - mins[0]) / (maxs[0] - mins[0]) : 0.0f;
                 float v = (maxs[1] > mins[1]) ? (st[1] - mins[1]) / (maxs[1] - mins[1]) : 0.0f;
 
+                float norm_u = u;
+                float norm_v = v;
+                float wX = maxs[0] - mins[0];
+                float wY = maxs[1] - mins[1];
+                
+                if (mx == 0 && wX > 0.0f && norm_u < 0.6f / wX) norm_u = 0.0f;
+                if (mx == mesh->width - 2 && wX > 0.0f && norm_u > 1.0f - 0.6f / wX) norm_u = 1.0f;
+                if (my == 0 && wY > 0.0f && norm_v < 0.6f / wY) norm_v = 0.0f;
+                if (my == mesh->height - 2 && wY > 0.0f && norm_v > 1.0f - 0.6f / wY) norm_v = 1.0f;
+
                 for (k = 0; k < 3; k++)
                 {
-                    bestExtrapOrigin[k] = (1.0f - u) * (1.0f - v) * v00->xyz[k] +
-                                          u * (1.0f - v) * v10->xyz[k] +
-                                          (1.0f - u) * v * v01->xyz[k] +
-                                          u * v * v11->xyz[k];
+                    if (v > u) {
+                        bestExtrapOrigin[k] = (1.0f - v) * v00->xyz[k] +
+                                              (v - u) * v01->xyz[k] +
+                                              u * v11->xyz[k];
+                    } else {
+                        bestExtrapOrigin[k] = (1.0f - u) * v00->xyz[k] +
+                                              (u - v) * v10->xyz[k] +
+                                              v * v11->xyz[k];
+                    }
 
-                    bestExtrapNormal[k] = (1.0f - u) * (1.0f - v) * v00->normal[k] +
-                                          u * (1.0f - v) * v10->normal[k] +
-                                          (1.0f - u) * v * v01->normal[k] +
-                                          u * v * v11->normal[k];
+                    bestExtrapNormal[k] = (1.0f - norm_u) * (1.0f - norm_v) * v00->normal[k] +
+                                          norm_u * (1.0f - norm_v) * v10->normal[k] +
+                                          (1.0f - norm_u) * norm_v * v01->normal[k] +
+                                          norm_u * norm_v * v11->normal[k];
                 }
             }
         }
