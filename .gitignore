@@ -87,3 +87,5 @@ compile_userdir.log
 testvfs_fast.bat
 bomb_gfx.shader
 DM1_user.bat
+killer_shaders/prong_dm12.shader
+killer_shaders/prong_dm23.shader

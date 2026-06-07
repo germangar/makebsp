@@ -448,7 +448,19 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             // Explicitly skip 'template' line
             if (!Q_stricmp(token, "template"))
             {
-                while (TokenAvailable()) GetToken(qfalse);
+                while (TokenAvailable())
+                {
+                    GetToken(qfalse);
+                    if (!strcmp(token, "}"))
+                    {
+                        shaderDepth--;
+                        break;
+                    }
+                    else if (!strcmp(token, "{"))
+                    {
+                        shaderDepth++;
+                    }
+                }
                 continue;
             }
 
@@ -785,6 +797,15 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             while (TokenAvailable())
             {
                 GetToken(qfalse);
+                if (!strcmp(token, "}"))
+                {
+                    shaderDepth--;
+                    break;
+                }
+                else if (!strcmp(token, "{"))
+                {
+                    shaderDepth++;
+                }
             }
         }
     }
