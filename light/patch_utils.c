@@ -144,17 +144,17 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     // Step 1: Adaptive Bezier subdivision (always produces an odd-sized grid)
     mesh = SubdivideMesh(srcMesh, 8.0f, 999.0f);
 
+    // Compute smooth normals on the control net BEFORE dropping to the curve.
+    // This utilizes a property of Bezier curves: the vectors between subdivided control
+    // points exactly match the analytical tangents at the vertices.
+    MakeMeshNormals(*mesh);
+
     // Step 2: Push approximating points onto the Bezier curve
-    //         Safe here because SubdivideMesh always produces an odd grid
     PutMeshOnCurve(*mesh);
 
-    // Step 3: Compute normals
+    // Step 3: Check planar
     localSurface_t *localSurface = &localSurfaces[(int)(ds - drawSurfaces)];
     localSurface->isPlanarPatch = CheckPatchPlanar(mesh);
-    
-    // Compute smooth normals from the curved CCW-wound mesh
-    // This gives correct outward-facing normals regardless of patch orientation
-    MakeMeshNormals(*mesh);
 
     // Step 4: Remove co-linear rows/columns to keep the mesh lean
     subdivided = RemoveLinearMeshColumnsRows(mesh);

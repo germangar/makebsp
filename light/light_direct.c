@@ -241,6 +241,29 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
     vec3_t bestExtrapOrigin, bestExtrapNormal;
     float bestExtrapDistSq = 999999.0f;
 
+    // Detect open (non-wrapping) axes using the same logic as MakeMeshNormals.
+    // An axis is "closed" (cylindrical) when the first and last vertex column/row
+    // share the same 3D position (within 1 unit). An "open" axis borders flat brushes
+    // and requires the entire first/last quad to use the flat edge normals.
+    qboolean openU = qtrue, openV = qtrue;
+    {
+        int i;
+        for (i = 0; i < mesh->height; i++) {
+            vec3_t delta;
+            VectorSubtract(mesh->verts[i * mesh->width].xyz,
+                           mesh->verts[i * mesh->width + mesh->width - 1].xyz, delta);
+            if (VectorLength(delta) > 1.0f) { openU = qtrue; break; }
+            openU = qfalse;
+        }
+        for (i = 0; i < mesh->width; i++) {
+            vec3_t delta;
+            VectorSubtract(mesh->verts[i].xyz,
+                           mesh->verts[i + (mesh->height - 1) * mesh->width].xyz, delta);
+            if (VectorLength(delta) > 1.0f) { openV = qtrue; break; }
+            openV = qfalse;
+        }
+    }
+
     for (my = 0; my < mesh->height - 1; my++)
     {
         for (mx = 0; mx < mesh->width - 1; mx++)
@@ -313,13 +336,18 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
 
                 float norm_u = u;
                 float norm_v = v;
-                float wX = maxs[0] - mins[0];
-                float wY = maxs[1] - mins[1];
-                
-                if (mx == 0 && wX > 0.0f && norm_u < 0.6f / wX) norm_u = 0.0f;
-                if (mx == mesh->width - 2 && wX > 0.0f && norm_u > 1.0f - 0.6f / wX) norm_u = 1.0f;
-                if (my == 0 && wY > 0.0f && norm_v < 0.6f / wY) norm_v = 0.0f;
-                if (my == mesh->height - 2 && wY > 0.0f && norm_v > 1.0f - 0.6f / wY) norm_v = 1.0f;
+                // Open-edge patches: freeze the entire first/last quad to the flat edge normal.
+                // This makes the lighting at the seam perfectly planar, matching the adjacent brush.
+                // Interpolation only begins from the second quad inward.
+                // Closed patches (cylinders etc.) keep standard interpolation everywhere.
+                if (openU) {
+                    if (mx == 0) norm_u = 0.0f;
+                    else if (mx == mesh->width - 2) norm_u = 1.0f;
+                }
+                if (openV) {
+                    if (my == 0) norm_v = 0.0f;
+                    else if (my == mesh->height - 2) norm_v = 1.0f;
+                }
 
                 for (k = 0; k < 3; k++)
                 {
@@ -355,13 +383,14 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
 
                 float norm_u = u;
                 float norm_v = v;
-                float wX = maxs[0] - mins[0];
-                float wY = maxs[1] - mins[1];
-                
-                if (mx == 0 && wX > 0.0f && norm_u < 0.6f / wX) norm_u = 0.0f;
-                if (mx == mesh->width - 2 && wX > 0.0f && norm_u > 1.0f - 0.6f / wX) norm_u = 1.0f;
-                if (my == 0 && wY > 0.0f && norm_v < 0.6f / wY) norm_v = 0.0f;
-                if (my == mesh->height - 2 && wY > 0.0f && norm_v > 1.0f - 0.6f / wY) norm_v = 1.0f;
+                if (openU) {
+                    if (mx == 0) norm_u = 0.0f;
+                    else if (mx == mesh->width - 2) norm_u = 1.0f;
+                }
+                if (openV) {
+                    if (my == 0) norm_v = 0.0f;
+                    else if (my == mesh->height - 2) norm_v = 1.0f;
+                }
 
                 for (k = 0; k < 3; k++)
                 {
