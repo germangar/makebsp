@@ -124,6 +124,118 @@ static qboolean CheckPatchPlanar(mesh_t *mesh) {
 
 /*
 =========================
+OverrideOpenEdgeNormals
+
+For open (non-wrapping) patch edges, computes the exact analytical plane normal
+from the control net geometry and overrides all edge vertex normals with it.
+This must run on the pre-PutMeshOnCurve control net where tangent vectors
+are mathematically exact Bezier derivatives.
+
+MakeMeshNormals uses 8-directional neighbors including diagonals, which skews
+edge normals because diagonal control points are already bending away from the
+edge plane. This function bypasses that by computing the plane directly from:
+  - The edge tangent (vector along the edge)
+  - The perpendicular tangent (vector from edge into the surface interior)
+The cross product of these two gives the exact plane normal of the adjacent brush.
+=========================
+*/
+static void OverrideOpenEdgeNormals(mesh_t *mesh) {
+    int i;
+    int w = mesh->width;
+    int h = mesh->height;
+
+    if (w < 2 || h < 2) return;
+
+    // Detect wrapping per axis (same logic as MakeMeshNormals)
+    qboolean wrapU = qtrue;
+    for (i = 0; i < h; i++) {
+        vec3_t delta;
+        VectorSubtract(mesh->verts[i * w].xyz, mesh->verts[i * w + w - 1].xyz, delta);
+        if (VectorLength(delta) > 1.0f) { wrapU = qfalse; break; }
+    }
+
+    qboolean wrapV = qtrue;
+    for (i = 0; i < w; i++) {
+        vec3_t delta;
+        VectorSubtract(mesh->verts[i].xyz, mesh->verts[i + (h - 1) * w].xyz, delta);
+        if (VectorLength(delta) > 1.0f) { wrapV = qfalse; break; }
+    }
+
+    // Left edge (column 0) — open when U doesn't wrap
+    if (!wrapU) {
+        vec3_t edgeTan, perpTan, edgeNormal;
+        VectorSubtract(mesh->verts[(h - 1) * w].xyz, mesh->verts[0].xyz, edgeTan);
+        VectorSubtract(mesh->verts[1].xyz, mesh->verts[0].xyz, perpTan);
+
+        if (VectorNormalize(edgeTan, edgeTan) > 0.001f &&
+            VectorNormalize(perpTan, perpTan) > 0.001f) {
+            CrossProduct(edgeTan, perpTan, edgeNormal);
+            if (VectorNormalize(edgeNormal, edgeNormal) > 0.001f) {
+                if (DotProduct(edgeNormal, mesh->verts[0].normal) < 0)
+                    VectorScale(edgeNormal, -1.0f, edgeNormal);
+                for (i = 0; i < h; i++)
+                    VectorCopy(edgeNormal, mesh->verts[i * w].normal);
+            }
+        }
+    }
+
+    // Right edge (column w-1) — open when U doesn't wrap
+    if (!wrapU) {
+        vec3_t edgeTan, perpTan, edgeNormal;
+        VectorSubtract(mesh->verts[(h - 1) * w + w - 1].xyz, mesh->verts[w - 1].xyz, edgeTan);
+        VectorSubtract(mesh->verts[w - 2].xyz, mesh->verts[w - 1].xyz, perpTan);
+
+        if (VectorNormalize(edgeTan, edgeTan) > 0.001f &&
+            VectorNormalize(perpTan, perpTan) > 0.001f) {
+            CrossProduct(edgeTan, perpTan, edgeNormal);
+            if (VectorNormalize(edgeNormal, edgeNormal) > 0.001f) {
+                if (DotProduct(edgeNormal, mesh->verts[w - 1].normal) < 0)
+                    VectorScale(edgeNormal, -1.0f, edgeNormal);
+                for (i = 0; i < h; i++)
+                    VectorCopy(edgeNormal, mesh->verts[i * w + w - 1].normal);
+            }
+        }
+    }
+
+    // Bottom edge (row 0) — open when V doesn't wrap
+    if (!wrapV) {
+        vec3_t edgeTan, perpTan, edgeNormal;
+        VectorSubtract(mesh->verts[w - 1].xyz, mesh->verts[0].xyz, edgeTan);
+        VectorSubtract(mesh->verts[w].xyz, mesh->verts[0].xyz, perpTan);
+
+        if (VectorNormalize(edgeTan, edgeTan) > 0.001f &&
+            VectorNormalize(perpTan, perpTan) > 0.001f) {
+            CrossProduct(edgeTan, perpTan, edgeNormal);
+            if (VectorNormalize(edgeNormal, edgeNormal) > 0.001f) {
+                if (DotProduct(edgeNormal, mesh->verts[0].normal) < 0)
+                    VectorScale(edgeNormal, -1.0f, edgeNormal);
+                for (i = 0; i < w; i++)
+                    VectorCopy(edgeNormal, mesh->verts[i].normal);
+            }
+        }
+    }
+
+    // Top edge (row h-1) — open when V doesn't wrap
+    if (!wrapV) {
+        vec3_t edgeTan, perpTan, edgeNormal;
+        VectorSubtract(mesh->verts[(h - 1) * w + w - 1].xyz, mesh->verts[(h - 1) * w].xyz, edgeTan);
+        VectorSubtract(mesh->verts[(h - 2) * w].xyz, mesh->verts[(h - 1) * w].xyz, perpTan);
+
+        if (VectorNormalize(edgeTan, edgeTan) > 0.001f &&
+            VectorNormalize(perpTan, perpTan) > 0.001f) {
+            CrossProduct(edgeTan, perpTan, edgeNormal);
+            if (VectorNormalize(edgeNormal, edgeNormal) > 0.001f) {
+                if (DotProduct(edgeNormal, mesh->verts[(h - 1) * w].normal) < 0)
+                    VectorScale(edgeNormal, -1.0f, edgeNormal);
+                for (i = 0; i < w; i++)
+                    VectorCopy(edgeNormal, mesh->verts[(h - 1) * w + i].normal);
+            }
+        }
+    }
+}
+
+/*
+=========================
 SubdividePatchForLighting
 
 Replicates the exact subdivision pipeline used by the BSP phase
@@ -148,6 +260,11 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     // This utilizes a property of Bezier curves: the vectors between subdivided control
     // points exactly match the analytical tangents at the vertices.
     MakeMeshNormals(*mesh);
+
+    // Override edge normals with exact analytical plane normals computed from
+    // the control net tangent vectors. This eliminates the diagonal skew from
+    // MakeMeshNormals and ensures edge normals exactly match adjacent brush faces.
+    OverrideOpenEdgeNormals(mesh);
 
     // Step 2: Push approximating points onto the Bezier curve
     PutMeshOnCurve(*mesh);
