@@ -161,7 +161,11 @@ void BuildPlanarSurfaceIndex(void) {
 					int s1=allEdges[j].surfaceIdx, s2=allEdges[k].surfaceIdx;
 					if (s1==s2) continue;
 					planarInfo_t *p1=&planarSurfaces[s1], *p2=&planarSurfaces[s2];
-					if (DotProduct(p1->normal, p2->normal)<0.99f || fabs(p1->dist-p2->dist)>0.1f) continue;
+                    dsurface_t *ds1 = &drawSurfaces[p1->surfaceNum];
+                    dsurface_t *ds2 = &drawSurfaces[p2->surfaceNum];
+                    if (ds1->surfaceType != MST_PATCH && ds2->surfaceType != MST_PATCH) {
+					    if (DotProduct(p1->normal, p2->normal)<0.99f || fabs(p1->dist-p2->dist)>0.1f) continue;
+                    }
 					qboolean f=qfalse;
 					for(int m=0; m<p1->numPartners; m++) {
 						if(p1->partners[m]==s2) {
