@@ -16,6 +16,9 @@
 
 #define AA_ANGLE_MATCH_COS 0.85f
 
+/* Maximum angle deviation (in degrees) to consider two adjacent planar surfaces as partners for lightmap smoothing */
+#define COPLANAR_TOLERANCE_DEGREES 10.0f // 10.0f
+
 static int lightmapAA;
 static float lightmapSmoothRadius;
 static int lightmapSmoothPasses;
@@ -164,7 +167,16 @@ void BuildPlanarSurfaceIndex(void) {
                     dsurface_t *ds1 = &drawSurfaces[p1->surfaceNum];
                     dsurface_t *ds2 = &drawSurfaces[p2->surfaceNum];
                     if (ds1->surfaceType != MST_PATCH && ds2->surfaceType != MST_PATCH) {
-					    if (DotProduct(p1->normal, p2->normal)<0.99f || fabs(p1->dist-p2->dist)>0.1f) continue;
+                        float coplanarCos = cos(COPLANAR_TOLERANCE_DEGREES * Q_PI / 180.0f);
+                        float dot = DotProduct(p1->normal, p2->normal);
+                        
+                        if (dot < coplanarCos) continue;
+
+                        /* The distance-to-origin check is only mathematically valid for perfectly parallel planes.
+                           Even a 1-degree angle difference at 1000 units from the origin will cause a huge 
+                           divergence in mathematical distance, causing false-rejections. 
+                           Therefore, we only distance-check surfaces that are essentially parallel (> 0.999f). */
+                        if (dot > 0.999f && fabs(p1->dist - p2->dist) > 0.1f) continue;
                     }
 					qboolean f=qfalse;
 					for(int m=0; m<p1->numPartners; m++) {
