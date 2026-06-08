@@ -83,3 +83,9 @@ The toolchain features a highly modernized entity parsing system for mappers:
 - **Agnostic Keys**: Entity keys are entirely case-insensitive and completely ignore the legacy Quake `_` prefix (e.g., `_color` and `Color` are treated identically).
 - **Nomenclature Shift**: The term `falloff` has been explicitly replaced with `shading` in the codebase and CLI to clarify that it refers to angle/surface shading, distinguishing it from distance-based "attenuation".
 - **Dynamic Overrides**: `misc_model` and `func_*` entities support powerful per-entity overrides, such as `upscale`, `smooth`, `collisiontype` (for tweaking convex hull/trisoup generation), and `haloshader` for overriding automatically generated light halos.
+
+## 13. Bezier Patch Mesh Lighting Pipeline
+The toolchain implements a mathematically exact `q3map2`-style 2-pass tessellation and sampling architecture for curved Bezier patches to eliminate lighting seams and artifacts without relying on heuristic normal smoothing:
+- **Two-Pass Surface Generation**: Curved patch normals are calculated via a double pass of `PutMeshOnCurve` (one constrained, one unconstrained wrapping) and blended using spherical interpolation to perfectly resolve boundary normals directly during BSP generation.
+- **Accurate UV Measurement**: `AllocateLightmapForPatch` scales texture boundaries by summing the `maxLength` of individual edge segments instead of bounding dimensions.
+- **Planar Patch Isolation**: Because `q3map2` mathematical corrections disrupt pixel-perfect atlas grid-snapping on perfectly flat geometry, the system globally forks logic based on `IsMeshPlanar()`. Planar patches fallback to legacy geometry subdivision (`SubdivideMeshQuads`) and purely linear UV distribution, guaranteeing zero-tolerance alignment with surrounding BSP structural brushes.
