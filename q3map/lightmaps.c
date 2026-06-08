@@ -463,33 +463,81 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     int i, j;
     drawVert_t *verts;
     int w, h;
-    int x, y;
+    int x, y, ssize;
     float s, t;
-    mesh_t mesh, *subdividedMesh, *tempMesh, *newmesh;
-    int widthtable[1024], heighttable[1024], ssize;
+    mesh_t srcMesh, *subdiv;
+    float maxLengthS, maxLengthT, lengthS, lengthT;
+    vec3_t delta;
+    float S_basis, T_basis;
 
     verts = ds->verts;
-
-    mesh.width = ds->patchWidth;
-    mesh.height = ds->patchHeight;
-    mesh.verts = verts;
-    newmesh = SubdivideMesh(mesh, 8, 999);
-
-    PutMeshOnCurve(*newmesh);
-    tempMesh = RemoveLinearMeshColumnsRows(newmesh);
-    FreeMesh(newmesh);
-
     ssize = ds->samplesize;
 
-    subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 2,
-                                        widthtable, heighttable);
+    /* Step 1: Temporarily tessellate the patch to measure its physical arc lengths.
+       We use SubdivideMesh + PutMeshOnCurve (same as the lighting tessellation path)
+       but immediately discard the result after measuring. */
+    srcMesh.width  = ds->patchWidth;
+    srcMesh.height = ds->patchHeight;
+    srcMesh.verts  = verts;
+    subdiv = SubdivideMesh(srcMesh, 8, 999);
+    PutMeshOnCurve(*subdiv);
 
-    w = subdividedMesh->width;
-    h = subdividedMesh->height;
+    /* Measure maximum segment length for each column/row (q3map2 widthTable/heightTable logic) */
+    float *widthTable = malloc(subdiv->width * sizeof(float));
+    float *heightTable = malloc(subdiv->height * sizeof(float));
+    memset(widthTable, 0, subdiv->width * sizeof(float));
+    memset(heightTable, 0, subdiv->height * sizeof(float));
 
-    FreeMesh(subdividedMesh);
+    for (j = 0; j < subdiv->height; j++)
+    {
+        for (i = 0; i < subdiv->width; i++)
+        {
+            if (i + 1 < subdiv->width)
+            {
+                VectorSubtract(subdiv->verts[j * subdiv->width + i + 1].xyz,
+                               subdiv->verts[j * subdiv->width + i].xyz, delta);
+                float len = VectorLength(delta);
+                if (len > widthTable[i])
+                    widthTable[i] = len;
+            }
+            if (j + 1 < subdiv->height)
+            {
+                VectorSubtract(subdiv->verts[(j + 1) * subdiv->width + i].xyz,
+                               subdiv->verts[j * subdiv->width + i].xyz, delta);
+                float len = VectorLength(delta);
+                if (len > heightTable[j])
+                    heightTable[j] = len;
+            }
+        }
+    }
 
-    // allocate the lightmap (including 1-texel padding on all sides)
+    /* Sum the maximum segments to get the total lightmap dimension */
+    maxLengthS = 0;
+    for (i = 0; i < subdiv->width - 1; i++)
+        maxLengthS += widthTable[i];
+
+    maxLengthT = 0;
+    for (j = 0; j < subdiv->height - 1; j++)
+        maxLengthT += heightTable[j];
+
+    free(widthTable);
+    free(heightTable);
+
+    FreeMesh(subdiv);
+
+    /* Step 2: Compute lightmap dimensions from physical arc lengths.
+       W_lm = ceil(maxLengthS / ssize) + 1
+       H_lm = ceil(maxLengthT / ssize) + 1
+       The +1 ensures both endpoints of the arc have a dedicated texel. */
+    w = (int)ceil(maxLengthS / ssize) + 1;
+    h = (int)ceil(maxLengthT / ssize) + 1;
+
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (w > LIGHTMAP_WIDTH  - 2) w = LIGHTMAP_WIDTH  - 2;
+    if (h > LIGHTMAP_HEIGHT - 2) h = LIGHTMAP_HEIGHT - 2;
+
+    /* Step 3: Allocate the lightmap block (1-texel padding on all sides). */
     c_exactLightmap += (w + 2) * (h + 2);
 
     qboolean allocated_patch_success = qfalse;
@@ -514,9 +562,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
         ds->lightmapNum = numLightmaps - 1;
     }
 
-    // set the lightmap texture coordinates in the drawVerts
-    // we add 1 to x and y to account for the padding gutter
-    ds->lightmapWidth = w;
+    ds->lightmapWidth  = w;
     ds->lightmapHeight = h;
     ds->lightmapX = x + 1;
     ds->lightmapY = y + 1;
@@ -524,38 +570,29 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     x = ds->lightmapX;
     y = ds->lightmapY;
 
-    for (i = 0; i < ds->patchWidth; i++)
+    /* Step 4: Assign UV coordinates to the coarse control points using a
+       uniform linear basis.
+         S_basis = (W_lm - 1) / (patchWidth  - 1)
+         T_basis = (H_lm - 1) / (patchHeight - 1)
+       At col=0:           s = x + 0.5  (center of first texel)
+       At col=patchWidth-1: s = x + W_lm - 0.5 (center of last texel)
+       This guarantees a perfect 0.5-texel boundary on both sides. */
+    S_basis = (ds->patchWidth  > 1) ? (float)(w - 1) / (float)(ds->patchWidth  - 1) : 0.0f;
+    T_basis = (ds->patchHeight > 1) ? (float)(h - 1) / (float)(ds->patchHeight - 1) : 0.0f;
+
+    for (j = 0; j < ds->patchHeight; j++)
     {
-        int k_w;
-        for (k_w = 0; k_w < w; k_w++)
+        for (i = 0; i < ds->patchWidth; i++)
         {
-            if (originalWidths[k_w] >= i)
-            {
-                break;
-            }
-        }
-        if (k_w >= w)
-            k_w = w - 1;
-        s = x + k_w + 0.5f;
-        for (j = 0; j < ds->patchHeight; j++)
-        {
-            int k_h;
-            for (k_h = 0; k_h < h; k_h++)
-            {
-                if (originalHeights[k_h] >= j)
-                {
-                    break;
-                }
-            }
-            if (k_h >= h)
-                k_h = h - 1;
-            t = y + k_h + 0.5f;
-            verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
-            verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
+            s = x + i * S_basis + 0.5f;
+            t = y + j * T_basis + 0.5f;
+            verts[j * ds->patchWidth + i].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
+            verts[j * ds->patchWidth + i].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
         }
     }
 
-    // precision nudge pass: shift UVs slightly outward to prevent float point inaccuracies
+    /* Step 5: Precision nudge pass — shift UVs slightly outward at boundaries
+       to prevent floating-point inaccuracies from landing samples outside the block. */
     for (i = 0; i < ds->patchWidth * ds->patchHeight; i++)
     {
         float *uv = verts[i].lightmap[0];
@@ -573,6 +610,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
 /*
 ===================
 AllocateLightmapForSurface
+
 ===================
 */
 // #define	LIGHTMAP_BLOCK	16

@@ -126,17 +126,9 @@ static qboolean CheckPatchPlanar(mesh_t *mesh) {
 =========================
 OverrideOpenEdgeNormals
 
-For open (non-wrapping) patch edges, computes the exact analytical plane normal
-from the control net geometry and overrides all edge vertex normals with it.
-This must run on the pre-PutMeshOnCurve control net where tangent vectors
-are mathematically exact Bezier derivatives.
-
-MakeMeshNormals uses 8-directional neighbors including diagonals, which skews
-edge normals because diagonal control points are already bending away from the
-edge plane. This function bypasses that by computing the plane directly from:
-  - The edge tangent (vector along the edge)
-  - The perpendicular tangent (vector from edge into the surface interior)
-The cross product of these two gives the exact plane normal of the adjacent brush.
+Kept for reference but no longer called from the main tessellation path.
+The two-pass MakeMeshNormals in DrawSurfaceForMesh now produces correct
+edge normals without needing this post-hoc correction.
 =========================
 */
 static void OverrideOpenEdgeNormals(mesh_t *mesh) {
@@ -238,54 +230,44 @@ static void OverrideOpenEdgeNormals(mesh_t *mesh) {
 =========================
 SubdividePatchForLighting
 
-Replicates the exact subdivision pipeline used by the BSP phase
-(AllocateLightmapForPatch in q3map/lightmaps.c) to guarantee:
-  1. Matching lightmap dimensions (no miscount errors)
-  2. Consistent outward-facing normals via MakeMeshNormals
-     on the actual CCW-wound triangle mesh
+q3map2-matching tessellation pipeline:
+  SubdivideMesh -> PutMeshOnCurve -> RemoveLinearMeshColumnsRows
+
+Normals are NOT recalculated after tessellation. They propagate from the coarse
+control point normals (set by DrawSurfaceForMesh's two-pass strategy) through
+spherical interpolation in the fixed LerpDrawVert. PutMeshOnCurve never touches
+normals — only xyz, st, and lightmap coordinates are curve-fitted.
 =========================
 */
 mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
-    mesh_t srcMesh, *mesh, *subdivided, *final;
-    int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
+    mesh_t srcMesh, *mesh, *final;
 
-    srcMesh.width = ds->patchWidth;
+    srcMesh.width  = ds->patchWidth;
     srcMesh.height = ds->patchHeight;
-    srcMesh.verts = &drawVerts[ds->firstVert];
+    srcMesh.verts  = &drawVerts[ds->firstVert];
 
-    // Step 1: Adaptive Bezier subdivision (always produces an odd-sized grid)
+    /* Step 1: Adaptive Bezier subdivision.
+       Normals are correctly spherically interpolated via the fixed LerpDrawVert,
+       so no MakeMeshNormals call is needed here. The coarse control point normals
+       (calculated in DrawSurfaceForMesh with the two-pass strategy) propagate
+       seamlessly into the dense mesh through subdivision. */
     mesh = SubdivideMesh(srcMesh, 8.0f, 999.0f);
 
-    // Compute smooth normals on the control net BEFORE dropping to the curve.
-    // This utilizes a property of Bezier curves: the vectors between subdivided control
-    // points exactly match the analytical tangents at the vertices.
-    MakeMeshNormals(*mesh);
-
-    // Override edge normals with exact analytical plane normals computed from
-    // the control net tangent vectors. This eliminates the diagonal skew from
-    // MakeMeshNormals and ensures edge normals exactly match adjacent brush faces.
-    OverrideOpenEdgeNormals(mesh);
-
-    // Step 2: Push approximating points onto the Bezier curve
+    /* Step 2: Push xyz, st, and lightmap onto the Bezier curve.
+       Normals are explicitly NOT touched here — this is the core invariant:
+       normals come from spherical interpolation, positions from the curve. */
     PutMeshOnCurve(*mesh);
 
-    // Step 3: Check planar
+    /* Step 3: Record whether this is a planar patch for the lighting system. */
     localSurface_t *localSurface = &localSurfaces[(int)(ds - drawSurfaces)];
     localSurface->isPlanarPatch = CheckPatchPlanar(mesh);
 
-    // Step 4: Remove co-linear rows/columns to keep the mesh lean
-    subdivided = RemoveLinearMeshColumnsRows(mesh);
+    /* Step 4: Remove co-linear rows/columns to keep the mesh lean.
+       Matches q3map2's TessellatedMesh exactly:
+         SubdivideMesh2 -> PutMeshOnCurve -> RemoveLinearMeshColumnsRows
+         (MakeMeshNormals is commented out in q3map2's TessellatedMesh) */
+    final = RemoveLinearMeshColumnsRows(mesh);
     FreeMesh(mesh);
-
-    // Step 5: Align to the lightmap atlas grid using the same ssize as the BSP phase
-    //         This guarantees lightmapWidth/Height match exactly
-    final = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH, widthtable, heighttable);
-    FreeMesh(subdivided);
-
-    // Step 7: Unify normals at singularities (collapsed edges / fan shapes)
-    UnifyMeshNormals(final);
 
     return final;
 }
-
-

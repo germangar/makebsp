@@ -29,14 +29,14 @@ DrawSurfaceForMesh
 mapDrawSurface_t *DrawSurfaceForMesh(mesh_t *m)
 {
     mapDrawSurface_t *ds;
-    int i, j;
+    int i, j, idx;
     mesh_t *copy;
 
-    // to make valid normals for patches with degenerate edges,
-    // we need to make a copy of the mesh and put the aproximating
-    // points onto the curve
+    /* q3map2 two-pass normal strategy:
+       Pass 1: Normals on the RAW control points.
+               These are geometrically exact at non-degenerate edges and will
+               perfectly match adjacent brush face normals. */
     copy = CopyMesh(m);
-    PutMeshOnCurve(*copy);
     MakeMeshNormals(*copy);
     for (j = 0; j < m->width; j++)
     {
@@ -44,6 +44,25 @@ mapDrawSurface_t *DrawSurfaceForMesh(mesh_t *m)
         {
             VectorCopy(copy->verts[i * m->width + j].normal,
                        m->verts[i * m->width + j].normal);
+        }
+    }
+
+    /* Pass 2: Shift copy to curve, recalculate normals.
+               The curve-fitted normals handle degenerate/collapsed edges
+               where the raw pass would produce a zero or flipped normal.
+               Only override if the two normals diverge significantly
+               (dot < 0.75, i.e. more than ~41 degrees apart). */
+    PutMeshOnCurve(*copy);
+    MakeMeshNormals(*copy);
+    for (j = 0; j < m->width; j++)
+    {
+        for (i = 0; i < m->height; i++)
+        {
+            idx = i * m->width + j;
+            if (DotProduct(copy->verts[idx].normal, m->verts[idx].normal) < 0.75f)
+            {
+                VectorCopy(copy->verts[idx].normal, m->verts[idx].normal);
+            }
         }
     }
     FreeMesh(copy);

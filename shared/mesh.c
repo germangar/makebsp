@@ -67,6 +67,14 @@ void LerpDrawVert( drawVert_t *a, drawVert_t *b, drawVert_t *out ) {
 		out->color[i][2] = (a->color[i][2] + b->color[i][2]) >> 1;
 		out->color[i][3] = (a->color[i][3] + b->color[i][3]) >> 1;
 	}
+
+	/* ydnar: spherical normal interpolation — N_out = normalize(N_a + N_b) */
+	out->normal[0] = a->normal[0] + b->normal[0];
+	out->normal[1] = a->normal[1] + b->normal[1];
+	out->normal[2] = a->normal[2] + b->normal[2];
+	if ( VectorNormalize( out->normal, out->normal ) == 0 ) {
+		VectorCopy( a->normal, out->normal );
+	}
 }
 
 
@@ -263,24 +271,39 @@ Drops the aproximating points onto the curve
 =================
 */
 void PutMeshOnCurve(mesh_t in) {
-	int i, j, l;
-	float prev, next;
+	int i, j, l, k;
+	drawVert_t *mid, *pv, *nv;
+
+	/* Column pass (height axis): apply B-spline formula to xyz, st, lightmap.
+	   Normal is explicitly NOT touched — it stays as interpolated from coarse points. */
 	for (i = 0; i < in.width; i++) {
 		for (j = 1; j < in.height - 1; j += 2) {
-			for (l = 0; l < 3; l++) {
-				prev = (in.verts[j*in.width+i].xyz[l] + in.verts[(j+1)*in.width+i].xyz[l]) * 0.5f;
-				next = (in.verts[j*in.width+i].xyz[l] + in.verts[(j-1)*in.width+i].xyz[l]) * 0.5f;
-				in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
-			}
+			mid = &in.verts[j * in.width + i];
+			pv  = &in.verts[(j - 1) * in.width + i];
+			nv  = &in.verts[(j + 1) * in.width + i];
+			for (l = 0; l < 3; l++)
+				mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
+			for (l = 0; l < 2; l++)
+				mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
+			for (k = 0; k < 4; k++)
+				for (l = 0; l < 2; l++)
+					mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
 		}
 	}
+
+	/* Row pass (width axis): same formula across columns. */
 	for (j = 0; j < in.height; j++) {
 		for (i = 1; i < in.width - 1; i += 2) {
-			for (l = 0; l < 3; l++) {
-				prev = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i+1].xyz[l]) * 0.5f;
-				next = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i-1].xyz[l]) * 0.5f;
-				in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
-			}
+			mid = &in.verts[j * in.width + i];
+			pv  = &in.verts[j * in.width + i - 1];
+			nv  = &in.verts[j * in.width + i + 1];
+			for (l = 0; l < 3; l++)
+				mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
+			for (l = 0; l < 2; l++)
+				mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
+			for (k = 0; k < 4; k++)
+				for (l = 0; l < 2; l++)
+					mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
 		}
 	}
 }
