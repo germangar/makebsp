@@ -89,3 +89,4 @@ bomb_gfx.shader
 DM1_user.bat
 killer_shaders/prong_dm12.shader
 killer_shaders/prong_dm23.shader
+patches_in_q3map2_specs.txt
