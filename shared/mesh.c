@@ -273,37 +273,63 @@ Drops the aproximating points onto the curve
 void PutMeshOnCurve(mesh_t in) {
 	int i, j, l, k;
 	drawVert_t *mid, *pv, *nv;
+	float prev, next;
+	qboolean isPlanar = IsMeshPlanar(&in);
 
-	/* Column pass (height axis): apply B-spline formula to xyz, st, lightmap.
-	   Normal is explicitly NOT touched — it stays as interpolated from coarse points. */
-	for (i = 0; i < in.width; i++) {
-		for (j = 1; j < in.height - 1; j += 2) {
-			mid = &in.verts[j * in.width + i];
-			pv  = &in.verts[(j - 1) * in.width + i];
-			nv  = &in.verts[(j + 1) * in.width + i];
-			for (l = 0; l < 3; l++)
-				mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
-			for (l = 0; l < 2; l++)
-				mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
-			for (k = 0; k < 4; k++)
-				for (l = 0; l < 2; l++)
-					mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
+	if (isPlanar) {
+		/* For planar patches, we use the exact b013afa4ecdb7a5a75e55613c2d216e168302162 logic.
+		   We only smooth xyz and leave st/lightmap strictly alone to preserve their
+		   perfect linear interpolation and grid alignment. */
+		for (i = 0; i < in.width; i++) {
+			for (j = 1; j < in.height - 1; j += 2) {
+				for (l = 0; l < 3; l++) {
+					prev = (in.verts[j*in.width+i].xyz[l] + in.verts[(j+1)*in.width+i].xyz[l]) * 0.5f;
+					next = (in.verts[j*in.width+i].xyz[l] + in.verts[(j-1)*in.width+i].xyz[l]) * 0.5f;
+					in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
+				}
+			}
 		}
-	}
-
-	/* Row pass (width axis): same formula across columns. */
-	for (j = 0; j < in.height; j++) {
-		for (i = 1; i < in.width - 1; i += 2) {
-			mid = &in.verts[j * in.width + i];
-			pv  = &in.verts[j * in.width + i - 1];
-			nv  = &in.verts[j * in.width + i + 1];
-			for (l = 0; l < 3; l++)
-				mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
-			for (l = 0; l < 2; l++)
-				mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
-			for (k = 0; k < 4; k++)
+		for (j = 0; j < in.height; j++) {
+			for (i = 1; i < in.width - 1; i += 2) {
+				for (l = 0; l < 3; l++) {
+					prev = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i+1].xyz[l]) * 0.5f;
+					next = (in.verts[j*in.width+i].xyz[l] + in.verts[j*in.width+i-1].xyz[l]) * 0.5f;
+					in.verts[j*in.width+i].xyz[l] = (prev + next) * 0.5f;
+				}
+			}
+		}
+	} else {
+		/* Column pass (height axis): apply B-spline formula to xyz, st, lightmap.
+		   Normal is explicitly NOT touched — it stays as interpolated from coarse points. */
+		for (i = 0; i < in.width; i++) {
+			for (j = 1; j < in.height - 1; j += 2) {
+				mid = &in.verts[j * in.width + i];
+				pv  = &in.verts[(j - 1) * in.width + i];
+				nv  = &in.verts[(j + 1) * in.width + i];
+				for (l = 0; l < 3; l++)
+					mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
 				for (l = 0; l < 2; l++)
-					mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
+					mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
+				for (k = 0; k < 4; k++)
+					for (l = 0; l < 2; l++)
+						mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
+			}
+		}
+
+		/* Row pass (width axis): same formula across columns. */
+		for (j = 0; j < in.height; j++) {
+			for (i = 1; i < in.width - 1; i += 2) {
+				mid = &in.verts[j * in.width + i];
+				pv  = &in.verts[j * in.width + i - 1];
+				nv  = &in.verts[j * in.width + i + 1];
+				for (l = 0; l < 3; l++)
+					mid->xyz[l] = (pv->xyz[l] + mid->xyz[l] * 2 + nv->xyz[l]) * 0.25f;
+				for (l = 0; l < 2; l++)
+					mid->st[l] = (pv->st[l] + mid->st[l] * 2 + nv->st[l]) * 0.25f;
+				for (k = 0; k < 4; k++)
+					for (l = 0; l < 2; l++)
+						mid->lightmap[k][l] = (pv->lightmap[k][l] + mid->lightmap[k][l] * 2 + nv->lightmap[k][l]) * 0.25f;
+			}
 		}
 	}
 }
@@ -725,4 +751,51 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 	mesh_t *result = CopyMesh(&out);
 	free(expand);
 	return result;
+}
+
+/*
+================
+IsMeshPlanar
+
+Returns qtrue if all generated vertices of the patch mesh lie on a single plane.
+If planar, outNormal contains the uniform outward-facing normal.
+================
+*/
+qboolean IsMeshPlanar(mesh_t *mesh) {
+    int numVerts = mesh->width * mesh->height;
+    if (numVerts < 3) return qfalse;
+
+    vec3_t p0, p1, p2, n;
+    int i, j;
+    qboolean found;
+    float dist, maxDist;
+
+    VectorCopy(mesh->verts[0].xyz, p0);
+
+    /* Find a valid normal from the first three non-collinear points */
+    found = qfalse;
+    for (i = 1; i < numVerts - 1; i++) {
+        for (j = i + 1; j < numVerts; j++) {
+            VectorSubtract(mesh->verts[i].xyz, p0, p1);
+            VectorSubtract(mesh->verts[j].xyz, p0, p2);
+            CrossProduct(p1, p2, n);
+            if (VectorNormalize(n, n) > 0.001f) {
+                found = qtrue;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    if (!found) return qfalse; /* Degenerate patch */
+
+    dist = DotProduct(p0, n);
+    maxDist = 0.0f;
+    for (i = 0; i < numVerts; i++) {
+        float d = DotProduct(mesh->verts[i].xyz, n);
+        float dev = fabs(d - dist);
+        if (dev > maxDist) maxDist = dev;
+    }
+
+    return (maxDist <= 0.1f);
 }

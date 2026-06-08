@@ -43,6 +43,10 @@ mesh_t *TransposeMesh( mesh_t *in );
 void InvertMesh( mesh_t *m );
 mesh_t *SubdivideMesh( mesh_t in, float maxError, float minLength );
 mesh_t *SubdivideMeshQuads( mesh_t *in, float minLength, int maxsize, int widthtable[], int heighttable[]);
+int     IterationsForCurve( float len, int subdivisions );
+mesh_t *SubdivideMesh2( mesh_t in, int iterations );
+
+qboolean IsMeshPlanar(mesh_t *mesh);
 mesh_t *RemoveLinearMeshColumnsRows( mesh_t *in );
 void MakeMeshNormals( mesh_t in );
 void PutMeshOnCurve( mesh_t in );

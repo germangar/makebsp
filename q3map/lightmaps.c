@@ -479,6 +479,106 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     srcMesh.width  = ds->patchWidth;
     srcMesh.height = ds->patchHeight;
     srcMesh.verts  = verts;
+
+    if (IsMeshPlanar(&srcMesh))
+    {
+        /* Old b013afa4ecdb7a5a75e55613c2d216e168302162 logic strictly for planar patches */
+        int widthtable[1024], heighttable[1024];
+        mesh_t *subdividedMesh, *tempMesh, *newmesh;
+        
+        newmesh = SubdivideMesh(srcMesh, 8, 999);
+        PutMeshOnCurve(*newmesh);
+        tempMesh = RemoveLinearMeshColumnsRows(newmesh);
+        FreeMesh(newmesh);
+
+        subdividedMesh = SubdivideMeshQuads(tempMesh, ssize, LIGHTMAP_WIDTH - 2,
+                                            widthtable, heighttable);
+
+        w = subdividedMesh->width;
+        h = subdividedMesh->height;
+
+        FreeMesh(subdividedMesh);
+
+        /* Step 3: Allocate the lightmap block (1-texel padding on all sides). */
+        c_exactLightmap += (w + 2) * (h + 2);
+
+        qboolean allocated_patch_success = qfalse;
+        for (i = 0; i < numLightmaps; i++)
+        {
+            if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+            {
+                ds->lightmapNum = i;
+                allocated_patch_success = qtrue;
+                break;
+            }
+        }
+
+        if (!allocated_patch_success)
+        {
+            PrepareNewLightmap();
+            if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+            {
+                Error("Entity %i, brush %i: Patch lightmap allocation failed",
+                      ds->mapBrush->entitynum, ds->mapBrush->brushnum);
+            }
+            ds->lightmapNum = numLightmaps - 1;
+        }
+
+        ds->lightmapWidth = w;
+        ds->lightmapHeight = h;
+        ds->lightmapX = x + 1;
+        ds->lightmapY = y + 1;
+
+        x = ds->lightmapX;
+        y = ds->lightmapY;
+
+        for (i = 0; i < ds->patchWidth; i++)
+        {
+            int k_w;
+            for (k_w = 0; k_w < w; k_w++)
+            {
+                if (originalWidths[k_w] >= i)
+                {
+                    break;
+                }
+            }
+            if (k_w >= w)
+                k_w = w - 1;
+            s = x + k_w + 0.5f;
+            for (j = 0; j < ds->patchHeight; j++)
+            {
+                int k_h;
+                for (k_h = 0; k_h < h; k_h++)
+                {
+                    if (originalHeights[k_h] >= j)
+                    {
+                        break;
+                    }
+                }
+                if (k_h >= h)
+                    k_h = h - 1;
+                t = y + k_h + 0.5f;
+                verts[i + j * ds->patchWidth].lightmap[0][0] = s / (float)LIGHTMAP_WIDTH;
+                verts[i + j * ds->patchWidth].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
+            }
+        }
+
+        /* precision nudge pass: shift UVs slightly outward to prevent float point inaccuracies */
+        for (i = 0; i < ds->patchWidth * ds->patchHeight; i++)
+        {
+            float *uv = verts[i].lightmap[0];
+            if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
+                uv[0] -= UV_PRECISION_NUDGE;
+            if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
+                uv[0] += UV_PRECISION_NUDGE;
+            if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
+                uv[1] -= UV_PRECISION_NUDGE;
+            if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
+                uv[1] += UV_PRECISION_NUDGE;
+        }
+        return;
+    }
+
     subdiv = SubdivideMesh(srcMesh, 8, 999);
     PutMeshOnCurve(*subdiv);
 

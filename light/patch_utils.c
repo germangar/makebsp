@@ -80,51 +80,9 @@ static void UnifyMeshNormals(mesh_t *mesh) {
 }
 
 /*
-================
-CheckPatchPlanar
-
-Returns qtrue if all generated vertices of the patch mesh lie on a single plane.
-If planar, outNormal contains the uniform outward-facing normal.
-================
-*/
-static qboolean CheckPatchPlanar(mesh_t *mesh) {
-    int numVerts = mesh->width * mesh->height;
-    if (numVerts < 3) return qfalse;
-
-    vec3_t p0, p1, p2, n;
-    VectorCopy(mesh->verts[0].xyz, p0);
-
-    // Find a valid normal from the first three non-collinear points
-    qboolean found = qfalse;
-    for (int i = 1; i < numVerts - 1; i++) {
-        for (int j = i + 1; j < numVerts; j++) {
-            VectorSubtract(mesh->verts[i].xyz, p0, p1);
-            VectorSubtract(mesh->verts[j].xyz, p0, p2);
-            CrossProduct(p1, p2, n);
-            if (VectorNormalize(n, n) > 0.001f) {
-                found = qtrue;
-                break;
-            }
-        }
-        if (found) break;
-    }
-
-    if (!found) return qfalse; // Degenerate patch
-
-    float dist = DotProduct(p0, n);
-    float maxDist = 0.0f;
-    for (int i = 0; i < numVerts; i++) {
-        float d = DotProduct(mesh->verts[i].xyz, n);
-        float dev = fabs(d - dist);
-        if (dev > maxDist) maxDist = dev;
-    }
-
-    return (maxDist <= 0.1f);
-}
-
-/*
 =========================
 OverrideOpenEdgeNormals
+
 
 Kept for reference but no longer called from the main tessellation path.
 The two-pass MakeMeshNormals in DrawSurfaceForMesh now produces correct
@@ -246,6 +204,27 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     srcMesh.height = ds->patchHeight;
     srcMesh.verts  = &drawVerts[ds->firstVert];
 
+    if (IsMeshPlanar(&srcMesh)) {
+        /* Planar: Use strictly the geometry logic that matches the old BSP path 
+           to guarantee lightmap texel alignment. */
+        mesh_t *subdivided;
+        int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
+
+        mesh = SubdivideMesh(srcMesh, 8.0f, 999.0f);
+        PutMeshOnCurve(*mesh);
+        
+        localSurfaces[(int)(ds - drawSurfaces)].isPlanarPatch = qtrue;
+
+        subdivided = RemoveLinearMeshColumnsRows(mesh);
+        FreeMesh(mesh);
+
+        /* Align to the lightmap atlas grid using the same ssize as the BSP phase */
+        final = SubdivideMeshQuads(subdivided, ssize, LIGHTMAP_WIDTH - 2, widthtable, heighttable);
+        FreeMesh(subdivided);
+
+        return final;
+    }
+
     /* Step 1: Adaptive Bezier subdivision.
        Normals are correctly spherically interpolated via the fixed LerpDrawVert,
        so no MakeMeshNormals call is needed here. The coarse control point normals
@@ -259,8 +238,7 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     PutMeshOnCurve(*mesh);
 
     /* Step 3: Record whether this is a planar patch for the lighting system. */
-    localSurface_t *localSurface = &localSurfaces[(int)(ds - drawSurfaces)];
-    localSurface->isPlanarPatch = CheckPatchPlanar(mesh);
+    localSurfaces[(int)(ds - drawSurfaces)].isPlanarPatch = qfalse;
 
     /* Step 4: Remove co-linear rows/columns to keep the mesh lean.
        Matches q3map2's TessellatedMesh exactly:
