@@ -47,6 +47,39 @@ void WriteFloat (FILE *f, vec_t v)
 		fprintf (f,"%f ",v);
 }
 
+// Check if an opaque node contains a brush with SURF_SKY faces
+static qboolean NodeHasSkyBrush(node_t *node) {
+    bspbrush_t *b;
+    int i;
+    for (b = node->brushlist; b; b = b->next) {
+        for (i = 0; i < b->numsides; i++) {
+            if (b->sides[i].shaderInfo &&
+                (b->sides[i].shaderInfo->surfaceFlags & SURF_SKY)) {
+                return qtrue;
+            }
+        }
+    }
+    return qfalse;
+}
+
+// Check if a non-opaque leaf is adjacent to a sky-textured opaque node
+static qboolean LeafCanSeeSky(node_t *node) {
+    portal_t *p;
+    int s;
+    for (p = node->portals; p; p = p->next[s]) {
+        s = (p->nodes[1] == node);
+        // We only care about non-passable portals (solid boundaries)
+        if (Portal_Passable(p))
+            continue;
+        // Check the node on the OTHER side of this solid boundary
+        node_t *other = p->nodes[!s];
+        if (other->opaque && NodeHasSkyBrush(other)) {
+            return qtrue;
+        }
+    }
+    return qfalse;
+}
+
 /*
 =================
 WritePortalFile_r
@@ -92,10 +125,13 @@ void WritePortalFile_r (node_t *node)
 			}
 			else
 				fprintf (pf,"%i %i %i ",w->numpoints, p->nodes[0]->cluster, p->nodes[1]->cluster);
-			if (p->hint)
-				fprintf (pf, "1 ");
-			else
-				fprintf (pf, "0 ");
+			{
+				int flags = 0;
+				if (p->hint) flags |= 1;
+				if (LeafCanSeeSky(p->nodes[0]) || LeafCanSeeSky(p->nodes[1]))
+					flags |= 2;
+				fprintf(pf, "%i ", flags);
+			}
 			for (i=0 ; i<w->numpoints ; i++)
 			{
 				fprintf (pf,"(");

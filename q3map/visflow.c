@@ -1538,15 +1538,26 @@ void BasePortalVis (int portalnum)
 			continue;
 		if (tp->removed)
 			continue;
-		/*
-		if (farplanedist >= 0)
-		{
+		if (!p->sky && !tp->sky && farPlaneDist > 0.0f) {
 			vec3_t dir;
+			float dist;
+
 			VectorSubtract(p->origin, tp->origin, dir);
-			if (VectorLength(dir) > farplanedist - p->radius - tp->radius)
-				continue;
+			dist = VectorLength(dir);
+
+			if (farPlaneDistMode == 'o') {
+				if (dist > farPlaneDist) continue;
+			}
+			else if (farPlaneDistMode == 'e') {
+				if (dist + p->radius + tp->radius > 2.0f * farPlaneDist) continue;
+			}
+			else if (farPlaneDistMode == 'r') {
+				if (p->radius + tp->radius > farPlaneDist) continue;
+			}
+			else {
+				if (dist - p->radius - tp->radius > farPlaneDist) continue;
+			}
 		}
-		*/
 		w = tp->winding;
 		for (k=0 ; k<w->numpoints ; k++)
 		{

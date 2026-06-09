@@ -93,3 +93,5 @@ patches_in_q3map2_specs.txt
 patches_improvement_plan.txt
 q3map2_export_lightmaps.txt
 q3map2_vis_specs.txt
+bmodel_shadows.txt
+fix_models_plan.txt

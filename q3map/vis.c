@@ -58,6 +58,8 @@ qboolean mergevis = qfalse;
 qboolean nosort;
 qboolean saveprt;
 
+float farPlaneDist = 0.0f;
+char farPlaneDistMode = '\0';
 int testlevel = 2;
 
 int totalvis;
@@ -810,7 +812,7 @@ LoadPortals
 */
 void LoadPortals(char *name)
 {
-    int i, j, hint;
+    int i, j, flags;
     vportal_t *p;
     leaf_t *l;
     char magic[80];
@@ -870,8 +872,8 @@ void LoadPortals(char *name)
         if ((unsigned)leafnums[0] > v_portalclusters ||
             (unsigned)leafnums[1] > v_portalclusters)
             Error("LoadPortals: reading portal %i", i);
-        if (fscanf(f, "%i ", &hint) != 1)
-            Error("LoadPortals: reading hint state");
+        if (fscanf(f, "%i ", &flags) != 1)
+            Error("LoadPortals: reading portal flags");
 
         w = p->winding = NewWinding(numpoints);
         w->numpoints = numpoints;
@@ -901,7 +903,8 @@ void LoadPortals(char *name)
         l->numportals_in_leaf++;
 
         p->num = i + 1;
-        p->hint = hint;
+        p->hint = (flags & 1) != 0;
+        p->sky  = (flags & 2) != 0;
         p->winding = w;
         VectorSubtract(vec3_origin, plane.normal, p->plane.normal);
         p->plane.dist = -plane.dist;
@@ -917,7 +920,8 @@ void LoadPortals(char *name)
         l->numportals_in_leaf++;
 
         p->num = i + 1;
-        p->hint = hint;
+        p->hint = (flags & 1) != 0;
+        p->sky  = (flags & 2) != 0;
         p->winding = NewWinding(w->numpoints);
         p->winding->numpoints = w->numpoints;
         for (j = 0; j < w->numpoints; j++)
@@ -1196,6 +1200,22 @@ int VisMain(int argc, char **argv)
         {
             _printf("saveprt = true\n");
             saveprt = qtrue;
+        }
+        else if (!strcmp(argv[i], "-farplane"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-farplane requires a numeric argument");
+            farPlaneDist = atof(argv[i + 1]);
+            _printf("farPlaneDist = %f\n", farPlaneDist);
+            i++;
+        }
+        else if (!strcmp(argv[i], "-farplanemode"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-farplanemode requires a mode argument (o, e, r)");
+            farPlaneDistMode = argv[i + 1][0];
+            _printf("farPlaneDistMode = %c\n", farPlaneDistMode);
+            i++;
         }
         else if (!strcmp(argv[i], "-tmpin"))
         {

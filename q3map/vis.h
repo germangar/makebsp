@@ -77,6 +77,7 @@ typedef struct
 {
     int num;
     qboolean hint; // true if this portal was created from a hint splitter
+    qboolean sky;  // true if this portal bounds a sky-visible leaf
     qboolean removed;
     plane_t plane; // normal pointing into neighbor
     int leaf;      // neighbor
@@ -95,7 +96,7 @@ typedef struct
                          // are v_portals in the leaf this portal leads to
 } vportal_t;
 
-#define MAX_PORTALS_ON_LEAF 128
+#define MAX_PORTALS_ON_LEAF 1024
 typedef struct leaf_s
 {
     int numportals_in_leaf;
@@ -149,6 +150,9 @@ extern byte *uncompressed;
 
 extern int leafbytes, leaflongs;
 extern int portalbytes, portallongs;
+
+extern float farPlaneDist;
+extern char farPlaneDistMode;
 
 void LeafFlow(int leafnum);
 
