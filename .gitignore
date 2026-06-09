@@ -91,3 +91,5 @@ killer_shaders/prong_dm12.shader
 killer_shaders/prong_dm23.shader
 patches_in_q3map2_specs.txt
 patches_improvement_plan.txt
+q3map2_export_lightmaps.txt
+q3map2_vis_specs.txt

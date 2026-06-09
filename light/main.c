@@ -516,6 +516,11 @@ int main(int argc, char **argv) {
             if (game->defaultSmoothRadius < 0.1f)
                 game->defaultSmoothRadius = 0.1f;
             i++;
+        } else if (!strcmp(argv[i], "-softedges")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-softedges requires 1 or 0");
+            game->softEdges = atoi(argv[i + 1]) ? qtrue : qfalse;
+            _printf("Soft edge stitching %s\n", game->softEdges ? "enabled" : "disabled");
+            i++;
         } else if (!strcmp(argv[i], "-rad_passes")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-rad_passes requires a number of passes");
             game->radiosityPasses = atoi(argv[i + 1]);
@@ -640,6 +645,7 @@ int main(int argc, char **argv) {
                 "    -ambientonly        Skip direct and radiosity passes.\n"
                 "   smoothpasses <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
+                "   softedges <0|1> = enable (1) or disable (0) 1-texel stitching across sharp edges (< 60º)\n"
                 "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
                 "   supersample <mode> = trace-time super-sampling mode:\n"
                 "                     0 = OFF\n"

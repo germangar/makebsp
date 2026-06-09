@@ -71,6 +71,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
+        qfalse,     // softEdges
 		"",         // flareShader
 		"halo"      // haloShader
 	},
@@ -123,6 +124,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
+        qfalse,     // softEdges
 		"",         // flareShader
 		""          // haloShader
 	}
