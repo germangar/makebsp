@@ -81,7 +81,7 @@ void ProcessWorldModel(void)
     PatchMapDrawSurfs(e);
 
     // loading pass for misc_models (bakes transformations)
-    LoadTriangleModels();
+    LoadTriangleModels(&entities[0]);
 
     // build an initial bsp tree using all of the sides
     // of all of the structural brushes
@@ -248,6 +248,23 @@ void ProcessSubModel(void)
 
     e = &entities[entity_num];
     e->firstDrawSurf = numMapDrawSurfs;
+
+    LoadTriangleModels(e);
+
+    // Expand the bmodel bounds to include the loaded misc_model geometry.
+    // Otherwise, the engine might cull the model because the misc_model is outside
+    // the bounds of the original func_plat brushes.
+    {
+        int i, j;
+        dmodel_t *mod = &dmodels[nummodels];
+        for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
+            mapDrawSurface_t *ds = &mapDrawSurfs[i];
+            if (!ds->miscModel) continue;
+            for (j = 0; j < ds->numVerts; j++) {
+                AddPointToBounds(ds->verts[j].xyz, mod->mins, mod->maxs);
+            }
+        }
+    }
 
     PatchMapDrawSurfs(e);
 

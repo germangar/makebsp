@@ -496,7 +496,7 @@ extern int c_triangleSurfaces;
 extern int c_triangleVertexes;
 extern int c_triangleIndexes;
 
-void LoadTriangleModels(void);
+void LoadTriangleModels(entity_t *eparent);
 void AddTriangleModels(tree_t *tree);
 
 #define MAX_MODEL_INSTANCES 1024

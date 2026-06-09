@@ -633,7 +633,7 @@ LoadTriangleModels
 Initial pass to load and transform all misc_model entities.
 ====================
 */
-void LoadTriangleModels(void)
+void LoadTriangleModels(entity_t *eparent)
 {
     int entity_num;
     entity_t *entity;
@@ -644,6 +644,46 @@ void LoadTriangleModels(void)
     vec3_t scale_vec;
     float rotationMatrix[3][3];
 
+    const char *modelGroup;
+    if (eparent == &entities[0])
+    {
+        modelGroup = "";
+    }
+    else
+    {
+        modelGroup = ValueForKey(eparent, "modelgroup");
+        if (!modelGroup[0])
+        {
+            modelGroup = ValueForKey(eparent, "modelsgroup");
+        }
+
+        if (!modelGroup[0])
+        {
+            return;
+        }
+
+        // Check for duplicate modelgroup in other brushmodels
+        for (int i = 1; i < num_entities; i++)
+        {
+            entity_t *other = &entities[i];
+            if (other == eparent) continue;
+            
+            // Only check other brushmodels (entities with brushes or patches)
+            if (!other->brushes && !other->patches) continue;
+
+            const char *otherGroup = ValueForKey(other, "modelgroup");
+            if (!otherGroup[0])
+            {
+                otherGroup = ValueForKey(other, "modelsgroup");
+            }
+
+            if (otherGroup[0] && !Q_stricmp(otherGroup, modelGroup))
+            {
+                Error("Duplicate modelgroup '%s' found on multiple brushmodel entities", modelGroup);
+            }
+        }
+    }
+
     for (entity_num = 1; entity_num < num_entities; entity_num++)
     {
         entity = &entities[entity_num];
@@ -651,11 +691,29 @@ void LoadTriangleModels(void)
 
         if (!Q_stricmp("misc_model", classname))
         {
+            const char *entGroup = ValueForKey(entity, "modelgroup");
+            if (!entGroup[0])
+            {
+                entGroup = ValueForKey(entity, "modelsgroup");
+            }
+
+            if (Q_stricmp(entGroup, modelGroup))
+            {
+                continue;
+            }
+
             model = ValueForKey(entity, "model");
             if (!model[0])
                 continue;
 
             GetVectorForKey(entity, "origin", origin);
+            if (eparent != &entities[0])
+            {
+                vec3_t parentOrigin;
+                GetVectorForKey(eparent, "origin", parentOrigin);
+                VectorSubtract(origin, parentOrigin, origin);
+            }
+
             GetVectorForKey(entity, "angles", angles);
             if (angles[0] == 0 && angles[1] == 0 && angles[2] == 0)
             {
@@ -756,7 +814,13 @@ void LoadTriangleModels(void)
 
             inst->has_collision_type_override = qfalse;
             const char *col_type_str = ValueForKey(entity, "collisiontype");
-            if (col_type_str[0])
+            
+            if (eparent != &entities[0])
+            {
+                inst->has_collision_type_override = qtrue;
+                inst->collision_type_override = MC_NONE;
+            }
+            else if (col_type_str[0])
             {
                 inst->has_collision_type_override = qtrue;
                 if (!Q_stricmp(col_type_str, "shell")) inst->collision_type_override = MC_SHELL;
