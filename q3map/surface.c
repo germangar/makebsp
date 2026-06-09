@@ -1400,6 +1400,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
 
     numDrawSurfaces++;
 
@@ -1492,6 +1493,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
 
     numDrawSurfaces++;
 
@@ -1590,6 +1592,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
 
     numDrawSurfaces++;
 
@@ -1652,6 +1655,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
 
     numDrawSurfaces++;
 

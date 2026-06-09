@@ -187,6 +187,7 @@ typedef struct drawsurf_s
     int attenuationModel;
     int noDeluxeInfluence;
     int noDeluxeInfluenceBacksplash;
+    int castShadows;
 } mapDrawSurface_t;
 
 typedef struct drawSurfRef_s

@@ -714,6 +714,14 @@ void LoadTriangleModels(void)
                 upscale = atoi(upscaleStr);
             }
 
+            int castShadows = -1;
+            const char *csStr = ValueForKey(entity, "castshadows");
+            if (!csStr[0]) csStr = ValueForKey(entity, "cs"); // alias
+            if (csStr[0])
+            {
+                castShadows = atoi(csStr);
+            }
+
             // supersample override
             float superSampleRadius = -1.0f;
             const char *ssStr = ValueForKey(entity, "supersample");
@@ -902,6 +910,7 @@ void LoadTriangleModels(void)
                     ds->smoothingRadius = smoothingRadius;
                     ds->hasVertexColor = hasVertexColor;
                     ds->upscale = upscale;
+                    ds->castShadows = castShadows;
                     if (hasVertexColor)
                         VectorCopy(vertexColor, ds->vertexColor);
                     ds->planeNum = -1;

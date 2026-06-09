@@ -391,8 +391,10 @@ typedef struct
     vec3_t vertexColor;
     float superSampleRadius;
     int upscale;
+    qboolean castShadows;
 } localSurface_t;
 extern localSurface_t *localSurfaces;
+extern qboolean brushCastsShadow[MAX_MAP_BRUSHES];
 void BuildLocalSurfaces(void);
 
 typedef struct

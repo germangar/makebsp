@@ -61,6 +61,10 @@ void InitTracingGeometry(void)
     int count = 0;
     for (i = 0; i < numDrawSurfaces; i++)
     {
+        if (!localSurfaces[i].castShadows) {
+            continue;
+        }
+
         dsurf = &drawSurfaces[i];
 
         // don't make surfaces for transparent objects
@@ -346,6 +350,10 @@ static void AddBrushesToEmbree(RTCScene scene)
 
     for (i = 0; i < numbrushes; i++)
     {
+        if (!brushCastsShadow[i]) {
+            continue;
+        }
+
         b = &dbrushes[i];
 
         if (dshaders[b->shaderNum].contentFlags &

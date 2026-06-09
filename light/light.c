@@ -102,6 +102,7 @@ float     ambient_gatheradius  = 256.0f;
 qboolean  ambient_enabled        = qfalse;
 
 localSurface_t *localSurfaces;
+qboolean brushCastsShadow[MAX_MAP_BRUSHES];
 
 // 7,9,11 normalized to avoid being nearly coplanar with common faces
 // vec3_t		sunDirection = { 0.441835, 0.56807, 0.694313 };
@@ -1164,9 +1165,67 @@ void BuildLocalSurfaces(void)
         if (localSurfaces[i].upscale == 0) {
             localSurfaces[i].upscale = game->upscale ? 2 : 1;
         }
+
+        // Pass sidecar castShadows (initially defaulting to qtrue before dmodel overrides)
+        localSurfaces[i].castShadows = qtrue; 
+        if (extra && i < numExtra && extra[i].castShadows != -1) {
+            localSurfaces[i].castShadows = extra[i].castShadows ? qtrue : qfalse;
+        }
     }
     if (extra)
         free(extra);
+
+    // 4. Map Shadow Groups
+    {
+        qboolean modelCastsShadow[MAX_MAP_MODELS];
+        int m, b, s;
+        entity_t *e;
+        const char *modelKey, *csKey;
+
+        // Initialize worldspawn to cast shadows, others to false
+        modelCastsShadow[0] = qtrue;
+        if (num_entities > 0) {
+            csKey = ValueForKey(&entities[0], "castshadows");
+            if (!csKey[0]) csKey = ValueForKey(&entities[0], "cs");
+            if (csKey[0] && atoi(csKey) == 0) {
+                modelCastsShadow[0] = qfalse;
+            }
+        }
+
+        for (m = 1; m < nummodels; m++) {
+            modelCastsShadow[m] = qfalse;
+        }
+
+        // Parse entities to find bmodel overrides
+        for (m = 1; m < num_entities; m++) {
+            e = &entities[m];
+            modelKey = ValueForKey(e, "model");
+            if (modelKey[0] == '*') {
+                int modelNum = atoi(modelKey + 1);
+                if (modelNum > 0 && modelNum < nummodels) {
+                    csKey = ValueForKey(e, "castshadows");
+                    if (!csKey[0]) csKey = ValueForKey(e, "cs"); // alias
+
+                    if (csKey[0] && atoi(csKey) == 1) {
+                        modelCastsShadow[modelNum] = qtrue;
+                    }
+                }
+            }
+        }
+
+        // Propagate to brushes and surfaces
+        for (m = 0; m < nummodels; m++) {
+            qboolean casts = modelCastsShadow[m];
+            
+            for (b = 0; b < dmodels[m].numBrushes; b++) {
+                brushCastsShadow[dmodels[m].firstBrush + b] = casts;
+            }
+            
+            for (s = 0; s < dmodels[m].numSurfaces; s++) {
+                localSurfaces[dmodels[m].firstSurface + s].castShadows = casts;
+            }
+        }
+    }
 }
 
 /*
