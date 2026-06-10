@@ -1052,7 +1052,30 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
     struct _finddata_t fileinfo;
     intptr_t handle = _findfirst(winPath, &fileinfo);
     if (handle != -1) {
+      char *pk3Files[1024];
+      int numPk3s = 0;
       do {
+        if (numPk3s < 1024) {
+          pk3Files[numPk3s] = (char *)malloc(strlen(fileinfo.name) + 1);
+          strcpy(pk3Files[numPk3s], fileinfo.name);
+          numPk3s++;
+        }
+      } while (_findnext(handle, &fileinfo) != -1);
+      _findclose(handle);
+
+      // Sort alphabetically A to Z
+      // By loading A-Z, 'Z' is pushed to the LIFO stack last and receives highest priority
+      for (int i = 0; i < numPk3s - 1; i++) {
+        for (int j = i + 1; j < numPk3s; j++) {
+          if (stricmp(pk3Files[i], pk3Files[j]) > 0) {
+            char *temp = pk3Files[i];
+            pk3Files[i] = pk3Files[j];
+            pk3Files[j] = temp;
+          }
+        }
+      }
+
+      for (int i = 0; i < numPk3s; i++) {
         // Construct clean path with forward slashes
         char cleanPath[WORK_LEN];
         strncpy(cleanPath, normalizedBasePath, sizeof(cleanPath) - 1);
@@ -1061,12 +1084,12 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
         if (len > 0 && cleanPath[len-1] != '/') {
             strncat(cleanPath, "/", sizeof(cleanPath) - len - 1);
         }
-        strncat(cleanPath, fileinfo.name, sizeof(cleanPath) - strlen(cleanPath) - 1);
+        strncat(cleanPath, pk3Files[i], sizeof(cleanPath) - strlen(cleanPath) - 1);
         
         _printf("    Found archive: %s\n", cleanPath);
         OpenPakFile(cleanPath);
-      } while (_findnext(handle, &fileinfo) != -1);
-      _findclose(handle);
+        free(pk3Files[i]);
+      }
     }
   } else {
     OpenPakFile(pName);
