@@ -96,3 +96,4 @@ extern int numShaderInfo;
 
 void LoadShaderInfo(void);
 shaderInfo_t *ShaderInfoForShader(const char *shader);
+qboolean ShaderExists(const char *shaderName);

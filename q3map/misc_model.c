@@ -152,31 +152,124 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
         strncpy(shaderName, path.data, MAX_QPATH - 1);
         shaderName[MAX_QPATH - 1] = '\0';
         StripExtension(shaderName);
-        return;
-    }
-
-    ExtractFileExtension(modelPath, ext);
-
-    if (!Q_stricmp(ext, "obj"))
-    {
-        if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
-            aiReturn_SUCCESS)
-        {
-            strncpy(shaderName, path.data, MAX_QPATH - 1);
-            shaderName[MAX_QPATH - 1] = '\0';
-            StripExtension(shaderName);
-            return;
-        }
-    }
-
-    if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
-    {
-        strncpy(shaderName, matName.data, MAX_QPATH - 1);
-        shaderName[MAX_QPATH - 1] = '\0';
     }
     else
     {
-        strcpy(shaderName, "default");
+        ExtractFileExtension(modelPath, ext);
+
+        if (!Q_stricmp(ext, "obj"))
+        {
+            if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
+                aiReturn_SUCCESS)
+            {
+                strncpy(shaderName, path.data, MAX_QPATH - 1);
+                shaderName[MAX_QPATH - 1] = '\0';
+                StripExtension(shaderName);
+            }
+            else if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
+            {
+                strncpy(shaderName, matName.data, MAX_QPATH - 1);
+                shaderName[MAX_QPATH - 1] = '\0';
+            }
+            else
+            {
+                strcpy(shaderName, "default");
+                return;
+            }
+        }
+        else
+        {
+            if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
+            {
+                strncpy(shaderName, matName.data, MAX_QPATH - 1);
+                shaderName[MAX_QPATH - 1] = '\0';
+            }
+            else
+            {
+                strcpy(shaderName, "default");
+                return;
+            }
+        }
+    }
+
+    // Step 1.5: Virtualize absolute paths
+    // If the path contains directories, check if it contains any active gamedir name
+    if (strchr(shaderName, '/') != NULL || strchr(shaderName, '\\') != NULL)
+    {
+        for (int i = 0; i < numActiveGamedirs; i++)
+        {
+            const char *gamedir = activeGamedirs[i];
+            int glen = strlen(gamedir);
+            const char *p = shaderName;
+            
+            while ((p = strstr(p, gamedir)) != NULL)
+            {
+                qboolean isStart = (p == shaderName);
+                qboolean hasPreSlash = (!isStart && (*(p - 1) == '/' || *(p - 1) == '\\'));
+                
+                if (isStart || hasPreSlash)
+                {
+                    const char *after = p + glen;
+                    if (*after == '/' || *after == '\\' || *after == '\0')
+                    {
+                        char temp[MAX_QPATH];
+                        if (*after == '/' || *after == '\\') after++;
+                        strcpy(temp, after);
+                        strcpy(shaderName, temp);
+                        goto virtualization_done;
+                    }
+                }
+                p++;
+            }
+        }
+    }
+virtualization_done:
+
+    // Step 2: Smart Guessing for poorly configured models
+    // If the resolved shaderName has no path, attempt tiered fallbacks
+    if (strchr(shaderName, '/') == NULL && strchr(shaderName, '\\') == NULL && Q_stricmp(shaderName, "default"))
+    {
+        char modelDir[1024];
+        char modelNameOnly[1024];
+        char candidate[MAX_QPATH];
+        char original[MAX_QPATH];
+
+        strcpy(original, shaderName);
+        ExtractFilePath(modelPath, modelDir);
+        
+        // Extract model filename without extension
+        const char *lastSlash = strrchr(modelPath, '/');
+        if (!lastSlash) lastSlash = strrchr(modelPath, '\\');
+        const char *start = lastSlash ? lastSlash + 1 : modelPath;
+        strcpy(modelNameOnly, start);
+        StripExtension(modelNameOnly);
+
+        // Tier 1: Literal (Already in shaderName)
+        if (ShaderExists(shaderName)) return;
+
+        // Tier 2: Same directory as model
+        sprintf(candidate, "%s%s", modelDir, original);
+        if (ShaderExists(candidate)) {
+            strcpy(shaderName, candidate);
+            return;
+        }
+
+        // Tier 3: Subdirectory named after model
+        sprintf(candidate, "%s%s/%s", modelDir, modelNameOnly, original);
+        if (ShaderExists(candidate)) {
+            strcpy(shaderName, candidate);
+            return;
+        }
+
+        // Tier 4: "textures" subdirectory
+        sprintf(candidate, "%stextures/%s", modelDir, original);
+        if (ShaderExists(candidate)) {
+            strcpy(shaderName, candidate);
+            return;
+        }
+
+        // Tier 5: Accept defeat, revert to original for standard warning
+        strcpy(shaderName, original);
     }
 }
 

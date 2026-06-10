@@ -291,7 +291,10 @@ int main(int argc, char **argv) {
         }
         else if ((!strcmp(argv[i], "-gamedir") || !strcmp(argv[i], "-fs_game")) && i + 1 < argc)
         {
-            if (numModGameDirs < MAX_VFS_PATHS) modGameDirs[numModGameDirs++] = argv[i + 1];
+            if (numModGameDirs < MAX_VFS_PATHS) {
+                modGameDirs[numModGameDirs++] = argv[i + 1];
+                AddActiveGamedir(argv[i + 1]);
+            }
             i++;
         }
     }

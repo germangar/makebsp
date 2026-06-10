@@ -3,6 +3,7 @@
 
 #include "../common/mathlib.h"
 #include "../common/qtypes.h"
+#include "../common/qfiles.h"
 
 typedef enum {
     ATTENUATION_INVERSE_SQUARE,
@@ -121,6 +122,11 @@ extern qboolean g_lowmem;
 extern int numGames;
 extern game_t *game;
 extern game_t gameTemplates[MAX_GAMES];
+
+#define MAX_ACTIVE_GAMEDIRS 32
+extern char activeGamedirs[MAX_ACTIVE_GAMEDIRS][MAX_QPATH];
+extern int numActiveGamedirs;
+void AddActiveGamedir(const char *dir);
 
 game_t *InitGame(int argc, char **argv);
 void ClearCacheDirectory(void);

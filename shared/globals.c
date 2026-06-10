@@ -134,6 +134,21 @@ game_t gameTemplates[MAX_GAMES] = {
 game_t *game = &gameTemplates[0];
 static game_t activeGame;
 
+char activeGamedirs[MAX_ACTIVE_GAMEDIRS][MAX_QPATH];
+int numActiveGamedirs = 0;
+
+void AddActiveGamedir(const char *dir) {
+    if (!dir || !dir[0]) return;
+    for (int i = 0; i < numActiveGamedirs; i++) {
+        if (!Q_stricmp(activeGamedirs[i], dir)) return;
+    }
+    if (numActiveGamedirs < MAX_ACTIVE_GAMEDIRS) {
+        strncpy(activeGamedirs[numActiveGamedirs], dir, MAX_QPATH - 1);
+        activeGamedirs[numActiveGamedirs][MAX_QPATH - 1] = '\0';
+        numActiveGamedirs++;
+    }
+}
+
 /*
 ============
 InitGame
@@ -170,6 +185,9 @@ game_t *InitGame(int argc, char **argv) {
 
     // 5. Point the global game to our local struct
     game = &activeGame;
+
+    // 6. Register default game gamedir as active
+    AddActiveGamedir(game->gameDir);
 
     return game;
 }

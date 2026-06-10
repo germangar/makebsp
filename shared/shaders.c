@@ -197,6 +197,9 @@ static void LoadShaderImage(shaderInfo_t *si)
     si->color[0] = 0.5f;
     si->color[1] = 0.5f;
     si->color[2] = 0.5f;
+    si->averageColor[0] = 127;
+    si->averageColor[1] = 127;
+    si->averageColor[2] = 127;
     si->width = 64;
     si->height = 64;
     si->pixels = malloc(si->width * si->height * 4);
@@ -235,6 +238,41 @@ loadTga:
             si->color[i] = si->averageColor[i] / 255.0f;
         }
     }
+}
+
+/*
+===============
+ShaderExists
+===============
+*/
+qboolean ShaderExists(const char *shaderName)
+{
+    int i;
+    char shader[MAX_QPATH];
+    byte *buffer = NULL;
+
+    // strip off extension
+    strncpy(shader, shaderName, MAX_QPATH - 1);
+    shader[MAX_QPATH - 1] = '\0';
+    StripExtension(shader);
+
+    // 1. search in scripts
+    for (i = 0; i < numShaderInfo; i++)
+    {
+        if (!Q_stricmp(shader, shaderInfo[i].shader))
+        {
+            return qtrue;
+        }
+    }
+
+    // 2. check for image files in VFS
+    if (LoadImageFile(shader, &buffer, NULL) > 0)
+    {
+        free(buffer);
+        return qtrue;
+    }
+
+    return qfalse;
 }
 
 /*
