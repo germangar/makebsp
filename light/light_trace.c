@@ -61,10 +61,6 @@ void InitTracingGeometry(void)
     int count = 0;
     for (i = 0; i < numDrawSurfaces; i++)
     {
-        if (!localSurfaces[i].castShadows) {
-            continue;
-        }
-
         dsurf = &drawSurfaces[i];
 
         // don't make surfaces for transparent objects
@@ -99,6 +95,7 @@ void InitTracingGeometry(void)
 
             qboolean needsFilter = qfalse;
             if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+            if (!localSurfaces[i].castShadows) needsFilter = qtrue;
 
             if (needsFilter) {
                 rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
@@ -156,6 +153,7 @@ void InitTracingGeometry(void)
 
             qboolean needsFilter = qfalse;
             if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+            if (!localSurfaces[i].castShadows) needsFilter = qtrue;
 
             if (needsFilter) {
                 rtcSetGeometryIntersectFilterFunction(geom, AlphaFilter);
@@ -270,6 +268,16 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
         if (tw && tw->ignoreSurface != -1 && geomID == (unsigned int)tw->ignoreSurface)
         {
             if (ds->surfaceType == MST_PLANAR)
+            {
+                args->valid[0] = 0;
+                return;
+            }
+        }
+
+        // If the surface has castShadows disabled, it ONLY casts shadows on itself.
+        if (!localSurfaces[geomID].castShadows)
+        {
+            if (!tw || tw->ignoreSurface == -1 || geomID != (unsigned int)tw->ignoreSurface)
             {
                 args->valid[0] = 0;
                 return;
