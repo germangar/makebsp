@@ -1204,11 +1204,10 @@ void PrecacheTexelGeometryThread(int i)
     int x, y, k;
     dsurface_t *ds;
     vec3_t lightmapOrigin, lightmapVecs[3];
-    int surfWeight = 1;
-
     ds = &drawSurfaces[i];
+    int surfWeight = ds->numVerts;
     if (ds->lightmapNum[0] >= 0) {
-        surfWeight = ds->lightmapWidth * ds->lightmapHeight;
+        surfWeight += ds->lightmapWidth * ds->lightmapHeight;
     }
 
     if (ds->lightmapNum[0] < 0) {
@@ -1312,10 +1311,10 @@ void PrecacheTexelGeometry(void)
     numTotalLuxels = 0;
     
     for (i = 0; i < numDrawSurfaces; i++) {
+        int weight = drawSurfaces[i].numVerts;
         if (drawSurfaces[i].lightmapNum[0] >= 0)
-            numTotalLuxels += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
-        else
-            numTotalLuxels += 1;
+            weight += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
+        numTotalLuxels += weight;
     }
 
     _printf("--- PrecacheTexelGeometry ---\n");

@@ -42,6 +42,8 @@ extern float *energyFloats;
 extern float *normalFloats;
 extern float *radiosityFloats;
 extern float *accumRadiosityFloats;
+extern float *radiosityVertexFloats;
+extern float *radiosityGridColors;
 extern float *radiosityDeluxeFloats;
 extern float *radiosityEnergyFloats;
 extern float *accumRadiosityDeluxeSum;

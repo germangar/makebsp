@@ -17,6 +17,8 @@ float *normalFloats = NULL;
 int *lightSurfaceIndex = NULL;
 float *radiosityFloats = NULL;
 float *accumRadiosityFloats = NULL;
+float *radiosityVertexFloats = NULL;
+float *radiosityGridColors = NULL;
 float *radiosityDeluxeFloats = NULL;
 float *radiosityEnergyFloats = NULL;
 float *accumRadiosityDeluxeSum = NULL;
@@ -935,6 +937,9 @@ void AllocateRadiosityFloats(void)
     if (radiosityEnergyFloats) Q_Free(radiosityEnergyFloats);
     if (accumRadiosityDeluxeSum) Q_Free(accumRadiosityDeluxeSum);
     if (accumRadiosityEnergyFloats) Q_Free(accumRadiosityEnergyFloats);
+    
+    if (radiosityVertexFloats) Q_Free(radiosityVertexFloats);
+    if (radiosityGridColors) Q_Free(radiosityGridColors);
 
     radiosityFloats = Q_Alloc((numLightBytes / 3) * sizeof(vec3_t));
     if (!radiosityFloats)
@@ -945,6 +950,19 @@ void AllocateRadiosityFloats(void)
     if (!accumRadiosityFloats)
         Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
+
+    radiosityVertexFloats = Q_Alloc(MAX_MAP_DRAW_VERTS * sizeof(vec3_t));
+    if (!radiosityVertexFloats)
+        Error("AllocateRadiosityFloats: malloc failed (radiosityVertexFloats).");
+    memset(radiosityVertexFloats, 0, MAX_MAP_DRAW_VERTS * sizeof(vec3_t));
+
+    if (numGridPoints > 0)
+    {
+        radiosityGridColors = Q_Alloc(numGridPoints * sizeof(vec3_t));
+        if (!radiosityGridColors)
+            Error("AllocateRadiosityFloats: malloc failed (radiosityGridColors).");
+        memset(radiosityGridColors, 0, numGridPoints * sizeof(vec3_t));
+    }
 
     if (game->deluxeMap)
     {
@@ -983,6 +1001,16 @@ void FreeRadiosityFloats(void)
     {
         Q_Free(accumRadiosityFloats);
         accumRadiosityFloats = NULL;
+    }
+    if (radiosityVertexFloats)
+    {
+        Q_Free(radiosityVertexFloats);
+        radiosityVertexFloats = NULL;
+    }
+    if (radiosityGridColors)
+    {
+        Q_Free(radiosityGridColors);
+        radiosityGridColors = NULL;
     }
     if (radiosityDeluxeFloats)
     {

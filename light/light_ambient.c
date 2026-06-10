@@ -199,6 +199,96 @@ void RunMAOPass(void)
 
 /*
 ================
+GatherAmbientAtPoint
+================
+*/
+static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambColor, vec3_t bentAccum, traceWork_t *tw)
+{
+    float gatherRadius = ambient_gatheradius;
+    float gatherRadiusSq = gatherRadius * gatherRadius;
+
+    int ix_min = (int)((origin[0] - gatherRadius - gridMins[0]) / gridSize[0]);
+    int ix_max = (int)((origin[0] + gatherRadius - gridMins[0]) / gridSize[0]);
+    int iy_min = (int)((origin[1] - gatherRadius - gridMins[1]) / gridSize[1]);
+    int iy_max = (int)((origin[1] + gatherRadius - gridMins[1]) / gridSize[1]);
+    int iz_min = (int)((origin[2] - gatherRadius - gridMins[2]) / gridSize[2]);
+    int iz_max = (int)((origin[2] + gatherRadius - gridMins[2]) / gridSize[2]);
+
+    // clamp to bounds
+    if (ix_min < 0) ix_min = 0; 
+    if (ix_max > gridBounds[0] - 1) ix_max = gridBounds[0] - 1;
+    
+    if (iy_min < 0) iy_min = 0; 
+    if (iy_max > gridBounds[1] - 1) iy_max = gridBounds[1] - 1;
+    
+    if (iz_min < 0) iz_min = 0; 
+    if (iz_max > gridBounds[2] - 1) iz_max = gridBounds[2] - 1;
+
+    VectorClear(ambColor);
+    VectorClear(bentAccum);
+    float totalWeight = 0.0f;
+    
+    for (int gz = iz_min; gz <= iz_max; gz++) {
+        for (int gy = iy_min; gy <= iy_max; gy++) {
+            for (int gx = ix_min; gx <= ix_max; gx++) {
+                int gidx = (gz * gridBounds[1] + gy) * gridBounds[0] + gx;
+                float *gCol = &maoAmbient[gidx * 3];
+                
+                float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
+                if (lum <= 0.0001f) continue; // Skip solid/black voxels
+
+                vec3_t gPos;
+                gPos[0] = gridMins[0] + gx * gridSize[0];
+                gPos[1] = gridMins[1] + gy * gridSize[1];
+                gPos[2] = gridMins[2] + gz * gridSize[2];
+
+                vec3_t dir;
+                VectorSubtract(gPos, origin, dir);
+                
+                float distSq = DotProduct(dir, dir);
+                if (distSq > gatherRadiusSq) continue;
+                if (distSq < 1.0f) distSq = 1.0f; // Prevent div by zero
+
+                float dist = sqrtf(distSq);
+                VectorScale(dir, 1.0f / dist, dir); // Normalize
+
+                float NdotL = DotProduct(normal, dir);
+                if (NdotL <= 0.01f) continue; // Behind surface
+
+                float shadingModel = 1.0f - (distSq / gatherRadiusSq);
+                
+                float w = NdotL * shadingModel;
+
+                // Trace ray
+                trace_t trace;
+                TraceLine(origin, gPos, &trace, qfalse, tw);
+                if (!trace.passSolid) {
+                    ambColor[0] += gCol[0] * w;
+                    ambColor[1] += gCol[1] * w;
+                    ambColor[2] += gCol[2] * w;
+                    
+                    bentAccum[0] += dir[0] * w * lum;
+                    bentAccum[1] += dir[1] * w * lum;
+                    bentAccum[2] += dir[2] * w * lum;
+                }
+                
+                // Accumulate weight regardless of occlusion so blocked rays darken the final result
+                totalWeight += w;
+            }
+        }
+    }
+
+    if (totalWeight > 0.0001f) {
+        ambColor[0] /= totalWeight;
+        ambColor[1] /= totalWeight;
+        ambColor[2] /= totalWeight;
+        return qtrue;
+    }
+    return qfalse;
+}
+
+/*
+================
 TraceAmbient
 ================
 */
@@ -216,7 +306,33 @@ void TraceAmbient(int num)
 
     realSurfIndex = surfaceWorkOrder[num];
     ds = &drawSurfaces[realSurfIndex];
-    surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
+    
+    surfWeight = ds->numVerts;
+    if (ds->lightmapNum[0] >= 0) {
+        surfWeight += ds->lightmapWidth * ds->lightmapHeight;
+    }
+
+    // --- Vertex Ambient Pass ---
+    for (i = 0; i < ds->numVerts; i++)
+    {
+        int vIdx = ds->firstVert + i;
+        vec3_t origin, normal, ambColor, bentAccum;
+        
+        VectorCopy(drawVerts[vIdx].xyz, origin);
+        VectorCopy(drawVerts[vIdx].normal, normal);
+        
+        VectorMA(origin, SAMPLE_NUDGE, normal, origin);
+        
+        if (GatherAmbientAtPoint(origin, normal, ambColor, bentAccum, tw))
+        {
+            if (internalDrawVerts)
+            {
+                internalDrawVerts[vIdx].color[0][0] += ambColor[0];
+                internalDrawVerts[vIdx].color[0][1] += ambColor[1];
+                internalDrawVerts[vIdx].color[0][2] += ambColor[2];
+            }
+        }
+    }
 
     if (ds->lightmapNum[0] < 0)
     {
@@ -263,96 +379,11 @@ void TraceAmbient(int num)
                 lightAlphaMask[k] = ds->surfaceType;
             }
 
-            // --- Volumetric Irradiance Gathering ---
-            float gatherRadius = ambient_gatheradius;
-            float gatherRadiusSq = gatherRadius * gatherRadius;
-
-            int ix_min = (int)((origin[0] - gatherRadius - gridMins[0]) / gridSize[0]);
-            int ix_max = (int)((origin[0] + gatherRadius - gridMins[0]) / gridSize[0]);
-            int iy_min = (int)((origin[1] - gatherRadius - gridMins[1]) / gridSize[1]);
-            int iy_max = (int)((origin[1] + gatherRadius - gridMins[1]) / gridSize[1]);
-            int iz_min = (int)((origin[2] - gatherRadius - gridMins[2]) / gridSize[2]);
-            int iz_max = (int)((origin[2] + gatherRadius - gridMins[2]) / gridSize[2]);
-
-            // clamp to bounds
-            if (ix_min < 0) ix_min = 0; 
-            if (ix_max > gridBounds[0] - 1) ix_max = gridBounds[0] - 1;
-            
-            if (iy_min < 0) iy_min = 0; 
-            if (iy_max > gridBounds[1] - 1) iy_max = gridBounds[1] - 1;
-            
-            if (iz_min < 0) iz_min = 0; 
-            if (iz_max > gridBounds[2] - 1) iz_max = gridBounds[2] - 1;
-
             vec3_t ambColor;
-            VectorClear(ambColor);
             vec3_t bentAccum;
-            VectorClear(bentAccum);
-            float totalWeight = 0.0f;
             
-            for (int gz = iz_min; gz <= iz_max; gz++) {
-                for (int gy = iy_min; gy <= iy_max; gy++) {
-                    for (int gx = ix_min; gx <= ix_max; gx++) {
-                        int gidx = (gz * gridBounds[1] + gy) * gridBounds[0] + gx;
-                        float *gCol = &maoAmbient[gidx * 3];
-                        
-                        float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
-                        if (lum <= 0.0001f) continue; // Skip solid/black voxels
-
-                        vec3_t gPos;
-                        gPos[0] = gridMins[0] + gx * gridSize[0];
-                        gPos[1] = gridMins[1] + gy * gridSize[1];
-                        gPos[2] = gridMins[2] + gz * gridSize[2];
-
-                        vec3_t dir;
-                        VectorSubtract(gPos, origin, dir);
-                        
-                        float distSq = DotProduct(dir, dir);
-                        if (distSq > gatherRadiusSq) continue;
-                        if (distSq < 1.0f) distSq = 1.0f; // Prevent div by zero
-
-                        float dist = sqrtf(distSq);
-                        VectorScale(dir, 1.0f / dist, dir); // Normalize
-
-                        float NdotL = DotProduct(normal, dir);
-                        if (NdotL <= 0.01f) continue; // Behind surface
-
-                        float shadingModel = 1.0f - (distSq / gatherRadiusSq);
-                        
-                        // Inverse-Square with Minimum Size (Offset Model)
-                        // Gives a headstart of 32 units, as requested.
-                        // float sizeSq = 32.0f * 32.0f;
-                        // float shadingModel = 1.0f / (distSq + sizeSq);
-
-                        float w = NdotL * shadingModel;
-
-                        // Trace ray
-                        trace_t trace;
-                        TraceLine(origin, gPos, &trace, qfalse, tw);
-                        if (!trace.passSolid) {
-                            ambColor[0] += gCol[0] * w;
-                            ambColor[1] += gCol[1] * w;
-                            ambColor[2] += gCol[2] * w;
-                            
-                            float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
-                            bentAccum[0] += dir[0] * w * lum;
-                            bentAccum[1] += dir[1] * w * lum;
-                            bentAccum[2] += dir[2] * w * lum;
-                        }
-                        
-                        // Accumulate weight regardless of occlusion so blocked rays darken the final result
-                        totalWeight += w;
-                    }
-                }
-            }
-
-            if (totalWeight > 0.0001f) {
-                ambColor[0] /= totalWeight;
-                ambColor[1] /= totalWeight;
-                ambColor[2] /= totalWeight;
-            } else {
-                continue; // completely occluded or dark
-            }
+            if (!GatherAmbientAtPoint(origin, normal, ambColor, bentAccum, tw))
+                continue;
 
             float ambLum = ambColor[0] * 0.299f + ambColor[1] * 0.587f + ambColor[2] * 0.114f;
             if (ambLum < 0.0001f)

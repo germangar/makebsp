@@ -681,18 +681,105 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 }
 
 
+static void RadiosityIntegrateVertexSurface(int surfIdx) {
+    dsurface_t *ds = &drawSurfaces[surfIdx];
+    if (ds->numVerts == 0) return;
+
+    for (int i = 0; i < ds->numVerts; i++) {
+        int vIdx = ds->firstVert + i;
+        vec3_t dst, dstNormal;
+        
+        VectorCopy(drawVerts[vIdx].xyz, dst);
+        VectorCopy(drawVerts[vIdx].normal, dstNormal);
+        VectorAdd(dst, localSurfaces[surfIdx].entityOrigin, dst);
+        VectorMA(dst, RAD_ORIGIN_NUDGE, dstNormal, dst);
+
+        float accum[3] = {0, 0, 0};
+
+        for (int s = 0; s < numDrawSurfaces; s++) {
+            if (localSurfaces[s].emitterCount == 0) continue;
+
+            // Cull A: Distance
+            vec3_t v_to_surf; VectorSubtract(localSurfaces[s].origin, dst, v_to_surf);
+            float dist_to_surf = VectorLength(v_to_surf);
+            if (dist_to_surf > localSurfaces[s].maxReach + localSurfaces[s].radius) continue;
+
+            // Cull B: Receiver Plane
+            if (DotProduct(v_to_surf, dstNormal) < -localSurfaces[s].radius) continue;
+
+            // Cull C: Emitter Plane
+            if (drawSurfaces[s].surfaceType == MST_PLANAR) {
+                vec3_t v_to_dst; VectorSubtract(dst, localSurfaces[s].origin, v_to_dst);
+                if (DotProduct(v_to_dst, g_emitters[localSurfaces[s].emitterStart].normal) < -localSurfaces[s].radius) continue;
+            }
+
+            for (int e = localSurfaces[s].emitterStart; e < localSurfaces[s].emitterStart + localSurfaces[s].emitterCount; e++) {
+                emitter_t *em = &g_emitters[e];
+                vec3_t ray; VectorSubtract(em->center, dst, ray);
+                float dist = VectorLength(ray);
+                if (dist < 0.001f) continue;
+                vec3_t rayDir; VectorScale(ray, 1.0f / dist, rayDir);
+
+                float cosEmit = -DotProduct(em->normal, rayDir);
+                if (cosEmit <= 0.0f) continue;
+                float cosDst = DotProduct(dstNormal, rayDir);
+                if (cosDst <= 0.0f) continue;
+
+                float distClamped = dist < game->rad_ao_min ? game->rad_ao_min : dist;
+                float formFactorBase = (em->area * cosEmit) / (M_PI * distClamped * distClamped);
+                
+                float factor = 1.0f - active_rad_ao_intensity;
+                if (dist <= game->rad_ao_min) {
+                    factor = 1.0f - active_rad_ao_intensity;
+                } else if (dist < game->rad_ao_min + game->rad_ao_max) {
+                    float lerp = game->rad_ao_max > 0.0f ? (dist - game->rad_ao_min) / game->rad_ao_max : 1.0f;
+                    formFactorBase *= factor + (1.0f - factor) * lerp;
+                }
+                if (formFactorBase * cosDst > 1.0f) formFactorBase = 1.0f / cosDst;
+                
+                float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
+                if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
+
+                if (!RadVisCheck(dst, em->center)) continue;
+                
+                contribution_t cont;
+                VectorCopy(rayDir, cont.dir);
+                VectorScale(em->color, formFactorBase, cont.irradiance);
+                cont.angle = cosDst;
+                cont.isGlow = qfalse;
+                
+                AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
+            }
+        }
+        
+        if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
+            ThreadLock();
+            VectorAdd(&radiosityVertexFloats[vIdx * 3], accum, &radiosityVertexFloats[vIdx * 3]);
+            ThreadUnlock();
+        }
+    }
+}
+
 static void RadiosityIntegrateThread(int surfIdx) {
     int realSurfIndex = surfaceWorkOrder[surfIdx];
     dsurface_t *ds = &drawSurfaces[realSurfIndex];
-    int surfWeight = (ds->lightmapNum[0] >= 0) ? (ds->lightmapWidth * ds->lightmapHeight) : 1;
     
-    RadiosityIntegrateOneSurface(realSurfIndex);
+    int surfWeight = ds->numVerts;
+    if (ds->lightmapNum[0] >= 0) {
+        surfWeight += ds->lightmapWidth * ds->lightmapHeight;
+    }
+    
+    if (ds->lightmapNum[0] >= 0) {
+        RadiosityIntegrateOneSurface(realSurfIndex);
+    }
+    
+    RadiosityIntegrateVertexSurface(realSurfIndex);
     
     ThreadCompletedWeighted(surfWeight);
 }
 
 // ---------------------------------------------------------------------------
-static void RadiosityVoxelize(void) {
+static void RadiosityVoxelize(const float *srcFloats, const float *srcDeluxe, const float *srcEnergy) {
     _printf("  [voxelize]   Unified world-space splatting... ");
     RadiosityVoxelReset();
 
@@ -737,13 +824,13 @@ static void RadiosityVoxelize(void) {
 
                     if (lx % surf_rad_interval == 0 && ly % surf_rad_interval == 0) {
                         if (lightAlphaMask && !lightAlphaMask[pIdx]) continue;
-                        if (radiosityFloats[pIdx * 3] == 0 && radiosityFloats[pIdx * 3 + 1] == 0 && radiosityFloats[pIdx * 3 + 2] == 0) continue;
+                        if (srcFloats[pIdx * 3] == 0 && srcFloats[pIdx * 3 + 1] == 0 && srcFloats[pIdx * 3 + 2] == 0) continue;
                         
                         vec3_t pos, normal;
                         VectorCopy(points[i].pos, pos);
                         VectorCopy(points[i].normal, normal);
                         VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
-                        RadiosityVoxelAdd(pos, normal, &radiosityFloats[pIdx * 3], game->deluxeMap ? &radiosityDeluxeFloats[pIdx * 3] : NULL, game->deluxeMap ? &radiosityEnergyFloats[pIdx * 3] : NULL);
+                        RadiosityVoxelAdd(pos, normal, &srcFloats[pIdx * 3], game->deluxeMap ? &srcDeluxe[pIdx * 3] : NULL, game->deluxeMap ? &srcEnergy[pIdx * 3] : NULL);
                     }
                 }
                 Q_Free(points);
@@ -766,7 +853,7 @@ static void RadiosityVoxelize(void) {
                 int k_dst = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ly) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + lx;
                 if (lightAlphaMask && !lightAlphaMask[k_dst]) continue;
 
-                if (radiosityFloats[k_dst * 3] == 0 && radiosityFloats[k_dst * 3 + 1] == 0 && radiosityFloats[k_dst * 3 + 2] == 0) continue;
+                if (srcFloats[k_dst * 3] == 0 && srcFloats[k_dst * 3 + 1] == 0 && srcFloats[k_dst * 3 + 2] == 0) continue;
 
                 vec3_t pos, normal;
                 if (ds->surfaceType == MST_PATCH) {
@@ -784,7 +871,7 @@ static void RadiosityVoxelize(void) {
                     VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
                     VectorCopy(surfNormal, normal);
                 }
-                RadiosityVoxelAdd(pos, normal, &radiosityFloats[k_dst * 3], game->deluxeMap ? &radiosityDeluxeFloats[k_dst * 3] : NULL, game->deluxeMap ? &radiosityEnergyFloats[k_dst * 3] : NULL);
+                RadiosityVoxelAdd(pos, normal, &srcFloats[k_dst * 3], game->deluxeMap ? &srcDeluxe[k_dst * 3] : NULL, game->deluxeMap ? &srcEnergy[k_dst * 3] : NULL);
             }
         }
         
@@ -939,6 +1026,72 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
         VectorScale(totalEnergy, 1.0f / totalWeight, outEnergy);
     }
     return qtrue;
+}
+
+static void RadiosityIntegrateGridThread(int num) {
+    if (!gridData32) return;
+
+    vec3_t origin;
+    int mod = num;
+    int z = mod / (gridBounds[0] * gridBounds[1]);
+    mod -= z * (gridBounds[0] * gridBounds[1]);
+    int y = mod / gridBounds[0];
+    mod -= y * gridBounds[0];
+    int x = mod;
+
+    origin[0] = gridMins[0] + x * gridSize[0];
+    origin[1] = gridMins[1] + y * gridSize[1];
+    origin[2] = gridMins[2] + z * gridSize[2];
+
+    if (PointInSolid(origin)) {
+        return; 
+    }
+
+    int numSamples = 64; 
+    float phi = 3.14159265359f * (3.0f - sqrtf(5.0f));
+    
+    vec3_t accumColor = {0, 0, 0};
+    int hits = 0;
+
+    traceWork_t tw;
+    memset(&tw, 0, sizeof(tw));
+    tw.ignoreSurface = -1;
+    tw.patchshadows = patchshadows;
+
+    for (int i = 0; i < numSamples; i++) {
+        float sampleY = 1.0f - (i / (float)(numSamples - 1)) * 2.0f;
+        float radius = sqrtf(1.0f - sampleY * sampleY);
+        float theta = phi * i;
+        
+        vec3_t dir;
+        dir[0] = cosf(theta) * radius;
+        dir[1] = sinf(theta) * radius;
+        dir[2] = sampleY;
+
+        vec3_t end;
+        VectorMA(origin, 65536.0f, dir, end); 
+
+        trace_t trace;
+        TraceLine(origin, end, &trace, qtrue, &tw);
+
+        if (trace.passSolid && trace.hitFraction < 1.0f) {
+            vec3_t invDir;
+            VectorScale(dir, -1.0f, invDir);
+            
+            vec3_t hitColor = {0, 0, 0};
+            if (RadiosityVoxelSample(trace.hit, invDir, hitColor, NULL, NULL)) {
+                VectorAdd(accumColor, hitColor, accumColor);
+                hits++;
+            }
+        }
+    }
+
+    if (hits > 0) {
+        float factor = 1.0f / numSamples;
+        radiosityGridColors[num * 3 + 0] = accumColor[0] * factor;
+        radiosityGridColors[num * 3 + 1] = accumColor[1] * factor;
+        radiosityGridColors[num * 3 + 2] = accumColor[2] * factor;
+    }
 }
 
 static void RadiosityReconstructOneSurface(int surfIdx) {
@@ -1195,6 +1348,25 @@ static void RadiosityMerge(const float *srcBuffer) {
             VectorAdd(lightFloats + i * 3, srcBuffer + i * 3, lightFloats + i * 3);
         }
     }
+
+    // Merge Vertices
+    if (radiosityVertexFloats && internalDrawVerts) {
+        for (int i = 0; i < numDrawVerts; i++) {
+            internalDrawVerts[i].color[0][0] += radiosityVertexFloats[i * 3 + 0];
+            internalDrawVerts[i].color[0][1] += radiosityVertexFloats[i * 3 + 1];
+            internalDrawVerts[i].color[0][2] += radiosityVertexFloats[i * 3 + 2];
+        }
+    }
+
+    // Merge Grid
+    if (radiosityGridColors && gridData32 && numGridPoints > 0) {
+        for (int i = 0; i < numGridPoints; i++) {
+            gridData32[i].ambient[0][0] += radiosityGridColors[i * 3 + 0];
+            gridData32[i].ambient[0][1] += radiosityGridColors[i * 3 + 1];
+            gridData32[i].ambient[0][2] += radiosityGridColors[i * 3 + 2];
+            // Note: Since we gather isotropically from a sphere, all accumulated light is ambient
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1244,7 +1416,7 @@ void LightRadiosity(void) {
         RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, RadiosityIntegrateThread);
         _printf("done\n");
 
-        RadiosityVoxelize();
+        RadiosityVoxelize(radiosityFloats, radiosityDeluxeFloats, radiosityEnergyFloats);
 
         
         _printf("  [reconstruct] Fill ");
@@ -1268,6 +1440,17 @@ void LightRadiosity(void) {
         }
         Q_Free(g_emitters); g_emitters = NULL; g_numEmitters = 0;
         _printf("  Pass %d complete (%.0f seconds)\n\n", pnum, I_FloatTime() - passStart);
+    }
+
+    if (numGridPoints > 0) {
+        _printf("--- Radiosity Lightgrid ---\n");
+        _printf("  [voxelize] Building final cache with fully accumulated bounce light...\n");
+        RadiosityVoxelize(accumRadiosityFloats, accumRadiosityDeluxeSum, accumRadiosityEnergyFloats);
+        
+        _printf("  [integrate] ");
+        fflush(stdout);
+        RunThreadsOnIndividual(numGridPoints, qtrue, RadiosityIntegrateGridThread);
+        _printf("done\n");
     }
 
     _printf("--- Radiosity Merge ---\n");
