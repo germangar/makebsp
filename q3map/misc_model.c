@@ -10,6 +10,7 @@ This file is part of Quake III Arena source code.
 #include "../libs/assimp/include/assimp/cimport.h"
 #include "../libs/assimp/include/assimp/postprocess.h"
 #include "../libs/assimp/include/assimp/scene.h"
+#include "../libs/assimp/include/assimp/cfileio.h"
 #include "qbsp.h"
 #include "model_collision.h"
 #include "xatlas_c.h"
@@ -37,6 +38,89 @@ typedef struct modelCache_s
 #define MAX_MODEL_CACHE 256
 static modelCache_t modelCache[MAX_MODEL_CACHE];
 static int numModelCache;
+
+/*
+====================
+Assimp-VFS Bridge
+====================
+*/
+typedef struct {
+    byte *data;
+    size_t size;
+    size_t pos;
+} vfs_mem_file_t;
+
+static size_t VFS_Read(struct aiFile* file, char* buffer, size_t size, size_t count) {
+    vfs_mem_file_t *mf = (vfs_mem_file_t*)file->UserData;
+    size_t to_read = size * count;
+    if (mf->pos + to_read > mf->size) to_read = mf->size - mf->pos;
+    memcpy(buffer, mf->data + mf->pos, to_read);
+    mf->pos += to_read;
+    return to_read / size;
+}
+
+static size_t VFS_Tell(struct aiFile* file) {
+    vfs_mem_file_t *mf = (vfs_mem_file_t*)file->UserData;
+    return mf->pos;
+}
+
+static size_t VFS_FileSize(struct aiFile* file) {
+    vfs_mem_file_t *mf = (vfs_mem_file_t*)file->UserData;
+    return mf->size;
+}
+
+static aiReturn VFS_Seek(struct aiFile* file, size_t offset, enum aiOrigin origin) {
+    vfs_mem_file_t *mf = (vfs_mem_file_t*)file->UserData;
+    switch(origin) {
+        case aiOrigin_SET: mf->pos = offset; break;
+        case aiOrigin_CUR: mf->pos += offset; break;
+        case aiOrigin_END: mf->pos = mf->size - offset; break;
+        default: return aiReturn_FAILURE;
+    }
+    if (mf->pos > mf->size) mf->pos = mf->size;
+    return aiReturn_SUCCESS;
+}
+
+static struct aiFile* VFS_Open(struct aiFileIO* io, const char* filename, const char* mode) {
+    void *buffer = NULL;
+    int len = vfsLoadFile(filename, &buffer);
+    
+    if (len < 0 && io->UserData && ((char*)io->UserData)[0]) {
+        char relPath[1024];
+        char base[1024];
+        strcpy(base, (char*)io->UserData);
+        int blen = strlen(base);
+        if (blen > 0 && base[blen-1] != '/' && base[blen-1] != '\\') {
+            strcat(base, "/");
+        }
+        sprintf(relPath, "%s%s", base, filename);
+        len = vfsLoadFile(relPath, &buffer);
+    }
+    
+    if (len < 0) return NULL;
+    
+    vfs_mem_file_t *mf = malloc(sizeof(vfs_mem_file_t));
+    mf->data = buffer;
+    mf->size = (size_t)len;
+    mf->pos = 0;
+    
+    struct aiFile *file = malloc(sizeof(struct aiFile));
+    memset(file, 0, sizeof(struct aiFile));
+    file->ReadProc = VFS_Read;
+    file->TellProc = VFS_Tell;
+    file->FileSizeProc = VFS_FileSize;
+    file->SeekProc = VFS_Seek;
+    file->UserData = (aiUserData)mf;
+    
+    return file;
+}
+
+static void VFS_Close(struct aiFileIO* io, struct aiFile* file) {
+    vfs_mem_file_t *mf = (vfs_mem_file_t*)file->UserData;
+    free(mf->data);
+    free(mf);
+    free(file);
+}
 
 /*
 ============
@@ -104,8 +188,7 @@ GetCachedModel
 static const struct aiScene *GetCachedModel(const char *modelName)
 {
     int i;
-    void *buffer = NULL;
-    int length;
+    char baseDir[1024];
 
     for (i = 0; i < numModelCache; i++)
     {
@@ -120,31 +203,24 @@ static const struct aiScene *GetCachedModel(const char *modelName)
         Error("MAX_MODEL_CACHE reached");
     }
 
-    length = vfsLoadFile(modelName, &buffer);
-    if (length <= 0)
-    {
-        _printf("WARNING: Could not load model file %s (not found in VFS)\n", modelName);
-        return NULL;
-    }
+    ExtractFilePath(modelName, baseDir);
 
-    // Determine extension hint for Assimp
-    const char *hint = strrchr(modelName, '.');
-    if (hint)
-        hint++; // skip the dot
+    struct aiFileIO io;
+    io.OpenProc = VFS_Open;
+    io.CloseProc = VFS_Close;
+    io.UserData = (aiUserData)baseDir;
 
-    const struct aiScene *scene = aiImportFileFromMemory(
-        (const char *)buffer, length,
+    const struct aiScene *scene = aiImportFileEx(
+        modelName,
         aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
             aiProcess_SortByPType | aiProcess_FlipUVs |
             aiProcess_FlipWindingOrder |
             aiProcess_PreTransformVertices,
-        hint);
-
-    free(buffer);
+        &io);
 
     if (!scene)
     {
-        _printf("WARNING: Assimp failed to parse model file %s\n", modelName);
+        _printf("WARNING: Could not load or parse model file %s (Assimp error: %s)\n", modelName, aiGetErrorString());
         return NULL;
     }
 
