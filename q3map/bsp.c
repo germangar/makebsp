@@ -171,7 +171,7 @@ void ProcessWorldModel(void)
     FloodAreas(tree);
 
     // Create collision brushes for triangle models
-    CreateTriangleModelCollision();
+    CreateTriangleModelCollision(&entities[0]);
 
     // add references to the detail brushes
     FilterDetailBrushesIntoTree(e, tree);
@@ -243,13 +243,17 @@ void ProcessSubModel(void)
     tree_t *tree;
     bspbrush_t *b, *bc;
     node_t *node;
-
-    BeginModel();
-
     e = &entities[entity_num];
     e->firstDrawSurf = numMapDrawSurfs;
 
     LoadTriangleModels(e);
+
+    PatchMapDrawSurfs(e);
+
+    // Create collision brushes for the submodel's triangle models
+    CreateTriangleModelCollision(e);
+
+    BeginModel();
 
     // Expand the bmodel bounds to include the loaded misc_model geometry.
     // Otherwise, the engine might cull the model because the misc_model is outside
@@ -265,8 +269,6 @@ void ProcessSubModel(void)
             }
         }
     }
-
-    PatchMapDrawSurfs(e);
 
     // just put all the brushes in an empty leaf
     // FIXME: patches?

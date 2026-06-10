@@ -507,7 +507,7 @@ extern int numModelInstances;
 
 // model_collision.c
 
-void CreateTriangleModelCollision(void);
+void CreateTriangleModelCollision(entity_t *parent);
 void CreateCollisionTris(modelInstance_t *inst);
 
 bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, shaderInfo_t *shader);

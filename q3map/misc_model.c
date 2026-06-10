@@ -104,7 +104,8 @@ GetCachedModel
 static const struct aiScene *GetCachedModel(const char *modelName)
 {
     int i;
-    char filename[1024];
+    void *buffer = NULL;
+    int length;
 
     for (i = 0; i < numModelCache; i++)
     {
@@ -119,24 +120,37 @@ static const struct aiScene *GetCachedModel(const char *modelName)
         Error("MAX_MODEL_CACHE reached");
     }
 
-    if (!vfsFindFile(modelName, filename, sizeof(filename)))
+    length = vfsLoadFile(modelName, &buffer);
+    if (length <= 0)
     {
+        _printf("WARNING: Could not load model file %s (not found in VFS)\n", modelName);
         return NULL;
     }
 
-    const struct aiScene *scene = aiImportFile(
-        filename, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
-                      aiProcess_SortByPType | aiProcess_FlipUVs |
-                      aiProcess_FlipWindingOrder |
-                      aiProcess_PreTransformVertices);
+    // Determine extension hint for Assimp
+    const char *hint = strrchr(modelName, '.');
+    if (hint)
+        hint++; // skip the dot
+
+    const struct aiScene *scene = aiImportFileFromMemory(
+        (const char *)buffer, length,
+        aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
+            aiProcess_SortByPType | aiProcess_FlipUVs |
+            aiProcess_FlipWindingOrder |
+            aiProcess_PreTransformVertices,
+        hint);
+
+    free(buffer);
 
     if (!scene)
     {
+        _printf("WARNING: Assimp failed to parse model file %s\n", modelName);
         return NULL;
     }
 
     if (strlen(modelName) >= MAX_QPATH)
     {
+        _printf("WARNING: Model name %s exceeds MAX_QPATH\n", modelName);
     }
     strncpy(modelCache[numModelCache].name, modelName, MAX_QPATH - 1);
     modelCache[numModelCache].name[MAX_QPATH - 1] = '\0';
@@ -815,12 +829,7 @@ void LoadTriangleModels(entity_t *eparent)
             inst->has_collision_type_override = qfalse;
             const char *col_type_str = ValueForKey(entity, "collisiontype");
             
-            if (eparent != &entities[0])
-            {
-                inst->has_collision_type_override = qtrue;
-                inst->collision_type_override = MC_NONE;
-            }
-            else if (col_type_str[0])
+            if (col_type_str[0])
             {
                 inst->has_collision_type_override = qtrue;
                 if (!Q_stricmp(col_type_str, "shell")) inst->collision_type_override = MC_SHELL;

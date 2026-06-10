@@ -831,7 +831,7 @@ void ClipSidesIntoTree(entity_t *e, tree_t *tree)
                 continue;
             }
             // don't create faces for non-visible sides
-            if (si->surfaceFlags & SURF_NODRAW)
+            if ((si->surfaceFlags & SURF_NODRAW) || (side->surfaceFlags & SURF_NODRAW))
             {
                 continue;
             }

@@ -199,6 +199,8 @@ List of additions and modifications made to shader parsing and features compared
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
 - **forceuvgen**: Enable (default) or disable to force generating new lightmap UVs from scratch. Disabled uses the model UVs.
 - **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude (buggy), none (alias nosolid / nonsolid). More to come.
+- **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
+- **modelgroup**: Links this `misc_model` to a brush model entity (like `func_plat` or `func_door`). When set to the same `modelgroup` name as a parent brush entity, the model's visuals and automatically generated collision hulls are bundled with the brush model and move seamlessly with it.
 
 **Editor keys**
 - **model**: The path to the 3D model file to load.
@@ -215,6 +217,7 @@ List of additions and modifications made to shader parsing and features compared
 - **upscale**: Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the group's lightmaps.
 - **enforcesamplesize**: Subividide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
+- **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 
 **Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.
@@ -255,6 +258,7 @@ List of additions and modifications made to shader parsing and features compared
 - **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the entity's lightmaps.
 - **enforcesamplesize**: Subdivide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
+- **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 
 ### Entity: light
 

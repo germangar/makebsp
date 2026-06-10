@@ -1091,13 +1091,13 @@ DecomposeModelCollision
 Generate collision hulls from the model's geometry.
 ====================
 */
-static void DecomposeModelCollision(modelInstance_t *inst)
+static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
 {
     modelCategory_t category = inst->category;
     bspbrush_t *hulls_list = NULL;
     int numHulls = 0;
 
-    if (num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS)
+    if (parent == &entities[0] && num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS)
     {
         _printf("WARNING: MAX_CLIP_ENTITY_GROUPS reached\n");
         return;
@@ -1132,6 +1132,28 @@ static void DecomposeModelCollision(modelInstance_t *inst)
     // Step 5: Populate clip entity group
     if (hulls_list)
     {
+        if (parent != &entities[0])
+        {
+            // Append directly to parent's brushes
+            bspbrush_t *tail = parent->brushes;
+            if (tail)
+            {
+                while (tail->next)
+                {
+                    tail = tail->next;
+                }
+                tail->next = hulls_list;
+            }
+            else
+            {
+                parent->brushes = hulls_list;
+            }
+
+            _printf("[Collision] %s: %s -> %i Brushes appended to modelgroup brushmodel\n",
+                    inst->modelName, CategoryString(category), numHulls);
+            return;
+        }
+
         clip_entity_group_t *group = &clip_entity_groups[num_clip_entity_groups++];
 
         // Create a local entity (not part of the map entities yet)
@@ -1182,7 +1204,7 @@ CreateTriangleModelCollision
 Generates collision brushes from model geometry (per-instance pass).
 ====================
 */
-void CreateTriangleModelCollision(void)
+void CreateTriangleModelCollision(entity_t *parent)
 {
     int i;
     modelInstance_t *inst;
@@ -1190,10 +1212,27 @@ void CreateTriangleModelCollision(void)
 
     _printf("----- CreateTriangleModelCollision -----\n");
 
+    const char *parentGroup = "";
+    if (parent != &entities[0])
+    {
+        parentGroup = ValueForKey(parent, "modelgroup");
+        if (!parentGroup[0]) parentGroup = ValueForKey(parent, "modelsgroup");
+        if (!parentGroup[0]) return; // Non-worldspawn without a modelgroup has no misc_models
+    }
+
     // Step 1: Quick check for any solid geometry (optimization)
     for (i = 0; i < numModelInstances; i++)
     {
         inst = &modelInstances[i];
+
+        const char *instGroup = ValueForKey(inst->creator, "modelgroup");
+        if (!instGroup[0]) instGroup = ValueForKey(inst->creator, "modelsgroup");
+
+        if (Q_stricmp(instGroup, parentGroup))
+        {
+            continue;
+        }
+
         for (int j = 0; j < inst->numDrawSurfs; j++)
         {
             if (inst->drawSurfs[j]->shaderInfo &&
@@ -1209,17 +1248,28 @@ void CreateTriangleModelCollision(void)
 
     if (!hasSolid)
     {
-        _printf("No solid model geometry found for collision.\n");
+        // _printf("No solid model geometry found for collision.\n");
         return;
     }
 
-    // Reset groups
-    num_clip_entity_groups = 0;
+    if (parent == &entities[0])
+    {
+        // Reset groups for worldspawn
+        num_clip_entity_groups = 0;
+    }
 
     // Step 2: Extraction and Categorization Pass (per instance)
     for (i = 0; i < numModelInstances; i++)
     {
         inst = &modelInstances[i];
+
+        const char *instGroup = ValueForKey(inst->creator, "modelgroup");
+        if (!instGroup[0]) instGroup = ValueForKey(inst->creator, "modelsgroup");
+
+        if (Q_stricmp(instGroup, parentGroup))
+        {
+            continue;
+        }
 
         // Abstracted unified mesh processing executes unconditionally first
         CreateCollisionTris(inst);
@@ -1231,13 +1281,26 @@ void CreateTriangleModelCollision(void)
     {
         inst = &modelInstances[i];
 
+        const char *instGroup = ValueForKey(inst->creator, "modelgroup");
+        if (!instGroup[0]) instGroup = ValueForKey(inst->creator, "modelsgroup");
+
+        if (Q_stricmp(instGroup, parentGroup))
+        {
+            continue;
+        }
+
         if (inst->category != MC_NONE)
         {
-            DecomposeModelCollision(inst);
+            DecomposeModelCollision(inst, parent);
         }
 
         // Free the cleanly generated triangle geometry when done with the instance
         FreeCollisionTris(inst);
+    }
+
+    if (parent != &entities[0])
+    {
+        return; // Brush models skip the rest of the worldspawn logic
     }
 
     // Step 3: Preparation pass
