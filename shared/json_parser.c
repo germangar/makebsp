@@ -179,6 +179,13 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->writeLightmapSize = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "exportLightmaps"))
+        {
+            if (val->type == json_type_true)
+                game->exportLightmaps = qtrue;
+            else if (val->type == json_type_false)
+                game->exportLightmaps = qfalse;
+        }
         else if (!Q_stricmp(key, "cutoff") && val->type == json_type_number)
         {
             game->minLightAdd = (float)atof(json_value_as_number(val)->number);
@@ -531,6 +538,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"maxSurfaceIndexes\": %d,\n"
             "  \"lightmapSize\": %d,\n"
             "  \"writeLightmapSize\": %d,\n"
+            "  \"exportLightmaps\": %s,\n"
             "  \"sampleSize\": %i,\n"
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
             "  \"hdr8BitScale\": %.2f,\n"
@@ -570,6 +578,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->arg, game->rootDir, game->userDir ? game->userDir : "", game->gameDir, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
+            game->exportLightmaps ? "true" : "false",
             game->defaultSampleSize, hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",

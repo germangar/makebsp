@@ -871,6 +871,12 @@ int main(int argc, char **argv)
         {
             // Redundant, just to satisfy usage
         }
+        else if (!strcmp(argv[i], "-lightmapimagesize"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-lightmapimagesize requires a numeric argument");
+            i++; // Handled in pre-scan (InitGame)
+        }
         else
         {
             break;

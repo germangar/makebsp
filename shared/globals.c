@@ -16,6 +16,7 @@ float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
+qboolean g_debugExportLightmaps = qfalse;
 
 game_t gameTemplates[MAX_GAMES] = {
 	{
@@ -35,6 +36,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		393210,     // maxSurfaceIndexes
 		512,
 		512,        // writeLightmapSize
+		qfalse,     // exportLightmaps
 
 		4,          // defaultSampleSize
         qtrue,      // enforceSampleSize
@@ -88,6 +90,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		6000,
 		128,
 		128,        // writeLightmapSize
+		qfalse,     // exportLightmaps
 
 		8,          // defaultSampleSize
         qtrue,       // enforceSampleSize
@@ -183,7 +186,19 @@ game_t *InitGame(int argc, char **argv) {
         JSON_LoadGame(gameJsonPath, &activeGame);
     }
 
-    // 5. Point the global game to our local struct
+    // 5. Parse specific engine-overriding args before finalizing
+    int defaultLmSize = activeGame.lightmapSize;
+    for (int j = 1; j < argc; j++) {
+        if (!strcmp(argv[j], "-lightmapimagesize") && j + 1 < argc) {
+            activeGame.lightmapSize = atoi(argv[j + 1]);
+            if (activeGame.lightmapSize != defaultLmSize) {
+                activeGame.exportLightmaps = qtrue;
+            }
+            break;
+        }
+    }
+
+    // 6. Point the global game to our local struct
     game = &activeGame;
 
     // 6. Register default game gamedir as active

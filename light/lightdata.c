@@ -9,6 +9,8 @@
 #include <string.h>
 #include <math.h>
 
+#include "../libs/stb_image_write.h"
+
 drawVert32_t *internalDrawVerts = NULL;
 float *lightFloats = NULL;
 float *deluxeFloats = NULL;
@@ -650,6 +652,60 @@ static void DownConvertGrid(float scale, qboolean lightmapRange)
     }
 }
 
+static void ExportExternalLightmaps(void)
+{
+    char outDir[1024];
+    char filename[1024];
+    int size = game->lightmapSize;
+    int totalBytesPerImage = size * size * 3;
+    int numImages = numLightBytes / totalBytesPerImage;
+
+    GetMapOutputDir(source, outDir);
+
+    // Ensure the output directory exists before writing
+#ifdef _WIN32
+    {
+        char mkdirCmd[1536];
+        snprintf(mkdirCmd, sizeof(mkdirCmd), "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '%s' | Out-Null\"", outDir);
+        system(mkdirCmd);
+    }
+#else
+    {
+        char mkdirCmd[1536];
+        snprintf(mkdirCmd, sizeof(mkdirCmd), "mkdir -p \"%s\"", outDir);
+        system(mkdirCmd);
+    }
+#endif
+
+    _printf("ExportExternalLightmaps: Exporting %d lightmaps to %s\n", numImages, outDir);
+
+    // Write the new lightmaps (this safely overwrites existing ones)
+    for (int i = 0; i < numImages; i++) {
+        snprintf(filename, sizeof(filename), "%slm_%04d.tga", outDir, i);
+        if (!stbi_write_tga(filename, size, size, 3, &lightBytes[i * totalBytesPerImage])) {
+            _printf("WARNING: Failed to write %s\n", filename);
+        }
+    }
+
+    // Delete older stale lightmaps from previous runs with more images
+    int missCount = 0;
+    for (int i = numImages; i < 9999; i++) {
+        snprintf(filename, sizeof(filename), "%slm_%04d.tga", outDir, i);
+        if (remove(filename) == 0) {
+            missCount = 0;
+        } else {
+            missCount++;
+            if (missCount > 5) break;
+        }
+    }
+
+    // CRITICAL: Zero out the BSP lightmap lump so DarkPlaces/Xonotic falls back
+    // to loading the external lm_%04d.tga files from disk.
+    if (!g_debugExportLightmaps || game->exportLightmaps) {
+        numLightBytes = 0;
+    }
+}
+
 void DownConvertLightingData(void)
 {
     float scale = 1.0f;
@@ -747,6 +803,10 @@ void DownConvertLightingData(void)
     DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
     DownConvertDeluxeMaps();
     DownConvertGrid(scale, (game->hdr == HDR_8BIT));
+
+    if (game->exportLightmaps || g_debugExportLightmaps) {
+        ExportExternalLightmaps();
+    }
 
     _printf("DownConvert: Done\n");
 

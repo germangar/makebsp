@@ -71,6 +71,7 @@ typedef struct {
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
 	int         writeLightmapSize;
+	qboolean    exportLightmaps;
 
 	// Lighting flags
 	int         defaultSampleSize;
@@ -117,6 +118,7 @@ extern float shadingModelSoftBias;
 extern float sunSoftBias;
 extern vec3_t blockSize;
 extern qboolean g_lowmem;
+extern qboolean g_debugExportLightmaps;
 
 #define MAX_GAMES 128
 extern int numGames;
