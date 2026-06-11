@@ -945,7 +945,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             {
                 return qfalse;
             }
-            VectorMA(light->origin, distByNormal * (1.0f / dist), out->dir, pointAtDist);
+            VectorMA(light->origin, distByNormal, light->normal, pointAtDist);
             radiusAtDist = light->radiusByDist * distByNormal;
             VectorSubtract(origin, pointAtDist, distToSample);
             sampleRadius = VectorLength(distToSample);
