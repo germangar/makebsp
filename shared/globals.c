@@ -36,7 +36,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		393210,     // maxSurfaceIndexes
 		512,
 		512,        // writeLightmapSize
-		qfalse,     // exportLightmaps
+		qfalse,     // externalLightmaps: if true, lightmaps are stored as external .tga files instead of inside the BSP
 
 		4,          // defaultSampleSize
         qtrue,      // enforceSampleSize
@@ -192,7 +192,7 @@ game_t *InitGame(int argc, char **argv) {
         if (!strcmp(argv[j], "-lightmapimagesize") && j + 1 < argc) {
             activeGame.lightmapSize = atoi(argv[j + 1]);
             if (activeGame.lightmapSize != defaultLmSize) {
-                activeGame.exportLightmaps = qtrue;
+                activeGame.externalLightmaps = qtrue;
             }
             break;
         }

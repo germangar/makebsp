@@ -71,7 +71,7 @@ typedef struct {
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
 	int         writeLightmapSize;
-	qboolean    exportLightmaps;
+	qboolean    externalLightmaps;
 
 	// Lighting flags
 	int         defaultSampleSize;

@@ -701,7 +701,7 @@ static void ExportExternalLightmaps(void)
 
     // CRITICAL: Zero out the BSP lightmap lump so DarkPlaces/Xonotic falls back
     // to loading the external lm_%04d.tga files from disk.
-    if (!g_debugExportLightmaps || game->exportLightmaps) {
+    if (!g_debugExportLightmaps || game->externalLightmaps) {
         numLightBytes = 0;
     }
 }
@@ -804,7 +804,7 @@ void DownConvertLightingData(void)
     DownConvertDeluxeMaps();
     DownConvertGrid(scale, (game->hdr == HDR_8BIT));
 
-    if (game->exportLightmaps || g_debugExportLightmaps) {
+    if (game->externalLightmaps || g_debugExportLightmaps) {
         ExportExternalLightmaps();
     }
 
