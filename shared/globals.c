@@ -35,7 +35,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		65535,      // maxSurfaceVerts
 		393210,     // maxSurfaceIndexes
 		512,
-		512,        // writeLightmapSize
 		qfalse,     // externalLightmaps: if true, lightmaps are stored as external .tga files instead of inside the BSP
 
 		4,          // defaultSampleSize
@@ -64,12 +63,9 @@ game_t gameTemplates[MAX_GAMES] = {
         0.0f,       // backSplashSurface
 		qtrue,      // deluxeMap
 		15.0f,      // deluxeMinAngle
-		1.0f,       // deluxeAmbientExaggerate
-		1.0f,       // deluxeRadiosityExaggerate
 
 
 		0.0f,       // superSampleRadius
-		qfalse,     // upscale
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
@@ -89,7 +85,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		999,
 		6000,
 		128,
-		128,        // writeLightmapSize
 		qfalse,     // exportLightmaps
 
 		8,          // defaultSampleSize
@@ -118,12 +113,9 @@ game_t gameTemplates[MAX_GAMES] = {
         0.0f,       // backSplashSurface
 		qfalse,     // deluxeMap
 		40.0f,      // deluxeMinAngle
-		1.0f,       // deluxeAmbientExaggerate
-		1.0f,       // deluxeRadiosityExaggerate
 
 
 		0.0f,       // superSampleRadius
-		qfalse,     // upscale
 		0,          // antialiasingPasses
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius

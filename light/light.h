@@ -47,6 +47,9 @@ extern qboolean g_fast;
 extern qboolean    directonly;
 extern qboolean    radiosityonly;
 extern qboolean    ambientonly;
+extern qboolean    upscale;
+extern float       deluxeAmbientExaggerate;
+extern float       deluxeRadiosityExaggerate;
 
 /*
  * GpuPlanarSurface — CPU-side mirror of the struct in lm_common.cl.

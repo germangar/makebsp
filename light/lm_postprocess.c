@@ -362,7 +362,7 @@ void GpuLightmapState_Upload(void) {
     int s, x, y;
     GpuLightmapState *st = &g_gpuLM;
     cl_int err;
-    int scale = game->upscale ? 2 : 1;
+    int scale = upscale ? 2 : 1;
     st->upscale = scale;
     int totalP1x = numLightBytes/3, totalP = totalP1x*scale*scale;
     st->totalAtlasPixels=totalP;

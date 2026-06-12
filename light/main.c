@@ -39,6 +39,9 @@ qboolean g_fast = qfalse;
 qboolean directonly = qfalse;
 qboolean radiosityonly = qfalse;
 qboolean ambientonly = qfalse;
+qboolean upscale = qfalse;
+float deluxeAmbientExaggerate = 1.0f;
+float deluxeRadiosityExaggerate = 1.0f;
 
 static qboolean HasArg(const char *arg, int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
@@ -363,7 +366,7 @@ int main(int argc, char **argv) {
             nodirect = qtrue;
             _printf("No direct lighting\n");
         } else if (!strcmp(argv[i], "-upscale")) {
-            game->upscale = qtrue;
+            upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
         } else if (!strcmp(argv[i], "-novertex")) {
             novertexlighting = qtrue;
@@ -480,14 +483,14 @@ int main(int argc, char **argv) {
             _printf("Deluxe Min Angle floor set to %.1f degrees\n", game->deluxeMinAngle);
         } else if (!strcmp(argv[i], "-deluxe_ambient_exaggerate")) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe_ambient_exaggerate requires a scalar factor");
-            game->deluxeAmbientExaggerate = atof(argv[++i]);
-            if (game->deluxeAmbientExaggerate < 0.0f) game->deluxeAmbientExaggerate = 0.0f;
-            _printf("Deluxe Ambient Exaggerate multiplier set to %.2f\n", game->deluxeAmbientExaggerate);
+            deluxeAmbientExaggerate = atof(argv[++i]);
+            if (deluxeAmbientExaggerate < 0.0f) deluxeAmbientExaggerate = 0.0f;
+            _printf("Deluxe Ambient Exaggerate multiplier set to %.2f\n", deluxeAmbientExaggerate);
         } else if (!strcmp(argv[i], "-deluxe_radiosity_exaggerate")) {
             if (i + 1 >= argc || argv[i+1][0] == '-') Error("-deluxe_radiosity_exaggerate requires a scalar factor");
-            game->deluxeRadiosityExaggerate = atof(argv[++i]);
-            if (game->deluxeRadiosityExaggerate < 0.0f) game->deluxeRadiosityExaggerate = 0.0f;
-            _printf("Deluxe Radiosity Exaggerate multiplier set to %.2f\n", game->deluxeRadiosityExaggerate);
+            deluxeRadiosityExaggerate = atof(argv[++i]);
+            if (deluxeRadiosityExaggerate < 0.0f) deluxeRadiosityExaggerate = 0.0f;
+            _printf("Deluxe Radiosity Exaggerate multiplier set to %.2f\n", deluxeRadiosityExaggerate);
         } else if (!strcmp(argv[i], "-deluxesort")) {
             deluxeSort = qtrue;
             _printf("Deluxe sorting enabled (no-influence lights processed last)\n");

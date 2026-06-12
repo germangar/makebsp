@@ -70,7 +70,6 @@ typedef struct {
 	int         maxSurfaceVerts;
 	int         maxSurfaceIndexes;
 	int         lightmapSize;
-	int         writeLightmapSize;
 	qboolean    externalLightmaps;
 
 	// Lighting flags
@@ -100,11 +99,8 @@ typedef struct {
     float       backSplashSurface;
 	qboolean    deluxeMap;
 	float       deluxeMinAngle;
-	float       deluxeAmbientExaggerate;
-	float       deluxeRadiosityExaggerate;
 
 	float       superSampleRadius;
-	qboolean    upscale;
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;

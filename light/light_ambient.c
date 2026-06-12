@@ -361,7 +361,7 @@ void TraceAmbient(int num)
             if (unreachableMask && BITMAP_TEST(unreachableMask, k))
                 continue;
 
-            int scale = game->upscale ? 2 : 1;
+            int scale = upscale ? 2 : 1;
             int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
 
             if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
@@ -396,7 +396,7 @@ void TraceAmbient(int num)
             }
 
             // Exaggerate the ambient bent normal away from the surface normal
-            if (game->deluxeAmbientExaggerate > 1.0f) {
+            if (deluxeAmbientExaggerate > 1.0f) {
                 float w = DotProduct(normal, bentNormal);
                 vec3_t tangent;
                 
@@ -407,7 +407,7 @@ void TraceAmbient(int num)
                 
                 // Scale up the tangent to bend it further
                 for (int c = 0; c < 3; c++) {
-                    tangent[c] *= game->deluxeAmbientExaggerate;
+                    tangent[c] *= deluxeAmbientExaggerate;
                 }
                 
                 // Reconstruct and re-normalize

@@ -1163,7 +1163,7 @@ void BuildLocalSurfaces(void)
             localSurfaces[i].upscale = extra[i].upscale;
         }
         if (localSurfaces[i].upscale == 0) {
-            localSurfaces[i].upscale = game->upscale ? 2 : 1;
+            localSurfaces[i].upscale = upscale ? 2 : 1;
         }
 
         // Pass sidecar castShadows (initially defaulting to qtrue before dmodel overrides)
@@ -1444,8 +1444,8 @@ void ExportAlphaMask(const char *filenamePrefix)
         color[1] = (i * 456) % 200 + 55;
         color[2] = (i * 789) % 200 + 55;
 
-        int scale = game->upscale ? 2 : 1;
-        int currentGutter = game->upscale ? (GUTTER * 2) : 0;
+        int scale = upscale ? 2 : 1;
+        int currentGutter = upscale ? (GUTTER * 2) : 0;
         int extW = ds->lightmapWidth * scale + currentGutter * 2;
         int extH = ds->lightmapHeight * scale + currentGutter * 2;
 

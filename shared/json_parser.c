@@ -170,14 +170,7 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         }
         else if (!Q_stricmp(key, "lightmapSize") && val->type == json_type_number)
         {
-            int oldSize = game->lightmapSize;
             game->lightmapSize = atoi(json_value_as_number(val)->number);
-            if (game->writeLightmapSize == oldSize)
-                game->writeLightmapSize = game->lightmapSize;
-        }
-        else if (!Q_stricmp(key, "writeLightmapSize") && val->type == json_type_number)
-        {
-            game->writeLightmapSize = atoi(json_value_as_number(val)->number);
         }
         else if (!Q_stricmp(key, "externalLightmaps") || !Q_stricmp(key, "exportLightmaps"))
         {
@@ -299,14 +292,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->deluxeMinAngle = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "deluxeAmbientExaggerate") && val->type == json_type_number)
-        {
-            game->deluxeAmbientExaggerate = (float)atof(json_value_as_number(val)->number);
-        }
-        else if (!Q_stricmp(key, "deluxeRadiosityExaggerate") && val->type == json_type_number)
-        {
-            game->deluxeRadiosityExaggerate = (float)atof(json_value_as_number(val)->number);
-        }
         else if (!Q_stricmp(key, "smoothPasses") && val->type == json_type_number)
         {
             game->defaultSmoothPasses = atoi(json_value_as_number(val)->number);
@@ -324,13 +309,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         else if (!Q_stricmp(key, "superSampleRadius") && val->type == json_type_number)
         {
             game->superSampleRadius = (float)atof(json_value_as_number(val)->number);
-        }
-        else if (!Q_stricmp(key, "upscale"))
-        {
-            if (val->type == json_type_true)
-                game->upscale = qtrue;
-            else if (val->type == json_type_false)
-                game->upscale = qfalse;
         }
         else if (!Q_stricmp(key, "shading") && val->type == json_type_string)
         {
@@ -417,10 +395,6 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
     if (game->lightmapSize < 1)
     {
         game->lightmapSize = 128;
-    }
-    if (game->writeLightmapSize < 1)
-    {
-        game->writeLightmapSize = game->lightmapSize;
     }
 
     JSON_Free(root);
@@ -537,7 +511,6 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"maxSurfaceVerts\": %d,\n"
             "  \"maxSurfaceIndexes\": %d,\n"
             "  \"lightmapSize\": %d,\n"
-            "  \"writeLightmapSize\": %d,\n"
             "  \"externalLightmaps\": %s, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */\n"
             "  \"sampleSize\": %i,\n"
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
@@ -562,11 +535,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"backSplashSurface\": %f, /* Default surface light backsplash fraction (0.0 to 1.0) */\n"
             "  \"deluxeMap\": %s,\n"
             "  \"deluxeMinAngle\": %.2f,\n"
-            "  \"deluxeAmbientExaggerate\": %.2f,\n"
-            "  \"deluxeRadiosityExaggerate\": %.2f,\n"
             "  \"antialiasingPasses\": %d, /*Number of post-process AA passes */\n"
             "  \"superSampleRadius\": %.2f,\n"
-            "  \"upscale\": %s, /* Raytrace surfaces at 2x resolution */\n"
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
@@ -577,7 +547,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "}\n",
             game->arg, game->rootDir, game->userDir ? game->userDir : "", game->gameDir, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
-            game->maxSurfaceIndexes, game->lightmapSize, game->writeLightmapSize,
+            game->maxSurfaceIndexes, game->lightmapSize,
             game->externalLightmaps ? "true" : "false",
             game->defaultSampleSize, hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
@@ -600,12 +570,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->backSplashSurface,
             game->deluxeMap ? "true" : "false",
             game->deluxeMinAngle,
-            game->deluxeAmbientExaggerate,
-            game->deluxeRadiosityExaggerate,
 
             game->antialiasingPasses,
             game->superSampleRadius,
-            game->upscale ? "true" : "false",
             game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",

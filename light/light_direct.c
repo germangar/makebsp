@@ -1215,8 +1215,8 @@ void PrecacheTexelGeometryThread(int i)
         return;
     }
 
-    int currentGutter = game->upscale ? (GUTTER * 2) : GUTTER;
-    int scale = game->upscale ? 2 : 1;
+    int currentGutter = upscale ? (GUTTER * 2) : GUTTER;
+    int scale = upscale ? 2 : 1;
 
     int sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
     int sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
@@ -1715,7 +1715,7 @@ void TraceLights(int num)
                 float v = (float)(j - currentGutter) + jdy + 0.5f;
                 float step = 1.0f / (float)scale;
 
-                int global_scale = game->upscale ? 2 : 1;
+                int global_scale = upscale ? 2 : 1;
                 if (ss == 0 && scale == global_scale)
                 {
                     int native_px = px / scale;

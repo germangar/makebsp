@@ -425,7 +425,7 @@ static void UpConvertLightmaps(void)
         memset(unreachableMask, 0, ((numLightBytes / 3) + 7) / 8);
     }
 
-    int scale = game->upscale ? 2 : 1;
+    int scale = upscale ? 2 : 1;
     int upscaledPixels = (numLightBytes / 3) * (scale * scale);
 
     if (!texelOrigins)

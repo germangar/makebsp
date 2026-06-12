@@ -485,7 +485,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
-    int scale = game->upscale ? 2 : 1;
+    int scale = upscale ? 2 : 1;
     int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
 
     for (int ly = 0; ly < ds->lightmapHeight; ly += step) {
@@ -1100,7 +1100,7 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
 
     int surf_rad_interval = localSurfaces[surfIdx].radInterval;
 
-    int scale = game->upscale ? 2 : 1;
+    int scale = upscale ? 2 : 1;
     int numPixels = ds->lightmapWidth * ds->lightmapHeight;
     if (numPixels <= 0) {
         return;
@@ -1299,7 +1299,7 @@ static void RadiosityMerge(const float *srcBuffer) {
             }
 
             // Exaggerate the radiosity bent normal away from the surface normal
-            if (game->deluxeRadiosityExaggerate > 1.0f) {
+            if (deluxeRadiosityExaggerate > 1.0f) {
                 float w = DotProduct(&normalFloats[i*3], radDir);
                 vec3_t tangent;
                 
@@ -1310,7 +1310,7 @@ static void RadiosityMerge(const float *srcBuffer) {
                 
                 // Scale up the tangent to bend it further
                 for (int c = 0; c < 3; c++) {
-                    tangent[c] *= game->deluxeRadiosityExaggerate;
+                    tangent[c] *= deluxeRadiosityExaggerate;
                 }
                 
                 // Reconstruct and re-normalize
