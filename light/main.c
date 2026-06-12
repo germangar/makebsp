@@ -68,11 +68,11 @@ static void ParseWorldspawnKeys(int argc, char **argv)
                 "Please re-run the BSP phase.");
     }
     int bspLmSize = atoi(lmSizeVal);
-    if (bspLmSize != game->lightmapSize && !game->externalLightmaps) {
-        Error("Lightmap size mismatch!\n"
-                "BSP was built for %dx%d lightmaps, but the lighting tool is configured for %dx%d.\n"
-                "Check your game profile or -lightmapsize command line setting.",
-                bspLmSize, bspLmSize, game->lightmapSize, game->lightmapSize);
+    if (bspLmSize != game->lightmapSize) {
+        _printf("Adapting lightmap atlas size from profile default (%d) to BSP value (%d).\n",
+                game->lightmapSize, bspLmSize);
+        game->lightmapSize = bspLmSize;
+        game->externalLightmaps = qtrue;
     }
 
     // map keys
@@ -619,9 +619,6 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-exportlightmaps")) {
             g_debugExportLightmaps = qtrue;
             _printf("Exporting a copy of the lightmaps as images for visual inspection\n");
-        } else if (!strcmp(argv[i], "-lightmapimagesize")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-lightmapimagesize requires a numeric argument");
-            i++; // Handled in pre-scan (InitGame)
         } else {
             break;
         }
@@ -646,7 +643,6 @@ int main(int argc, char **argv) {
                 "   sunshading_softbias <F> = override the sun soft bias\n"
                 "   -lowmem        = use memory-mapped files for massive radiosity passes\n"
                 "   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
-                "   -lightmapimagesize <N> = force a specific lightmap atlas size (e.g. 1024)\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
                 "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n"

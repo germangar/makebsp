@@ -178,19 +178,7 @@ game_t *InitGame(int argc, char **argv) {
         JSON_LoadGame(gameJsonPath, &activeGame);
     }
 
-    // 5. Parse specific engine-overriding args before finalizing
-    int defaultLmSize = activeGame.lightmapSize;
-    for (int j = 1; j < argc; j++) {
-        if (!strcmp(argv[j], "-lightmapimagesize") && j + 1 < argc) {
-            activeGame.lightmapSize = atoi(argv[j + 1]);
-            if (activeGame.lightmapSize != defaultLmSize) {
-                activeGame.externalLightmaps = qtrue;
-            }
-            break;
-        }
-    }
-
-    // 6. Point the global game to our local struct
+    // 5. Point the global game to our local struct
     game = &activeGame;
 
     // 6. Register default game gamedir as active

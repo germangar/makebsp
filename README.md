@@ -44,6 +44,7 @@ The legacy BSP-traversal ray caster has been replaced with the industry-standard
 - **Omnidirectional Lightmapping:** Triangle soups receive high-quality, seamless lightmaps. The UV-to-world rasterizer preserves the integrity of the mesh regardless of its topology.
 - **Automatic Collision (HACD):** Every model placed into the map is solid by default. Optimized convex collision hulls are automatically generated using the **HACD (Hierarchical Approximate Convex Decomposition)** algorithm.
 - **Solid and Lightmapped by Default:** Unless explicitly disabled in the shader, all models are solid and lightmapped just like world brushes.
+- **Modelgroups:** `misc_model`s can be part of `func_*` entities through them, bundling their visuals and collision seamlessly.
 
 ### 4. Brush-to-Light Generation (func_light)
 The `func_light` entity allows mappers to create complex light setups directly from brush geometry without any shader scripting.
@@ -116,12 +117,12 @@ By following this hierarchy, your map source files (`.map`) remain portable and 
 
 ## 🎨 Shader Modifications
 
-List of additions and modifications made to shader parsing and features compared to the original makebsp.
+List of additions and modifications made to shader parsing and features compared to the original q3map.
 
 ### New Shader Directives
 - **q3map_vertexcolor <R G B>**: Overrides the vertex color for the surface.
 - **q3map_surfacelight_glow <value>**: Sets the backface glow fraction for surface lights (enabled by default in CONTENTS_LAVA and CONTENTS_SLIME).
-- **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality (it will only contribute color/energy).
+- **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality. Instead it will only contribute color/energy (to prevent bumpmap distortions caused by trim lights).
 - **q3map_backsplash_nodeluxe**: Prevents the surface light's backsplash from influencing the deluxe map's directionality.
 - **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
 
@@ -218,6 +219,7 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the group's lightmaps.
 - **enforcesamplesize**: Subividide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
+- **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
 
 **Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.
@@ -259,6 +261,7 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the entity's lightmaps.
 - **enforcesamplesize**: Subdivide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
+- **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
 
 ### Entity: light
 
@@ -296,6 +299,7 @@ Used to compile a `.map` file into a `.bsp` file.
 *New or relevant to makebsp:*
 - `-game <G>`: Load a specific game profile (e.g., quake3, qfusion) from `makebsp/<G>.json`.
 - `-samplesize <N>`: Sets the default lightmap sample size (e.g., 4, 8, 16). Lower values = higher resolution.
+- `-lightmapimagesize <N>`: Forces a specific lightmap atlas size (e.g., 1024).
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.
 - `-guessuvs`: [Experimental] Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
 - `-rootdir / -basepath / -fs_basepath <P>`: Set the engine root directory path. Can be specified multiple times to build layered search paths.
@@ -363,11 +367,13 @@ These switches change the primary mode of the executable.
 - `-smoothpasses <N>`: Number of lightmap smoothing/blurring passes.
 - `-smooth <R>`: Radius for smoothing and jittered supersampling.
 - `-supersample <radius>`: Enable trace-time supersampling using a 8x jittered pattern. The radius defines the spread of the jitter in world units (e.g., 0.5 or 1.0). Set to 0 to disable.
+- `-softedges`: Enable soft filtering on patch edges (disabled by default).
 
 **Performance & Debug**
 - `-fast`: Drop quality for quick tests.
 - `-lowmem`: Enables memory-mapped file mode to reduce RAM usage on extremely large maps.
 - `-opencl <0|1>`: Enable (1) or disable (0) OpenCL GPU acceleration for supported passes.
+- `-exportlightmaps`: Export a copy of the lightmaps as images for visual inspection.
 - `-debuglightmaps`: Generate BMP files showing lightmap allocation and atlas usage.
 - `-debuglightmapsalpha`: Generate BMP files showing exact lit pixels (highly accurate debug).
 - `-nodirect`: Skip the direct lighting pass.
@@ -376,4 +382,3 @@ These switches change the primary mode of the executable.
 - `-ambientonly`: Only perform the macro-ambient pass. 
 - `-novertex`: Disable vertex lighting generation.
 - `-nogrid`: Disable volumetric light grid generation.
-nogrid`: Disable volumetric light grid generation.
