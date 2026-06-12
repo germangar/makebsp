@@ -25,8 +25,8 @@
   "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
   "rad_ao_min": 0.00,
   "rad_ao_max": 32.00, /* Distance of ambient occlusion shadowing */
-  "falloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "sunFalloff": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "attenuation": "standard",  /* [ standard, soft, linear ] */
   "cutoff": 0.100000, /* Minimum remaining light energy to apply the contribution to a surface */
   "fadeout": 0.000000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */

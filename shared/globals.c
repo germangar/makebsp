@@ -53,8 +53,8 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
-		SHADING_MODEL_LAMBERT, // falloff
-		SHADING_MODEL_LAMBERT, // sunFalloff
+		SHADING_MODEL_LAMBERT, // shading
+		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
         TONEMAP_REINHARD, // exposureFilter
         0.1f,       // cutoff
@@ -103,8 +103,8 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
-		SHADING_MODEL_LAMBERT, // falloff
-		SHADING_MODEL_LAMBERT, // sunFalloff
+		SHADING_MODEL_LAMBERT, // shading
+		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
         TONEMAP_LINEAR, // exposureFilter
         0.1f,       // cutoff
