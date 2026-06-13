@@ -240,7 +240,7 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int))
 /*
 ===================================================================
 
-OSF1
+LINUX / UNIX / MAC
 
 ===================================================================
 */
@@ -248,17 +248,25 @@ OSF1
 #if defined(__unix__) || defined(__linux__) || defined(__APPLE__)
 #define USED
 
-int numthreads = 4;
+#include <pthread.h>
+#include <unistd.h>
+
+int numthreads = -1;
 
 void ThreadSetDefault(void)
 {
     if (numthreads == -1) // not set manually
     {
+#ifdef _SC_NPROCESSORS_ONLN
+        numthreads = sysconf(_SC_NPROCESSORS_ONLN);
+#else
         numthreads = 4;
+#endif
+        if (numthreads < 1 || numthreads > MAX_THREADS)
+            numthreads = 1;
     }
+    _printf("%i threads\n", numthreads);
 }
-
-#include <pthread.h>
 
 pthread_mutex_t *my_mutex;
 
@@ -283,13 +291,14 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int))
 {
     int i;
     pthread_t work_threads[MAX_THREADS];
-    pthread_addr_t status;
     pthread_attr_t attrib;
     pthread_mutexattr_t mattrib;
     int start, end;
 
     start = I_FloatTime();
     dispatch = 0;
+    completed = 0;
+    completed_work = 0;
     workcount = workcnt;
     oldf = -1;
     pacifier = showpacifier;
@@ -301,30 +310,38 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int))
     if (!my_mutex)
     {
         my_mutex = malloc(sizeof(*my_mutex));
-        if (pthread_mutexattr_create(&mattrib) == -1)
-            Error("pthread_mutex_attr_create failed");
-        if (pthread_mutexattr_setkind_np(&mattrib, MUTEX_FAST_NP) == -1)
-            Error("pthread_mutexattr_setkind_np failed");
-        if (pthread_mutex_init(my_mutex, mattrib) == -1)
+        if (pthread_mutexattr_init(&mattrib) != 0)
+            Error("pthread_mutexattr_init failed");
+#ifdef __linux__
+        pthread_mutexattr_settype(&mattrib, PTHREAD_MUTEX_ADAPTIVE_NP);
+#endif
+        if (pthread_mutex_init(my_mutex, &mattrib) != 0)
             Error("pthread_mutex_init failed");
     }
 
-    if (pthread_attr_create(&attrib) == -1)
-        Error("pthread_attr_create failed");
-    if (pthread_attr_setstacksize(&attrib, 0x100000) == -1)
+    if (pthread_attr_init(&attrib) != 0)
+        Error("pthread_attr_init failed");
+    if (pthread_attr_setstacksize(&attrib, 0x100000) != 0)
         Error("pthread_attr_setstacksize failed");
 
-    for (i = 0; i < numthreads; i++)
+    if (numthreads == 1)
     {
-        if (pthread_create(&work_threads[i], attrib, (pthread_startroutine_t)func,
-                           (pthread_addr_t)i) == -1)
-            Error("pthread_create failed");
+        func(0);
     }
-
-    for (i = 0; i < numthreads; i++)
+    else
     {
-        if (pthread_join(work_threads[i], &status) == -1)
-            Error("pthread_join failed");
+        for (i = 0; i < numthreads; i++)
+        {
+            if (pthread_create(&work_threads[i], &attrib, (void *(*)(void *))func,
+                               (void *)(intptr_t)i) != 0)
+                Error("pthread_create failed");
+        }
+
+        for (i = 0; i < numthreads; i++)
+        {
+            if (pthread_join(work_threads[i], NULL) != 0)
+                Error("pthread_join failed");
+        }
     }
 
     threaded = qfalse;

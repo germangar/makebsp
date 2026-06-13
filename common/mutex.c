@@ -73,12 +73,12 @@ mutex_t *MutexAlloc(void)
 /*
 ===================================================================
 
-OSF1
+LINUX / UNIX / MAC
 
 ===================================================================
 */
 
-#ifdef __osf__
+#if defined(__osf__) || defined(__linux__) || defined(__APPLE__)
 #define	USED
 
 #include <pthread.h>
@@ -111,11 +111,12 @@ mutex_t *MutexAlloc(void)
 	if (numthreads == 1)
 		return NULL;
 	my_mutex = malloc (sizeof(*my_mutex));
-	if (pthread_mutexattr_create (&mattrib) == -1)
-		Error ("pthread_mutex_attr_create failed");
-	if (pthread_mutexattr_setkind_np (&mattrib, MUTEX_FAST_NP) == -1)
-		Error ("pthread_mutexattr_setkind_np failed");
-	if (pthread_mutex_init (my_mutex, mattrib) == -1)
+	if (pthread_mutexattr_init (&mattrib) != 0)
+		Error ("pthread_mutexattr_init failed");
+#ifdef __linux__
+	pthread_mutexattr_settype(&mattrib, PTHREAD_MUTEX_ADAPTIVE_NP);
+#endif
+	if (pthread_mutex_init (my_mutex, &mattrib) != 0)
 		Error ("pthread_mutex_init failed");
 	return (void *) my_mutex;
 }

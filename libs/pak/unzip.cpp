@@ -14,7 +14,9 @@
 #include "unzip.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 // #include "../../common/cmdlib.h"
 

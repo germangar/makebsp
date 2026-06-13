@@ -2,13 +2,17 @@ CC = gcc
 CXX = g++
 
 ifeq ($(OS),Windows_NT)
+    EXECUTABLE_EXT = .exe
     CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/windows/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -mconsole -static -lwsock32 -lws2_32 -lm -lstdc++ -fopenmp -Wl,--stack,16777216
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12 -Llibs/opencl/lib -lOpenCL -lcfgmgr32 -lruntimeobject -lole32 -lsetupapi
+    GENERATE_KERNELS = powershell.exe -NoProfile -ExecutionPolicy Bypass -File stringify_kernels.ps1
 else
+    EXECUTABLE_EXT =
     CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/linux/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -DNDEBUG -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -lpthread -ldl -lm -lstdc++ -fopenmp
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/linux/lib -lembree4 -ltbb12 -lOpenCL
+    GENERATE_KERNELS = chmod +x stringify_kernels.sh && ./stringify_kernels.sh
 endif
 
 ifeq ($(RELEASE), 1)
@@ -116,15 +120,15 @@ LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$
 # Object files for MeshLib-Lite (persistent)
 ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
 
-Q3MAP_TARGET = makebsp.exe
-Q3LIGHT_TARGET = q3light.exe
-LIGHT_TARGET = makelight.exe
+Q3MAP_TARGET = makebsp$(EXECUTABLE_EXT)
+Q3LIGHT_TARGET = q3light$(EXECUTABLE_EXT)
+LIGHT_TARGET = makelight$(EXECUTABLE_EXT)
 KERNELS_HEADER = light/kernels_embedded.h
 
 all: $(KERNELS_HEADER) $(Q3MAP_TARGET) $(LIGHT_TARGET)
 
 $(KERNELS_HEADER): makebsp/kernels/*.cl stringify_kernels.ps1
-	powershell.exe -NoProfile -ExecutionPolicy Bypass -File stringify_kernels.ps1
+	$(GENERATE_KERNELS)
 
 $(ML_LITE_LIB): $(ML_LITE_OBJ)
 	echo Building persistent MeshLib-Lite library...
@@ -135,6 +139,7 @@ $(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB)
 
 $(LIGHT_TARGET): $(LIGHT_OBJ)
 	$(CXX) -o $@ $(LIGHT_OBJ) $(LIGHT_LDFLAGS)
+
 
 # Compile rules
 $(OBJ_DIR)/common/%.o: $(COMMON_DIR)/%.c

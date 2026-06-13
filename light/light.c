@@ -25,9 +25,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "radiosity.h"
 #include "../common/imagelib.h"
 #include <string.h>
-#ifdef _WIN32
 #include "../libs/pakstuff.h"
-#endif
 
 #define DEFAULT_SPOTLIGHT_TARGET_DISTANCE 64.0f
 

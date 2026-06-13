@@ -23,13 +23,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "pakstuff.h"
 #include "../common/cmdlib.h"
 #include "../common/mathlib.h"
+
+#ifdef _WIN32
 #include "io.h"
-#include "unzip.h"
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
+#include "unzip.h"
 
 // #include "cmdlib.h"
 #include "str.h"
@@ -1021,11 +1023,11 @@ void ClosePakFile(void) {
   CleanUpPakDirs();
 }
 
-void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
+void InitPakFile(const char *pBasePath, const char *pName) {
   char normalizedBasePath[1024];
   strncpy(normalizedBasePath, pBasePath, sizeof(normalizedBasePath) - 1);
   normalizedBasePath[sizeof(normalizedBasePath) - 1] = '\0';
-  
+
   // Normalize slashes to forward slashes for internal consistency
   for (int i = 0; normalizedBasePath[i]; i++) {
     if (normalizedBasePath[i] == '\\') normalizedBasePath[i] = '/';
@@ -1035,11 +1037,12 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
   g_strBasePath[sizeof(g_strBasePath) - 1] = '\0';
 
   if (pName == NULL) {
+    _printf("  Scanning for archives in: %s\n", normalizedBasePath);
+
+#ifdef _WIN32
     Str strPath(normalizedBasePath);
     AddSlash(strPath);
     strPath += "*.pk3";
-
-    _printf("  Scanning for archives in: %s\n", strPath.GetBuffer());
 
     // Create a working copy for _findfirst with backslashes
     char winPath[WORK_LEN];
@@ -1064,10 +1067,9 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
       _findclose(handle);
 
       // Sort alphabetically A to Z
-      // By loading A-Z, 'Z' is pushed to the LIFO stack last and receives highest priority
       for (int i = 0; i < numPk3s - 1; i++) {
         for (int j = i + 1; j < numPk3s; j++) {
-          if (stricmp(pk3Files[i], pk3Files[j]) > 0) {
+          if (Q_stricmp(pk3Files[i], pk3Files[j]) > 0) {
             char *temp = pk3Files[i];
             pk3Files[i] = pk3Files[j];
             pk3Files[j] = temp;
@@ -1076,25 +1078,54 @@ void WINAPI InitPakFile(const char *pBasePath, const char *pName) {
       }
 
       for (int i = 0; i < numPk3s; i++) {
-        // Construct clean path with forward slashes
         char cleanPath[WORK_LEN];
-        strncpy(cleanPath, normalizedBasePath, sizeof(cleanPath) - 1);
-        cleanPath[sizeof(cleanPath) - 1] = '\0';
-        int len = strlen(cleanPath);
-        if (len > 0 && cleanPath[len-1] != '/') {
-            strncat(cleanPath, "/", sizeof(cleanPath) - len - 1);
-        }
-        strncat(cleanPath, pk3Files[i], sizeof(cleanPath) - strlen(cleanPath) - 1);
-        
+        sprintf(cleanPath, "%s/%s", normalizedBasePath, pk3Files[i]);
         _printf("    Found archive: %s\n", cleanPath);
         OpenPakFile(cleanPath);
         free(pk3Files[i]);
       }
     }
+#else
+    DIR *dir = opendir(normalizedBasePath);
+    if (dir) {
+      struct dirent *entry;
+      char *pk3Files[1024];
+      int numPk3s = 0;
+      while ((entry = readdir(dir)) != NULL) {
+        if (strstr(entry->d_name, ".pk3") || strstr(entry->d_name, ".PK3")) {
+          if (numPk3s < 1024) {
+            pk3Files[numPk3s] = strdup(entry->d_name);
+            numPk3s++;
+          }
+        }
+      }
+      closedir(dir);
+
+      // Sort alphabetically A to Z
+      for (int i = 0; i < numPk3s - 1; i++) {
+        for (int j = i + 1; j < numPk3s; j++) {
+          if (Q_stricmp(pk3Files[i], pk3Files[j]) > 0) {
+            char *temp = pk3Files[i];
+            pk3Files[i] = pk3Files[j];
+            pk3Files[j] = temp;
+          }
+        }
+      }
+
+      for (int i = 0; i < numPk3s; i++) {
+        char cleanPath[WORK_LEN];
+        sprintf(cleanPath, "%s/%s", normalizedBasePath, pk3Files[i]);
+        _printf("    Found archive: %s\n", cleanPath);
+        OpenPakFile(cleanPath);
+        free(pk3Files[i]);
+      }
+    }
+#endif
   } else {
     OpenPakFile(pName);
   }
 }
+
 
 void ClearPakFiles(void) {
   ClosePakFile();

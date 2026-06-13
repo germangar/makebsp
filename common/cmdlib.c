@@ -25,19 +25,24 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "connect.h"
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
 #include <stdint.h>
 #include <windows.h>
-#include "../libs/pakstuff.h"
 #endif
 
 #ifndef _WIN32
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <sys/time.h>
 #endif
+
+#include "../libs/pakstuff.h"
 
 #ifdef NeXT
 #include <libc.h>
@@ -199,7 +204,6 @@ void _printf(const char *format, ...)
 {
     va_list argptr;
     char text[4096];
-    ATOM a;
 
     va_start(argptr, format);
     vsnprintf(text, sizeof(text), format, argptr);
@@ -224,7 +228,7 @@ void _printf(const char *format, ...)
     {
         if (strlen(text) < 255)
         {
-            a = GlobalAddAtom(text);
+            ATOM a = GlobalAddAtom(text);
             PostMessage(hwndOut, wm_BroadcastCommand, (WPARAM)a, 0);
         }
     }
@@ -280,6 +284,16 @@ void GetExecutablePath(const char *argv0)
     char path[1024];
     if (GetModuleFileName(NULL, path, sizeof(path)))
     {
+        ExtractFilePath(path, executablePath);
+        NormalizePath(executablePath);
+        return;
+    }
+#elif defined(__linux__)
+    char path[1024];
+    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len != -1)
+    {
+        path[len] = '\0';
         ExtractFilePath(path, executablePath);
         NormalizePath(executablePath);
         return;
@@ -465,11 +479,9 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
             return length;
 
         // b. Try PAK/PK3 archives in this path
-#ifdef _WIN32
         length = PakLoadAnyFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
-#endif
     }
 
     return -1;
@@ -567,6 +579,16 @@ typedef struct {
 #define MAX_MEMMAPS 1024
 static memmap_t memmaps[MAX_MEMMAPS];
 static int numMemmaps = 0;
+#else
+typedef struct {
+    void *ptr;
+    size_t size;
+    int fd;
+} memmap_t;
+
+#define MAX_MEMMAPS 1024
+static memmap_t memmaps[MAX_MEMMAPS];
+static int numMemmaps = 0;
 #endif
 
 void *Q_Alloc(size_t size) {
@@ -621,6 +643,37 @@ void *Q_Alloc(size_t size) {
 
         return ptr;
     }
+#else
+    if (g_lowmem) {
+        if (numMemmaps >= MAX_MEMMAPS) {
+            Error("Q_Alloc: MAX_MEMMAPS exceeded");
+        }
+
+        char tempFile[] = "/tmp/makebspXXXXXX";
+        int fd = mkstemp(tempFile);
+        if (fd == -1) {
+            Error("Q_Alloc: mkstemp failed");
+        }
+        unlink(tempFile); // Nuked on close
+
+        if (ftruncate(fd, size) == -1) {
+            close(fd);
+            Error("Q_Alloc: ftruncate failed");
+        }
+
+        void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (ptr == MAP_FAILED) {
+            close(fd);
+            Error("Q_Alloc: mmap failed");
+        }
+
+        memmaps[numMemmaps].ptr = ptr;
+        memmaps[numMemmaps].size = size;
+        memmaps[numMemmaps].fd = fd;
+        numMemmaps++;
+
+        return ptr;
+    }
 #endif
 
     void *ptr = malloc(size);
@@ -639,6 +692,18 @@ void Q_Free(void *ptr) {
             UnmapViewOfFile(ptr);
             CloseHandle(memmaps[i].hMap);
             CloseHandle(memmaps[i].hFile);
+            
+            // Swap with last element to keep array dense
+            memmaps[i] = memmaps[numMemmaps - 1];
+            numMemmaps--;
+            return;
+        }
+    }
+#else
+    for (int i = 0; i < numMemmaps; i++) {
+        if (memmaps[i].ptr == ptr) {
+            munmap(ptr, memmaps[i].size);
+            close(memmaps[i].fd);
             
             // Swap with last element to keep array dense
             memmaps[i] = memmaps[numMemmaps - 1];
@@ -685,26 +750,21 @@ I_FloatTime
 */
 double I_FloatTime(void)
 {
+#ifdef _WIN32
     time_t t;
-
     time(&t);
+    return (double)t;
+#else
+    struct timeval tp;
+    static int secbase;
 
-    return t;
-#if 0
-// more precise, less portable
-	struct timeval tp;
-	struct timezone tzp;
-	static int		secbase;
-
-	gettimeofday(&tp, &tzp);
-	
-	if (!secbase)
-	{
-		secbase = tp.tv_sec;
-		return tp.tv_usec/1000000.0;
-	}
-	
-	return (tp.tv_sec - secbase) + tp.tv_usec/1000000.0;
+    gettimeofday(&tp, NULL);
+    if (!secbase)
+    {
+        secbase = tp.tv_sec;
+        return tp.tv_usec / 1000000.0;
+    }
+    return (double)(tp.tv_sec - secbase) + tp.tv_usec / 1000000.0;
 #endif
 }
 
@@ -716,7 +776,7 @@ void Q_getwd(char *out)
     _getcwd(out, 256);
     strcat(out, "\\");
 #else
-    getwd(out);
+    getcwd(out, 256);
     strcat(out, "/");
 #endif
 
@@ -1357,7 +1417,7 @@ static unsigned short crctable[256] = {
     0xfbbf, 0xeb9e, 0x9b79, 0x8b58, 0xbb3b, 0xab1a, 0x6ca6, 0x7c87, 0x4ce4,
     0x5cc5, 0x2c22, 0x3c03, 0x0c60, 0x1c41, 0xedae, 0xfd8f, 0xcdec, 0xddcd,
     0xad2a, 0xbd0b, 0x8d68, 0x9d49, 0x7e97, 0x6eb6, 0x5ed5, 0x4ef4, 0x3e13,
-    0x2e32, 0x1e51, 0x0e70, 0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a,
+    0x2e32, 0x1e51, 0x0ed1, 0x1ef0, 0xff9f, 0xefbe, 0xdfdd, 0xcffc, 0xbf1b, 0xaf3a,
     0x9f59, 0x8f78, 0x9188, 0x81a9, 0xb1ca, 0xa1eb, 0xd10c, 0xc12d, 0xf14e,
     0xe16f, 0x1080, 0x00a1, 0x30c2, 0x20e3, 0x5004, 0x4025, 0x7046, 0x6067,
     0x83b9, 0x9398, 0xa3fb, 0xb3da, 0xc33d, 0xd31c, 0xe37f, 0xf35e, 0x02b1,

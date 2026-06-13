@@ -32,9 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "shaders.h"
 #include "globals.h"
-#ifdef _WIN32
 #include "../libs/pakstuff.h"
-#endif
 
 // Default backsplash is disabled unless explicitly requested
 #define DEFAULT_BACKSPLASH_DISTANCE 24
@@ -929,12 +927,10 @@ static void ShaderPakCallback(const char *filename)
     {
         sprintf(absolute, "%s%s", current_vfs_path, filename);
         
-#ifdef _WIN32
         size = PakLoadAnyFile(absolute, &buffer);
         if (size == -1) return;
 
         AddShaderFile(absolute, filename, buffer, size);
-#endif
     }
 }
 
