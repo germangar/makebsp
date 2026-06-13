@@ -60,6 +60,8 @@ typedef struct parseMesh_s
 
     qboolean grouped; // used during shared edge grouping
     struct parseMesh_s *groupChain;
+    
+    int entitynum; // retains the original entity index (e.g. func_group)
 } parseMesh_t;
 
 typedef struct bspface_s

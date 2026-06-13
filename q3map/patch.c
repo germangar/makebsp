@@ -163,6 +163,7 @@ void ParsePatch(void)
     sprintf(shader, "textures/%s", texture);
     pm->shaderInfo = ShaderInfoForShader(shader);
     pm->mesh = m;
+    pm->entitynum = num_entities - 1;
 
     // link to the entity
     pm->next = mapent->patches;
@@ -326,13 +327,16 @@ void PatchMapDrawSurfs(entity_t *e)
 
         // Resolve sample size hierarchy
         ds->samplesize = samplesize; // Start with global default
+        
+        entity_t *originalEnt = &entities[scan->entitynum];
+        
         if (scan->shaderInfo && scan->shaderInfo->lightmapSampleSize > 0)
         {
             ds->samplesize = scan->shaderInfo->lightmapSampleSize;
         }
-        const char *ent_sample_str = ValueForKey(e, "lightmapsamplesize");
+        const char *ent_sample_str = ValueForKey(originalEnt, "lightmapsamplesize");
         if (!ent_sample_str[0])
-            ent_sample_str = ValueForKey(e, "samplesize");
+            ent_sample_str = ValueForKey(originalEnt, "samplesize");
 
         if (ent_sample_str[0])
         {
@@ -343,13 +347,13 @@ void PatchMapDrawSurfs(entity_t *e)
             }
         }
 
-        const char *rad_str = ValueForKey(e, "smooth");
+        const char *rad_str = ValueForKey(originalEnt, "smooth");
         if (rad_str[0])
         {
             ds->smoothingRadius = atof(rad_str);
         }
 
-        const char *vcolStr = ValueForKey(e, "vertexcolor");
+        const char *vcolStr = ValueForKey(originalEnt, "vertexcolor");
         if (vcolStr[0])
         {
             ds->hasVertexColor = 1;
@@ -357,12 +361,12 @@ void PatchMapDrawSurfs(entity_t *e)
         }
 
         // upscale override
-        const char *upscaleStr = ValueForKey(e, "upscale");
+        const char *upscaleStr = ValueForKey(originalEnt, "upscale");
         if (upscaleStr[0])
             ds->upscale = atoi(upscaleStr);
 
         // supersample override
-        const char *ssStr = ValueForKey(e, "supersample");
+        const char *ssStr = ValueForKey(originalEnt, "supersample");
         if (ssStr[0])
         {
             float ssVal = atof(ssStr);
