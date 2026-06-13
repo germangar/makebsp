@@ -622,6 +622,22 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                 continue;
             }
 
+            // q3map_surfacelight_cutoff <value>
+            if (!Q_stricmp(token, "q3map_surfacelight_cutoff"))
+            {
+                GetToken(qfalse);
+                si->cutoff = atof(token);
+                continue;
+            }
+
+            // q3map_surfacelight_fadeout <value>
+            if (!Q_stricmp(token, "q3map_surfacelight_fadeout"))
+            {
+                GetToken(qfalse);
+                si->fadeout = atof(token);
+                continue;
+            }
+
             // q3map_surfacelight_nodeluxe
             if (!Q_stricmp(token, "q3map_surfacelight_nodeluxe"))
             {

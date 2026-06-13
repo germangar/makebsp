@@ -755,7 +755,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 
         // instant reach check
         VectorSubtract(light->origin, origin, n);
-        if (VectorLength(n) > light->reach)
+        dist = VectorLength(n);
+        if (dist > light->reach)
         {
             return qfalse;
         }
@@ -885,6 +886,16 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         {
             formFactorBase = angle;
             outAngle = 1.0f;
+        }
+
+        if (light->attnSoftnessRange > 0.0f)
+        {
+            float fadeStartDist = light->reach - light->attnSoftnessRange;
+            if (dist > fadeStartDist)
+            {
+                float fadeScale = (light->reach - dist) / light->attnSoftnessRange;
+                formFactorBase *= fadeScale;
+            }
         }
 
         out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];

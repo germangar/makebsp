@@ -44,8 +44,8 @@ typedef struct shaderInfo_s
     float backsplashFraction; // floating point value, usually 0.05
     float backsplashDistance; // default 16
     float lightSubdivide;     // default 120
-    float cutoff;             // entity override
-    float fadeout;            // entity override
+    float cutoff;
+    float fadeout;
     qboolean hasAttenuationOverride; // entity override
     int attenuationModel;     // entity override
     int lightmapSampleSize;   // lightmap sample size
