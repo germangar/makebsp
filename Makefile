@@ -19,7 +19,7 @@ ifeq ($(RELEASE), 1)
     CFLAGS += -DRELEASE_BUILD
 endif
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
-Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/assimp/lib -lassimp -Llibs/coacd/build -lcoacd -lz
+Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/coacd/build -lcoacd -lz
 Q3LIGHT_LDFLAGS = $(BASE_LDFLAGS)
 
 # Directories
@@ -108,10 +108,12 @@ ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 
 ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
 
-ASSIMP_SRC = $(wildcard libs/assimp/src/code/Common/*.cpp) \
+ASSIMP_COMMON_SRC = $(filter-out libs/assimp/src/code/Common/ZipArchiveIOSystem.cpp, $(wildcard libs/assimp/src/code/Common/*.cpp))
+ASSIMP_SRC = $(ASSIMP_COMMON_SRC) \
              $(wildcard libs/assimp/src/code/PostProcessing/*.cpp) \
              $(wildcard libs/assimp/src/code/Material/*.cpp) \
              $(wildcard libs/assimp/src/code/CApi/*.cpp) \
+             $(wildcard libs/assimp/src/code/Geometry/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/Obj/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/FBX/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/glTF2/*.cpp) \
@@ -122,7 +124,11 @@ ASSIMP_SRC = $(wildcard libs/assimp/src/code/Common/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/IQM/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/MD5/*.cpp)
 
-ASSIMP_OBJ = $(ASSIMP_SRC:libs/assimp/src/code/%.cpp=$(OBJ_DIR)/assimp/%.o)
+ASSIMP_CONTRIB_SRC = libs/assimp/src/contrib/pugixml/src/pugixml.cpp
+
+ASSIMP_OBJ = $(ASSIMP_SRC:libs/assimp/src/code/%.cpp=$(OBJ_DIR)/assimp/%.o) \
+             $(ASSIMP_CONTRIB_SRC:libs/assimp/src/contrib/%.cpp=$(OBJ_DIR)/assimp/contrib/%.o)
+
 ASSIMP_LIB = libs/assimp/libassimp_lite.a
 
 # Object files for Q3MAP (BSP/VIS)
@@ -200,9 +206,13 @@ $(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Compile rules for Assimp-Lite
-ASSIMP_CXXFLAGS = $(CXXFLAGS) -Ilibs/assimp/include -Ilibs/assimp/src/code -DASSIMP_BUILD_NO_OWN_ZLIB -DASSIMP_BUILD_NO_EXPORT -DASSIMP_BUILD_NO_X3D_IMPORTER
+ASSIMP_CXXFLAGS = $(filter-out -DSTB_IMAGE_IMPLEMENTATION, $(CXXFLAGS)) -Ilibs/assimp/include -Ilibs/assimp/src/code -Ilibs/assimp/src/contrib -Ilibs/assimp/src/contrib/pugixml/src -Ilibs/assimp/src/contrib/rapidjson/include -Ilibs/assimp/src/contrib/utf8cpp/source -Ilibs/assimp/src/contrib/stb -DASSIMP_BUILD_NO_OWN_ZLIB=1 -DASSIMP_BUILD_NO_EXPORT=1 -DASSIMP_BUILD_NO_X3D_IMPORTER=1 -DASSIMP_BUILD_NO_M3D_IMPORTER=1 -DASSIMP_BUILD_NO_3DS_IMPORTER=1 -DASSIMP_BUILD_NO_GLTF_IMPORTER=0 -DASSIMP_BUILD_NO_OBJ_IMPORTER=0 -DASSIMP_BUILD_NO_FBX_IMPORTER=0 -DASSIMP_BUILD_NO_ASE_IMPORTER=0 -DASSIMP_BUILD_NO_MD3_IMPORTER=0 -DASSIMP_BUILD_NO_LWO_IMPORTER=0 -DASSIMP_BUILD_NO_IQM_IMPORTER=0 -DASSIMP_BUILD_NO_MD5_IMPORTER=0 -DASSIMP_BUILD_NO_DRACO=1
 
 $(OBJ_DIR)/assimp/%.o: libs/assimp/src/code/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/assimp/contrib/%.o: libs/assimp/src/contrib/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
 
