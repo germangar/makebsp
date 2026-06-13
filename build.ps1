@@ -19,6 +19,8 @@ Write-Host ""
 Get-Process makebsp -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process makelight -ErrorAction SilentlyContinue | Stop-Process -Force
 
+# Note: 'make clean' now preserves Assimp and MeshLib binaries on Windows for speed.
+# Use 'make clean-all' manually if a full library rebuild is needed.
 Write-Host "[1/2] Running make clean && make..." -ForegroundColor Yellow
 & make clean
 

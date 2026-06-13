@@ -1,3 +1,28 @@
+# =============================================================================
+# Modernized BSP Toolchain Makefile
+# =============================================================================
+#
+# QUICK START GUIDE:
+#
+# WINDOWS (Optimization Focused):
+#   - 'make': Fast build. Recompiles only changed project code.
+#   - 'make clean': Deletes project objects but PRESERVES heavy libraries 
+#      (Assimp and MeshLib) to keep development cycles under 5 seconds.
+#   - 'make clean-all': Wipes EVERYTHING. Use this if you need to force a 
+#      full re-compile of the internal libraries from source.
+#
+# LINUX (Safety Focused):
+#   - 'make': Standard build. All objects go into a temporary directory.
+#   - 'make clean': Wipes everything (including libraries) for a fresh start.
+#     The Linux build choice defaults to safety over speed to avoid version
+#     conflicts between different Linux distributions.
+#
+# LIBRARIES (NOT self-compiled):
+#   - Intel Embree 4: Uses pre-built binaries (located in libs/embree/prebuilt).
+#   - OpenCL: Linked from system drivers on Linux, local loader on Windows.
+#
+# =============================================================================
+
 CC = gcc
 CXX = g++
 
@@ -30,9 +55,17 @@ Q3LIGHT_DIR = light
 LIGHT_DIR = light_embree
 PAK_DIR = libs/pak
 HACD_DIR = libs/hacd
+XATLAS_DIR = libs/xatlas
 OBJ_DIR = obj
 OBJ_LITE_DIR = obj_lite
-XATLAS_DIR = libs/xatlas
+
+ifeq ($(OS),Windows_NT)
+    OBJ_ASSIMP_DIR = $(OBJ_LITE_DIR)/assimp
+    OBJ_ML_DIR = $(OBJ_LITE_DIR)
+else
+    OBJ_ASSIMP_DIR = $(OBJ_DIR)/assimp
+    OBJ_ML_DIR = $(OBJ_DIR)
+endif
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
@@ -126,8 +159,8 @@ ASSIMP_SRC = $(ASSIMP_COMMON_SRC) \
 
 ASSIMP_CONTRIB_SRC = libs/assimp/src/contrib/pugixml/src/pugixml.cpp
 
-ASSIMP_OBJ = $(ASSIMP_SRC:libs/assimp/src/code/%.cpp=$(OBJ_DIR)/assimp/%.o) \
-             $(ASSIMP_CONTRIB_SRC:libs/assimp/src/contrib/%.cpp=$(OBJ_DIR)/assimp/contrib/%.o)
+ASSIMP_OBJ = $(ASSIMP_SRC:libs/assimp/src/code/%.cpp=$(OBJ_ASSIMP_DIR)/%.o) \
+             $(ASSIMP_CONTRIB_SRC:libs/assimp/src/contrib/%.cpp=$(OBJ_ASSIMP_DIR)/contrib/%.o)
 
 ASSIMP_LIB = libs/assimp/libassimp_lite.a
 
@@ -141,7 +174,7 @@ Q3LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC
 LIGHT_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/light_%.o) $(Q3LIGHT_SRC:light/%.c=$(OBJ_DIR)/light/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o)
 
 # Object files for MeshLib-Lite (persistent)
-ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_LITE_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_LITE_DIR)/MRMeshC/%.o)
+ML_LITE_OBJ = $(ML_LITE_CORE_SRC:libs/MeshLib-Lite/MRMesh/%.cpp=$(OBJ_ML_DIR)/MRMesh/%.o) $(ML_C_SRC:libs/MeshLib-Lite/MRMeshC/%.cpp=$(OBJ_ML_DIR)/MRMeshC/%.o)
 
 Q3MAP_TARGET = makebsp$(EXECUTABLE_EXT)
 Q3LIGHT_TARGET = q3light$(EXECUTABLE_EXT)
@@ -206,13 +239,13 @@ $(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Compile rules for Assimp-Lite
-ASSIMP_CXXFLAGS = $(filter-out -DSTB_IMAGE_IMPLEMENTATION, $(CXXFLAGS)) -Ilibs/assimp/include -Ilibs/assimp/src/code -Ilibs/assimp/src/contrib -Ilibs/assimp/src/contrib/pugixml/src -Ilibs/assimp/src/contrib/rapidjson/include -Ilibs/assimp/src/contrib/utf8cpp/source -Ilibs/assimp/src/contrib/stb -DASSIMP_BUILD_NO_OWN_ZLIB=1 -DASSIMP_BUILD_NO_EXPORT=1 -DASSIMP_BUILD_NO_X3D_IMPORTER=1 -DASSIMP_BUILD_NO_M3D_IMPORTER=1 -DASSIMP_BUILD_NO_3DS_IMPORTER=1 -DASSIMP_BUILD_NO_GLTF_IMPORTER=0 -DASSIMP_BUILD_NO_OBJ_IMPORTER=0 -DASSIMP_BUILD_NO_FBX_IMPORTER=0 -DASSIMP_BUILD_NO_ASE_IMPORTER=0 -DASSIMP_BUILD_NO_MD3_IMPORTER=0 -DASSIMP_BUILD_NO_LWO_IMPORTER=0 -DASSIMP_BUILD_NO_IQM_IMPORTER=0 -DASSIMP_BUILD_NO_MD5_IMPORTER=0 -DASSIMP_BUILD_NO_DRACO=1
+ASSIMP_CXXFLAGS = $(filter-out -DSTB_IMAGE_IMPLEMENTATION, $(CXXFLAGS)) -Ilibs/assimp/include -Ilibs/assimp/src/code -Ilibs/assimp/src/contrib -Ilibs/assimp/src/contrib/pugixml/src -Ilibs/assimp/src/contrib/rapidjson/include -Ilibs/assimp/src/contrib/utf8cpp/source -Ilibs/assimp/src/contrib/stb -DASSIMP_BUILD_NO_OWN_ZLIB=1 -DASSIMP_BUILD_NO_EXPORT=1 -DASSIMP_BUILD_NO_X3D_IMPORTER=1 -DASSIMP_BUILD_NO_M3D_IMPORTER=1 -DASSIMP_BUILD_NO_3DS_IMPORTER=1 -DASSIMP_BUILD_NO_DRACO=1
 
-$(OBJ_DIR)/assimp/%.o: libs/assimp/src/code/%.cpp
+$(OBJ_ASSIMP_DIR)/%.o: libs/assimp/src/code/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
 
-$(OBJ_DIR)/assimp/contrib/%.o: libs/assimp/src/contrib/%.cpp
+$(OBJ_ASSIMP_DIR)/contrib/%.o: libs/assimp/src/contrib/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
 
@@ -231,6 +264,6 @@ clean:
 
 clean-all: clean
 	rm -rf $(OBJ_LITE_DIR)
-	rm -f $(ML_LITE_LIB)
+	rm -f $(ML_LITE_LIB) $(ASSIMP_LIB)
 
 .PHONY: all clean clean-all

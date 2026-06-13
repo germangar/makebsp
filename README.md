@@ -45,6 +45,13 @@ The legacy BSP-traversal ray caster has been replaced with the industry-standard
 - **Automatic Collision (HACD):** Every model placed into the map is solid by default. Optimized convex collision hulls are automatically generated using the **HACD (Hierarchical Approximate Convex Decomposition)** algorithm.
 - **Solid and Lightmapped by Default:** Unless explicitly disabled in the shader, all models are solid and lightmapped just like world brushes.
 - **Modelgroups:** `misc_model`s can be part of `func_*` entities through them, bundling their visuals and collision seamlessly.
+- **Supported Formats:**:
+    - **Wavefront:** `.obj` (+ `.mtl`)
+    - **Autodesk:** `.fbx`, `.ase`
+    - **glTF:** `.gltf`, `.glb`
+    - **Quake:** `.md3`, `.md5`
+    - **LightWave:** `.lwo`
+    - **Inter-Quake Model:** `.iqm`
 
 ### 4. Brush-to-Light Generation (func_light)
 The `func_light` entity allows mappers to create complex light setups directly from brush geometry without any shader scripting.
