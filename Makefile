@@ -108,6 +108,23 @@ ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 
 ML_LITE_LIB = libs/MeshLib-Lite/libmrmesh_lite.a
 
+ASSIMP_SRC = $(wildcard libs/assimp/src/code/Common/*.cpp) \
+             $(wildcard libs/assimp/src/code/PostProcessing/*.cpp) \
+             $(wildcard libs/assimp/src/code/Material/*.cpp) \
+             $(wildcard libs/assimp/src/code/CApi/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/Obj/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/FBX/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/glTF2/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/glTF/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/ASE/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/MD3/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/LWO/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/IQM/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/MD5/*.cpp)
+
+ASSIMP_OBJ = $(ASSIMP_SRC:libs/assimp/src/code/%.cpp=$(OBJ_DIR)/assimp/%.o)
+ASSIMP_LIB = libs/assimp/libassimp_lite.a
+
 # Object files for Q3MAP (BSP/VIS)
 Q3MAP_OBJ = $(COMMON_SRC:$(COMMON_DIR)/%.c=$(OBJ_DIR)/common/%.o) $(SHARED_SRC:$(SHARED_DIR)/%.c=$(OBJ_DIR)/shared/q3map_%.o) $(Q3MAP_SRC:$(Q3MAP_DIR)/%.c=$(OBJ_DIR)/q3map/%.o) $(PAK_SRC:libs/pak/%.cpp=$(OBJ_DIR)/pak/%.o) $(HACD_SRC:libs/hacd/%.cpp=$(OBJ_DIR)/hacd/%.o) $(XATLAS_SRC:$(XATLAS_DIR)/%.cpp=$(OBJ_DIR)/xatlas/%.o)
 
@@ -134,8 +151,12 @@ $(ML_LITE_LIB): $(ML_LITE_OBJ)
 	echo Building persistent MeshLib-Lite library...
 	ar rcs $@ $^
 
-$(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB)
-	$(CXX) -o $@ $(Q3MAP_OBJ) $(ML_LITE_LIB) $(Q3MAP_LDFLAGS)
+$(ASSIMP_LIB): $(ASSIMP_OBJ)
+	echo Building Assimp-Lite library...
+	ar rcs $@ $^
+
+$(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB) $(ASSIMP_LIB)
+	$(CXX) -o $@ $(Q3MAP_OBJ) $(ML_LITE_LIB) $(ASSIMP_LIB) $(Q3MAP_LDFLAGS)
 
 $(LIGHT_TARGET): $(LIGHT_OBJ)
 	$(CXX) -o $@ $(LIGHT_OBJ) $(LIGHT_LDFLAGS)
@@ -177,6 +198,13 @@ $(OBJ_DIR)/xatlas/%.o: $(XATLAS_DIR)/%.cpp
 $(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Compile rules for Assimp-Lite
+ASSIMP_CXXFLAGS = $(CXXFLAGS) -Ilibs/assimp/include -Ilibs/assimp/src/code -DASSIMP_BUILD_NO_OWN_ZLIB -DASSIMP_BUILD_NO_EXPORT -DASSIMP_BUILD_NO_X3D_IMPORTER
+
+$(OBJ_DIR)/assimp/%.o: libs/assimp/src/code/%.cpp
+	mkdir -p $(dir $@)
+	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
 
 # Compile rules for persistent MeshLib-Lite
 $(OBJ_LITE_DIR)/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
