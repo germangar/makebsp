@@ -363,6 +363,11 @@ void PatchMapDrawSurfs(entity_t *e)
                 ds->samplesize = (float)minPow2;
         }
 
+        if (scan->shaderInfo && scan->shaderInfo->smoothingRadius >= 0.0f)
+        {
+            ds->smoothingRadius = scan->shaderInfo->smoothingRadius;
+        }
+
         const char *rad_str = ValueForKey(originalEnt, "smooth");
         if (rad_str[0])
         {

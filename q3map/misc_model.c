@@ -1158,6 +1158,8 @@ void LoadTriangleModels(entity_t *eparent)
                     ds->miscModel = qtrue;
                     ds->superSampleRadius = superSampleRadius;
                     ds->smoothingRadius = smoothingRadius;
+                    if (ds->smoothingRadius < 0.0f && si && si->smoothingRadius >= 0.0f)
+                        ds->smoothingRadius = si->smoothingRadius;
                     ds->hasVertexColor = hasVertexColor;
                     ds->upscale = upscale;
                     ds->castShadows = castShadows;

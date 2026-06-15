@@ -50,6 +50,7 @@ typedef struct shaderInfo_s
     int attenuationModel;     // entity override
     int lightmapSampleSize;   // lightmap sample size
     float maxSampleSize;      // maximum lightmap sample size
+    float smoothingRadius;    // custom smoothing radius
 
     qboolean hasPasses; // false if the shader doesn't define any rendering passes
 

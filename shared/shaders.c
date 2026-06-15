@@ -303,6 +303,7 @@ static shaderInfo_t *AllocShaderInfo(void)
 
     si->lightmapSampleSize = 0;
     si->maxSampleSize = 0.0f;
+    si->smoothingRadius = -1.0f;
     si->forceTraceLight = qfalse;
     si->forceVLight = qfalse;
     si->vertexShadows = qfalse;
@@ -676,6 +677,14 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                 si->maxSampleSize = atof(token);
                 if (si->maxSampleSize < 0.0f)
                     si->maxSampleSize = 0.0f;
+                continue;
+            }
+
+            // q3map_smooth <value>
+            if (!Q_stricmp(token, "q3map_smooth"))
+            {
+                GetToken(qfalse);
+                si->smoothingRadius = atof(token);
                 continue;
             }
 
