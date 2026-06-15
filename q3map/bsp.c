@@ -46,6 +46,7 @@ qboolean testExpand;
 qboolean showseams;
 qboolean novis;
 extern qboolean saveprt;
+qboolean g_fast = qfalse;
 
 qboolean guessUVs = qfalse;
 
@@ -846,6 +847,11 @@ int main(int argc, char **argv)
             fakemap = qtrue;
             _printf("will generate fakemap.map\n");
         }
+        else if (!strcmp(argv[i], "-fast"))
+        {
+            g_fast = qtrue;
+            _printf("fast compilation mode enabled\n");
+        }
         else if (!strcmp(argv[i], "-samplesize"))
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
@@ -919,6 +925,7 @@ int main(int argc, char **argv)
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
+                "   fast           = fast compile (ignores q3map_maxsamplesize)\n"
                 "   saveprt        = do not delete the .prt file after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
 

@@ -104,7 +104,8 @@ AllocateLightmapForMiscModel
 */
 void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
 {
-    int i, x, y, ssize;
+    int i, x, y;
+    float ssize;
     float min_s, max_s, min_t, max_t;
     double area3D = 0, areaUV = 0;
     float s, t, scale;
@@ -317,7 +318,7 @@ static void AllocateLightmapForPlanarPatch(mapDrawSurface_t *ds, vec3_t planeNor
     float d;
     vec3_t absNormal;
 
-    ssize = ds->samplesize;
+    ssize = (int)ds->samplesize;
     verts = ds->verts;
     int numVerts = ds->patchWidth * ds->patchHeight;
 
@@ -471,7 +472,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     float S_basis, T_basis;
 
     verts = ds->verts;
-    ssize = ds->samplesize;
+    ssize = (int)ds->samplesize;
 
     /* Step 1: Temporarily tessellate the patch to measure its physical arc lengths.
        We use SubdivideMesh + PutMeshOnCurve (same as the lighting tessellation path)
@@ -743,7 +744,7 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds)
         return;
     }
 
-    ssize = ds->samplesize;
+    ssize = (int)ds->samplesize;
 
     plane = &mapplanes[ds->side->planenum];
 

@@ -49,6 +49,7 @@ typedef struct shaderInfo_s
     qboolean hasAttenuationOverride; // entity override
     int attenuationModel;     // entity override
     int lightmapSampleSize;   // lightmap sample size
+    float maxSampleSize;      // maximum lightmap sample size
 
     qboolean hasPasses; // false if the shader doesn't define any rendering passes
 

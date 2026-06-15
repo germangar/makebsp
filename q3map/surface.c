@@ -221,6 +221,22 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     {
         ds->samplesize = si->lightmapSampleSize;
     }
+
+    // Fast mode: ignore requests for higher resolution than the compilation setting
+    if (g_fast && ds->samplesize < samplesize)
+    {
+        ds->samplesize = samplesize;
+    }
+    
+    // Apply maxSampleSize floor (planar: snap to next power of 2)
+    if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < ds->samplesize)
+    {
+        int minPow2 = 1;
+        while (minPow2 < (int)ceil(si->maxSampleSize))
+            minPow2 <<= 1;
+        if (minPow2 < ds->samplesize)
+            ds->samplesize = (float)minPow2;
+    }
     // Brushes strictly follow the Shader/Global hierarchy for samplesize.
     // Manual entity-level overrides are no longer supported.
     ds->lightmapScale = 1.0f;

@@ -33,6 +33,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../shared/mesh.h"
 #include "../shared/shaders.h"
 
+extern qboolean g_fast;
+
 // Currently active engine limits
 #define MAX_SURFACE_VERTS (game->maxSurfaceVerts)
 #define MAX_SURFACE_INDEXES (game->maxSurfaceIndexes)
@@ -170,7 +172,7 @@ typedef struct drawsurf_s
     qboolean miscModel;
 
     qboolean flareSurface;
-    int samplesize;
+    float samplesize;
     float lightmapScale;
     float smoothingRadius;
     float lightValue;

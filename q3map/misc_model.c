@@ -1041,6 +1041,14 @@ void LoadTriangleModels(entity_t *eparent)
                 int ssize = samplesize;
                 if (si && si->lightmapSampleSize > 0)
                     ssize = si->lightmapSampleSize;
+                
+                // Fast mode: ignore requests for higher resolution than the compilation setting
+                if (g_fast && ssize < samplesize)
+                    ssize = samplesize;
+
+                // Apply maxSampleSize floor (trisoup: use exact fractional value, rounded up to int for xatlas)
+                if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < (float)ssize)
+                    ssize = (int)ceil(si->maxSampleSize);
 
                 if (mesh->mTextureCoords[uvChannel] && !forceUVGen)
                 {
@@ -1167,10 +1175,22 @@ void LoadTriangleModels(entity_t *eparent)
                         ds->samplesize = si->lightmapSampleSize;
                     }
 
+                    // Fast mode: ignore requests for higher resolution than the compilation setting
+                    if (g_fast && ds->samplesize < samplesize)
+                    {
+                        ds->samplesize = samplesize;
+                    }
+                    
+                    // Apply maxSampleSize floor (trisoup: exact fractional value)
+                    if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < ds->samplesize)
+                    {
+                        ds->samplesize = si->maxSampleSize;
+                    }
+
                     // Entity-level lightmapscale for models
                     ds->lightmapScale = inst->lightmapScale;
 
-                    _printf("Final samplesize for misc_model: %d, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
+                    _printf("Final samplesize for misc_model: %.1f, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
 
                     // Reset vMap for this new chunk
                     for (int v = 0; v < mesh->mNumVertices; v++)

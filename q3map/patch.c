@@ -347,6 +347,22 @@ void PatchMapDrawSurfs(entity_t *e)
             }
         }
 
+        // Fast mode: ignore requests for higher resolution than the compilation setting
+        if (g_fast && ds->samplesize < samplesize)
+        {
+            ds->samplesize = samplesize;
+        }
+
+        if (!g_fast && scan->shaderInfo && scan->shaderInfo->maxSampleSize > 0.0f
+            && scan->shaderInfo->maxSampleSize < ds->samplesize)
+        {
+            int minPow2 = 1;
+            while (minPow2 < (int)ceil(scan->shaderInfo->maxSampleSize))
+                minPow2 <<= 1;
+            if (minPow2 < ds->samplesize)
+                ds->samplesize = (float)minPow2;
+        }
+
         const char *rad_str = ValueForKey(originalEnt, "smooth");
         if (rad_str[0])
         {
