@@ -110,7 +110,7 @@ The **Worldspawn entity** should be used to define map-specific lighting and sur
 
 ### 3. CLI Arguments (Build Modifiers)
 Command-line arguments should be treated as **build-specific modifiers**. Use them to toggle between "fast" development builds and "high-quality" final bakes. For example:
-- **Dev Build:** Use `-fast` or a larger `-samplesize` via CLI to get quick feedback.
+- **Dev Build:** Use `-fast` (which ignores high-resolution lightmap requests in `makebsp` and forces fast rasterized voxelization in `makelight`) or a larger `-samplesize` via CLI to get quick feedback.
 - **Final Build:** Use `-upscale` or smaller `-samplesize` to maximize fidelity for the release version.
 
 By following this hierarchy, your map source files (`.map`) remain portable and consistent, while you retain the flexibility to control the compile-time/quality tradeoff on a per-build basis.
@@ -134,6 +134,8 @@ List of additions and modifications made to shader parsing and features compared
 - **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality. Instead it will only contribute color/energy (to prevent bumpmap distortions caused by trim lights).
 - **q3map_backsplash_nodeluxe**: Prevents the surface light's backsplash from influencing the deluxe map's directionality.
 - **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
+- **q3map_maxsamplesize <value>**: Enforces a minimum lightmap resolution (quality floor) by establishing a maximum limit on the surface's `samplesize` value. Ignored during `-fast` compilations.
+- **q3map_minsmooth <value>**: Enforces a minimum lightmap smooth filter radius. It only acts if the global setting has a smaller smooth value than the requested minimum. Can be overridden by an entity's `smooth` key.
 
 ### Color Handling
 - **Global Application:** The new color processing pipeline applies globally. It works for shader commands (e.g., `q3map_lightRGB`, `q3map_lightColor`, `q3map_vertexcolor`) as well as entity keys (e.g., `color`, `_color`).

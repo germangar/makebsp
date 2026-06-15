@@ -363,9 +363,14 @@ void PatchMapDrawSurfs(entity_t *e)
                 ds->samplesize = (float)minPow2;
         }
 
-        if (scan->shaderInfo && scan->shaderInfo->smoothingRadius >= 0.0f)
+        float globalSmooth = game->defaultSmoothRadius;
+        const char *wsSmooth = ValueForKey(&entities[0], "smooth");
+        if (wsSmooth[0])
+            globalSmooth = atof(wsSmooth);
+
+        if (scan->shaderInfo && scan->shaderInfo->minSmoothRadius >= 0.0f && scan->shaderInfo->minSmoothRadius > globalSmooth)
         {
-            ds->smoothingRadius = scan->shaderInfo->smoothingRadius;
+            ds->smoothingRadius = scan->shaderInfo->minSmoothRadius;
         }
 
         const char *rad_str = ValueForKey(originalEnt, "smooth");

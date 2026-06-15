@@ -84,8 +84,13 @@ ResolveSurfaceExtraProperties
 static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
 {
     // Resolve smoothing radius
-    if (ds->shaderInfo && ds->shaderInfo->smoothingRadius >= 0.0f)
-        ds->smoothingRadius = ds->shaderInfo->smoothingRadius;
+    float globalSmooth = game->defaultSmoothRadius;
+    const char *wsSmooth = ValueForKey(&entities[0], "smooth");
+    if (wsSmooth[0])
+        globalSmooth = atof(wsSmooth);
+
+    if (ds->shaderInfo && ds->shaderInfo->minSmoothRadius >= 0.0f && ds->shaderInfo->minSmoothRadius > globalSmooth)
+        ds->smoothingRadius = ds->shaderInfo->minSmoothRadius;
 
     const char *radiusStr = ValueForKey(e, "smooth");
     if (radiusStr[0])
