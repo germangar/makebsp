@@ -46,7 +46,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "[2/3] Running makebsp -v $MapFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
     # Run the map and show relevant optimization stats
-    ./makebsp.exe -v -samplesize 16 -userdir "$UserDir" -gamedir "$GameDir" "$MapFile"
+    ./makebsp.exe -v -samplesize 16 -fast -userdir "$UserDir" -gamedir "$GameDir" "$MapFile"
     Write-Host ""
     Write-Host "[3/3] Running makelight -rad_passes 0 -v $BspFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
