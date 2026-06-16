@@ -103,85 +103,151 @@ static qboolean MakeTextureMatrix(decalProjector_t *dp, vec3_t projNormal, float
 
 /*
 ================
-MakeDecalProjector
+MakeDecalProjectorForPatch
+Builds ONE projector for an entire decal patch mesh (after tessellation).
+The projector uses:
+  planes[0] = front (area-weighted average normal of the patch)
+  planes[1] = back  (parallel to front, offset by 'distance')
+  planes[2..5] = 4 boundary side planes (top, bottom, left, right rows of
+                  the tessellated grid, each extruded along projNormal)
+A single texMat is fitted to 3 corner control points of the ORIGINAL
+(pre-tessellation) mesh, so UVs are exact at the corners and linearly
+interpolated across the whole patch with no per-triangle discontinuities.
 ================
 */
-static void MakeDecalProjector(shaderInfo_t *si, vec3_t projNormal, float distance,
-                                drawVert_t *a, drawVert_t *b, drawVert_t *c, int decalEntityNum)
+static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
+                                            float distance, mesh_t *tess,
+                                            drawVert_t *cornerA, drawVert_t *cornerB,
+                                            drawVert_t *cornerC, int decalEntityNum)
 {
     decalProjector_t *dp;
-    vec3_t backPoint;
-    vec3_t verts[3];
-    int i;
-    vec3_t extent;
+    vec3_t avgNormal, totalNormal;
+    vec3_t extent, backPoint;
+    int x, y, i;
+    int W = tess->width;
+    int H = tess->height;
 
-    if (numDecalProjectors >= MAX_DECAL_PROJECTORS) 
+    if (numDecalProjectors >= MAX_DECAL_PROJECTORS)
     {
         _printf("WARNING: MAX_DECAL_PROJECTORS reached\n");
-        return;
+        return qfalse;
     }
-    
+
     dp = &decalProjectors[numDecalProjectors];
     memset(dp, 0, sizeof(*dp));
     dp->si = si;
     dp->decalEntityNum = decalEntityNum;
-    dp->numPlanes = 5;
-    
-    VectorCopy(a->xyz, verts[0]);
-    VectorCopy(b->xyz, verts[1]);
-    VectorCopy(c->xyz, verts[2]);
-    
-    // 1. Front plane (coplanar with triangle)
-    vec4_t p;
-    PlaneFromPoints(p, verts[0], verts[1], verts[2]);
-    VectorCopy(p, dp->planes[0].normal);
-    dp->planes[0].dist = p[3];
-    
-    // 2. Back plane (parallel to front, pushed by 'distance' along projection vector)
-    VectorMA(a->xyz, distance, projNormal, backPoint);
-    VectorCopy(dp->planes[0].normal, dp->planes[1].normal);
-    VectorNegate(dp->planes[1].normal);
-    dp->planes[1].dist = DotProduct(backPoint, dp->planes[1].normal);
-    
-    // 3. Three side planes (triangle edges extruded along projection vector)
-    VectorCopy(a->xyz, verts[0]);
-    VectorCopy(b->xyz, verts[1]);
-    VectorCopy(c->xyz, verts[2]);
+    dp->numPlanes = 6;
 
-    for (i = 0; i < 3; i++) 
+    // --- 1. Front plane: area-weighted average normal of all tessellated quads ---
+    VectorClear(totalNormal);
+    for (y = 0; y < H - 1; y++)
     {
-        vec3_t extruded;
-        VectorMA(verts[i], distance, projNormal, extruded);
-        vec4_t p;
-        PlaneFromPoints(p, verts[(i+1)%3], verts[i], extruded);
-        VectorCopy(p, dp->planes[i + 2].normal);
-        dp->planes[i + 2].dist = p[3];
+        for (x = 0; x < W - 1; x++)
+        {
+            vec3_t e1, e2, cross;
+            drawVert_t *v0 = &tess->verts[y * W + x];
+            drawVert_t *v1 = &tess->verts[(y+1) * W + x];
+            drawVert_t *v2 = &tess->verts[y * W + x + 1];
+            VectorSubtract(v1->xyz, v0->xyz, e1);
+            VectorSubtract(v2->xyz, v0->xyz, e2);
+            CrossProduct(e2, e1, cross); // length = 2 * triangle area
+            VectorAdd(totalNormal, cross, totalNormal);
+        }
     }
-    
-    // 4. Bounding box & sphere from 6 points (3 verts + 3 projected verts)
+    if (VectorNormalize(totalNormal, avgNormal) < 1e-6f)
+    {
+        _printf("WARNING: Degenerate decal patch (zero-area), skipping projector\n");
+        return qfalse;
+    }
+
+    VectorCopy(avgNormal, dp->planes[0].normal);
+    dp->planes[0].dist = DotProduct(avgNormal, tess->verts[0].xyz);
+
+    // --- 2. Back plane: parallel to front, displaced by 'distance' ---
+    VectorMA(tess->verts[0].xyz, distance, projNormal, backPoint);
+    VectorCopy(avgNormal, dp->planes[1].normal);
+    VectorNegate(dp->planes[1].normal);
+    dp->planes[1].dist = DotProduct(dp->planes[1].normal, backPoint);
+
+    // --- 3. Four boundary side planes ---
+    // Each side plane is built by finding the average outward edge direction along
+    // that boundary row/column, computing its outward normal (perpendicular to
+    // projNormal and to the edge direction), then setting dist from a boundary vertex.
+    // Order: top (y=0), bottom (y=H-1), left (x=0), right (x=W-1)
+    {
+        // Helper: compute a side plane for a linear sequence of boundary vertices.
+        // 'inward' is a representative interior point to check the normal direction.
+        struct { int start; int step; int count; } sides[4];
+        sides[0].start = 0;          sides[0].step = 1;   sides[0].count = W;    // top row
+        sides[1].start = (H-1)*W;    sides[1].step = 1;   sides[1].count = W;    // bottom row
+        sides[2].start = 0;          sides[2].step = W;   sides[2].count = H;    // left col
+        sides[3].start = W-1;        sides[3].step = W;   sides[3].count = H;    // right col
+
+        // Interior reference point (center of patch)
+        vec3_t interior;
+        VectorCopy(tess->verts[(H/2)*W + W/2].xyz, interior);
+
+        for (i = 0; i < 4; i++)
+        {
+            // Accumulate edge vectors along this boundary
+            vec3_t edgeSum;
+            vec3_t planeNormal;
+            int k;
+            VectorClear(edgeSum);
+            for (k = 0; k < sides[i].count - 1; k++)
+            {
+                int idx0 = sides[i].start + k * sides[i].step;
+                int idx1 = sides[i].start + (k+1) * sides[i].step;
+                vec3_t seg;
+                VectorSubtract(tess->verts[idx1].xyz, tess->verts[idx0].xyz, seg);
+                VectorAdd(edgeSum, seg, edgeSum);
+            }
+            // Side plane normal = projNormal x edgeSum (or its negative),
+            // oriented to point outward (away from interior)
+            CrossProduct(projNormal, edgeSum, planeNormal);
+            if (VectorNormalize(planeNormal, planeNormal) < 1e-6f)
+            {
+                // Degenerate boundary edge; use a loose plane that won't clip anything
+                VectorCopy(avgNormal, dp->planes[2 + i].normal);
+                dp->planes[2 + i].dist = -999999.0f;
+                continue;
+            }
+            // Make sure it points away from interior
+            int first = sides[i].start;
+            if (DotProduct(planeNormal, interior) > DotProduct(planeNormal, tess->verts[first].xyz))
+                VectorNegate(planeNormal);
+
+            VectorCopy(planeNormal, dp->planes[2 + i].normal);
+            dp->planes[2 + i].dist = DotProduct(planeNormal, tess->verts[first].xyz);
+        }
+    }
+
+    // --- 4. Bounding box & sphere from all tessellated verts + projected verts ---
     ClearBounds(dp->mins, dp->maxs);
-    for (i = 0; i < 3; i++) 
+    for (i = 0; i < W * H; i++)
     {
         vec3_t proj;
-        AddPointToBounds(verts[i], dp->mins, dp->maxs);
-        VectorMA(verts[i], distance, projNormal, proj);
+        AddPointToBounds(tess->verts[i].xyz, dp->mins, dp->maxs);
+        VectorMA(tess->verts[i].xyz, distance, projNormal, proj);
         AddPointToBounds(proj, dp->mins, dp->maxs);
     }
-    
-    // center = midpoint of AABB, radius = distance from center to corner
     VectorAdd(dp->mins, dp->maxs, dp->center);
     VectorScale(dp->center, 0.5f, dp->center);
     VectorSubtract(dp->maxs, dp->center, extent);
     dp->radius = VectorLength(extent);
-    
-    // 5. Texture matrix
-    if (!MakeTextureMatrix(dp, projNormal, DotProduct(a->xyz, projNormal), a, b, c)) 
+
+    // --- 5. Single global texture matrix from 3 non-collinear corner control points ---
+    //  projDist = signed distance of cornerA along the average normal
+    if (!MakeTextureMatrix(dp, projNormal, DotProduct(cornerA->xyz, projNormal),
+                           cornerA, cornerB, cornerC))
     {
-        _printf("WARNING: Degenerate decal triangle UVs, skipping projector\n");
-        return;
+        _printf("WARNING: Degenerate decal patch UVs (collinear corners), skipping projector\n");
+        return qfalse;
     }
-    
+
     numDecalProjectors++;
+    return qtrue;
 }
 
 /*
@@ -192,7 +258,7 @@ Phase A
 */
 void ProcessDecals(void)
 {
-    int i, y, x;
+    int i;
     parseMesh_t *pm;
     bspbrush_t *b;
     
@@ -221,7 +287,7 @@ void ProcessDecals(void)
             continue;
         }
             
-        // 2. Extract triangles from entity's patches
+        // 2. Build ONE projector per decal patch
         for (pm = e->patches; pm; pm = pm->next)
         {
             vec3_t patchCenter, mins, maxs;
@@ -229,9 +295,11 @@ void ProcessDecals(void)
             vec3_t projNormal;
             float distance = 64.0f;
             int j;
-            
+            int W = pm->mesh.width;
+            int H = pm->mesh.height;
+
             ClearBounds(mins, maxs);
-            for (j = 0; j < pm->mesh.width * pm->mesh.height; j++)
+            for (j = 0; j < W * H; j++)
                 AddPointToBounds(pm->mesh.verts[j].xyz, mins, maxs);
             VectorAdd(mins, maxs, patchCenter);
             VectorScale(patchCenter, 0.5f, patchCenter);
@@ -262,29 +330,21 @@ void ProcessDecals(void)
                 distance = 64.0f;
             }
 
+            // Tessellate the control mesh to get accurate boundary geometry.
+            // We use a coarser tolerance here (8.0f) since we only need the
+            // boundary shape — the surface being projected onto is tessellated
+            // separately inside MakeEntityDecals with a finer tolerance (0.1f).
             mesh_t *tess = SubdivideMesh(pm->mesh, 8.0f, 999.0f);
-            for (y = 0; y < tess->height - 1; y++) 
-            {
-                for (x = 0; x < tess->width - 1; x++) 
-                {
-                    int r = (x + y) & 1;
-                    drawVert_t *pw[5], *idx[4];
-                    
-                    pw[0] = &tess->verts[y * tess->width + x];
-                    pw[1] = &tess->verts[(y+1) * tess->width + x];
-                    pw[2] = &tess->verts[(y+1) * tess->width + x + 1];
-                    pw[3] = &tess->verts[y * tess->width + x + 1];
-                    pw[4] = pw[0];
-                    
-                    idx[0] = pw[r + 0];
-                    idx[1] = pw[r + 1];
-                    idx[2] = pw[r + 2];
-                    idx[3] = pw[r + 3];
 
-                    MakeDecalProjector(pm->shaderInfo, projNormal, distance, idx[0], idx[1], idx[2], i);
-                    MakeDecalProjector(pm->shaderInfo, projNormal, distance, idx[0], idx[2], idx[3], i);
-                }
-            }
+            // Pick 3 non-collinear corner control points for the global texMat.
+            // Use the original control grid corners, not tessellated verts,
+            // to avoid floating-point contamination from subdivision.
+            drawVert_t *cA = &pm->mesh.verts[0];
+            drawVert_t *cB = &pm->mesh.verts[W - 1];
+            drawVert_t *cC = &pm->mesh.verts[(H - 1) * W];
+
+            MakeDecalProjectorForPatch(pm->shaderInfo, projNormal, distance,
+                                        tess, cA, cB, cC, i);
             FreeMesh(tess);
         }
 
@@ -486,7 +546,6 @@ static void ProjectDecalOntoWinding(decalProjector_t *dp, mapDrawSurface_t *ds,
     for (i = 0; i < w->numpoints; i++)
     {
         drawVert_t *dv = &newDs->verts[i];
-        float d, d2, alpha;
 
         VectorCopy(w->points[i], dv->xyz);
         
@@ -495,19 +554,10 @@ static void ProjectDecalOntoWinding(decalProjector_t *dp, mapDrawSurface_t *ds,
         
         VectorCopy(surfNormal, dv->normal);
         
-        d  = DotProduct(dp->planes[0].normal, w->points[i]) - dp->planes[0].dist;
-        d2 = DotProduct(dp->planes[1].normal, w->points[i]) - dp->planes[1].dist;
-        float absD = (float)fabs(d);
-        float absD2 = (float)fabs(d2);
-        alpha = 255.0f; // Force to 255 to prove if alpha was 0
-        
-        if (alpha < 0.0f) alpha = 0.0f;
-        if (alpha > 255.0f) alpha = 255.0f;
-        
         dv->color[0][0] = 255;
         dv->color[0][1] = 255;
         dv->color[0][2] = 255;
-        // dv->color[0][3] = (byte)alpha;
+        dv->color[0][3] = 255;
     }
     
     FreeWinding(w);

@@ -547,8 +547,8 @@ typedef struct {
     vec3_t center;
     float radius;
     vec3_t mins, maxs;
-    plane_t planes[6];   // 0=front, 1=back, 2..4=sides
-    int numPlanes;       // Always 5
+    plane_t planes[6];   // 0=front, 1=back, 2=top, 3=bottom, 4=left, 5=right
+    int numPlanes;       // Always 6
     float texMat[2][4];  // S and T rows of the 3D->2D texture matrix
     shaderInfo_t *si;
     int decalEntityNum;
