@@ -551,10 +551,29 @@ typedef struct {
     int numPlanes;       // Always 5
     float texMat[2][4];  // S and T rows of the 3D->2D texture matrix
     shaderInfo_t *si;
+    int decalEntityNum;
 } decalProjector_t;
 
 extern int numDecalProjectors;
 extern decalProjector_t decalProjectors[MAX_DECAL_PROJECTORS];
+
+#define DECAL_MESH_INITIAL_VERTS   1024
+#define DECAL_MESH_INITIAL_INDEXES 2048
+
+typedef struct {
+    int maxVerts;
+    int numVerts;
+    drawVert_t *verts;
+    
+    int maxIndexes;
+    int numIndexes;
+    int *indexes;
+} decalMesh_t;
+
+void InitDecalMesh(decalMesh_t *m);
+void FreeDecalMesh(decalMesh_t *m);
+void WeldDecalMesh(decalMesh_t *m, float epsilon);
+void ExtrudeDecalMesh(decalMesh_t *m, float distance);
 
 void ProcessDecals(void);
 void MakeEntityDecals(entity_t *e);
