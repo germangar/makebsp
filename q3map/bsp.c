@@ -213,11 +213,12 @@ void ProcessWorldModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    // add in any vertexes required to fix tjunctions
     if (!notjunc)
     {
         FixTJunctions(e);
     }
+
+    MakeEntityDecals(e);
 
     GenerateHalos(e);
 
@@ -305,6 +306,8 @@ void ProcessSubModel(void)
     {
         FixTJunctions(e);
     }
+
+    MakeEntityDecals(e);
 
     // allocate lightmaps for faces and patches
     AllocateLightmaps(e);
@@ -1003,6 +1006,8 @@ int main(int argc, char **argv)
     }
 
     ParseWorldspawnKeys(argc, argv);
+
+    ProcessDecals();
 
     SetModelNumbers();
     SetLightStyles();

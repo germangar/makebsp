@@ -506,6 +506,7 @@ static void DownConvertDrawVerts(float scale, qboolean lightmapRange)
     if (!internalDrawVerts)
         return;
     _printf("DownConvert: %d DrawVerts\n", numDrawVerts);
+    
     for (i = 0; i < numDrawVerts; i++)
     {
         for (j = 0; j < 4; j++)

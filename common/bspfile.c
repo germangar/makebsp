@@ -775,7 +775,8 @@ void UnparseEntities(void)
 
         // Strip compiler-only entities that have no brushes/model
         const char *classname = ValueForKey(&entities[i], "classname");
-        if (!strcmp(classname, "func_group") || !strcmp(classname, "func_light"))
+        if (!strcmp(classname, "func_group") || !strcmp(classname, "func_light") ||
+            !strcmp(classname, "_decal"))
         {
             if (!ValueForKey(&entities[i], "model")[0])
             {

@@ -1816,7 +1816,16 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree)
         {
             continue;
         }
-        if (ds->miscModel)
+        if (ds->isDecal)
+        {
+            winding_t *w = WindingFromDrawSurf(ds);
+            refs = FilterMapDrawSurfIntoTree_r(w, ds, tree->headnode);
+            if (refs > 0)
+            {
+                EmitPlanarSurf(ds);
+            }
+        }
+        else if (ds->miscModel)
         {
             refs = FilterMiscModelSurfIntoTree(ds, tree);
             if (refs > 0)
