@@ -236,9 +236,17 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
             int first = sides[i].start;
             if (DotProduct(planeNormal, interior) > DotProduct(planeNormal, tess->verts[first].xyz))
                 VectorNegate(planeNormal);
+            // Find the maximum distance along the edge to ensure the plane bounds the entire curve
+            float maxDist = -999999.0f;
+            for (k = 0; k < sides[i].count; k++)
+            {
+                int idx = sides[i].start + k * sides[i].step;
+                float d = DotProduct(planeNormal, tess->verts[idx].xyz);
+                if (d > maxDist) maxDist = d;
+            }
 
             VectorCopy(planeNormal, dp->planes[2 + i].normal);
-            dp->planes[2 + i].dist = DotProduct(planeNormal, tess->verts[first].xyz);
+            dp->planes[2 + i].dist = maxDist;
         }
     }
 
@@ -772,9 +780,9 @@ void ExtrudeDecalMesh(decalMesh_t *m)
     // EXTRUSION TUNING PARAMETERS
     // Tweak these values to adjust how decals project onto curved/corner geometry
     // =========================================================================
-    const float MIN_EXTRUSION = 0.0f;       // Base extrusion (keeps convex/planar decals tight to wall)
+    const float MIN_EXTRUSION = 0.075f;       // Base extrusion (keeps convex/planar decals tight to wall)
     const float MAX_EXTRUSION = 1.125f;         // Absolute maximum extrusion limit
-    const float CONCAVITY_SCALE = 720.0f;      // Multiplier for the extra extrusion added to concave parts
+    const float CONCAVITY_SCALE = 10.0f;      // Multiplier for the extra extrusion added to concave parts
     // =========================================================================
 
     vec3_t *smoothNormals = malloc(m->numVerts * sizeof(vec3_t));
@@ -854,19 +862,47 @@ void ExtrudeDecalMesh(decalMesh_t *m)
     }
     
     float maxFoundConcavity = 0.0f;
+    
+    // Smooth the concavity array to prevent sharp extrusion steps
+    {
+        float *smoothed = malloc(m->numVerts * sizeof(float));
+        int iter;
+        for (iter = 0; iter < 5; iter++) {
+            for (i = 0; i < m->numVerts; i++) {
+                float sum = vertexConcavity[i];
+                int count = 1;
+                int j;
+                for (j = 0; j < m->numIndexes; j += 3) {
+                    int i0 = m->indexes[j];
+                    int i1 = m->indexes[j+1];
+                    int i2 = m->indexes[j+2];
+                    if (i0 == i) { sum += vertexConcavity[i1] + vertexConcavity[i2]; count += 2; }
+                    else if (i1 == i) { sum += vertexConcavity[i0] + vertexConcavity[i2]; count += 2; }
+                    else if (i2 == i) { sum += vertexConcavity[i0] + vertexConcavity[i1]; count += 2; }
+                }
+                smoothed[i] = sum / count;
+            }
+            memcpy(vertexConcavity, smoothed, m->numVerts * sizeof(float));
+        }
+        free(smoothed);
+    }
+    
     // Apply the dynamic extrusion
     for (i = 0; i < m->numVerts; i++)
     {
         // vertexConcavity[i] is now the true curvature 'k' (roughly 1 / Radius).
         // For a wall with radius 64, k is ~0.015. 
-        // With CONCAVITY_SCALE = 64.0f, the extra extrusion would be ~1.0f.
-        float dist = MIN_EXTRUSION + (vertexConcavity[i] * CONCAVITY_SCALE);
+        // We use a square root scaling to aggressively push decals out of slight concavities
+        // without requiring a massive multiplier that would explode on sharp corners.
+        // With CONCAVITY_SCALE = 8.0f, the extra extrusion for radius 64 would be ~1.0f.
+        float dist = MIN_EXTRUSION + (sqrtf(vertexConcavity[i]) * CONCAVITY_SCALE);
         if (vertexConcavity[i] > maxFoundConcavity) maxFoundConcavity = vertexConcavity[i];
         if (dist > MAX_EXTRUSION) {
             dist = MAX_EXTRUSION;
         }
         
-        VectorMA(m->verts[i].xyz, dist, smoothNormals[i], m->verts[i].xyz);
+        VectorCopy(smoothNormals[i], m->verts[i].normal);
+        VectorMA(m->verts[i].xyz, dist, m->verts[i].normal, m->verts[i].xyz);
     }
     
     if (maxFoundConcavity > 0.0001f) {
@@ -984,9 +1020,9 @@ void MakeEntityDecals(entity_t *e)
                     {
                         for (x = 0; x < tess->width - 1; x++) 
                         {
-                            // Always match engine's triangle strip diagonal (BottomLeft to TopRight)
+                            // Always match engine's triangle strip diagonal (TopLeft to BottomRight)
                             // to prevent the decal from intersecting/poking out of the base patch.
-                            int r = 1;
+                            int r = 0;
                             drawVert_t *pw[5], *idx[4];
                             winding_t *w1, *w2;
                             
