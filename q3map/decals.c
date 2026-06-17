@@ -984,7 +984,9 @@ void MakeEntityDecals(entity_t *e)
                     {
                         for (x = 0; x < tess->width - 1; x++) 
                         {
-                            int r = (x + y) & 1;
+                            // Always match engine's triangle strip diagonal (BottomLeft to TopRight)
+                            // to prevent the decal from intersecting/poking out of the base patch.
+                            int r = 1;
                             drawVert_t *pw[5], *idx[4];
                             winding_t *w1, *w2;
                             
