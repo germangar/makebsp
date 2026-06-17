@@ -50,7 +50,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "[3/3] Running makelight -rad_passes 0 -v $BspFile..." -ForegroundColor Cyan
     Write-Host "----------------------------------------" -ForegroundColor Gray
-    ./makelight.exe -smoothpasses 1 -rad_passes 0 -v -userdir "$UserDir" -gamedir "$GameDir" "$BspFile"
+    ./makelight.exe -smoothpasses 1 -radiosity 0 -v -userdir "$UserDir" -gamedir "$GameDir" "$BspFile"
 } else {
     Write-Host "----------------------------------------" -ForegroundColor Red
     Write-Host "        ERROR: BUILD FAILED!" -ForegroundColor Red

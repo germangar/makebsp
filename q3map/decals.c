@@ -161,14 +161,29 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
         return qfalse;
     }
 
-    VectorCopy(avgNormal, dp->planes[0].normal);
-    dp->planes[0].dist = DotProduct(avgNormal, tess->verts[0].xyz);
+    {
+        float maxProj = -999999.0f;
+        float minProj = 999999.0f;
+        int i;
+        for (i = 0; i < W * H; i++)
+        {
+            float d = DotProduct(avgNormal, tess->verts[i].xyz);
+            if (d > maxProj) maxProj = d;
+            if (d < minProj) minProj = d;
+        }
 
-    // --- 2. Back plane: parallel to front, displaced by 'distance' ---
-    VectorMA(tess->verts[0].xyz, distance, projNormal, backPoint);
-    VectorCopy(avgNormal, dp->planes[1].normal);
-    VectorNegate(dp->planes[1].normal);
-    dp->planes[1].dist = DotProduct(dp->planes[1].normal, backPoint);
+        VectorCopy(avgNormal, dp->planes[0].normal);
+        // Push front plane 2 units outward from the most prominent vertex
+        dp->planes[0].dist = maxProj + 2.0f;
+
+        // --- 2. Back plane: parallel to front, displaced by 'distance' along projNormal ---
+        // To ensure the back plane covers the deepest part of the curve, we use minProj.
+        VectorCopy(avgNormal, dp->planes[1].normal);
+        VectorNegate(dp->planes[1].normal);
+        // dist = Dot(-avgNormal, V_min + distance * projNormal)
+        //      = -minProj + distance * Dot(-avgNormal, projNormal)
+        dp->planes[1].dist = -minProj + distance * DotProduct(dp->planes[1].normal, projNormal);
+    }
 
     // --- 3. Four boundary side planes ---
     // Each side plane is built by finding the average outward edge direction along
@@ -611,7 +626,10 @@ static void AddWindingToDecalMesh(decalProjector_t *dp, winding_t *w, decalMesh_
     }
     VectorCopy(plane, surfNormal);
     
-    if (DotProduct(dp->planes[0].normal, surfNormal) < -0.0001f)
+    // Backface cull: reject only strongly back-facing surfaces.
+    // With a single curved-patch projector, the avgNormal can diverge significantly
+    // from the local normals on flat/side regions, so we use a generous threshold.
+    if (DotProduct(dp->planes[0].normal, surfNormal) < -0.5f)
     {
         FreeWinding(w);
         return;
@@ -735,11 +753,25 @@ void WeldDecalMesh(decalMesh_t *m, float epsilon)
 ExtrudeDecalMesh
 ================
 */
-void ExtrudeDecalMesh(decalMesh_t *m, float distance)
+void ExtrudeDecalMesh(decalMesh_t *m, float defaultDistance)
 {
+    // =========================================================================
+    // EXTRUSION TUNING PARAMETERS
+    // Tweak these values to adjust how decals project onto curved/corner geometry
+    // =========================================================================
+    const float MIN_EXTRUSION = 0.125f;       // Base extrusion (keeps convex/planar decals tight to wall)
+    const float MAX_EXTRUSION = 1.0f;         // Absolute maximum extrusion limit
+    const float CONCAVITY_SCALE = 320.0f;      // Multiplier for the extra extrusion added to concave parts
+    // =========================================================================
+
     vec3_t *smoothNormals = malloc(m->numVerts * sizeof(vec3_t));
-    memset(smoothNormals, 0, m->numVerts * sizeof(vec3_t));
+    float *vertexConcavity = malloc(m->numVerts * sizeof(float));
     int i;
+    
+    memset(smoothNormals, 0, m->numVerts * sizeof(vec3_t));
+    for (i = 0; i < m->numVerts; i++) {
+        vertexConcavity[i] = 0.0f;
+    }
     
     for (i = 0; i < m->numIndexes; i += 3)
     {
@@ -758,27 +790,78 @@ void ExtrudeDecalMesh(decalMesh_t *m, float distance)
         VectorAdd(smoothNormals[i2], faceNormal, smoothNormals[i2]);
     }
     
+    // Normalize smooth normals to unit vectors
     for (i = 0; i < m->numVerts; i++)
     {
-        vec3_t n;
-        float len;
-        VectorCopy(smoothNormals[i], n);
-        
-        len = VectorNormalize(n, n);
-        if (len > 0.0001f)
-        {
-            if (DotProduct(n, m->verts[i].normal) < 0.0f) {
-                VectorNegate(n);
-            }
-            VectorMA(m->verts[i].xyz, distance, n, m->verts[i].xyz);
+        float len = VectorLength(smoothNormals[i]);
+        if (len > 0.0001f) {
+            VectorScale(smoothNormals[i], 1.0f / len, smoothNormals[i]);
+        } else {
+            VectorCopy(m->verts[i].normal, smoothNormals[i]);
         }
-        else
+        
+        // Ensure the normal points generally outward from the base surface
+        if (DotProduct(smoothNormals[i], m->verts[i].normal) < 0.0f) {
+            VectorNegate(smoothNormals[i]);
+        }
+    }
+
+    // Evaluate local curvature across all edges to find concave areas
+    for (i = 0; i < m->numIndexes; i += 3)
+    {
+        int j;
+        int idx[3];
+        idx[0] = m->indexes[i];
+        idx[1] = m->indexes[i + 1];
+        idx[2] = m->indexes[i + 2];
+        
+        for (j = 0; j < 3; j++)
         {
-            VectorMA(m->verts[i].xyz, distance, m->verts[i].normal, m->verts[i].xyz);
+            int i0 = idx[j];
+            int i1 = idx[(j + 1) % 3];
+            
+            vec3_t dPos, dNorm;
+            VectorSubtract(m->verts[i1].xyz, m->verts[i0].xyz, dPos);
+            VectorSubtract(smoothNormals[i1], smoothNormals[i0], dNorm);
+            
+            // For a concave joint, the normals point towards each other.
+            // -DotProduct(dNorm, dPos) gives the absolute dip, but since the mesh is finely
+            // tessellated (small dPos), this value is microscopic!
+            // We must divide by the squared length to get the true CURVATURE (k = 1/R),
+            // which is independent of the triangle size.
+            float lenSq = DotProduct(dPos, dPos);
+            if (lenSq > 0.0001f)
+            {
+                float curvature = -DotProduct(dNorm, dPos) / lenSq;
+                
+                if (curvature > vertexConcavity[i0]) vertexConcavity[i0] = curvature;
+                if (curvature > vertexConcavity[i1]) vertexConcavity[i1] = curvature;
+            }
         }
     }
     
+    float maxFoundConcavity = 0.0f;
+    // Apply the dynamic extrusion
+    for (i = 0; i < m->numVerts; i++)
+    {
+        // vertexConcavity[i] is now the true curvature 'k' (roughly 1 / Radius).
+        // For a wall with radius 64, k is ~0.015. 
+        // With CONCAVITY_SCALE = 64.0f, the extra extrusion would be ~1.0f.
+        float dist = MIN_EXTRUSION + (vertexConcavity[i] * CONCAVITY_SCALE);
+        if (vertexConcavity[i] > maxFoundConcavity) maxFoundConcavity = vertexConcavity[i];
+        if (dist > MAX_EXTRUSION) {
+            dist = MAX_EXTRUSION;
+        }
+        
+        VectorMA(m->verts[i].xyz, dist, smoothNormals[i], m->verts[i].xyz);
+    }
+    
+    if (maxFoundConcavity > 0.0001f) {
+        _printf("ExtrudeDecalMesh: max curvature found = %f\n", maxFoundConcavity);
+    }
+    
     free(smoothNormals);
+    free(vertexConcavity);
 }
 
 /*
@@ -952,8 +1035,8 @@ void MakeEntityDecals(entity_t *e)
             if (initialSurfs > e->firstDrawSurf)
                 templateDs = &mapDrawSurfs[e->firstDrawSurf];
             
-            WeldDecalMesh(&decalTrisoup, 0.25f);
-            ExtrudeDecalMesh(&decalTrisoup, 1.0f);
+            WeldDecalMesh(&decalTrisoup, 0.5f);
+            ExtrudeDecalMesh(&decalTrisoup, 0.25f);
             EmitDecalMeshAsMiscModel(&decalTrisoup, &decalProjectors[firstProjectorIndex], templateDs);
         }
         
