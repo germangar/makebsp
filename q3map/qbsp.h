@@ -573,7 +573,7 @@ typedef struct {
 void InitDecalMesh(decalMesh_t *m);
 void FreeDecalMesh(decalMesh_t *m);
 void WeldDecalMesh(decalMesh_t *m, float epsilon);
-void ExtrudeDecalMesh(decalMesh_t *m, float distance);
+void ExtrudeDecalMesh(decalMesh_t *m);
 
 void ProcessDecals(void);
 void MakeEntityDecals(entity_t *e);

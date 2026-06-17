@@ -161,6 +161,10 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
         return qfalse;
     }
 
+    if (DotProduct(avgNormal, projNormal) > 0.0f) {
+        VectorNegate(avgNormal);
+    }
+
     {
         float maxProj = -999999.0f;
         float minProj = 999999.0f;
@@ -350,6 +354,7 @@ void ProcessDecals(void)
             // boundary shape — the surface being projected onto is tessellated
             // separately inside MakeEntityDecals with a finer tolerance (0.1f).
             mesh_t *tess = SubdivideMesh(pm->mesh, 8.0f, 999.0f);
+            PutMeshOnCurve(*tess);
 
             // Pick 3 non-collinear corner control points for the global texMat.
             // Use the original control grid corners, not tessellated verts,
@@ -611,7 +616,7 @@ void FreeDecalMesh(decalMesh_t *m)
 AddWindingToDecalMesh
 ================
 */
-static void AddWindingToDecalMesh(decalProjector_t *dp, winding_t *w, decalMesh_t *m)
+static void AddWindingToDecalMesh(decalProjector_t *dp, winding_t *w, decalMesh_t *m, qboolean isPatch)
 {
     vec4_t plane;
     vec3_t surfNormal;
@@ -626,13 +631,21 @@ static void AddWindingToDecalMesh(decalProjector_t *dp, winding_t *w, decalMesh_
     }
     VectorCopy(plane, surfNormal);
     
-    // Backface cull: reject only strongly back-facing surfaces.
-    // With a single curved-patch projector, the avgNormal can diverge significantly
-    // from the local normals on flat/side regions, so we use a generous threshold.
+    // Backface cull: reject strongly back-facing surfaces.
     if (DotProduct(dp->planes[0].normal, surfNormal) < -0.5f)
     {
-        FreeWinding(w);
-        return;
+        if (isPatch) {
+            winding_t *old_w;
+            // It's an inverted patch. Flip its normal to face outward.
+            VectorNegate(surfNormal);
+            // Reverse the winding so the geometry is consistent (CCW from the front)
+            old_w = w;
+            w = ReverseWinding(old_w);
+            FreeWinding(old_w);
+        } else {
+            FreeWinding(w);
+            return;
+        }
     }
     
     for (p = 0; p < dp->numPlanes; p++)
@@ -753,15 +766,15 @@ void WeldDecalMesh(decalMesh_t *m, float epsilon)
 ExtrudeDecalMesh
 ================
 */
-void ExtrudeDecalMesh(decalMesh_t *m, float defaultDistance)
+void ExtrudeDecalMesh(decalMesh_t *m)
 {
     // =========================================================================
     // EXTRUSION TUNING PARAMETERS
     // Tweak these values to adjust how decals project onto curved/corner geometry
     // =========================================================================
-    const float MIN_EXTRUSION = 0.125f;       // Base extrusion (keeps convex/planar decals tight to wall)
-    const float MAX_EXTRUSION = 1.0f;         // Absolute maximum extrusion limit
-    const float CONCAVITY_SCALE = 320.0f;      // Multiplier for the extra extrusion added to concave parts
+    const float MIN_EXTRUSION = 0.0f;       // Base extrusion (keeps convex/planar decals tight to wall)
+    const float MAX_EXTRUSION = 1.125f;         // Absolute maximum extrusion limit
+    const float CONCAVITY_SCALE = 720.0f;      // Multiplier for the extra extrusion added to concave parts
     // =========================================================================
 
     vec3_t *smoothNormals = malloc(m->numVerts * sizeof(vec3_t));
@@ -966,6 +979,7 @@ void MakeEntityDecals(entity_t *e)
                     srcMesh.verts = ds->verts;
                     
                     tess = SubdivideMesh(srcMesh, 0.1f, 999.0f);
+                    PutMeshOnCurve(*tess);
                     for (y = 0; y < tess->height - 1; y++) 
                     {
                         for (x = 0; x < tess->width - 1; x++) 
@@ -990,14 +1004,14 @@ void MakeEntityDecals(entity_t *e)
                             VectorCopy(idx[0]->xyz, w1->points[0]);
                             VectorCopy(idx[1]->xyz, w1->points[1]);
                             VectorCopy(idx[2]->xyz, w1->points[2]);
-                            AddWindingToDecalMesh(&localDp, w1, &decalTrisoup);
+                            AddWindingToDecalMesh(&localDp, w1, &decalTrisoup, qtrue);
                             
                             w2 = AllocWinding(3);
                             w2->numpoints = 3;
                             VectorCopy(idx[0]->xyz, w2->points[0]);
                             VectorCopy(idx[2]->xyz, w2->points[1]);
                             VectorCopy(idx[3]->xyz, w2->points[2]);
-                            AddWindingToDecalMesh(&localDp, w2, &decalTrisoup);
+                            AddWindingToDecalMesh(&localDp, w2, &decalTrisoup, qtrue);
                         }
                     }
                     FreeMesh(tess);
@@ -1014,7 +1028,7 @@ void MakeEntityDecals(entity_t *e)
                             VectorCopy(ds->verts[ds->indexes[j]].xyz, w->points[0]);
                             VectorCopy(ds->verts[ds->indexes[j+1]].xyz, w->points[1]);
                             VectorCopy(ds->verts[ds->indexes[j+2]].xyz, w->points[2]);
-                            AddWindingToDecalMesh(&localDp, w, &decalTrisoup);
+                            AddWindingToDecalMesh(&localDp, w, &decalTrisoup, qfalse);
                         }
                     }
                     else
@@ -1023,7 +1037,7 @@ void MakeEntityDecals(entity_t *e)
                         w->numpoints = ds->numVerts;
                         for (j = 0; j < ds->numVerts; j++)
                             VectorCopy(ds->verts[j].xyz, w->points[j]);
-                        AddWindingToDecalMesh(&localDp, w, &decalTrisoup);
+                        AddWindingToDecalMesh(&localDp, w, &decalTrisoup, qfalse);
                     }
                 }
             }
@@ -1035,8 +1049,8 @@ void MakeEntityDecals(entity_t *e)
             if (initialSurfs > e->firstDrawSurf)
                 templateDs = &mapDrawSurfs[e->firstDrawSurf];
             
-            WeldDecalMesh(&decalTrisoup, 0.5f);
-            ExtrudeDecalMesh(&decalTrisoup, 0.25f);
+            WeldDecalMesh(&decalTrisoup, 0.01f);
+            ExtrudeDecalMesh(&decalTrisoup);
             EmitDecalMeshAsMiscModel(&decalTrisoup, &decalProjectors[firstProjectorIndex], templateDs);
         }
         
