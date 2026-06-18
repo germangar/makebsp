@@ -301,7 +301,7 @@ List of additions and modifications made to shader parsing and features compared
 
 ### Entity: _decal
 
-Projects a 2D surface (defined by one or more Bezier patches) onto map geometry. This is a classic q3map2 feature.
+Projects a 2D surface (defined by patches or brushes) onto map geometry. This is a classic q3map2 feature.
 - **Surface Types**: Can be casted on all surface types (brushes, patches, and `misc_model`s).
 - **Limitations**: Distance alphablending is not supported.
 

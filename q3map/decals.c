@@ -279,24 +279,172 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
 
 /*
 ================
+MakeDecalProjectorForWinding
+Builds a projector for an arbitrary convex polygon (brush face).
+================
+*/
+static qboolean MakeDecalProjectorForWinding(side_t *side, vec3_t projNormal,
+                                             float distance, winding_t *w, int decalEntityNum)
+{
+    decalProjector_t *dp;
+    vec3_t extent;
+    int i;
+    vec3_t faceNormal;
+    float maxDist;
+
+    if (numDecalProjectors >= MAX_DECAL_PROJECTORS)
+    {
+        _printf("WARNING: MAX_DECAL_PROJECTORS reached\n");
+        return qfalse;
+    }
+    
+    if (w->numpoints < 3)
+    {
+        return qfalse;
+    }
+
+    dp = &decalProjectors[numDecalProjectors];
+    memset(dp, 0, sizeof(*dp));
+    dp->si = side->shaderInfo;
+    dp->decalEntityNum = decalEntityNum;
+    
+    // Front plane is exactly the face plane
+    WindingPlane(w, faceNormal, &dp->planes[0].dist);
+    VectorCopy(faceNormal, dp->planes[0].normal);
+    
+    // We expect the surface to point away from the target.
+    // If we are here, it has already passed the hemisphere check.
+    // However, just to ensure consistency with MakeDecalProjectorForPatch,
+    // we make sure the front plane faces away from projNormal.
+    if (DotProduct(faceNormal, projNormal) > 0.0f) {
+        VectorNegate(faceNormal);
+        VectorCopy(faceNormal, dp->planes[0].normal);
+        dp->planes[0].dist = -dp->planes[0].dist;
+    }
+
+    // Back plane
+    VectorCopy(faceNormal, dp->planes[1].normal);
+    VectorNegate(dp->planes[1].normal);
+    
+    // Push front plane outward slightly
+    maxDist = -999999.0f;
+    for (i = 0; i < w->numpoints; i++)
+    {
+        float d = DotProduct(faceNormal, w->points[i]);
+        if (d > maxDist) maxDist = d;
+    }
+    dp->planes[0].dist = maxDist + 2.0f;
+    
+    // Back plane dist
+    {
+        float minProj = 999999.0f;
+        for (i = 0; i < w->numpoints; i++)
+        {
+            float d = DotProduct(faceNormal, w->points[i]);
+            if (d < minProj) minProj = d;
+        }
+        dp->planes[1].dist = -minProj + distance * DotProduct(dp->planes[1].normal, projNormal);
+    }
+    
+    // Side planes
+    dp->numPlanes = 2;
+    for (i = 0; i < w->numpoints; i++)
+    {
+        vec3_t p0, p1, edge, sideNormal;
+        VectorCopy(w->points[i], p0);
+        VectorCopy(w->points[(i + 1) % w->numpoints], p1);
+        
+        VectorSubtract(p1, p0, edge);
+        CrossProduct(projNormal, edge, sideNormal);
+        
+        if (VectorNormalize(sideNormal, sideNormal) < 1e-6f)
+            continue;
+            
+        // Ensure outward pointing
+        {
+            vec3_t center;
+            WindingCenter(w, center);
+            if (DotProduct(sideNormal, center) > DotProduct(sideNormal, p0))
+                VectorNegate(sideNormal);
+        }
+        
+        VectorCopy(sideNormal, dp->planes[dp->numPlanes].normal);
+        dp->planes[dp->numPlanes].dist = DotProduct(sideNormal, p0);
+        dp->numPlanes++;
+        
+        if (dp->numPlanes >= MAX_POINTS_ON_WINDING + 2)
+            break;
+    }
+
+    // Bounding box & sphere
+    ClearBounds(dp->mins, dp->maxs);
+    for (i = 0; i < w->numpoints; i++)
+    {
+        vec3_t proj;
+        AddPointToBounds(w->points[i], dp->mins, dp->maxs);
+        VectorMA(w->points[i], distance, projNormal, proj);
+        AddPointToBounds(proj, dp->mins, dp->maxs);
+    }
+    VectorAdd(dp->mins, dp->maxs, dp->center);
+    VectorScale(dp->center, 0.5f, dp->center);
+    VectorSubtract(dp->maxs, dp->center, extent);
+    dp->radius = VectorLength(extent);
+
+    // Texture matrix from brush primitive (or old brushes)
+    if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES)
+    {
+        VectorCopy(side->vecs[0], dp->texMat[0]);
+        dp->texMat[0][3] = side->vecs[0][3];
+        VectorCopy(side->vecs[1], dp->texMat[1]);
+        dp->texMat[1][3] = side->vecs[1][3];
+        
+        if (side->shaderInfo && side->shaderInfo->width > 0 && side->shaderInfo->height > 0)
+        {
+            VectorScale(dp->texMat[0], 1.0f / side->shaderInfo->width, dp->texMat[0]);
+            dp->texMat[0][3] /= side->shaderInfo->width;
+            VectorScale(dp->texMat[1], 1.0f / side->shaderInfo->height, dp->texMat[1]);
+            dp->texMat[1][3] /= side->shaderInfo->height;
+        }
+    }
+    else
+    {
+        vec3_t texX, texY;
+        ComputeAxisBase(mapplanes[side->planenum].normal, texX, texY);
+        
+        dp->texMat[0][0] = side->texMat[0][0] * texX[0] + side->texMat[0][1] * texY[0];
+        dp->texMat[0][1] = side->texMat[0][0] * texX[1] + side->texMat[0][1] * texY[1];
+        dp->texMat[0][2] = side->texMat[0][0] * texX[2] + side->texMat[0][1] * texY[2];
+        dp->texMat[0][3] = side->texMat[0][2];
+        
+        dp->texMat[1][0] = side->texMat[1][0] * texX[0] + side->texMat[1][1] * texY[0];
+        dp->texMat[1][1] = side->texMat[1][0] * texX[1] + side->texMat[1][1] * texY[1];
+        dp->texMat[1][2] = side->texMat[1][0] * texX[2] + side->texMat[1][1] * texY[2];
+        dp->texMat[1][3] = side->texMat[1][2];
+    }
+
+    numDecalProjectors++;
+    return qtrue;
+}
+
+/*
+================
 CalculateDecalFallbackNormal
 Tries to figure out a suitable projection normal by averaging the normals of the decal's geometry.
 Returns qtrue if successful and sets outNormal (inverted).
-Returns qfalse if geometry is completely closed or points in opposite hemispheres.
+Uses a "first come" basis to reject faces that point in opposite hemispheres.
 ================
 */
 static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
 {
     int numNormals = 0;
-    int maxNormals = 128;
-    vec3_t *normals = malloc(maxNormals * sizeof(vec3_t));
     vec3_t avgNormal;
+    vec3_t refNormal;
     parseMesh_t *pm;
     bspbrush_t *b;
     int i, x, y;
-    qboolean success = qfalse;
 
     VectorClear(avgNormal);
+    VectorClear(refNormal);
 
     for (pm = e->patches; pm; pm = pm->next)
     {
@@ -318,14 +466,17 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
                 
                 if (VectorNormalize(cross, cross) > 0.0001f)
                 {
-                    if (numNormals >= maxNormals)
+                    if (numNormals == 0)
                     {
-                        maxNormals *= 2;
-                        normals = realloc(normals, maxNormals * sizeof(vec3_t));
+                        VectorCopy(cross, refNormal);
+                        VectorAdd(avgNormal, cross, avgNormal);
+                        numNormals++;
                     }
-                    VectorCopy(cross, normals[numNormals]);
-                    VectorAdd(avgNormal, cross, avgNormal);
-                    numNormals++;
+                    else if (DotProduct(cross, refNormal) >= -0.01f)
+                    {
+                        VectorAdd(avgNormal, cross, avgNormal);
+                        numNormals++;
+                    }
                 }
             }
         }
@@ -333,42 +484,44 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
     
     for (b = e->brushes; b; b = b->next)
     {
+        int validFaces = 0;
+        side_t *validSide = NULL;
         for (i = 0; i < b->numsides; i++)
         {
             side_t *s = &b->sides[i];
+            if (!s->winding || s->bevel) continue;
+            if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+            validFaces++;
+            validSide = s;
+        }
+        
+        if (validFaces == 1 && validSide)
+        {
+            vec3_t norm;
+            VectorCopy(mapplanes[validSide->planenum].normal, norm);
             
-            if (numNormals >= maxNormals)
+            if (numNormals == 0)
             {
-                maxNormals *= 2;
-                normals = realloc(normals, maxNormals * sizeof(vec3_t));
+                VectorCopy(norm, refNormal);
+                VectorAdd(avgNormal, norm, avgNormal);
+                numNormals++;
             }
-            VectorCopy(mapplanes[s->planenum].normal, normals[numNormals]);
-            VectorAdd(avgNormal, normals[numNormals], avgNormal);
-            numNormals++;
+            else if (DotProduct(norm, refNormal) >= -0.01f)
+            {
+                VectorAdd(avgNormal, norm, avgNormal);
+                numNormals++;
+            }
         }
     }
 
     if (numNormals > 0 && VectorNormalize(avgNormal, avgNormal) > 0.0001f)
     {
-        success = qtrue;
-        for (i = 0; i < numNormals; i++)
-        {
-            if (DotProduct(avgNormal, normals[i]) < -0.01f)
-            {
-                success = qfalse;
-                break;
-            }
-        }
-        
-        if (success)
-        {
-            VectorCopy(avgNormal, outNormal);
-            VectorNegate(outNormal);
-        }
+        VectorCopy(avgNormal, outNormal);
+        VectorNegate(outNormal);
+        return qtrue;
     }
 
-    free(normals);
-    return success;
+    return qfalse;
 }
 
 /*
@@ -402,55 +555,114 @@ void ProcessDecals(void)
         if (targetName[0])
             targetEnt = FindTargetEntityByName(targetName);
             
-        if (!e->patches)
+        if (!e->patches && !e->brushes)
         {
-            _printf("WARNING: Decal entity without any patch meshes, ignoring.\n");
+            _printf("WARNING: Decal entity without geometry, ignoring.\n");
             continue;
         }
+
+        vec3_t fallbackNormal;
+        qboolean hasFallback = CalculateDecalFallbackNormal(e, fallbackNormal);
             
+        vec3_t globalOrigin;
+        vec3_t globalProjNormal;
+        float globalDistance = 64.0f;
+        
+        if (VectorCompare(entityOrigin, vec3_origin))
+        {
+            vec3_t mins, maxs, center;
+            ClearBounds(mins, maxs);
+            for (pm = e->patches; pm; pm = pm->next)
+            {
+                int j;
+                int W = pm->mesh.width;
+                int H = pm->mesh.height;
+                for (j = 0; j < W * H; j++)
+                    AddPointToBounds(pm->mesh.verts[j].xyz, mins, maxs);
+            }
+            for (b = e->brushes; b; b = b->next)
+            {
+                int validFaces = 0;
+                side_t *validSide = NULL;
+                int j;
+                for (j = 0; j < b->numsides; j++)
+                {
+                    side_t *s = &b->sides[j];
+                    if (!s->winding || s->bevel) continue;
+                    if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                    validFaces++;
+                    validSide = s;
+                }
+                if (validFaces == 1 && validSide)
+                {
+                    for (j = 0; j < validSide->winding->numpoints; j++)
+                        AddPointToBounds(validSide->winding->points[j], mins, maxs);
+                }
+            }
+            VectorAdd(mins, maxs, center);
+            VectorScale(center, 0.5f, center);
+            VectorCopy(center, globalOrigin);
+        }
+        else
+        {
+            VectorCopy(entityOrigin, globalOrigin);
+        }
+
+        if (targetEnt)
+        {
+            vec3_t targetOrigin;
+            GetVectorForKey(targetEnt, "origin", targetOrigin);
+            VectorSubtract(targetOrigin, globalOrigin, globalProjNormal);
+            globalDistance = VectorLength(globalProjNormal);
+            if (globalDistance > 0.0f) {
+                VectorNormalize(globalProjNormal, globalProjNormal);
+            } else {
+                if (hasFallback) {
+                    VectorCopy(fallbackNormal, globalProjNormal);
+                } else {
+                    VectorSet(globalProjNormal, 0, 0, -1);
+                }
+                globalDistance = 64.0f;
+            }
+        }
+        else
+        {
+            if (hasFallback) {
+                VectorCopy(fallbackNormal, globalProjNormal);
+            } else {
+                VectorSet(globalProjNormal, 0, 0, -1);
+            }
+            globalDistance = 64.0f;
+        }
+
         // 2. Build ONE projector per decal patch
         for (pm = e->patches; pm; pm = pm->next)
         {
-            vec3_t patchCenter, mins, maxs;
-            vec3_t origin;
-            vec3_t projNormal;
-            float distance = 64.0f;
-            int j;
             int W = pm->mesh.width;
             int H = pm->mesh.height;
+            vec3_t avgNormal;
 
-            ClearBounds(mins, maxs);
-            for (j = 0; j < W * H; j++)
-                AddPointToBounds(pm->mesh.verts[j].xyz, mins, maxs);
-            VectorAdd(mins, maxs, patchCenter);
-            VectorScale(patchCenter, 0.5f, patchCenter);
-
-            if (VectorCompare(entityOrigin, vec3_origin)) {
-                VectorCopy(patchCenter, origin);
-            } else {
-                VectorCopy(entityOrigin, origin);
-            }
-
-            if (targetEnt)
+            VectorClear(avgNormal);
+            for (int y = 0; y < H - 1; y++)
             {
-                vec3_t targetOrigin;
-                GetVectorForKey(targetEnt, "origin", targetOrigin);
-                VectorSubtract(targetOrigin, origin, projNormal);
-                distance = VectorLength(projNormal);
-                if (distance > 0.0f)
-                    VectorNormalize(projNormal, projNormal);
-                else
+                for (int x = 0; x < W - 1; x++)
                 {
-                    if (!CalculateDecalFallbackNormal(e, projNormal))
-                        VectorSet(projNormal, 0, 0, -1);
-                    distance = 64.0f;
+                    vec3_t e1, e2, cross;
+                    drawVert_t *v0 = &pm->mesh.verts[y * W + x];
+                    drawVert_t *v1 = &pm->mesh.verts[(y+1) * W + x];
+                    drawVert_t *v2 = &pm->mesh.verts[y * W + x + 1];
+                    VectorSubtract(v1->xyz, v0->xyz, e1);
+                    VectorSubtract(v2->xyz, v0->xyz, e2);
+                    CrossProduct(e2, e1, cross);
+                    VectorAdd(avgNormal, cross, avgNormal);
                 }
             }
-            else
+            VectorNormalize(avgNormal, avgNormal);
+
+            if (DotProduct(avgNormal, globalProjNormal) > 0.01f)
             {
-                if (!CalculateDecalFallbackNormal(e, projNormal))
-                    VectorSet(projNormal, 0, 0, -1);
-                distance = 64.0f;
+                _printf("WARNING: Decal patch points in wrong hemisphere, dropping.\n");
+                continue;
             }
 
             // Tessellate the control mesh to get accurate boundary geometry.
@@ -467,9 +679,41 @@ void ProcessDecals(void)
             drawVert_t *cB = &pm->mesh.verts[W - 1];
             drawVert_t *cC = &pm->mesh.verts[(H - 1) * W];
 
-            MakeDecalProjectorForPatch(pm->shaderInfo, projNormal, distance,
+            MakeDecalProjectorForPatch(pm->shaderInfo, globalProjNormal, globalDistance,
                                         tess, cA, cB, cC, i);
             FreeMesh(tess);
+        }
+        
+        // 3. Build ONE projector per valid brush face
+        for (b = e->brushes; b; b = b->next)
+        {
+            int validFaces = 0;
+            side_t *validSide = NULL;
+            int j;
+            vec3_t faceNormal;
+            
+            for (j = 0; j < b->numsides; j++)
+            {
+                side_t *s = &b->sides[j];
+                if (!s->winding || s->bevel) continue;
+                if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                validFaces++;
+                validSide = s;
+            }
+            
+            if (validFaces != 1 || !validSide)
+            {
+                continue;
+            }
+
+            VectorCopy(mapplanes[validSide->planenum].normal, faceNormal);
+            if (DotProduct(faceNormal, globalProjNormal) > 0.01f)
+            {
+                _printf("WARNING: Decal brush face points in wrong hemisphere, dropping.\n");
+                continue;
+            }
+            
+            MakeDecalProjectorForWinding(validSide, globalProjNormal, globalDistance, validSide->winding, i);
         }
 
         
@@ -593,99 +837,6 @@ static winding_t *ClipWindingEpsilonStrict(winding_t *in, vec3_t normal, vec_t d
     return back;
 }
 
-/*
-================
-ProjectDecalOntoWinding
-================
-*/
-static void ProjectDecalOntoWinding(decalProjector_t *dp, mapDrawSurface_t *ds,
-                                     winding_t *w)
-{
-    int p, i;
-    mapDrawSurface_t *newDs;
-    int planenum;
-    side_t *dummySide;
-    vec4_t plane;
-    vec3_t surfNormal;
-
-    if (w->numpoints < 3 || !PlaneFromPoints(plane, w->points[0], w->points[1], w->points[2]))
-    {
-        FreeWinding(w);
-        return;
-    }
-    VectorCopy(plane, surfNormal);
-
-    // 1. Backface cull
-    if (DotProduct(dp->planes[0].normal, surfNormal) < -0.0001f)
-    {
-        FreeWinding(w);
-        return;
-    }
-    
-    // 2. Clip against all 5 frustum planes
-    for (p = 0; p < dp->numPlanes; p++)
-    {
-        winding_t *clipped = ClipWindingEpsilonStrict(w, dp->planes[p].normal, dp->planes[p].dist);
-        FreeWinding(w);
-        if (!clipped) return; // Completely outside
-        w = clipped;
-    }
-    
-    // 3. Emit the surviving winding as a new mapDrawSurface_t
-    newDs = AllocDrawSurf();
-    newDs->isDecal = qtrue;
-    if (dp->si && dp->si->hasVertexColor)
-    {
-        newDs->hasVertexColor = 1;
-        VectorCopy(dp->si->vertexColor, newDs->vertexColor);
-    }
-    else
-    {
-        newDs->hasVertexColor = -1;
-    }
-    newDs->shaderInfo = dp->si;
-    newDs->numVerts = w->numpoints;
-    newDs->verts = malloc(w->numpoints * sizeof(drawVert_t));
-    memset(newDs->verts, 0, w->numpoints * sizeof(drawVert_t));
-    newDs->mapBrush = NULL;
-    
-    newDs->samplesize = ds->samplesize;
-    if (dp->si->lightmapSampleSize > 0)
-        newDs->samplesize = dp->si->lightmapSampleSize;
-    newDs->enforceSampleSize = ds->enforceSampleSize;
-
-    if (ds->side) 
-    {
-        newDs->side = ds->side;
-    } 
-    else 
-    {
-        planenum = FindFloatPlane(surfNormal, DotProduct(w->points[0], surfNormal));
-        dummySide = malloc(sizeof(side_t));
-        memset(dummySide, 0, sizeof(side_t));
-        dummySide->planenum = planenum;
-        newDs->side = dummySide;
-    }
-    
-    for (i = 0; i < w->numpoints; i++)
-    {
-        drawVert_t *dv = &newDs->verts[i];
-
-        VectorCopy(w->points[i], dv->xyz);
-        
-        dv->st[0] = DotProduct(dv->xyz, dp->texMat[0]) + dp->texMat[0][3];
-        dv->st[1] = DotProduct(dv->xyz, dp->texMat[1]) + dp->texMat[1][3];
-        
-        VectorCopy(surfNormal, dv->normal);
-        
-        dv->color[0][0] = 255;
-        dv->color[0][1] = 255;
-        dv->color[0][2] = 255;
-        dv->color[0][3] = 255;
-    }
-    
-    FreeWinding(w);
-}
 
 /*
 ================
