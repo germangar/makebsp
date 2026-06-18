@@ -23,6 +23,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
     - [func_group](#entity-func_group)
     - [func_light](#entity-func_light)
     - [light](#entity-light)
+    - [_decal](#entity-_decal)
 - [💻 CLI Command Reference](#-cli-command-reference)
 
 ---
@@ -297,6 +298,15 @@ List of additions and modifications made to shader parsing and features compared
 - **angles**: Rotation angles (Pitch Yaw Roll) for the spotlight (when not using a target).
 - **haloshader**: Specific shader to use for the volumetric halo. Set to "none" or "0" to disable the halo for this light.
 - **haloscale**: Scales the size of the generated halo surface. Defaults to 1.0.
+
+### Entity: _decal
+
+Projects a 2D surface (defined by one or more Bezier patches) onto map geometry. This is a classic q3map2 feature.
+- **Surface Types**: Can be casted on all surface types (brushes, patches, and `misc_model`s).
+- **Limitations**: Distance alphablending is not supported.
+
+**Keys**
+- **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
 
 ---
 

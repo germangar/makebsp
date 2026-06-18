@@ -279,6 +279,100 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
 
 /*
 ================
+CalculateDecalFallbackNormal
+Tries to figure out a suitable projection normal by averaging the normals of the decal's geometry.
+Returns qtrue if successful and sets outNormal (inverted).
+Returns qfalse if geometry is completely closed or points in opposite hemispheres.
+================
+*/
+static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
+{
+    int numNormals = 0;
+    int maxNormals = 128;
+    vec3_t *normals = malloc(maxNormals * sizeof(vec3_t));
+    vec3_t avgNormal;
+    parseMesh_t *pm;
+    bspbrush_t *b;
+    int i, x, y;
+    qboolean success = qfalse;
+
+    VectorClear(avgNormal);
+
+    for (pm = e->patches; pm; pm = pm->next)
+    {
+        int W = pm->mesh.width;
+        int H = pm->mesh.height;
+        
+        for (y = 0; y < H - 1; y++)
+        {
+            for (x = 0; x < W - 1; x++)
+            {
+                vec3_t e1, e2, cross;
+                drawVert_t *v0 = &pm->mesh.verts[y * W + x];
+                drawVert_t *v1 = &pm->mesh.verts[(y+1) * W + x];
+                drawVert_t *v2 = &pm->mesh.verts[y * W + x + 1];
+                
+                VectorSubtract(v1->xyz, v0->xyz, e1);
+                VectorSubtract(v2->xyz, v0->xyz, e2);
+                CrossProduct(e2, e1, cross);
+                
+                if (VectorNormalize(cross, cross) > 0.0001f)
+                {
+                    if (numNormals >= maxNormals)
+                    {
+                        maxNormals *= 2;
+                        normals = realloc(normals, maxNormals * sizeof(vec3_t));
+                    }
+                    VectorCopy(cross, normals[numNormals]);
+                    VectorAdd(avgNormal, cross, avgNormal);
+                    numNormals++;
+                }
+            }
+        }
+    }
+    
+    for (b = e->brushes; b; b = b->next)
+    {
+        for (i = 0; i < b->numsides; i++)
+        {
+            side_t *s = &b->sides[i];
+            
+            if (numNormals >= maxNormals)
+            {
+                maxNormals *= 2;
+                normals = realloc(normals, maxNormals * sizeof(vec3_t));
+            }
+            VectorCopy(mapplanes[s->planenum].normal, normals[numNormals]);
+            VectorAdd(avgNormal, normals[numNormals], avgNormal);
+            numNormals++;
+        }
+    }
+
+    if (numNormals > 0 && VectorNormalize(avgNormal, avgNormal) > 0.0001f)
+    {
+        success = qtrue;
+        for (i = 0; i < numNormals; i++)
+        {
+            if (DotProduct(avgNormal, normals[i]) < -0.01f)
+            {
+                success = qfalse;
+                break;
+            }
+        }
+        
+        if (success)
+        {
+            VectorCopy(avgNormal, outNormal);
+            VectorNegate(outNormal);
+        }
+    }
+
+    free(normals);
+    return success;
+}
+
+/*
+================
 ProcessDecals
 Phase A
 ================
@@ -347,13 +441,15 @@ void ProcessDecals(void)
                     VectorNormalize(projNormal, projNormal);
                 else
                 {
-                    VectorSet(projNormal, 0, 0, -1);
+                    if (!CalculateDecalFallbackNormal(e, projNormal))
+                        VectorSet(projNormal, 0, 0, -1);
                     distance = 64.0f;
                 }
             }
             else
             {
-                VectorSet(projNormal, 0, 0, -1);
+                if (!CalculateDecalFallbackNormal(e, projNormal))
+                    VectorSet(projNormal, 0, 0, -1);
                 distance = 64.0f;
             }
 
