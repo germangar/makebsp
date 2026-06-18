@@ -310,6 +310,7 @@ Projects a 2D surface (defined by patches or brushes) onto map geometry. This is
 **Keys**
 - **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key. For brushes and patches, the key must be applied to the `func_group` they belong to.
+- **patchSubdivision**: Adjusts the resolution of the decal when projected onto curved patches. The default is 0.4. Lowering this value (e.g. down to 0.1) increases the triangle density for a smoother curve, while higher values (e.g. 1.0 or 4.0) reduce the triangle count.
 
 ---
 

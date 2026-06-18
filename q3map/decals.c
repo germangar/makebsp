@@ -1263,7 +1263,18 @@ void MakeEntityDecals(entity_t *e)
                     srcMesh.height = ds->patchHeight;
                     srcMesh.verts = ds->verts;
                     
-                    tess = SubdivideMesh(srcMesh, 0.1f, 999.0f);
+                    {
+                        const char *patchSubdivStr = ValueForKey(decalEnt, "patchSubdivision");
+                        float patchSubdiv = 0.4f;
+                        if (patchSubdivStr[0])
+                        {
+                            patchSubdiv = atof(patchSubdivStr);
+                            // Lower value = higher resolution. Clamp it so they can't crash the compiler with 0.0
+                            if (patchSubdiv <= 0.05f) patchSubdiv = 0.05f; 
+                        }
+                        tess = SubdivideMesh(srcMesh, patchSubdiv, 999.0f);
+                    }
+                    
                     PutMeshOnCurve(*tess);
                     for (y = 0; y < tess->height - 1; y++) 
                     {

@@ -1,0 +1,19 @@
+Decal System Optimizations Study
+=================================
+
+The following are potential performance optimizations for the `MakeEntityDecals` feature in `makebsp`. These are currently not considered high priority since the patch subdivision error was reduced to a reasonable default (`0.4f`), but should be referenced if decal compilation times become a bottleneck.
+
+1. The O(N²) Welding Bottleneck (WeldDecalMesh)
+-----------------------------------------------
+Currently, `WeldDecalMesh` compares every vertex against every other unique vertex to merge them. If a decal has 100 vertices, that's 10,000 checks (fast). But if a map has a massive decal spanning multiple surfaces and generating 5,000 vertices, that jumps to 25,000,000 checks. 
+- Solution: Implement a simple spatial hash grid or sort the vertices by their X-axis before welding. This turns an O(N²) operation into an O(N log N) operation, making welding near-instantaneous even for huge decals.
+
+2. The Global Surface Loop
+--------------------------
+Inside `MakeEntityDecals`, every single decal projector loops through *every single drawsurface* in the map (which can easily be 50,000+ surfaces) doing bounding box intersection checks. If you have 1,000 decals, that's 50 million AABB checks.
+- Solution: Group the map's drawsurfaces into a simple spatial grid or BVH (Bounding Volume Hierarchy) before processing decals. Projectors would only query the grid cells they touch, skipping 99% of the map's surfaces instantly.
+
+3. Multi-Threading
+------------------
+The outer loop that processes each `_decal` entity one by one is completely serial. 
+- Solution: Since `makebsp` already links OpenMP, add a `#pragma omp parallel for` to the entity loop. A `#pragma omp critical` block is required right at the end around `EmitDecalMeshAsMiscModel` to ensure threads don't cause race conditions when adding the final drawsurface to the global `mapDrawSurfs` array.
