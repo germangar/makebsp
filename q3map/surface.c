@@ -224,6 +224,9 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     ds->side = s;
     ds->fogNum = -1;
 
+    memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
+    strncpy(ds->decalgroup, ValueForKey(&entities[b->entitynum], "decalgroup"), sizeof(ds->decalgroup) - 1);
+
     // Resolve sample size hierarchy
     if (si && si->lightmapSampleSize > 0)
     {

@@ -1156,6 +1156,10 @@ void LoadTriangleModels(entity_t *eparent)
                     mapDrawSurface_t *ds = AllocDrawSurf();
                     inst->drawSurfs[inst->numDrawSurfs++] = ds;
                     ds->miscModel = qtrue;
+                    
+                    memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
+                    strncpy(ds->decalgroup, ValueForKey(entity, "decalgroup"), sizeof(ds->decalgroup) - 1);
+
                     ds->superSampleRadius = superSampleRadius;
                     ds->smoothingRadius = smoothingRadius;
                     

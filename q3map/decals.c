@@ -1216,6 +1216,7 @@ void MakeEntityDecals(entity_t *e)
     {
         entity_t *decalEnt = &entities[d];
         const char *classname = ValueForKey(decalEnt, "classname");
+        const char *decalGroup = ValueForKey(decalEnt, "decalgroup");
         decalMesh_t decalTrisoup;
         int firstProjectorIndex = -1;
         
@@ -1241,6 +1242,7 @@ void MakeEntityDecals(entity_t *e)
                 if (ds->isDecal) continue;
                 if (ds->shaderInfo->autosprite) continue;
                 if (ds->shaderInfo->surfaceFlags & SURF_NOMARKS) continue;
+                if (decalGroup[0] && Q_stricmp(decalGroup, ds->decalgroup) != 0) continue;
                 
                 ClearBounds(dsMins, dsMaxs);
                 for (v = 0; v < ds->numVerts; v++)

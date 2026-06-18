@@ -214,6 +214,7 @@ List of additions and modifications made to shader parsing and features compared
 - **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude (buggy), none (alias nosolid / nonsolid). More to come.
 - **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links this `misc_model` to a brush model entity (like `func_plat` or `func_door`). When set to the same `modelgroup` name as a parent brush entity, the model's visuals and automatically generated collision hulls are bundled with the brush model and move seamlessly with it.
+- **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup`, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 
 **Editor keys**
 - **model**: The path to the 3D model file to load.
@@ -232,6 +233,7 @@ List of additions and modifications made to shader parsing and features compared
 - **enforcesamplesize**: Subividide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
+- **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 
 **Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.
@@ -307,6 +309,7 @@ Projects a 2D surface (defined by patches or brushes) onto map geometry. This is
 
 **Keys**
 - **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
+- **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key. For brushes and patches, the key must be applied to the `func_group` they belong to.
 
 ---
 

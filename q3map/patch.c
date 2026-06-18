@@ -324,6 +324,9 @@ void PatchMapDrawSurfs(entity_t *e)
         scan->grouped = qtrue;
         ds = DrawSurfaceForMesh(&scan->mesh);
         ds->shaderInfo = scan->shaderInfo;
+        
+        memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
+        strncpy(ds->decalgroup, ValueForKey(&entities[scan->entitynum], "decalgroup"), sizeof(ds->decalgroup) - 1);
 
         // Resolve sample size hierarchy
         ds->samplesize = samplesize; // Start with global default
