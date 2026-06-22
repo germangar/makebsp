@@ -1969,6 +1969,11 @@ void GenerateHalos(entity_t *e)
                 continue;
             }
 
+            if (!ShaderExists(haloShader)) {
+                _printf("WARNING: Halo shader '%s' not found, skipping halo generation.\n", haloShader);
+                continue;
+            }
+
             GetVectorForKey(light, "origin", origin);
 
             // Move the origin 8 units backwards so the halo doesn't start abruptly in mid-air

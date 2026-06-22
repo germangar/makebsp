@@ -413,6 +413,7 @@ void OnlyEnts(void)
     num_entities = 0;
 
     LoadMapFile(name);
+    ProcessDecals();
     SetModelNumbers();
     SetLightStyles();
 
@@ -703,6 +704,7 @@ int main(int argc, char **argv)
     }
 
     // do a bsp if nothing else was specified
+    ClearCacheDirectory();
 
 
 

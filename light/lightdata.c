@@ -987,12 +987,19 @@ void VoxelCache_BakeAll(void)
         if (f_test)
         {
             fclose(f_test);
-#pragma omp critical
+            int dummyOut;
+            voxelPoint_t *testPoints = VoxelCache_Load(i, &dummyOut);
+            if (testPoints)
             {
-                _printf(".");
-                fflush(stdout);
+                Q_Free(testPoints);
+#pragma omp critical
+                {
+                    _printf(".");
+                    fflush(stdout);
+                }
+                continue;
             }
-            continue;
+            // Fall through and rebake if VoxelCache_Load rejected it as stale or missing
         }
 
         int W = ds->lightmapWidth;
@@ -1208,6 +1215,28 @@ voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
         Q_Free(points);
         fclose(f);
         return NULL;
+    }
+
+    dsurface_t *ds = &drawSurfaces[surfIdx];
+    for (int i = 0; i < numPoints; i++)
+    {
+        int pIdx = points[i].pixelIndex;
+        int cachePage = pIdx / (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+        if (cachePage != ds->lightmapNum[0])
+        {
+            Q_Free(points);
+            fclose(f);
+            return NULL; // Stale cache: page mismatch
+        }
+        int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+        int lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+        int ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
+        if (lx < 0 || lx >= ds->lightmapWidth || ly < 0 || ly >= ds->lightmapHeight)
+        {
+            Q_Free(points);
+            fclose(f);
+            return NULL; // Stale cache: bounds mismatch
+        }
     }
 
     fclose(f);

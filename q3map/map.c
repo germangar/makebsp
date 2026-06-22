@@ -1053,6 +1053,7 @@ void MoveBrushesToWorld(entity_t *mapent)
     {
         next = b->next;
 
+        b->entitynum = 0; // Fix entitynum pointing to the wrong entity slot after decrement
         b->next = entities[0].brushes;
         entities[0].brushes = b;
     }

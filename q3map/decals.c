@@ -561,6 +561,8 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
     return qfalse;
 }
 
+extern qboolean onlyents;
+
 /*
 ================
 ProcessDecals
@@ -599,6 +601,11 @@ void ProcessDecals(void)
         {
             _printf("WARNING: Decal entity without geometry, ignoring.\n");
             continue;
+        }
+
+        if (onlyents)
+        {
+            goto clear_geometry;
         }
 
         vec3_t fallbackNormal;
@@ -866,6 +873,7 @@ void ProcessDecals(void)
             MakeDecalProjectorForWinding(validSide, globalProjNormal, globalDistance, validSide->winding, i);
         }
 
+clear_geometry:
         
         // 5. Delete entity geometry so it's not compiled into BSP
         // Free brushes
