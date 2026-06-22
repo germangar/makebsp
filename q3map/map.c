@@ -1053,7 +1053,6 @@ void MoveBrushesToWorld(entity_t *mapent)
     {
         next = b->next;
 
-        b->entitynum = 0; // Fix entitynum pointing to the wrong entity slot after decrement
         b->next = entities[0].brushes;
         entities[0].brushes = b;
     }
@@ -1344,6 +1343,11 @@ qboolean ParseMapEntity(void)
             num_entities--;
 
             ProcessFuncLight(&temp);
+            
+            // Fix entitynum pointing to the wrong entity slot after decrement
+            for (bspbrush_t *b = temp.brushes; b; b = b->next) {
+                b->entitynum = 0; 
+            }
             MoveBrushesToWorld(&temp);
         }
         return qtrue;
