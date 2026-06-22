@@ -1,0 +1,42 @@
+Title: Misc_Model Light Tag System Implementation Draft
+
+Goal:
+Allow artists to place point lights and spotlights intuitively from within their 3D modeling software (e.g. Blender, Maya) using "tag" triangles.
+A tag is identified by a specific shader (e.g., "tag_light"). MakeBSP will detect these tag triangles, extract their origin and direction using the "Altitude to the Shortest Edge" algorithm, spawn a light entity, and discard the tag mesh from the final BSP.
+
+Algorithm: "Altitude to the Shortest Edge"
+For a given tag triangle with vertices V0, V1, V2:
+1. Calculate the lengths of the three edges:
+   edge0 = length(V1 - V0)
+   edge1 = length(V2 - V1)
+   edge2 = length(V0 - V2)
+2. Identify the shortest edge. Let's call its vertices V_base1 and V_base2.
+3. The remaining vertex is V_tip.
+4. Calculate the vector of the line containing the shortest edge: 
+   base_dir = normalize(V_base2 - V_base1)
+5. Project V_tip onto the line passing through V_base1 and V_base2 to find the Origin (the intersection of the altitude with the base):
+   vector_to_tip = V_tip - V_base1
+   projection_length = dot(vector_to_tip, base_dir)
+   Origin = V_base1 + (base_dir * projection_length)
+6. Calculate the Direction:
+   Direction = normalize(V_tip - Origin)
+
+Implementation Steps:
+1. Shader Detection
+   - When loading model surfaces, check `surface->shader` for the "tag_light" string (or a new shader directive like `q3map_lighttag`).
+   - If found, flag the surface for tag processing.
+
+2. Iterating Triangles
+   - Iterate through the indices of the tag surface.
+   - For each triangle (3 indices), grab the corresponding vertices.
+   - Execute the algorithm to get Origin and Direction.
+
+3. Entity Generation
+   - Generate a new light entity in the map's entity array programmatically.
+   - Set "classname" to "light" or "light_spot".
+   - Set "origin" to the calculated Origin `(X Y Z)`.
+   - Convert the Direction vector to Pitch/Yaw/Roll angles and set the "angles" key, or set the "dir" vector directly.
+   - Pass any relevant lighting parameters.
+
+4. Surface Discard
+   - Once all triangles in the tag surface are processed and lights are spawned, discard the surface so it is not added to the structural geometry or the trisoup.

@@ -24,6 +24,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
     - [func_light](#entity-func_light)
     - [light](#entity-light)
     - [_decal](#entity-_decal)
+    - [misc_decal](#entity-misc_decal)
 - [💻 CLI Command Reference](#-cli-command-reference)
 
 ---
@@ -311,6 +312,22 @@ Projects a 2D surface (defined by patches or brushes) onto map geometry. This is
 - **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key. For brushes and patches, the key must be applied to the `func_group` they belong to.
 - **patchSubdivision**: Adjusts the resolution of the decal when projected onto curved patches. The default is 0.4. Lowering this value (e.g. down to 0.1) increases the triangle density for a smoother curve, while higher values (e.g. 1.0 or 4.0) reduce the triangle count.
+
+### Entity: misc_decal
+
+A point entity that projects a 2D quad decal onto map geometry without requiring in-map brush or patch geometry as the projection source. The quad is centered at the entity's origin and faces opposite to the projection direction.
+
+- **Projection Direction**: Determined by the `angles` key, or by targeting another entity (such as a `target_position`) via the `target` key. If neither is specified, it projects in the direction defined by the `angles` key (defaulting to straight down if angles are zero/not set).
+- **Targeting / Groups**: Multiple `misc_decal` entities can safely target the same target entity (e.g. `target_position`) without conflict.
+
+**Keys**
+- **shader**: The shader to project (e.g., `textures/decals/logo`). Required; defaults to `textures/common/nodraw` with a warning if omitted.
+- **width**: The width of the projecting quad source in game units. Default: `128`.
+- **height**: The height of the projecting quad source in game units. Default: `128`.
+- **distance** / **depth**: The projection depth/distance in game units. Default: `64`.
+- **angles**: Rotation angles (Pitch Yaw Roll) that define the projection direction if no `target` is set.
+- **target**: Target entity name used to determine the projection direction. If specified, the projection vector points from the `misc_decal` towards the target entity.
+- **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key.
 
 ---
 

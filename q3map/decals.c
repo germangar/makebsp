@@ -12,6 +12,42 @@ decalProjector_t decalProjectors[MAX_DECAL_PROJECTORS];
 
 /*
 ================
+MiscDecalAngleVectors
+================
+*/
+static void MiscDecalAngleVectors(const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up) {
+    float angle;
+    float sr, sp, sy, cr, cp, cy;
+
+    angle = angles[1] * (Q_PI / 180.0f);
+    sy = sin(angle);
+    cy = cos(angle);
+    angle = angles[0] * (Q_PI / 180.0f);
+    sp = sin(angle);
+    cp = cos(angle);
+    angle = angles[2] * (Q_PI / 180.0f);
+    sr = sin(angle);
+    cr = cos(angle);
+
+    if (forward) {
+        forward[0] = cp*cy;
+        forward[1] = cp*sy;
+        forward[2] = -sp;
+    }
+    if (right) {
+        right[0] = (-1.0f*sr*sp*cy+-1.0f*cr*-sy);
+        right[1] = (-1.0f*sr*sp*sy+-1.0f*cr*cy);
+        right[2] = -1.0f*sr*cp;
+    }
+    if (up) {
+        up[0] = (cr*sp*cy+-sr*-sy);
+        up[1] = (cr*sp*sy+-sr*cy);
+        up[2] = cr*cp;
+    }
+}
+
+/*
+================
 FindTargetEntityByName
 ================
 */
@@ -490,6 +526,7 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
         {
             side_t *s = &b->sides[i];
             if (!s->winding || s->bevel) continue;
+            if (WindingArea(s->winding) < 0.1f) continue;
             if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
             validFaces++;
             validSide = s;
@@ -546,8 +583,11 @@ void ProcessDecals(void)
         vec3_t entityOrigin;
         const char *targetName;
         entity_t *targetEnt = NULL;
+        qboolean isMiscDecal = qfalse;
 
-        if (strcmp(classname, "_decal") != 0) 
+        if (strcmp(classname, "misc_decal") == 0) 
+            isMiscDecal = qtrue;
+        else if (strcmp(classname, "_decal") != 0) 
             continue;
         
         GetVectorForKey(e, "origin", entityOrigin);
@@ -555,57 +595,151 @@ void ProcessDecals(void)
         if (targetName[0])
             targetEnt = FindTargetEntityByName(targetName);
             
-        if (!e->patches && !e->brushes)
+        if (!isMiscDecal && !e->patches && !e->brushes)
         {
             _printf("WARNING: Decal entity without geometry, ignoring.\n");
             continue;
         }
 
         vec3_t fallbackNormal;
-        qboolean hasFallback = CalculateDecalFallbackNormal(e, fallbackNormal);
+        qboolean hasFallback = qfalse;
+        
+        if (!isMiscDecal)
+            hasFallback = CalculateDecalFallbackNormal(e, fallbackNormal);
             
         vec3_t globalOrigin;
         vec3_t globalProjNormal;
         float globalDistance = 64.0f;
         
-        if (VectorCompare(entityOrigin, vec3_origin))
+        if (!isMiscDecal)
         {
-            vec3_t mins, maxs, center;
-            ClearBounds(mins, maxs);
-            for (pm = e->patches; pm; pm = pm->next)
+            if (VectorCompare(entityOrigin, vec3_origin))
             {
-                int j;
-                int W = pm->mesh.width;
-                int H = pm->mesh.height;
-                for (j = 0; j < W * H; j++)
-                    AddPointToBounds(pm->mesh.verts[j].xyz, mins, maxs);
+                vec3_t mins, maxs, center;
+                ClearBounds(mins, maxs);
+                for (pm = e->patches; pm; pm = pm->next)
+                {
+                    int j;
+                    int W = pm->mesh.width;
+                    int H = pm->mesh.height;
+                    for (j = 0; j < W * H; j++)
+                        AddPointToBounds(pm->mesh.verts[j].xyz, mins, maxs);
+                }
+                for (b = e->brushes; b; b = b->next)
+                {
+                    int validFaces = 0;
+                    side_t *validSide = NULL;
+                    int j;
+                    for (j = 0; j < b->numsides; j++)
+                    {
+                        side_t *s = &b->sides[j];
+                        if (!s->winding || s->bevel) continue;
+                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                        validFaces++;
+                        validSide = s;
+                    }
+                    if (validFaces == 1 && validSide)
+                    {
+                        for (j = 0; j < validSide->winding->numpoints; j++)
+                            AddPointToBounds(validSide->winding->points[j], mins, maxs);
+                    }
+                }
+                VectorAdd(mins, maxs, center);
+                VectorScale(center, 0.5f, center);
+                VectorCopy(center, globalOrigin);
             }
-            for (b = e->brushes; b; b = b->next)
+            else
             {
-                int validFaces = 0;
-                side_t *validSide = NULL;
-                int j;
-                for (j = 0; j < b->numsides; j++)
-                {
-                    side_t *s = &b->sides[j];
-                    if (!s->winding || s->bevel) continue;
-                    if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
-                    validFaces++;
-                    validSide = s;
-                }
-                if (validFaces == 1 && validSide)
-                {
-                    for (j = 0; j < validSide->winding->numpoints; j++)
-                        AddPointToBounds(validSide->winding->points[j], mins, maxs);
-                }
+                VectorCopy(entityOrigin, globalOrigin);
             }
-            VectorAdd(mins, maxs, center);
-            VectorScale(center, 0.5f, center);
-            VectorCopy(center, globalOrigin);
         }
         else
         {
             VectorCopy(entityOrigin, globalOrigin);
+        }
+
+        if (isMiscDecal)
+        {
+            float width = FloatForKey(e, "width");
+            float height = FloatForKey(e, "height");
+            const char *distStr = ValueForKey(e, "distance");
+            const char *shaderStr = ValueForKey(e, "shader");
+            shaderInfo_t *si;
+            vec3_t forward, right, up;
+            vec3_t angles;
+            mesh_t quad;
+
+            if (!distStr[0]) distStr = ValueForKey(e, "depth");
+            if (distStr[0])
+                globalDistance = atof(distStr);
+            else
+                globalDistance = 64.0f;
+
+            if (width == 0.0f) width = 128.0f;
+            if (height == 0.0f) height = 128.0f;
+            if (!shaderStr[0]) {
+                _printf("WARNING: misc_decal at %f %f %f missing shader parameter. Defaulting to nodraw.\n", globalOrigin[0], globalOrigin[1], globalOrigin[2]);
+                shaderStr = "textures/common/nodraw";
+            }
+            si = ShaderInfoForShader(shaderStr);
+
+            if (targetEnt)
+            {
+                vec3_t targetOrigin;
+                GetVectorForKey(targetEnt, "origin", targetOrigin);
+                VectorSubtract(targetOrigin, globalOrigin, globalProjNormal);
+                
+                if (VectorLength(globalProjNormal) > 0.0f)
+                    VectorNormalize(globalProjNormal, globalProjNormal);
+                else
+                    VectorSet(globalProjNormal, 0, 0, -1);
+                
+                // We need orthogonal vectors. We can't use vectoangles reliably if it doesn't exist.
+                // Let's use MakeNormalVectors if available, otherwise just use cross products.
+                // mathlib.c has MakeNormalVectors(forward, right, up)
+                VectorCopy(globalProjNormal, forward);
+                MakeNormalVectors(forward, right, up);
+                // MakeNormalVectors gives right and up. But q3 math might have them differently.
+                // Let's use MiscDecalAngleVectors on the entity's angles, and only override forward?
+                // Actually, if a target is specified, we should probably ignore angles completely and derive up/right from forward.
+            }
+            else
+            {
+                GetVectorForKey(e, "angles", angles);
+                MiscDecalAngleVectors(angles, forward, right, up);
+                VectorCopy(forward, globalProjNormal);
+            }
+
+            quad.width = 2;
+            quad.height = 2;
+            quad.verts = malloc(4 * sizeof(drawVert_t));
+            memset(quad.verts, 0, 4 * sizeof(drawVert_t));
+
+            // Top-Left (x=0, y=0)
+            VectorMA(globalOrigin, height*0.5f, up, quad.verts[0].xyz);
+            VectorMA(quad.verts[0].xyz, -width*0.5f, right, quad.verts[0].xyz);
+            quad.verts[0].st[0] = 0.0f; quad.verts[0].st[1] = 0.0f;
+
+            // Top-Right (x=1, y=0)
+            VectorMA(globalOrigin, height*0.5f, up, quad.verts[1].xyz);
+            VectorMA(quad.verts[1].xyz, width*0.5f, right, quad.verts[1].xyz);
+            quad.verts[1].st[0] = 1.0f; quad.verts[1].st[1] = 0.0f;
+
+            // Bottom-Left (x=0, y=1)
+            VectorMA(globalOrigin, -height*0.5f, up, quad.verts[2].xyz);
+            VectorMA(quad.verts[2].xyz, -width*0.5f, right, quad.verts[2].xyz);
+            quad.verts[2].st[0] = 0.0f; quad.verts[2].st[1] = 1.0f;
+
+            // Bottom-Right (x=1, y=1)
+            VectorMA(globalOrigin, -height*0.5f, up, quad.verts[3].xyz);
+            VectorMA(quad.verts[3].xyz, width*0.5f, right, quad.verts[3].xyz);
+            quad.verts[3].st[0] = 1.0f; quad.verts[3].st[1] = 1.0f;
+
+            MakeDecalProjectorForPatch(si, globalProjNormal, globalDistance, &quad,
+                                       &quad.verts[0], &quad.verts[1], &quad.verts[2], i);
+            free(quad.verts);
+            
+            continue; // Skip the _decal geometry deletion since we have none
         }
 
         if (targetEnt)
@@ -696,6 +830,7 @@ void ProcessDecals(void)
             {
                 side_t *s = &b->sides[j];
                 if (!s->winding || s->bevel) continue;
+                if (WindingArea(s->winding) < 0.1f) continue;
                 if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
                 validFaces++;
                 validSide = s;
@@ -703,6 +838,21 @@ void ProcessDecals(void)
             
             if (validFaces != 1 || !validSide)
             {
+                if (validFaces != 1)
+                {
+                    _printf("WARNING: Decal brush has %d valid faces (expected exactly 1), ignoring. If you rotated a brush, grid snapping might have split the face into multiple triangles.\n", validFaces);
+                    
+                    // Diagnostic: print what the valid faces actually are
+                    _printf("  Valid faces found:\n");
+                    for (j = 0; j < b->numsides; j++)
+                    {
+                        side_t *s = &b->sides[j];
+                        if (!s->winding || s->bevel) continue;
+                        if (WindingArea(s->winding) < 0.1f) continue;
+                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                        _printf("  - Shader: %s (Area: %.2f)\n", s->shaderInfo ? s->shaderInfo->shader : "UNKNOWN", WindingArea(s->winding));
+                    }
+                }
                 continue;
             }
 
@@ -1220,7 +1370,7 @@ void MakeEntityDecals(entity_t *e)
         decalMesh_t decalTrisoup;
         int firstProjectorIndex = -1;
         
-        if (strcmp(classname, "_decal") != 0) continue;
+        if (strcmp(classname, "_decal") != 0 && strcmp(classname, "misc_decal") != 0) continue;
         
         InitDecalMesh(&decalTrisoup);
         
