@@ -31,6 +31,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #endif
 
 extern qboolean nodirect;
+extern qboolean noambient;
 qboolean deluxeSort = qfalse;
 int radiosityPasses = 0;
 extern tonemap_t tonemapMode;
@@ -365,6 +366,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-nodirect")) {
             nodirect = qtrue;
             _printf("No direct lighting\n");
+        } else if (!strcmp(argv[i], "-noambient")) {
+            noambient = qtrue;
+            _printf("No ambient lighting\n");
         } else if (!strcmp(argv[i], "-upscale")) {
             upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
@@ -645,6 +649,7 @@ int main(int argc, char **argv) {
                 "   threads <X>    = set number of threads to X\n"
                 "   area <V>       = set the area light scale to V\n"
                 "   -nodirect      = skip direct lighting passes\n"
+               "   -noambient     = skip ambient lighting passes\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   shading <type>  = set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
                 "   shading_softbias <F> = override the default soft bias for the shading model\n"

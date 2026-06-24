@@ -34,6 +34,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define POINTSCALE_SMOOTHSTEP 50.0f
 
 qboolean nodirect;
+qboolean noambient;
 qboolean patchshadows = qtrue;
 qboolean lightmapBorder = qfalse;
 
@@ -1739,7 +1740,7 @@ void LightMain(void)
 
         float skyLum    = skyColor[0]    * 0.299f + skyColor[1]    * 0.587f + skyColor[2]    * 0.114f;
         float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
-        if (skyLum > 0.001f || groundLum > 0.001f)
+        if (!noambient && (skyLum > 0.001f || groundLum > 0.001f))
         {
             ambient_enabled = qtrue;
         }

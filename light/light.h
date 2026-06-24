@@ -458,6 +458,7 @@ typedef struct
 
 extern float areaScale;
 extern qboolean nodirect;
+extern qboolean noambient;
 extern qboolean deluxeSort;
 
 extern qboolean lightmapBorder;
