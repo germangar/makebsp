@@ -637,6 +637,7 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     TraceLine(origin, end, &trace, qtrue, tw);
 
     // If the ray hit a solid occluder in Embree, it cannot be the sky!
+    if (trace.passSolid) return qfalse;
 
     // see if trace.hit is inside a sky brush
     for (i = 0; i < numSkyBrushes; i++)

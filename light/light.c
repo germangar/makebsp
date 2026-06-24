@@ -256,7 +256,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
     dl->si = ls;
     dl->noDeluxeInfluence = ls->noDeluxeInfluence;
 
-    if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME))
+    if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER))
     {
         dl->twosided = qtrue;
     }
