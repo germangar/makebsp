@@ -150,7 +150,7 @@ static void DilateLightmapAtlas(int width, int passes)
                     if (litWeight > 0)
                     {
                         VectorScale(litSum, 1.0f / litWeight, &lightFloats[idx * 3]);
-                        lightAlphaMask[idx] = 1;
+                        lightAlphaMask[idx] = ds->surfaceType;
                         if (deluxeFloats)
                         {
                             vec3_t avgDir;
@@ -169,7 +169,7 @@ static void DilateLightmapAtlas(int width, int passes)
                     else if (weight > 0)
                     {
                         VectorScale(sum, 1.0f / weight, &lightFloats[idx * 3]);
-                        lightAlphaMask[idx] = 1;
+                        lightAlphaMask[idx] = ds->surfaceType;
                         if (deluxeFloats)
                         {
                             vec3_t avgDir;
@@ -716,7 +716,7 @@ void DownConvertLightingData(void)
 
 
 
-    DilateLightmapAtlas(game->lightmapSize, 2);
+    //DilateLightmapAtlas(game->lightmapSize, 2);
 
     // Deferred Deluxe Division: convert lightFloats from Radiance to Radiance/w
     if (deluxeFloats && normalFloats)
@@ -802,6 +802,29 @@ void DownConvertLightingData(void)
     }
 
     DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
+
+    if (g_debugMagentaTrisoups || g_debugCyanPatches || g_debugGreenPlanar) {
+        _printf("Coloring debug lightmaps based on surface types...\n");
+        int totalPixels = numLightBytes / 3;
+        for (int i = 0; i < totalPixels; i++) {
+            if (lightAlphaMask && lightAlphaMask[i]) {
+                if (g_debugMagentaTrisoups && lightAlphaMask[i] == MST_TRIANGLE_SOUP) {
+                    lightBytes[i*3+0] = 255;
+                    lightBytes[i*3+1] = 0;
+                    lightBytes[i*3+2] = 255;
+                } else if (g_debugCyanPatches && lightAlphaMask[i] == MST_PATCH) {
+                    lightBytes[i*3+0] = 0;
+                    lightBytes[i*3+1] = 255;
+                    lightBytes[i*3+2] = 255;
+                } else if (g_debugGreenPlanar && lightAlphaMask[i] == MST_PLANAR) {
+                    lightBytes[i*3+0] = 0;
+                    lightBytes[i*3+1] = 255;
+                    lightBytes[i*3+2] = 0;
+                }
+            }
+        }
+    }
+
     DownConvertDeluxeMaps();
     DownConvertGrid(scale, (game->hdr == HDR_8BIT));
 

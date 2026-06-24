@@ -619,6 +619,15 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-exportlightmaps")) {
             g_debugExportLightmaps = qtrue;
             _printf("Exporting a copy of the lightmaps as images for visual inspection\n");
+        } else if (!strcmp(argv[i], "-magentatrisoups")) {
+            g_debugMagentaTrisoups = qtrue;
+            _printf("Coloring TRISOUP lightmaps flat magenta\n");
+        } else if (!strcmp(argv[i], "-cyanpatches")) {
+            g_debugCyanPatches = qtrue;
+            _printf("Coloring PATCH lightmaps flat cyan\n");
+        } else if (!strcmp(argv[i], "-greenplanar")) {
+            g_debugGreenPlanar = qtrue;
+            _printf("Coloring PLANAR lightmaps flat green\n");
         } else {
             break;
         }
@@ -643,6 +652,9 @@ int main(int argc, char **argv) {
                 "   sunshading_softbias <F> = override the sun soft bias\n"
                 "   -lowmem        = use memory-mapped files for massive radiosity passes\n"
                 "   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
+                "   -magentatrisoups = Color TRISOUP lightmaps flat magenta (for export debugging)\n"
+                "   -cyanpatches    = Color PATCH lightmaps flat cyan (for export debugging)\n"
+                "   -greenplanar    = Color PLANAR lightmaps flat green (for export debugging)\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
                 "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n"

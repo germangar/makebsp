@@ -17,6 +17,9 @@ float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
 qboolean g_debugExportLightmaps = qfalse;
+qboolean g_debugMagentaTrisoups = qfalse;
+qboolean g_debugCyanPatches = qfalse;
+qboolean g_debugGreenPlanar = qfalse;
 
 game_t gameTemplates[MAX_GAMES] = {
 	{
