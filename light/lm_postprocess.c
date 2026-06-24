@@ -766,7 +766,7 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
         for (int i=0; i<N; i++) {
             for (int k=1; k<nS; k++) {
                 float st[2] = { (float)ds->lightmapOffset[0][0]+tX[i]+0.5f+ssPattern8[k][0]*radius, (float)ds->lightmapOffset[0][1]+tY[i]+0.5f+ssPattern8[k][1]*radius };
-                if (TriSoupSamplePoint(ds, st, &jP[(i*nS+k)*3], &jN[(i*nS+k)*3])) jV[i*nS+k]=1;
+                if (TriSoupSamplePoint(ds, st, &jP[(i*nS+k)*3], &jN[(i*nS+k)*3], NULL)) jV[i*nS+k]=1;
             }
         }
     }
@@ -1023,7 +1023,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
                 vec3_t o, n;
                 if(isAA) {
                     float st[2]={(float)ds->lightmapOffset[0][0]+(p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT))%LIGHTMAP_WIDTH-ds->lightmapOffset[0][0]+0.5f+ssPattern8[k][0]*radius, (float)ds->lightmapOffset[0][1]+(p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT))/LIGHTMAP_WIDTH-ds->lightmapOffset[0][1]+0.5f+ssPattern8[k][1]*radius};
-                    if(!TriSoupSamplePoint(ds,st,o,n)) continue;
+                    if(!TriSoupSamplePoint(ds,st,o,n,NULL)) continue;
                 } else {
                     VectorCopy(cP[i].pos,o);
                     VectorCopy(cP[i].normal,n);

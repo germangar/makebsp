@@ -382,7 +382,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + st_x;
                     st[1] = (float)ds->lightmapOffset[0][1] + st_y;
-                    if (!TriSoupSamplePoint(ds, st, em->center, em->normal)) {
+                    if (!TriSoupSamplePoint(ds, st, em->center, em->normal, NULL)) {
                         VectorClear(em->center); VectorClear(em->normal);
                     }
                     VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
@@ -391,7 +391,7 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + st_x;
                     st[1] = (float)ds->lightmapOffset[0][1] + st_y;
-                    if (PatchSamplePoint(patchMesh, st, em->center, em->normal)) {
+                    if (PatchSamplePoint(patchMesh, st, em->center, em->normal, NULL)) {
                         VectorMA(em->center, RAD_ORIGIN_NUDGE, em->normal, em->center);
                         VectorAdd(em->center, localSurfaces[i].entityOrigin, em->center);
                     } else {
@@ -860,7 +860,7 @@ static void RadiosityVoxelize(const float *srcFloats, const float *srcDeluxe, co
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + (float)lx + 0.5f;
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ly + 0.5f;
-                    if (PatchSamplePoint(patchMesh, st, pos, normal)) {
+                    if (PatchSamplePoint(patchMesh, st, pos, normal, NULL)) {
                         VectorAdd(pos, localSurfaces[s].entityOrigin, pos);
                     } else {
                         continue;

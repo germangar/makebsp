@@ -123,7 +123,6 @@ void GpuLightmapState_Download(void);
 void GpuLightmapState_Free(void);
 
 #define SAMPLE_NUDGE 0.0625f
-#define SUN_BOUNDS_NUDGE 0.125f
 #define SPOTLIGHT_SOFTNESS_RANGE 128.0f
 
 /* These values have been manually calibrated.
@@ -429,8 +428,8 @@ qboolean PointInTrisoup(vec3_t origin, vec3_t normal);
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
-qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);
-qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal);
+qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);
+qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);
 mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize);
 struct MyRayQueryContext
 {
@@ -484,12 +483,12 @@ void PrecacheTexelGeometry(void);
 void TraceLights(int num);
 void TraceGrid(int num);
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
-					  vec3_t dir, vec3_t energy,
-					  qboolean testOcclusion, qboolean forceSunLight,
-					  qboolean applyColorFilter, light_t **lightList,
-					  int numLights, traceWork_t *tw);
+                      vec3_t dir, vec3_t energy,
+                      qboolean testOcclusion, qboolean forceSunLight,
+                      qboolean applyColorFilter, light_t **lightList,
+                      int numLights, traceWork_t *tw);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 					qboolean forceSunLight, float scale, light_t **lightList,
 					int numLights, traceWork_t *tw);
 void CountLightmaps(void);
-qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal);
+qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);

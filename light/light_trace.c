@@ -380,7 +380,7 @@ static void AddBrushesToEmbree(RTCScene scene)
             for (k = 0; k < b->numSides && w; k++)
             {
                 p2 = &dplanes[dbrushsides[b->firstSide + k].planeNum];
-                ChopWindingInPlace(&w, p2->normal, p2->dist, 0.1f);
+                ChopWindingInPlace(&w, p2->normal, p2->dist, 0.0f);
             }
 
             if (!w)

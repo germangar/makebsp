@@ -30,6 +30,7 @@ byte *unreachableMask = NULL;
 
 vec3_t *texelOrigins = NULL;
 vec3_t *texelNormals = NULL;
+int *texelSurfaceDebug = NULL;
 bspGridPoint32_t *gridData32 = NULL;
 
 float maxLightIntensity = 0.0f;
@@ -442,6 +443,15 @@ static void UpConvertLightmaps(void)
             Error("UpConvert: malloc texelNormals failed");
     }
 
+    if (!texelSurfaceDebug)
+    {
+        texelSurfaceDebug = Q_Alloc(upscaledPixels * sizeof(int));
+        if (!texelSurfaceDebug)
+            Error("UpConvert: malloc texelSurfaceDebug failed");
+        for (int i = 0; i < upscaledPixels; i++)
+            texelSurfaceDebug[i] = -1;
+    }
+
     if (game->deluxeMap)
     {
         if (deluxeFloats)
@@ -714,9 +724,7 @@ void DownConvertLightingData(void)
     _printf("--- DownConvertLightingData ---\n");
     tonemapMode = game->exposureFilter;
 
-
-
-    //DilateLightmapAtlas(game->lightmapSize, 2);
+    DilateLightmapAtlas(game->lightmapSize, 2);
 
     // Deferred Deluxe Division: convert lightFloats from Radiance to Radiance/w
     if (deluxeFloats && normalFloats)
@@ -845,6 +853,7 @@ void DownConvertLightingData(void)
     if (unreachableMask)   { Q_Free(unreachableMask);   unreachableMask = NULL; }
     if (texelOrigins)      { Q_Free(texelOrigins);      texelOrigins = NULL; }
     if (texelNormals)      { Q_Free(texelNormals);      texelNormals = NULL; }
+    if (texelSurfaceDebug) { Q_Free(texelSurfaceDebug); texelSurfaceDebug = NULL; }
     if (lightSurfaceIndex) { Q_Free(lightSurfaceIndex); lightSurfaceIndex = NULL; }
     if (gridData32)        { Q_Free(gridData32);        gridData32 = NULL; }
 }
@@ -1141,7 +1150,7 @@ void VoxelCache_BakeAll(void)
                     st[0] = (float)ds->lightmapOffset[0][0] + (float)tx + 0.5f;
                     st[1] = (float)ds->lightmapOffset[0][1] + (float)ty + 0.5f;
 
-                    if (TriSoupSamplePoint(ds, st, grid[pIdx].pos, grid[pIdx].normal))
+                    if (TriSoupSamplePoint(ds, st, grid[pIdx].pos, grid[pIdx].normal, NULL))
                     {
                         gridValid[pIdx] = 1;
                         grid[pIdx].pixelIndex = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT + ds->lightmapOffset[0][1] + ty) * LIGHTMAP_WIDTH + ds->lightmapOffset[0][0] + tx;

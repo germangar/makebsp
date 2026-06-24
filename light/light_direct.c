@@ -7,6 +7,7 @@
 #include <float.h>
 
 int *surfaceWorkOrder;
+extern int *texelSurfaceDebug;
 
 // 8-point Rotated Grid (tilted ~26.6 degrees)
 static const float ssPattern8[][2] = {
@@ -94,8 +95,7 @@ Finds the position and normal for a lightmap sample point (st in pixel space)
 on a triangle soup surface using barycentric interpolation.
 =================
 */
-qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
-                            vec3_t normal)
+qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid)
 {
     int j, k;
     float st0[2], st1[2], st2[2];
@@ -103,6 +103,8 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
     float bestExtrapolatedDistSq = 999999.0f;
     vec3_t bestExtrapOrigin;
     vec3_t bestExtrapNormal;
+    vec3_t bestExtrapCentroid;
+    VectorClear(bestExtrapCentroid);
 
     for (j = 0; j < ds->numIndexes; j += 3)
     {
@@ -157,6 +159,12 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
                     w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
             }
             VectorNormalize(normal, normal);
+            if (outCentroid)
+            {
+                outCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
+                outCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
+                outCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
+            }
             return qtrue;
         }
 
@@ -186,8 +194,8 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
                 edgeBest = 2;
             }
 
-            // Check if within dilation radius AND better than previous extrapolation
-            if (edgeBest >= 0 && dMin < (float)GUTTER * GUTTER && dMin < bestExtrapolatedDistSq)
+            // Check if better than previous extrapolation
+            if (edgeBest >= 0 && dMin < bestExtrapolatedDistSq)
             {
                 // Calculate raw barycentric coordinates (extrapolation)
                 area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
@@ -210,6 +218,9 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
                         w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
                 }
                 VectorNormalize(bestExtrapNormal, bestExtrapNormal);
+                bestExtrapCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
+                bestExtrapCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
+                bestExtrapCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
                 bestExtrapolatedDistSq = dMin;
             }
         }
@@ -220,6 +231,10 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
     {
         VectorCopy(bestExtrapOrigin, origin);
         VectorCopy(bestExtrapNormal, normal);
+        if (outCentroid)
+        {
+            VectorCopy(bestExtrapCentroid, outCentroid);
+        }
         return qtrue;
     }
 
@@ -234,14 +249,26 @@ Checks if a 2D lightmap sample point (st in pixel space) is strictly inside
 the triangles of a MST_PLANAR surface.
 =================
 */
-qboolean PlanarSamplePointInside(dsurface_t *ds, float st[2])
+qboolean PlanarSamplePointInside(dsurface_t *ds, float st[2], vec3_t outCentroid)
 {
     int j;
     float st0[2], st1[2], st2[2];
     float area, w0, w1, w2;
+    float bestExtrapolatedDistSq = 999999.0f;
+    vec3_t bestExtrapCentroid;
+    VectorClear(bestExtrapCentroid);
 
     if (ds->numIndexes <= 0)
+    {
+        if (outCentroid && ds->numVerts > 0)
+        {
+            VectorClear(outCentroid);
+            for (j = 0; j < ds->numVerts; j++)
+                VectorAdd(outCentroid, drawVerts[ds->firstVert + j].xyz, outCentroid);
+            VectorScale(outCentroid, 1.0f / ds->numVerts, outCentroid);
+        }
         return qtrue; // Fallback if no indices are present
+    }
 
     for (j = 0; j < ds->numIndexes; j += 3)
     {
@@ -267,8 +294,8 @@ qboolean PlanarSamplePointInside(dsurface_t *ds, float st[2])
         maxs[0] = st0[0] > st1[0] ? (st0[0] > st2[0] ? st0[0] : st2[0]) : (st1[0] > st2[0] ? st1[0] : st2[0]);
         maxs[1] = st0[1] > st1[1] ? (st0[1] > st2[1] ? st0[1] : st2[1]) : (st1[1] > st2[1] ? st1[1] : st2[1]);
 
-        if (st[0] < mins[0] - 0.5f || st[0] > maxs[0] + 0.5f ||
-            st[1] < mins[1] - 0.5f || st[1] > maxs[1] + 0.5f)
+        if (st[0] < mins[0] - (float)GUTTER || st[0] > maxs[0] + (float)GUTTER ||
+            st[1] < mins[1] - (float)GUTTER || st[1] > maxs[1] + (float)GUTTER)
         {
             continue;
         }
@@ -286,10 +313,46 @@ qboolean PlanarSamplePointInside(dsurface_t *ds, float st[2])
              area;
         w2 = 1.0f - w0 - w1;
 
-        if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f)
+        if (w0 >= -0.0001f && w1 >= -0.0001f && w2 >= -0.0001f)
         {
+            if (outCentroid)
+            {
+                outCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
+                outCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
+                outCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
+            }
             return qtrue; // strictly inside
         }
+        
+        // Dilation: if not inside, check if we are within the gutter distance
+        {
+            float dSq, dMin = 999999.0f;
+            float t;
+
+            dSq = DistanceSqToSegment(st[0], st[1], st0, st1, &t);
+            if (dSq < dMin) dMin = dSq;
+
+            dSq = DistanceSqToSegment(st[0], st[1], st1, st2, &t);
+            if (dSq < dMin) dMin = dSq;
+
+            dSq = DistanceSqToSegment(st[0], st[1], st2, st0, &t);
+            if (dSq < dMin) dMin = dSq;
+
+            if (dMin < bestExtrapolatedDistSq)
+            {
+                bestExtrapCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
+                bestExtrapCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
+                bestExtrapCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
+                bestExtrapolatedDistSq = dMin;
+            }
+        }
+    }
+
+    if (bestExtrapolatedDistSq < 999999.0f)
+    {
+        if (outCentroid)
+            VectorCopy(bestExtrapCentroid, outCentroid);
+        return qtrue;
     }
 
     return qfalse;
@@ -303,11 +366,13 @@ Finds the position and normal for a lightmap sample point (st in pixel space)
 on a Bezier patch mesh using barycentric interpolation on the subdivided quads.
 =================
 */
-qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal)
+qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid)
 {
     int mx, my, k;
     qboolean found = qfalse;
     vec3_t bestExtrapOrigin, bestExtrapNormal;
+    vec3_t bestExtrapCentroid;
+    VectorClear(bestExtrapCentroid);
     float bestExtrapDistSq = 999999.0f;
 
     for (my = 0; my < mesh->height - 1; my++)
@@ -400,6 +465,13 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
                                 (1.0f - norm_u) * norm_v * v01->normal[k] +
                                 norm_u * norm_v * v11->normal[k];
                 }
+                if (outCentroid)
+                {
+                    for (k = 0; k < 3; k++)
+                    {
+                        outCentroid[k] = (v00->xyz[k] + v10->xyz[k] + v01->xyz[k] + v11->xyz[k]) * 0.25f;
+                    }
+                }
                 found = qtrue;
                 break;
             }
@@ -434,6 +506,8 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
                                           norm_u * (1.0f - norm_v) * v10->normal[k] +
                                           (1.0f - norm_u) * norm_v * v01->normal[k] +
                                           norm_u * norm_v * v11->normal[k];
+                    
+                    bestExtrapCentroid[k] = (v00->xyz[k] + v10->xyz[k] + v01->xyz[k] + v11->xyz[k]) * 0.25f;
                 }
             }
         }
@@ -451,6 +525,12 @@ qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t norma
                 origin[k] = bestExtrapOrigin[k];
                 normal[k] = bestExtrapNormal[k];
             }
+            if (outCentroid)
+            {
+                VectorCopy(bestExtrapCentroid, outCentroid);
+            }
+            VectorNormalize(normal, normal);
+            return qtrue;
         }
         else
         {
@@ -556,15 +636,17 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
 
     TraceLine(origin, end, &trace, qtrue, tw);
 
+    // If the ray hit a solid occluder in Embree, it cannot be the sky!
+
     // see if trace.hit is inside a sky brush
     for (i = 0; i < numSkyBrushes; i++)
     {
         b = &skyBrushes[i];
 
         // this assumes that sky brushes are axial...
-        if (trace.hit[0] < b->bounds[0][0] - SUN_BOUNDS_NUDGE || trace.hit[0] > b->bounds[1][0] + SUN_BOUNDS_NUDGE ||
-            trace.hit[1] < b->bounds[0][1] - SUN_BOUNDS_NUDGE || trace.hit[1] > b->bounds[1][1] + SUN_BOUNDS_NUDGE ||
-            trace.hit[2] < b->bounds[0][2] - SUN_BOUNDS_NUDGE || trace.hit[2] > b->bounds[1][2] + SUN_BOUNDS_NUDGE)
+        if (trace.hit[0] < b->bounds[0][0] || trace.hit[0] > b->bounds[1][0] ||
+            trace.hit[1] < b->bounds[0][1] || trace.hit[1] > b->bounds[1][1] ||
+            trace.hit[2] < b->bounds[0][2] || trace.hit[2] > b->bounds[1][2])
         {
             continue;
         }
@@ -1274,6 +1356,7 @@ mesh_t *LinearSubdivideMesh(mesh_t *in)
     return out;
 }
 
+
 /*
 =============
 PrecacheTexelGeometry
@@ -1330,7 +1413,7 @@ void PrecacheTexelGeometryThread(int i)
             float u = ((float)(x - currentGutter) + 0.5f) * step;
             float v = ((float)(y - currentGutter) + 0.5f) * step;
             
-            vec3_t origin, normal;
+            vec3_t origin, normal, centroid;
             qboolean hit = qtrue;
 
             if (ds->surfaceType == MST_TRIANGLE_SOUP)
@@ -1338,7 +1421,7 @@ void PrecacheTexelGeometryThread(int i)
                 float st[2];
                 st[0] = (float)ds->lightmapOffset[0][0] + u;
                 st[1] = (float)ds->lightmapOffset[0][1] + v;
-                if (!TriSoupSamplePoint(ds, st, origin, normal))
+                if (!TriSoupSamplePoint(ds, st, origin, normal, centroid))
                     hit = qfalse;
             }
             else if (ds->surfaceType == MST_PATCH)
@@ -1350,7 +1433,7 @@ void PrecacheTexelGeometryThread(int i)
                     float st[2];
                     st[0] = (float)ds->lightmapOffset[0][0] + u;
                     st[1] = (float)ds->lightmapOffset[0][1] + v;
-                    if (!PatchSamplePoint(mesh, st, origin, normal))
+                    if (!PatchSamplePoint(mesh, st, origin, normal, centroid))
                         hit = qfalse;
                 }
             }
@@ -1366,15 +1449,30 @@ void PrecacheTexelGeometryThread(int i)
                 float st[2];
                 st[0] = (float)ds->lightmapOffset[0][0] + u;
                 st[1] = (float)ds->lightmapOffset[0][1] + v;
-                if (!PlanarSamplePointInside(ds, st))
+                if (!PlanarSamplePointInside(ds, st, centroid))
                     hit = qfalse;
             }
 
             if (hit)
             {
+                vec3_t toCentroid;
+                vec3_t nudgeOffset;
+                VectorClear(nudgeOffset);
+
+                VectorSubtract(centroid, origin, toCentroid);
+                float dist = VectorLength(toCentroid);
+                if (dist > 0.001f) {
+                    VectorScale(toCentroid, 1.0f / dist, toCentroid);
+                    float nudgeDist = SAMPLE_NUDGE;
+                    if (nudgeDist > dist * 0.5f) {
+                        nudgeDist = dist * 0.5f;
+                    }
+                    VectorScale(toCentroid, nudgeDist, nudgeOffset);
+                }
+
                 for (k = 0; k < 3; k++)
                 {
-                    texelOrigins[idx][k] = origin[k] + normal[k] * SAMPLE_NUDGE + localSurfaces[i].entityOrigin[k];
+                    texelOrigins[idx][k] = origin[k] + normal[k] * SAMPLE_NUDGE + nudgeOffset[k] + localSurfaces[i].entityOrigin[k];
                     texelNormals[idx][k] = normal[k];
                 }
             }
@@ -1386,6 +1484,13 @@ void PrecacheTexelGeometryThread(int i)
                     texelNormals[idx][k] = 0.0f;
                 }
             }
+
+            if (texelSurfaceDebug[idx] != -1 && texelSurfaceDebug[idx] != i)
+            {
+                _printf("WARNING: Texel overlap! Surface %d overwriting %d at px=%d py=%d (lmNum=%d)\n",
+                        i, texelSurfaceDebug[idx], px, py, ds->lightmapNum[0]);
+            }
+            texelSurfaceDebug[idx] = i;
         }
     }
 
@@ -1831,19 +1936,18 @@ void TraceLights(int num)
                         continue;
 
                     vec3_t temp_origin;
+                    vec3_t centroid;
+                    qboolean hasCentroid = qfalse;
+
                     if (ds->surfaceType == MST_TRIANGLE_SOUP)
                     {
                         float st[2];
                         st[0] = (float)ds->lightmapOffset[0][0] + u * step;
                         st[1] = (float)ds->lightmapOffset[0][1] + v * step;
 
-                        if (!TriSoupSamplePoint(ds, st, temp_origin, normal))
+                        if (!TriSoupSamplePoint(ds, st, temp_origin, normal, centroid))
                             continue;
-
-                        for (k = 0; k < 3; k++)
-                        {
-                            base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
-                        }
+                        hasCentroid = qtrue;
                     }
                     else if (ds->surfaceType == MST_PATCH)
                     {
@@ -1851,23 +1955,53 @@ void TraceLights(int num)
                         float target_t = (float)ds->lightmapOffset[0][1] + v * step;
                         float st[2] = {target_s, target_t};
 
-                        if (!PatchSamplePoint(mesh, st, temp_origin, normal))
+                        if (!PatchSamplePoint(mesh, st, temp_origin, normal, centroid))
                             continue;
-
-                        for (k = 0; k < 3; k++)
-                        {
-                            base[k] = (double)temp_origin[k] + (double)normal[k] * SAMPLE_NUDGE;
-                        }
+                        hasCentroid = qtrue;
                     }
                     else
                     {
+                        if (ds->surfaceType == MST_PLANAR)
+                        {
+                            float st[2];
+                            st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+                            st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                            if (!PlanarSamplePointInside(ds, st, centroid))
+                                continue;
+                            hasCentroid = qtrue;
+                        }
+
                         for (k = 0; k < 3; k++)
                         {
-                            base[k] = (double)lightmapOrigin[k] +
-                                      (double)normal[k] * SAMPLE_NUDGE +
-                                      (double)u * lightmapVecs[0][k] +
-                                      (double)v * lightmapVecs[1][k];
+                            temp_origin[k] = lightmapOrigin[k] +
+                                             u * lightmapVecs[0][k] +
+                                             v * lightmapVecs[1][k];
                         }
+                    }
+
+                    vec3_t nudgeOffset;
+                    VectorClear(nudgeOffset);
+
+                    if (hasCentroid)
+                    {
+                        vec3_t toCentroid;
+                        VectorSubtract(centroid, temp_origin, toCentroid);
+                        float dist = VectorLength(toCentroid);
+                        if (dist > 0.001f) {
+                            VectorScale(toCentroid, 1.0f / dist, toCentroid);
+                            float nudgeDist = SAMPLE_NUDGE;
+                            if (nudgeDist > dist * 0.5f) {
+                                nudgeDist = dist * 0.5f;
+                            }
+                            VectorScale(toCentroid, nudgeDist, nudgeOffset);
+                        }
+                    }
+
+                    for (k = 0; k < 3; k++)
+                    {
+                        base[k] = (double)temp_origin[k] +
+                                  (double)normal[k] * SAMPLE_NUDGE +
+                                  (double)nudgeOffset[k];
                     }
 
                     for (k = 0; k < 3; k++)
@@ -1906,6 +2040,7 @@ void TraceLights(int num)
                 {
                     if (deluxe) VectorAdd(accumNormal, normal, accumNormal);
                 }
+                
                 hitCount++;
             }
 

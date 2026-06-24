@@ -89,3 +89,10 @@ The toolchain implements a mathematically exact `q3map2`-style 2-pass tessellati
 - **Two-Pass Surface Generation**: Curved patch normals are calculated via a double pass of `PutMeshOnCurve` (one constrained, one unconstrained wrapping) and blended using spherical interpolation to perfectly resolve boundary normals directly during BSP generation.
 - **Accurate UV Measurement**: `AllocateLightmapForPatch` scales texture boundaries by summing the `maxLength` of individual edge segments instead of bounding dimensions.
 - **Planar Patch Isolation**: Because `q3map2` mathematical corrections disrupt pixel-perfect atlas grid-snapping on perfectly flat geometry, the system globally forks logic based on `IsMeshPlanar()`. Planar patches fallback to legacy geometry subdivision (`SubdivideMeshQuads`) and purely linear UV distribution, guaranteeing zero-tolerance alignment with surrounding BSP structural brushes.
+
+## 14. Robust Lightmap Sample Point Nudging (Centroid Nudge)
+To completely prevent light leaking at boundaries and corners (such as sunlight bypassing thick walls), the lighting pipeline employs a dynamic "Centroid Nudge" for all sample points prior to ray tracing:
+- **Surface Centroids**: The geometric centroid of every surface (or subdivided polygon) is calculated during the sampling phase.
+- **Inward Bias**: Instead of strictly nudging the sample point out along the normal vector, which can push corner texels into the void outside the map, the origin is first nudged *inward* toward the 3D surface centroid.
+- **Distance Limiting**: The centroid nudge distance is clamped to half the distance between the texel and the centroid (to prevent overshooting the center on small faces). After the centroid nudge, the standard `SAMPLE_NUDGE` is applied along the normal.
+- **Out-of-Bounds Texels**: This eliminates the need for strict bounding box culling. Lightmap texels whose centers fall slightly outside the strict 2D geometry bounds are safely extrapolated and automatically pulled inside the volume by the centroid nudge, inherently solving the "black sawtooth" bilinear filtering artifact without discarding samples.
