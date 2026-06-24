@@ -61,9 +61,9 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         qprintf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
     }
 
-    const char *lmSizeVal = ValueForKey(ent, "__lightmapImageSize");
+    const char *lmSizeVal = ValueForKey(ent, "_lightmapImageSize");
     if (!lmSizeVal[0]) {
-        Error("Worldspawn missing required key '__lightmapImageSize'.\n"
+        Error("Worldspawn missing required key '_lightmapImageSize'.\n"
                 "This BSP was likely compiled with an old version of q3map.\n"
                 "Please re-run the BSP phase.");
     }
@@ -676,7 +676,7 @@ int main(int argc, char **argv) {
                 "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
                 "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
                 "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
-                "                         Worldspawn: _ambient_sky <R G B>, _ambient_ground <R G B>\n"
+                "                         Worldspawn: ambient_sky <R G B>, ambient_ground <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");

@@ -1149,7 +1149,7 @@ void VoxelCache_BakeAll(void)
             if (f)
             {
                 int magic = 0x4C584F56;
-                int version = 1;
+                int version = g_fast ? 2 : 1; // Track if this cache was baked in fast mode
                 fwrite(&magic, 4, 1, f);
                 fwrite(&version, 4, 1, f);
                 fwrite(&validCount, 4, 1, f);
@@ -1192,7 +1192,7 @@ voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
         fclose(f);
         return NULL;
     }
-    if (fread(&version, 4, 1, f) != 1 || version != 1)
+    if (fread(&version, 4, 1, f) != 1 || version != (g_fast ? 2 : 1))
     {
         fclose(f);
         return NULL;

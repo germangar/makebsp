@@ -887,6 +887,13 @@ int main(int argc, char **argv)
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("-lightmapimagesize requires a numeric argument");
             int newSize = atoi(argv[i + 1]);
+            if (newSize < 128) newSize = 128;
+            if (newSize > 4096) newSize = 4096;
+            int p = 128;
+            while (p * 2 <= newSize) p *= 2;
+            if (newSize - p > (p * 2) - newSize) p *= 2;
+            newSize = p;
+
             if (newSize != game->lightmapSize) {
                 game->lightmapSize = newSize;
                 game->externalLightmaps = qtrue;
@@ -1019,11 +1026,12 @@ int main(int argc, char **argv)
     // Store the lightmap texel resolution in worldspawn for makelight.exe
     if (num_entities > 0)
     {
-        char buf[16];
+        char buf[64];
+
         sprintf(buf, "%d", samplesize);
         SetKeyValue(&entities[0], "__texelsize", buf);
         sprintf(buf, "%d", game->lightmapSize);
-        SetKeyValue(&entities[0], "__lightmapImageSize", buf);
+        SetKeyValue(&entities[0], "_lightmapImageSize", buf);
     }
 
     InjectSunEntity();

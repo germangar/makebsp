@@ -383,18 +383,23 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             game->haloShader = copystring(json_value_as_string(val)->string);
         }
 
+
         el = el->next;
     }
 
-    // Lightmap size validation: must be power of 2, max 4096 (reasonable limit for modern GPUs)
-    if (game->lightmapSize > 4096)
+    // Lightmap size validation: must be power of 2, max 4096, min 128
+    int targetSize = game->lightmapSize;
+    if (targetSize < 128) targetSize = 128;
+    if (targetSize > 4096) targetSize = 4096;
+    
+    int p = 128;
+    while (p * 2 <= targetSize) p *= 2;
+    if (targetSize - p > (p * 2) - targetSize) p *= 2;
+
+    if (game->lightmapSize != p)
     {
-        _printf("WARNING: lightmapSize (%d) exceeds limit (4096). Clamping.\n", game->lightmapSize);
-        game->lightmapSize = 4096;
-    }
-    if (game->lightmapSize < 1)
-    {
-        game->lightmapSize = 128;
+        _printf("WARNING: lightmapSize (%d) snapped to valid power of 2 (%d).\n", game->lightmapSize, p);
+        game->lightmapSize = p;
     }
 
     JSON_Free(root);

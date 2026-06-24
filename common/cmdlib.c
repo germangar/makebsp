@@ -928,6 +928,27 @@ int Q_stricmp(const char *s1, const char *s2)
     return Q_strncasecmp(s1, s2, 99999);
 }
 
+char *Q_stristr(const char *s, const char *find)
+{
+    size_t len1, len2;
+    size_t i;
+
+    if (!s || !find) return NULL;
+
+    len1 = strlen(s);
+    len2 = strlen(find);
+
+    if (len2 == 0) return (char *)s;
+    if (len1 < len2) return NULL;
+
+    for (i = 0; i <= len1 - len2; ++i) {
+        if (Q_strncasecmp(s + i, find, len2) == 0) {
+            return (char *)(s + i);
+        }
+    }
+    return NULL;
+}
+
 char *strupr(char *start)
 {
     char *in;

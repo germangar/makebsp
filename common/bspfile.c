@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "cmdlib.h"
 #include "mathlib.h"
 #include "bspfile.h"
+#include "../shared/globals.h"
 #include "scriplib.h"
 #include "../shared/globals.h"
 
@@ -744,6 +745,44 @@ void ParseEntities(void)
     }
 }
 
+static qboolean IsValidColorString(const char *value)
+{
+    int numTokens = 0;
+    const char *p = value;
+    qboolean inToken = qfalse;
+    char firstChar = 0;
+
+    while (*p)
+    {
+        if (*p > ' ')
+        {
+            if (!firstChar)
+                firstChar = *p;
+            if (!inToken)
+            {
+                numTokens++;
+                inToken = qtrue;
+            }
+        }
+        else
+        {
+            inToken = qfalse;
+        }
+        p++;
+    }
+
+    if (numTokens == 1 && firstChar == '#')
+    {
+        return qtrue;
+    }
+    if (numTokens == 3)
+    {
+        return qtrue;
+    }
+
+    return qfalse;
+}
+
 /*
 ================
 UnparseEntities
@@ -793,6 +832,16 @@ void UnparseEntities(void)
             StripTrailing(key);
             strcpy(value, ep->value);
             StripTrailing(value);
+
+            if (Q_stristr(key, "color") != NULL)
+            {
+                if (IsValidColorString(value))
+                {
+                    vec3_t color;
+                    ParseColor(value, color);
+                    sprintf(value, "%f %f %f", color[0], color[1], color[2]);
+                }
+            }
 
             sprintf(line, "\"%s\" \"%s\"\n", key, value);
             strcat(end, line);

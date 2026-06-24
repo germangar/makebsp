@@ -907,6 +907,7 @@ void AllocateLightmaps(entity_t *e)
     shaderInfo_t *si;
 
     qprintf("--- AllocateLightmaps ---\n");
+    _printf("Lightmap image size: %d\n", game->lightmapSize);
 
     if (!lightmapHeights)
     {
