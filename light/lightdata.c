@@ -682,8 +682,8 @@ static void ExportExternalLightmaps(void)
 
     // Write the new lightmaps (this safely overwrites existing ones)
     for (int i = 0; i < numImages; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.tga", outDir, i);
-        if (!stbi_write_tga(filename, size, size, 3, &lightBytes[i * totalBytesPerImage])) {
+        snprintf(filename, sizeof(filename), "%slm_%04d.png", outDir, i);
+        if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
             _printf("WARNING: Failed to write %s\n", filename);
         }
     }
@@ -691,7 +691,7 @@ static void ExportExternalLightmaps(void)
     // Delete older stale lightmaps from previous runs with more images
     int missCount = 0;
     for (int i = numImages; i < 9999; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.tga", outDir, i);
+        snprintf(filename, sizeof(filename), "%slm_%04d.png", outDir, i);
         if (remove(filename) == 0) {
             missCount = 0;
         } else {
@@ -701,7 +701,7 @@ static void ExportExternalLightmaps(void)
     }
 
     // CRITICAL: Zero out the BSP lightmap lump so DarkPlaces/Xonotic falls back
-    // to loading the external lm_%04d.tga files from disk.
+    // to loading the external lm_%04d.png files from disk.
     if (!g_debugExportLightmaps || game->externalLightmaps) {
         numLightBytes = 0;
     }
