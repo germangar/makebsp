@@ -228,6 +228,75 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin,
 
 /*
 =================
+PlanarSamplePointInside
+
+Checks if a 2D lightmap sample point (st in pixel space) is strictly inside
+the triangles of a MST_PLANAR surface.
+=================
+*/
+qboolean PlanarSamplePointInside(dsurface_t *ds, float st[2])
+{
+    int j;
+    float st0[2], st1[2], st2[2];
+    float area, w0, w1, w2;
+
+    if (ds->numIndexes <= 0)
+        return qtrue; // Fallback if no indices are present
+
+    for (j = 0; j < ds->numIndexes; j += 3)
+    {
+        int i0 = drawIndexes[ds->firstIndex + j];
+        int i1 = drawIndexes[ds->firstIndex + j + 1];
+        int i2 = drawIndexes[ds->firstIndex + j + 2];
+
+        drawVert_t *v0 = &drawVerts[ds->firstVert + i0];
+        drawVert_t *v1 = &drawVerts[ds->firstVert + i1];
+        drawVert_t *v2 = &drawVerts[ds->firstVert + i2];
+
+        st0[0] = v0->lightmap[0][0] * LIGHTMAP_WIDTH;
+        st0[1] = v0->lightmap[0][1] * LIGHTMAP_HEIGHT;
+        st1[0] = v1->lightmap[0][0] * LIGHTMAP_WIDTH;
+        st1[1] = v1->lightmap[0][1] * LIGHTMAP_HEIGHT;
+        st2[0] = v2->lightmap[0][0] * LIGHTMAP_WIDTH;
+        st2[1] = v2->lightmap[0][1] * LIGHTMAP_HEIGHT;
+
+        // Fast Bounding Box rejection
+        float mins[2], maxs[2];
+        mins[0] = st0[0] < st1[0] ? (st0[0] < st2[0] ? st0[0] : st2[0]) : (st1[0] < st2[0] ? st1[0] : st2[0]);
+        mins[1] = st0[1] < st1[1] ? (st0[1] < st2[1] ? st0[1] : st2[1]) : (st1[1] < st2[1] ? st1[1] : st2[1]);
+        maxs[0] = st0[0] > st1[0] ? (st0[0] > st2[0] ? st0[0] : st2[0]) : (st1[0] > st2[0] ? st1[0] : st2[0]);
+        maxs[1] = st0[1] > st1[1] ? (st0[1] > st2[1] ? st0[1] : st2[1]) : (st1[1] > st2[1] ? st1[1] : st2[1]);
+
+        if (st[0] < mins[0] - 0.5f || st[0] > maxs[0] + 0.5f ||
+            st[1] < mins[1] - 0.5f || st[1] > maxs[1] + 0.5f)
+        {
+            continue;
+        }
+
+        area = (st1[0] - st0[0]) * (st2[1] - st0[1]) -
+               (st2[0] - st0[0]) * (st1[1] - st0[1]);
+        if (fabs(area) < 0.0001f)
+            continue;
+
+        w0 = ((st1[1] - st2[1]) * (st[0] - st2[0]) +
+              (st2[0] - st1[0]) * (st[1] - st2[1])) /
+             area;
+        w1 = ((st2[1] - st0[1]) * (st[0] - st2[0]) +
+              (st0[0] - st2[0]) * (st[1] - st2[1])) /
+             area;
+        w2 = 1.0f - w0 - w1;
+
+        if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f)
+        {
+            return qtrue; // strictly inside
+        }
+    }
+
+    return qfalse;
+}
+
+/*
+=================
 PatchSamplePoint
 
 Finds the position and normal for a lightmap sample point (st in pixel space)
@@ -1292,6 +1361,13 @@ void PrecacheTexelGeometryThread(int i)
                     origin[k] = lightmapOrigin[k] + u * lightmapVecs[0][k] + v * lightmapVecs[1][k];
                     normal[k] = lightmapVecs[2][k];
                 }
+                
+                // Validate if this texel actually falls inside the planar polygon
+                float st[2];
+                st[0] = (float)ds->lightmapOffset[0][0] + u;
+                st[1] = (float)ds->lightmapOffset[0][1] + v;
+                if (!PlanarSamplePointInside(ds, st))
+                    hit = qfalse;
             }
 
             if (hit)
