@@ -241,7 +241,11 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
 
         // Interior reference point (center of patch)
         vec3_t interior;
-        VectorCopy(tess->verts[(H/2)*W + W/2].xyz, interior);
+        VectorClear(interior);
+        for (i = 0; i < W * H; i++) {
+            VectorAdd(interior, tess->verts[i].xyz, interior);
+        }
+        VectorScale(interior, 1.0f / (W * H), interior);
 
         for (i = 0; i < 4; i++)
         {
@@ -682,13 +686,14 @@ void ProcessDecals(void)
             else
                 globalDistance = 64.0f;
 
-            if (width == 0.0f) width = 128.0f;
-            if (height == 0.0f) height = 128.0f;
             if (!shaderStr[0]) {
                 _printf("WARNING: misc_decal at %f %f %f missing shader parameter. Defaulting to nodraw.\n", globalOrigin[0], globalOrigin[1], globalOrigin[2]);
                 shaderStr = "textures/common/nodraw";
             }
             si = ShaderInfoForShader(shaderStr);
+
+            if (width == 0.0f) width = (si->width > 0) ? (float)si->width : 64.0f;
+            if (height == 0.0f) height = (si->height > 0) ? (float)si->height : 64.0f;
 
             if (targetEnt)
             {
@@ -717,36 +722,41 @@ void ProcessDecals(void)
                 VectorCopy(forward, globalProjNormal);
             }
 
-            quad.width = 2;
-            quad.height = 2;
-            quad.verts = malloc(4 * sizeof(drawVert_t));
-            memset(quad.verts, 0, 4 * sizeof(drawVert_t));
+            {
+                quad.width = 2;
+                quad.height = 2;
+                quad.verts = malloc(4 * sizeof(drawVert_t));
+                memset(quad.verts, 0, 4 * sizeof(drawVert_t));
 
-            // Top-Left (x=0, y=0)
-            VectorMA(globalOrigin, height*0.5f, up, quad.verts[0].xyz);
-            VectorMA(quad.verts[0].xyz, -width*0.5f, right, quad.verts[0].xyz);
-            quad.verts[0].st[0] = 0.0f; quad.verts[0].st[1] = 0.0f;
+                // Top-Left (x=0, y=0)
+                VectorMA(globalOrigin, height*0.5f, up, quad.verts[0].xyz);
+                VectorMA(quad.verts[0].xyz, -width*0.5f, right, quad.verts[0].xyz);
+                quad.verts[0].st[0] = 0.0f; quad.verts[0].st[1] = 0.0f;
 
-            // Top-Right (x=1, y=0)
-            VectorMA(globalOrigin, height*0.5f, up, quad.verts[1].xyz);
-            VectorMA(quad.verts[1].xyz, width*0.5f, right, quad.verts[1].xyz);
-            quad.verts[1].st[0] = 1.0f; quad.verts[1].st[1] = 0.0f;
+                // Top-Right (x=1, y=0)
+                VectorMA(globalOrigin, height*0.5f, up, quad.verts[1].xyz);
+                VectorMA(quad.verts[1].xyz, width*0.5f, right, quad.verts[1].xyz);
+                quad.verts[1].st[0] = 1.0f; quad.verts[1].st[1] = 0.0f;
 
-            // Bottom-Left (x=0, y=1)
-            VectorMA(globalOrigin, -height*0.5f, up, quad.verts[2].xyz);
-            VectorMA(quad.verts[2].xyz, -width*0.5f, right, quad.verts[2].xyz);
-            quad.verts[2].st[0] = 0.0f; quad.verts[2].st[1] = 1.0f;
+                // Bottom-Left (x=0, y=1)
+                VectorMA(globalOrigin, -height*0.5f, up, quad.verts[2].xyz);
+                VectorMA(quad.verts[2].xyz, -width*0.5f, right, quad.verts[2].xyz);
+                quad.verts[2].st[0] = 0.0f; quad.verts[2].st[1] = 1.0f;
 
-            // Bottom-Right (x=1, y=1)
-            VectorMA(globalOrigin, -height*0.5f, up, quad.verts[3].xyz);
-            VectorMA(quad.verts[3].xyz, width*0.5f, right, quad.verts[3].xyz);
-            quad.verts[3].st[0] = 1.0f; quad.verts[3].st[1] = 1.0f;
+                // Bottom-Right (x=1, y=1)
+                VectorMA(globalOrigin, -height*0.5f, up, quad.verts[3].xyz);
+                VectorMA(quad.verts[3].xyz, width*0.5f, right, quad.verts[3].xyz);
+                quad.verts[3].st[0] = 1.0f; quad.verts[3].st[1] = 1.0f;
+            }
 
-            MakeDecalProjectorForPatch(si, globalProjNormal, globalDistance, &quad,
-                                       &quad.verts[0], &quad.verts[1], &quad.verts[2], i);
+            if (MakeDecalProjectorForPatch(si, globalProjNormal, globalDistance, &quad,
+                                       &quad.verts[0], &quad.verts[1], &quad.verts[2], i))
+            {
+                // Projector successfully created
+            }
             free(quad.verts);
             
-            continue; // Skip the _decal geometry deletion since we have none
+            goto clear_geometry; // Clear any brush geometry created accidentally
         }
 
         if (targetEnt)
@@ -1339,9 +1349,19 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
     
     newDs->enforceSampleSize = templateDs->enforceSampleSize;
     
-    newDs->samplesize = dp->si->lightmapSampleSize > 0 
-                        ? dp->si->lightmapSampleSize 
-                        : templateDs->samplesize;
+    // Resolve samplesize override
+    {
+        entity_t *e = &entities[dp->decalEntityNum];
+        const char *ssizeStr = ValueForKey(e, "lightmapsamplesize");
+        if (!ssizeStr[0]) ssizeStr = ValueForKey(e, "samplesize");
+        
+        if (ssizeStr[0])
+            newDs->samplesize = atof(ssizeStr);
+        else
+            newDs->samplesize = dp->si->lightmapSampleSize > 0 
+                                ? dp->si->lightmapSampleSize 
+                                : (float)samplesize;
+    }
     
     newDs->numVerts = m->numVerts;
     newDs->verts = malloc(m->numVerts * sizeof(drawVert_t));
@@ -1350,6 +1370,22 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
     newDs->numIndexes = m->numIndexes;
     newDs->indexes = malloc(m->numIndexes * sizeof(int));
     memcpy(newDs->indexes, m->indexes, m->numIndexes * sizeof(int));
+    
+    if (dp->decalEntityNum != -1)
+    {
+        // Reserved for future checks if necessary
+    }
+    
+    // Resolve vertexcolor override
+    {
+        entity_t *e = &entities[dp->decalEntityNum];
+        const char *vcolStr = ValueForKey(e, "vertexcolor");
+        if (vcolStr[0])
+        {
+            newDs->hasVertexColor = 1;
+            ParseColor(vcolStr, newDs->vertexColor);
+        }
+    }
 }
 
 /*
