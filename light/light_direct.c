@@ -622,9 +622,7 @@ Returns an amount of light to add at the point (grid)
 qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
                     qboolean applyColorFilter)
 {
-    int i;
     trace_t trace;
-    skyBrush_t *b;
     vec3_t end;
 
     if (!numSkyBrushes || !hasSun)
@@ -637,40 +635,25 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     TraceLine(origin, end, &trace, qtrue, tw);
 
     // If the ray hit a solid occluder in Embree, it cannot be the sky!
-    if (trace.passSolid) return qfalse;
-
-    // see if trace.hit is inside a sky brush
-    for (i = 0; i < numSkyBrushes; i++)
+    if (trace.passSolid)
     {
-        b = &skyBrushes[i];
-
-        // this assumes that sky brushes are axial...
-        if (trace.hit[0] < b->bounds[0][0] || trace.hit[0] > b->bounds[1][0] ||
-            trace.hit[1] < b->bounds[0][1] || trace.hit[1] > b->bounds[1][1] ||
-            trace.hit[2] < b->bounds[0][2] || trace.hit[2] > b->bounds[1][2])
-        {
-            continue;
-        }
-
-        // trace again to get intermediate filters
-        TraceLine(origin, trace.hit, &trace, qtrue, tw);
-
-        // we hit the sky, so add sunlight
-        if (!applyColorFilter)
-        {
-            trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
-        }
-
-        VectorCopy(sunDirection, out->dir);
-        out->irradiance[0] = trace.filter[0] * sunLight[0];
-        out->irradiance[1] = trace.filter[1] * sunLight[1];
-        out->irradiance[2] = trace.filter[2] * sunLight[2];
-        out->isGlow = qfalse;
-
-        return qtrue;
+        return qfalse;
     }
 
-    return qfalse;
+    // We reached the void/sky without being blocked by a solid wall.
+    // So we add sunlight.
+    if (!applyColorFilter)
+    {
+        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+    }
+
+    VectorCopy(sunDirection, out->dir);
+    out->irradiance[0] = trace.filter[0] * sunLight[0];
+    out->irradiance[1] = trace.filter[1] * sunLight[1];
+    out->irradiance[2] = trace.filter[2] * sunLight[2];
+    out->isGlow = qfalse;
+
+    return qtrue;
 }
 
 /*

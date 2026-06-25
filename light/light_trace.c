@@ -71,6 +71,12 @@ void InitTracingGeometry(void)
         {
             continue;
         }
+        
+        // do not add sky patches/triangles to Embree, sky never occludes!
+        if (si->surfaceFlags & SURF_SKY)
+        {
+            continue;
+        }
 
         if (dsurf->numIndexes > 0 &&
             (dsurf->surfaceType == MST_TRIANGLE_SOUP ||
@@ -367,6 +373,12 @@ static void AddBrushesToEmbree(RTCScene scene)
         if (dshaders[b->shaderNum].contentFlags &
             (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
              CONTENTS_TRANSLUCENT))
+        {
+            continue;
+        }
+
+        // Sky brushes never occlude light!
+        if (dshaders[b->shaderNum].surfaceFlags & SURF_SKY)
         {
             continue;
         }
