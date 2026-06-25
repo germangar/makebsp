@@ -553,6 +553,9 @@ typedef struct {
     float texMat[2][4];  // S and T rows of the 3D->2D texture matrix
     shaderInfo_t *si;
     int decalEntityNum;
+    char decalgroup[32];
+    int hasVertexColor;
+    vec4_t vertexColor;
 } decalProjector_t;
 
 extern int numDecalProjectors;

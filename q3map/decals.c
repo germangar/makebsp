@@ -567,6 +567,92 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
 
 extern qboolean onlyents;
 
+static void PopulateDecalProjectorProperties(decalProjector_t *dp, const char *decalgroup, const char *vertexcolorStr)
+{
+    if (decalgroup && decalgroup[0])
+    {
+        strncpy(dp->decalgroup, decalgroup, sizeof(dp->decalgroup) - 1);
+        dp->decalgroup[sizeof(dp->decalgroup) - 1] = '\0';
+    }
+    else
+    {
+        dp->decalgroup[0] = '\0';
+    }
+
+    if (vertexcolorStr && vertexcolorStr[0])
+    {
+        dp->hasVertexColor = 1;
+        ParseColor(vertexcolorStr, dp->vertexColor);
+    }
+    else
+    {
+        dp->hasVertexColor = 0;
+    }
+}
+
+/*
+================
+CreateMiscDecalProjector
+Standalone function to generate a misc_decal projector programmatically.
+================
+*/
+qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, vec3_t up, 
+                                  float distance, float width, float height, 
+                                  const char *shaderStr, const char *decalgroup, 
+                                  const char *vertexcolorStr, int entityNum)
+{
+    shaderInfo_t *si;
+    mesh_t quad;
+    qboolean result;
+
+    if (!shaderStr || !shaderStr[0])
+    {
+        _printf("WARNING: CreateMiscDecalProjector missing shader parameter. Defaulting to nodraw.\n");
+        shaderStr = "textures/common/nodraw";
+    }
+
+    si = ShaderInfoForShader(shaderStr);
+
+    if (width <= 0.0f) width = (si->width > 0) ? ((float)si->width * 0.25f) : 64.0f;
+    if (height <= 0.0f) height = (si->height > 0) ? ((float)si->height * 0.25f) : 64.0f;
+
+    quad.width = 2;
+    quad.height = 2;
+    quad.verts = malloc(4 * sizeof(drawVert_t));
+    memset(quad.verts, 0, 4 * sizeof(drawVert_t));
+
+    // Top-Left (x=0, y=0)
+    VectorMA(origin, height*0.5f, up, quad.verts[0].xyz);
+    VectorMA(quad.verts[0].xyz, -width*0.5f, right, quad.verts[0].xyz);
+    quad.verts[0].st[0] = 0.0f; quad.verts[0].st[1] = 0.0f;
+
+    // Top-Right (x=1, y=0)
+    VectorMA(origin, height*0.5f, up, quad.verts[1].xyz);
+    VectorMA(quad.verts[1].xyz, width*0.5f, right, quad.verts[1].xyz);
+    quad.verts[1].st[0] = 1.0f; quad.verts[1].st[1] = 0.0f;
+
+    // Bottom-Left (x=0, y=1)
+    VectorMA(origin, -height*0.5f, up, quad.verts[2].xyz);
+    VectorMA(quad.verts[2].xyz, -width*0.5f, right, quad.verts[2].xyz);
+    quad.verts[2].st[0] = 0.0f; quad.verts[2].st[1] = 1.0f;
+
+    // Bottom-Right (x=1, y=1)
+    VectorMA(origin, -height*0.5f, up, quad.verts[3].xyz);
+    VectorMA(quad.verts[3].xyz, width*0.5f, right, quad.verts[3].xyz);
+    quad.verts[3].st[0] = 1.0f; quad.verts[3].st[1] = 1.0f;
+
+    result = MakeDecalProjectorForPatch(si, forward, distance, &quad,
+                                        &quad.verts[0], &quad.verts[1], &quad.verts[2], entityNum);
+    free(quad.verts);
+
+    if (result && numDecalProjectors > 0)
+    {
+        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr);
+    }
+
+    return result;
+}
+
 /*
 ================
 ProcessDecals
@@ -675,25 +761,16 @@ void ProcessDecals(void)
             float height = FloatForKey(e, "height");
             const char *distStr = ValueForKey(e, "distance");
             const char *shaderStr = ValueForKey(e, "shader");
-            shaderInfo_t *si;
+            const char *decalgroup = ValueForKey(e, "decalgroup");
+            const char *vcolStr = ValueForKey(e, "vertexcolor");
             vec3_t forward, right, up;
             vec3_t angles;
-            mesh_t quad;
 
             if (!distStr[0]) distStr = ValueForKey(e, "depth");
             if (distStr[0])
                 globalDistance = atof(distStr);
             else
                 globalDistance = 64.0f;
-
-            if (!shaderStr[0]) {
-                _printf("WARNING: misc_decal at %f %f %f missing shader parameter. Defaulting to nodraw.\n", globalOrigin[0], globalOrigin[1], globalOrigin[2]);
-                shaderStr = "textures/common/nodraw";
-            }
-            si = ShaderInfoForShader(shaderStr);
-
-            if (width == 0.0f) width = (si->width > 0) ? (float)si->width : 64.0f;
-            if (height == 0.0f) height = (si->height > 0) ? (float)si->height : 64.0f;
 
             if (targetEnt)
             {
@@ -706,14 +783,8 @@ void ProcessDecals(void)
                 else
                     VectorSet(globalProjNormal, 0, 0, -1);
                 
-                // We need orthogonal vectors. We can't use vectoangles reliably if it doesn't exist.
-                // Let's use MakeNormalVectors if available, otherwise just use cross products.
-                // mathlib.c has MakeNormalVectors(forward, right, up)
                 VectorCopy(globalProjNormal, forward);
                 MakeNormalVectors(forward, right, up);
-                // MakeNormalVectors gives right and up. But q3 math might have them differently.
-                // Let's use MiscDecalAngleVectors on the entity's angles, and only override forward?
-                // Actually, if a target is specified, we should probably ignore angles completely and derive up/right from forward.
             }
             else
             {
@@ -722,39 +793,8 @@ void ProcessDecals(void)
                 VectorCopy(forward, globalProjNormal);
             }
 
-            {
-                quad.width = 2;
-                quad.height = 2;
-                quad.verts = malloc(4 * sizeof(drawVert_t));
-                memset(quad.verts, 0, 4 * sizeof(drawVert_t));
-
-                // Top-Left (x=0, y=0)
-                VectorMA(globalOrigin, height*0.5f, up, quad.verts[0].xyz);
-                VectorMA(quad.verts[0].xyz, -width*0.5f, right, quad.verts[0].xyz);
-                quad.verts[0].st[0] = 0.0f; quad.verts[0].st[1] = 0.0f;
-
-                // Top-Right (x=1, y=0)
-                VectorMA(globalOrigin, height*0.5f, up, quad.verts[1].xyz);
-                VectorMA(quad.verts[1].xyz, width*0.5f, right, quad.verts[1].xyz);
-                quad.verts[1].st[0] = 1.0f; quad.verts[1].st[1] = 0.0f;
-
-                // Bottom-Left (x=0, y=1)
-                VectorMA(globalOrigin, -height*0.5f, up, quad.verts[2].xyz);
-                VectorMA(quad.verts[2].xyz, -width*0.5f, right, quad.verts[2].xyz);
-                quad.verts[2].st[0] = 0.0f; quad.verts[2].st[1] = 1.0f;
-
-                // Bottom-Right (x=1, y=1)
-                VectorMA(globalOrigin, -height*0.5f, up, quad.verts[3].xyz);
-                VectorMA(quad.verts[3].xyz, width*0.5f, right, quad.verts[3].xyz);
-                quad.verts[3].st[0] = 1.0f; quad.verts[3].st[1] = 1.0f;
-            }
-
-            if (MakeDecalProjectorForPatch(si, globalProjNormal, globalDistance, &quad,
-                                       &quad.verts[0], &quad.verts[1], &quad.verts[2], i))
-            {
-                // Projector successfully created
-            }
-            free(quad.verts);
+            CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
+                                     width, height, shaderStr, decalgroup, vcolStr, i);
             
             goto clear_geometry; // Clear any brush geometry created accidentally
         }
@@ -830,8 +870,13 @@ void ProcessDecals(void)
             drawVert_t *cB = &pm->mesh.verts[W - 1];
             drawVert_t *cC = &pm->mesh.verts[(H - 1) * W];
 
-            MakeDecalProjectorForPatch(pm->shaderInfo, globalProjNormal, globalDistance,
-                                        tess, cA, cB, cC, i);
+            if (MakeDecalProjectorForPatch(pm->shaderInfo, globalProjNormal, globalDistance,
+                                        tess, cA, cB, cC, i))
+            {
+                const char *decalgroup = ValueForKey(e, "decalgroup");
+                const char *vcolStr = ValueForKey(e, "vertexcolor");
+                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr);
+            }
             FreeMesh(tess);
         }
         
@@ -880,7 +925,12 @@ void ProcessDecals(void)
                 continue;
             }
             
-            MakeDecalProjectorForWinding(validSide, globalProjNormal, globalDistance, validSide->winding, i);
+            if (MakeDecalProjectorForWinding(validSide, globalProjNormal, globalDistance, validSide->winding, i))
+            {
+                const char *decalgroup = ValueForKey(e, "decalgroup");
+                const char *vcolStr = ValueForKey(e, "vertexcolor");
+                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr);
+            }
         }
 
 clear_geometry:
@@ -1377,14 +1427,12 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
     }
     
     // Resolve vertexcolor override
+    if (dp->hasVertexColor)
     {
-        entity_t *e = &entities[dp->decalEntityNum];
-        const char *vcolStr = ValueForKey(e, "vertexcolor");
-        if (vcolStr[0])
-        {
-            newDs->hasVertexColor = 1;
-            ParseColor(vcolStr, newDs->vertexColor);
-        }
+        newDs->hasVertexColor = 1;
+        newDs->vertexColor[0] = dp->vertexColor[0];
+        newDs->vertexColor[1] = dp->vertexColor[1];
+        newDs->vertexColor[2] = dp->vertexColor[2];
     }
 }
 
@@ -1436,7 +1484,7 @@ void MakeEntityDecals(entity_t *e)
                 if (ds->isDecal) continue;
                 if (ds->shaderInfo->autosprite) continue;
                 if (ds->shaderInfo->surfaceFlags & SURF_NOMARKS) continue;
-                if (decalGroup[0] && Q_stricmp(decalGroup, ds->decalgroup) != 0) continue;
+                if (localDp.decalgroup[0] && Q_stricmp(localDp.decalgroup, ds->decalgroup) != 0) continue;
                 
                 ClearBounds(dsMins, dsMaxs);
                 for (v = 0; v < ds->numVerts; v++)
