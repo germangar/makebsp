@@ -773,6 +773,8 @@ void ProcessDecals(void)
             vec3_t forward, right, up;
             vec3_t angles;
 
+            float rotate = FloatForKey(e, "rotate");
+
             if (scale == 0.0f) scale = 1.0f;
 
             if (!distStr[0]) distStr = ValueForKey(e, "depth");
@@ -800,6 +802,27 @@ void ProcessDecals(void)
                 GetVectorForKey(e, "angles", angles);
                 MiscDecalAngleVectors(angles, forward, right, up);
                 VectorCopy(forward, globalProjNormal);
+            }
+
+            if (rotate != 0.0f)
+            {
+                // Invert angle for clockwise rotation
+                float r = -rotate * (Q_PI / 180.0f);
+                float c = cos(r);
+                float s = sin(r);
+                vec3_t tempRight, tempUp;
+
+                VectorCopy(right, tempRight);
+                VectorCopy(up, tempUp);
+
+                // CCW rotation of the projection quad
+                right[0] = tempRight[0] * c + tempUp[0] * s;
+                right[1] = tempRight[1] * c + tempUp[1] * s;
+                right[2] = tempRight[2] * c + tempUp[2] * s;
+
+                up[0] = -tempRight[0] * s + tempUp[0] * c;
+                up[1] = -tempRight[1] * s + tempUp[1] * c;
+                up[2] = -tempRight[2] * s + tempUp[2] * c;
             }
 
             CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
