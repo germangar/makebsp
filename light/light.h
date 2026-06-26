@@ -389,7 +389,7 @@ typedef struct
     shaderInfo_t *si_override;
 
     // vertex color override
-    qboolean hasVertexColor;
+    qboolean overrideVertexColor;
     vec3_t vertexColor;
     float superSampleRadius;
     int upscale;

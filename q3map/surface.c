@@ -166,7 +166,7 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     const char *vcolStr = ValueForKey(e, "vertexcolor");
     if (vcolStr[0])
     {
-        ds->hasVertexColor = 1;
+        ds->overrideVertexColor = 1;
         ParseColor(vcolStr, ds->vertexColor);
     }
 
@@ -1416,7 +1416,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
-    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
@@ -1474,7 +1474,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
         memcpy(outv, &ds->verts[j], sizeof(*outv));
-        if (!ds->hasVertexColor)
+        if (!ds->overrideVertexColor)
         {
             outv->color[0][0] = 255;
             outv->color[0][1] = 255;
@@ -1509,7 +1509,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
-    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
@@ -1608,7 +1608,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
-    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
@@ -1671,7 +1671,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     VectorCopy(ds->lightColor, drawExtraSurfaces[numDrawSurfaces].lightColor);
     drawExtraSurfaces[numDrawSurfaces].backsplashFraction = ds->backsplashFraction;
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
-    drawExtraSurfaces[numDrawSurfaces].hasVertexColor = ds->hasVertexColor;
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
@@ -2068,7 +2068,7 @@ void GenerateHalos(entity_t *e)
                 ds->verts[v].color[0][2] = b > 255.0f ? 255 : (byte)b;
                 ds->verts[v].color[0][3] = 255;
             }
-            ds->hasVertexColor = qtrue;
+            ds->overrideVertexColor = qtrue;
             VectorCopy(color, ds->vertexColor);
 
             ds->verts[0].st[0] = 0; ds->verts[0].st[1] = 0;

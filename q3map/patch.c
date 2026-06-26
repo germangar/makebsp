@@ -385,7 +385,7 @@ void PatchMapDrawSurfs(entity_t *e)
         const char *vcolStr = ValueForKey(originalEnt, "vertexcolor");
         if (vcolStr[0])
         {
-            ds->hasVertexColor = 1;
+            ds->overrideVertexColor = 1;
             ParseColor(vcolStr, ds->vertexColor);
         }
 

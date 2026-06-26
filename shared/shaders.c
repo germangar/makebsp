@@ -315,7 +315,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
     si->colorOverride = qfalse;
-    si->hasVertexColor = qfalse;
+    si->overrideVertexColor = qfalse;
     VectorClear(si->vertexColor);
 
     return si;
@@ -612,7 +612,7 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                         VectorCopy(c, si->vertexColor);
                     }
                 }
-                si->hasVertexColor = qtrue;
+                si->overrideVertexColor = qtrue;
                 continue;
             }
 

@@ -581,12 +581,12 @@ static void PopulateDecalProjectorProperties(decalProjector_t *dp, const char *d
 
     if (vertexcolorStr && vertexcolorStr[0])
     {
-        dp->hasVertexColor = 1;
+        dp->overrideVertexColor = 1;
         ParseColor(vertexcolorStr, dp->vertexColor);
     }
     else
     {
-        dp->hasVertexColor = 0;
+        dp->overrideVertexColor = 0;
     }
 }
 
@@ -597,7 +597,7 @@ Standalone function to generate a misc_decal projector programmatically.
 ================
 */
 qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, vec3_t up, 
-                                  float distance, float width, float height, 
+                                  float distance, float width, float height, float scale,
                                   const char *shaderStr, const char *decalgroup, 
                                   const char *vertexcolorStr, int entityNum)
 {
@@ -615,6 +615,12 @@ qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, v
 
     if (width <= 0.0f) width = (si->width > 0) ? ((float)si->width * 0.25f) : 64.0f;
     if (height <= 0.0f) height = (si->height > 0) ? ((float)si->height * 0.25f) : 64.0f;
+
+    if (scale > 0.0f && scale != 1.0f)
+    {
+        width *= scale;
+        height *= scale;
+    }
 
     quad.width = 2;
     quad.height = 2;
@@ -763,8 +769,11 @@ void ProcessDecals(void)
             const char *shaderStr = ValueForKey(e, "shader");
             const char *decalgroup = ValueForKey(e, "decalgroup");
             const char *vcolStr = ValueForKey(e, "vertexcolor");
+            float scale = FloatForKey(e, "scale");
             vec3_t forward, right, up;
             vec3_t angles;
+
+            if (scale == 0.0f) scale = 1.0f;
 
             if (!distStr[0]) distStr = ValueForKey(e, "depth");
             if (distStr[0])
@@ -794,7 +803,7 @@ void ProcessDecals(void)
             }
 
             CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
-                                     width, height, shaderStr, decalgroup, vcolStr, i);
+                                     width, height, scale, shaderStr, decalgroup, vcolStr, i);
             
             goto clear_geometry; // Clear any brush geometry created accidentally
         }
@@ -1427,13 +1436,44 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
     }
     
     // Resolve vertexcolor override
-    if (dp->hasVertexColor)
+    if (dp->overrideVertexColor)
     {
-        newDs->hasVertexColor = 1;
+        newDs->overrideVertexColor = 1;
         newDs->vertexColor[0] = dp->vertexColor[0];
         newDs->vertexColor[1] = dp->vertexColor[1];
         newDs->vertexColor[2] = dp->vertexColor[2];
     }
+}
+
+/*
+================
+IsInDecalGroup
+Checks if a projector's group exists in a space or comma separated list of surface groups.
+================
+*/
+static qboolean IsInDecalGroup(const char *projectorGroup, const char *surfaceGroups)
+{
+    const char *p;
+    int len;
+
+    if (!projectorGroup || !projectorGroup[0]) return qtrue;
+    if (!surfaceGroups || !surfaceGroups[0]) return qfalse;
+
+    len = strlen(projectorGroup);
+    p = surfaceGroups;
+
+    while ((p = Q_stristr(p, projectorGroup)) != NULL)
+    {
+        qboolean startBoundary = (p == surfaceGroups || *(p - 1) == ' ' || *(p - 1) == ',');
+        qboolean endBoundary = (*(p + len) == '\0' || *(p + len) == ' ' || *(p + len) == ',');
+        
+        if (startBoundary && endBoundary)
+            return qtrue;
+            
+        p += len;
+    }
+    
+    return qfalse;
 }
 
 /*
@@ -1484,7 +1524,7 @@ void MakeEntityDecals(entity_t *e)
                 if (ds->isDecal) continue;
                 if (ds->shaderInfo->autosprite) continue;
                 if (ds->shaderInfo->surfaceFlags & SURF_NOMARKS) continue;
-                if (localDp.decalgroup[0] && Q_stricmp(localDp.decalgroup, ds->decalgroup) != 0) continue;
+                if (localDp.decalgroup[0] && !IsInDecalGroup(localDp.decalgroup, ds->decalgroup)) continue;
                 
                 ClearBounds(dsMins, dsMaxs);
                 for (v = 0; v < ds->numVerts; v++)

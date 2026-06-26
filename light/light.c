@@ -1125,23 +1125,23 @@ void BuildLocalSurfaces(void)
         // Resolve vertex color override: shader is the base, entity key wins.
         {
             shaderInfo_t *si = localSurfaces[i].si_override ? localSurfaces[i].si_override : ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-            if (si && si->hasVertexColor)
+            if (si && si->overrideVertexColor)
             {
                 if (verbose) _printf("  Surface %d resolved shader %s (VertexColor: YES)\n", i, si->shader);
-                localSurfaces[i].hasVertexColor = qtrue;
+                localSurfaces[i].overrideVertexColor = qtrue;
                 VectorCopy(si->vertexColor, localSurfaces[i].vertexColor);
             }
             else
             {
                 if (verbose && ds->surfaceType == MST_TRIANGLE_SOUP) _printf("  Surface %d resolved shader %s (VertexColor: NO)\n", i, si->shader);
-                localSurfaces[i].hasVertexColor = qfalse;
+                localSurfaces[i].overrideVertexColor = qfalse;
                 VectorClear(localSurfaces[i].vertexColor);
             }
 
             // Entity-level 'vertexcolor' key (func_group / misc_model) overrides the shader.
-            if (extra && i < numExtra && extra[i].hasVertexColor)
+            if (extra && i < numExtra && extra[i].overrideVertexColor)
             {
-                localSurfaces[i].hasVertexColor = qtrue;
+                localSurfaces[i].overrideVertexColor = qtrue;
                 VectorCopy(extra[i].vertexColor, localSurfaces[i].vertexColor);
             }
         }

@@ -938,13 +938,13 @@ void LoadTriangleModels(entity_t *eparent)
             }
 
             // vertexcolor override for all surfaces of this model instance
-            int hasVertexColor = 0;
+            int overrideVertexColor = 0;
             vec3_t vertexColor;
             VectorClear(vertexColor);
             const char *vcolStr = ValueForKey(entity, "vertexcolor");
             if (vcolStr[0])
             {
-                hasVertexColor = 1;
+                overrideVertexColor = 1;
                 ParseColor(vcolStr, vertexColor);
             }
 
@@ -1171,10 +1171,10 @@ void LoadTriangleModels(entity_t *eparent)
                     if (ds->smoothingRadius < 0.0f && si && si->minSmoothRadius >= 0.0f && si->minSmoothRadius > globalSmooth)
                         ds->smoothingRadius = si->minSmoothRadius;
                         
-                    ds->hasVertexColor = hasVertexColor;
+                    ds->overrideVertexColor = overrideVertexColor;
                     ds->upscale = upscale;
                     ds->castShadows = castShadows;
-                    if (hasVertexColor)
+                    if (overrideVertexColor)
                         VectorCopy(vertexColor, ds->vertexColor);
                     ds->planeNum = -1;
                     ds->shaderInfo = si;

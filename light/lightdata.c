@@ -787,7 +787,7 @@ void DownConvertLightingData(void)
     // Apply q3map_vertexcolor overrides
     for (int s = 0; s < numDrawSurfaces; s++)
     {
-        if (localSurfaces[s].hasVertexColor)
+        if (localSurfaces[s].overrideVertexColor)
         {
             dsurface_t *ds = &drawSurfaces[s];
             byte c[3];

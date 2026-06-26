@@ -20,7 +20,7 @@ typedef struct {
     vec3_t lightColor;
     float backsplashFraction;
     float lightSubdivide;
-    int hasVertexColor;
+    int overrideVertexColor;
     vec3_t vertexColor;
     float superSampleRadius;
     qboolean isHalo;

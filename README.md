@@ -317,17 +317,19 @@ Projects a 2D surface (defined by patches or brushes) onto map geometry. This is
 
 A point entity that projects a 2D quad decal onto map geometry without requiring in-map brush or patch geometry as the projection source. The quad is centered at the entity's origin and faces opposite to the projection direction.
 
-- **Projection Direction**: Determined by the `angles` key, or by targeting another entity (such as a `target_position`) via the `target` key. If neither is specified, it projects in the direction defined by the `angles` key (defaulting to straight down if angles are zero/not set).
+- **Projection Direction**: Determined by the `angles` key, or by targeting another entity (such as a `target_position`) via the `target` key. If neither is specified, it projects in the direction defined by the `angles` key (defaulting to the +X axis, or "East", if angles are zero/not set). To project straight down, set the Pitch to `90`.
 - **Targeting / Groups**: Multiple `misc_decal` entities can safely target the same target entity (e.g. `target_position`) without conflict.
 
 **Keys**
 - **shader**: The shader to project (e.g., `textures/decals/logo`). Required; defaults to `textures/common/nodraw` with a warning if omitted.
-- **width**: The width of the projecting quad source in game units. Default: `128`.
-- **height**: The height of the projecting quad source in game units. Default: `128`.
+- **width**: The width of the projecting quad source in game units. If omitted, defaults to the shader's image width multiplied by `0.25` (or `64` if the image size cannot be resolved).
+- **height**: The height of the projecting quad source in game units. If omitted, defaults to the shader's image height multiplied by `0.25` (or `64` if the image size cannot be resolved).
+- **scale**: A multiplier applied to the final width and height of the decal. Useful for scaling decals proportionally without calculating the absolute dimensions. Default: `1.0`.
 - **distance** / **depth**: The projection depth/distance in game units. Default: `64`.
 - **angles**: Rotation angles (Pitch Yaw Roll) that define the projection direction if no `target` is set.
 - **target**: Target entity name used to determine the projection direction. If specified, the projection vector points from the `misc_decal` towards the target entity.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key.
+- **vertexcolor**: If specified, overwrites the vertex lighting of the generated decal geometry with a flat custom color (format: `R G B` or hex `#RRGGBB`).
 
 ---
 
