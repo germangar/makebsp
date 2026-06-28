@@ -1114,6 +1114,53 @@ ProcessFuncLight
 Creates lights from brushes
 ================
 */
+void SpawnLightEntity(vec3_t origin, vec3_t normal, qboolean isPoint, entity_t *sourceEnt, const char *shaderName)
+{
+    // Spawn a new light entity
+    if (num_entities == MAX_MAP_ENTITIES)
+        Error("num_entities == MAX_MAP_ENTITIES");
+
+    entity_t *le = &entities[num_entities++];
+    memset(le, 0, sizeof(*le));
+
+    SetKeyValue(le, "classname", "light");
+    char buf[128];
+    sprintf(buf, "%f %f %f", origin[0], origin[1], origin[2]);
+    SetKeyValue(le, "origin", buf);
+
+    // Spotlights get a direction, point lights don't
+    if (!isPoint)
+    {
+        sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
+        SetKeyValue(le, "dir", buf);
+    }
+
+    // Inherit all other keys (color, light, radius, etc) from the source entity
+    for (epair_t *ep = sourceEnt->epairs; ep; ep = ep->next)
+    {
+        if (KeyMatches(ep->key, "classname") || KeyMatches(ep->key, "origin") || KeyMatches(ep->key, "model"))
+            continue;
+
+        // Exclude smoothing radius keys (they belong to the surface, not the point light)
+        if (KeyMatches(ep->key, "smooth"))
+            continue;
+
+        SetKeyValue(le, ep->key, ep->value);
+    }
+
+    // If no color is set, try to derive it from the surface image
+    const char *color = ValueForKey(sourceEnt, "color");
+
+    if (!color[0] && shaderName && shaderName[0]) {
+        SetKeyValue(le, "lightimage", shaderName);
+    }
+}
+
+/*
+================
+ProcessFuncLight
+================
+*/
 void ProcessFuncLight(entity_t *ent)
 {
     bspbrush_t *b;
@@ -1165,44 +1212,7 @@ void ProcessFuncLight(entity_t *ent)
             vec3_t lightOrigin;
             VectorMA(center, nudge, normal, lightOrigin);
 
-            // Spawn a new light entity
-            if (num_entities == MAX_MAP_ENTITIES)
-                Error("num_entities == MAX_MAP_ENTITIES");
-
-            entity_t *le = &entities[num_entities++];
-            memset(le, 0, sizeof(*le));
-
-            SetKeyValue(le, "classname", "light");
-            char buf[128];
-            sprintf(buf, "%f %f %f", lightOrigin[0], lightOrigin[1], lightOrigin[2]);
-            SetKeyValue(le, "origin", buf);
-
-            // Spotlights get a direction, point lights don't
-            if (!isPoint)
-            {
-                sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
-                SetKeyValue(le, "dir", buf);
-            }
-
-            // Inherit all other keys (color, light, radius, etc) from the func_light
-            for (epair_t *ep = ent->epairs; ep; ep = ep->next)
-            {
-                if (KeyMatches(ep->key, "classname") || KeyMatches(ep->key, "origin") || KeyMatches(ep->key, "model"))
-                    continue;
-
-                // Exclude smoothing radius keys (they belong to the surface, not the point light)
-                if (KeyMatches(ep->key, "smooth"))
-                    continue;
-
-                SetKeyValue(le, ep->key, ep->value);
-            }
-
-            // If no color is set, try to derive it from the surface image
-            const char *color = ValueForKey(ent, "color");
-
-            if (!color[0]) {
-                SetKeyValue(le, "lightimage", side->shaderInfo->shader);
-            }
+            SpawnLightEntity(lightOrigin, normal, isPoint, ent, side->shaderInfo->shader);
         }
     }
 }

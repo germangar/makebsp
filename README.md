@@ -327,6 +327,7 @@ A point entity that projects a 2D quad decal onto map geometry without requiring
 - **scale**: A multiplier applied to the final width and height of the decal. Useful for scaling decals proportionally without calculating the absolute dimensions. Default: `1.0`.
 - **distance** / **depth**: The projection depth/distance in game units. Default: `64`.
 - **angles**: Rotation angles (Pitch Yaw Roll) that define the projection direction if no `target` is set.
+- **rotate**: An angle (in degrees) to rotate the projected decal clockwise around the projection axis. Particularly useful for spinning the decal when pointing at a target entity.
 - **target**: Target entity name used to determine the projection direction. If specified, the projection vector points from the `misc_decal` towards the target entity.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key.
 - **vertexcolor**: If specified, overwrites the vertex lighting of the generated decal geometry with a flat custom color (format: `R G B` or hex `#RRGGBB`).

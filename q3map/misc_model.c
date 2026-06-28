@@ -1033,6 +1033,91 @@ void LoadTriangleModels(entity_t *eparent)
                 shaderInfo_t *si = ShaderInfoForShader(shaderName);
 
                 // ==========================================
+                // Misc_Model Light Tag Processing
+                // ==========================================
+                if (!Q_stricmp(shaderName, "tag_light"))
+                {
+                    const char *type = ValueForKey(entity, "lighttype");
+                    qboolean isPoint = qfalse;
+                    if (!Q_stricmp(type, "point") || !Q_stricmp(type, "pointlight"))
+                    {
+                        isPoint = qtrue;
+                    }
+
+                    for (int j = 0; j < (int)mesh->mNumFaces; j++)
+                    {
+                        if (mesh->mFaces[j].mNumIndices != 3)
+                            continue;
+
+                        vec3_t v[3];
+                        for (int k = 0; k < 3; k++)
+                        {
+                            int idx = mesh->mFaces[j].mIndices[k];
+                            float mx = mesh->mVertices[idx].x * scale_vec[0];
+                            float my = mesh->mVertices[idx].y * scale_vec[1];
+                            float mz = mesh->mVertices[idx].z * scale_vec[2];
+
+                            // Axis Swap (Assimp Y-Up -> Quake Z-Up)
+                            vec3_t tx;
+                            tx[0] = mx; tx[1] = -mz; tx[2] = my;
+
+                            // Rotation & Translation
+                            v[k][0] = origin[0] + (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
+                            v[k][1] = origin[1] + (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
+                            v[k][2] = origin[2] + (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
+                        }
+
+                        // Calculate edge lengths
+                        vec3_t e0, e1, e2;
+                        VectorSubtract(v[1], v[0], e0);
+                        VectorSubtract(v[2], v[1], e1);
+                        VectorSubtract(v[0], v[2], e2);
+
+                        float len0 = VectorLength(e0);
+                        float len1 = VectorLength(e1);
+                        float len2 = VectorLength(e2);
+
+                        vec3_t vBase1, vBase2, vTip;
+                        if (len0 <= len1 && len0 <= len2)
+                        {
+                            VectorCopy(v[0], vBase1);
+                            VectorCopy(v[1], vBase2);
+                            VectorCopy(v[2], vTip);
+                        }
+                        else if (len1 <= len0 && len1 <= len2)
+                        {
+                            VectorCopy(v[1], vBase1);
+                            VectorCopy(v[2], vBase2);
+                            VectorCopy(v[0], vTip);
+                        }
+                        else
+                        {
+                            VectorCopy(v[2], vBase1);
+                            VectorCopy(v[0], vBase2);
+                            VectorCopy(v[1], vTip);
+                        }
+
+                        vec3_t baseDir, vecToTip;
+                        VectorSubtract(vBase2, vBase1, baseDir);
+                        VectorNormalize(baseDir, baseDir);
+                        VectorSubtract(vTip, vBase1, vecToTip);
+                        
+                        float projLen = DotProduct(vecToTip, baseDir);
+                        vec3_t lightOrigin;
+                        VectorMA(vBase1, projLen, baseDir, lightOrigin);
+
+                        vec3_t lightDir;
+                        VectorSubtract(vTip, lightOrigin, lightDir);
+                        VectorNormalize(lightDir, lightDir);
+
+                        SpawnLightEntity(lightOrigin, lightDir, isPoint, entity, "tag_light");
+                    }
+
+                    // Discard mesh from visual and collision generation
+                    continue;
+                }
+
+                // ==========================================
                 // UV Automatic Spreading
                 // ==========================================
                 uv_t *xatlasUVs = NULL;

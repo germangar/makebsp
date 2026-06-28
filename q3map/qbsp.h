@@ -328,6 +328,7 @@ bspbrush_t *FinishBrush(void);
 mapDrawSurface_t *AllocDrawSurf(void);
 mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w);
 void MoveBrushesToWorld(entity_t *mapent);
+void SpawnLightEntity(vec3_t origin, vec3_t normal, qboolean isPoint, entity_t *sourceEnt, const char *shaderName);
 
 //=============================================================================
 
