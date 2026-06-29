@@ -1,0 +1,714 @@
+==============================================================================
+  BSP PLANAR SURFACE EDGE CHAMFERING
+  Implementation Design Document
+==============================================================================
+
+OVERVIEW
+--------
+This feature inserts "support edges" (also called holding edges or a face-level
+chamfer with custom normals) into planar brush surfaces at sharp angle
+intersections. The goal is to smooth the harsh lighting transitions at wall/floor
+and wall/wall corners by blending vertex normals across a thin geometric strip,
+without any change to the physical collision or BSP tree.
+
+This is the same hard-surface modelling technique used to make sharp edges catch
+highlights naturally. A tiny strip of geometry at the corner transitions the
+vertex normal from the flat face normal to an averaged "corner" normal, making
+the lighting engine compute a smooth gradient at the edge instead of an abrupt
+discontinuity.
+
+The chamfering pass is completely independent from any future planar surface
+merging into trisoups. Surfaces that are later eligible for merging will carry
+their chamfered vertex data through that stage without modification.
+
+
+==============================================================================
+1. DATA STRUCTURES (AUDIT)
+==============================================================================
+
+drawVert_t (common/qfiles.h)
+----------------------------
+    vec3_t  xyz;            // 3D world-space position
+    float   st[2];          // texture UV coordinates
+    float   lightmap[4][2]; // lightmap UV channels (also reused as scratch)
+    vec3_t  normal;         // vertex normal (THIS IS WHAT WE MODIFY)
+    byte    color[4][4];    // vertex color channels
+
+This is the vertex unit. At our injection point, `normal` holds a copy of the
+flat face plane normal for every vertex. `lightmap[0][0]` is temporarily
+overwritten by FixTJunctions to store the edge-line index (it is scratch data
+at this point).
+
+mapDrawSurface_t (q3map/qbsp.h)
+--------------------------------
+Key fields at injection point:
+    shaderInfo_t    *shaderInfo;    // the surface shader
+    side_t          *side;          // back-reference to the brush side
+    int              numVerts;      // vertex count of the N-gon loop
+    drawVert_t      *verts;         // malloc'd vertex array [0..numVerts-1]
+    int              numIndexes;    // == 0, no index buffer yet
+    int             *indexes;       // NULL
+    qboolean         patch;         // qfalse for brush surfaces
+    qboolean         miscModel;     // qfalse for brush surfaces
+    float            samplesize;    // luxels per world unit
+    int              planeNum;      // plane index in mapplanes[]
+
+CRITICAL: `verts` is an ORDERED LOOP. Vertices 0..N-1 define the polygon edges
+as: edge(0→1), edge(1→2), ..., edge(N-1→0). There is no index buffer. This
+polygon is a flat convex N-gon lying exactly on the brush plane. Triangulation
+into a proper index buffer happens later inside AllocateLightmaps().
+
+mapplanes[] (q3map/qbsp.h, global)
+------------------------------------
+    vec3_t  normal;
+    float   dist;
+    int     type;
+Access with mapplanes[ds->side->planenum].normal to get the face plane normal.
+
+
+==============================================================================
+2. PIPELINE POSITION (AUDIT)
+==============================================================================
+
+In both ProcessWorldModel() and ProcessSubModel() (q3map/bsp.c), the pipeline
+runs in this order:
+
+    ClipSidesIntoTree()         <- brush sides clipped into BSP, surfaces born
+    FogDrawSurfs()              <- may split surfaces
+    SubdivideDrawSurfs()        <- shader tessellation
+    MergeSides()                <- coplanar same-shader surfaces joined
+    FixTJunctions()             <- T-junction vertices inserted
+                                *** OUR INJECTION POINT ***
+    ChamferSurfaceEdges()       <- [NEW] this pass
+                                *** (future) MergePlanarToTrisoups() ***
+    MakeEntityDecals()
+    GenerateHalos()
+    AllocateLightmaps()         <- triangulation happens here (xatlas path)
+    FilterDrawsurfsIntoTree()
+
+The function must be called from BOTH ProcessWorldModel and ProcessSubModel,
+in exactly this position, after FixTJunctions and before AllocateLightmaps.
+
+WHY AFTER FixTJunctions:
+FixTJunctions inserts extra collinear vertices along edges wherever adjacent
+surfaces required T-junction splits. This means the "corner edge" between a
+wall and a floor is no longer two vertices (A, B). It is a chain of collinear
+vertices (A, T1, T2, T3, ..., B). We need this fully expanded chain BEFORE
+we compute the inset, because every vertex in the chain must get its own inset
+counterpart.
+
+WHY BEFORE AllocateLightmaps:
+AllocateLightmaps routes planar surfaces flagged as miscModel through xatlas,
+which triangulates them and builds the index buffer. After triangulation,
+inserting a new edge would slice through diagonal triangle edges at arbitrary
+positions, creating tiny degenerate triangles. Before triangulation, we only
+have a convex polygon loop, and polygon inset is clean O(N) geometry.
+
+
+==============================================================================
+3. WHAT FixTJunctions PRODUCES (AUDIT)
+==============================================================================
+
+AddSurfaceEdges() (tjunction.c) iterates every vertex in ds->verts[] and calls
+AddEdge(v[i], v[(i+1)%N]) to register the edge in the global edge-line table.
+It stores the edge-line index in verts[i].lightmap[0][0] as scratch.
+
+FixSurfaceJunctions() (tjunction.c) then rebuilds ds->verts by:
+  1. Walking each original vertex V[i] -> V[i+1] edge.
+  2. Checking the edge-line's linked list for any T-junction points that were
+     registered by OTHER surfaces lying on the same edge.
+  3. Inserting those extra xyz positions into the vertex array between V[i]
+     and V[i+1], interpolating UV coords, copying the face normal.
+
+Result: ds->verts is reallocated with the new, expanded vertex count. The
+polygon is still flat and convex, but edges shared with adjacent perpendicular
+surfaces now have extra collinear points inserted.
+
+IMPORTANT SIDE EFFECT: After FixSurfaceJunctions, verts[i].lightmap[0][0] is
+NO LONGER a valid edge index. It is stale scratch data. We must not rely on it.
+
+
+==============================================================================
+4. THE SURFACE ADJACENCY GRAPH (CORE FOUNDATION)
+==============================================================================
+
+To avoid an O(N^2) loop when searching for adjacent surfaces (both for this
+chamfer pass, and for any future Trisoup merging pass), we first build a
+persistent Surface Adjacency Graph.
+
+4.1 The Adjacency Data Structure
+--------------------------------
+We define a global adjacency list to track which surfaces touch which other
+surfaces, and exactly what edge chain they share.
+
+    typedef struct surfaceNeighbor_s {
+        int neighborSurfaceNum;
+        int sharedChainIndicesA[MAX_SURFACE_VERTS];
+        int sharedChainIndicesB[MAX_SURFACE_VERTS];
+        int sharedChainLen;
+        struct surfaceNeighbor_s *next;
+    } surfaceNeighbor_t;
+
+    // Global array mapping every surface to a linked list of its neighbors
+    surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS];
+
+Declared in qbsp.h so that both tjunction.c (graph builder) and any future
+consumers (chamfering, trisoup merging) can access it.
+
+4.2 Building the Graph (Standalone Pass After FixTJunctions)
+------------------------------------------------------------
+IMPORTANT: We CANNOT piggyback on FixTJunctions' internal `edgeLines[]` and
+`edgePoint_t` tables. There are two reasons:
+  a) When `-notjunc` is passed, FixTJunctions is skipped entirely. But the
+     adjacency graph is still needed for chamfering.
+  b) After FixSurfaceJunctions rebuilds the vertex arrays (realloc), the old
+     vertex pointers stored in `edgePoint_t.xyz` become stale/freed.
+
+Instead, `BuildSurfaceAdjacencyGraph(entity_t *e)` is its own standalone pass
+that runs AFTER FixTJunctions completes. It operates on the FINAL vertex data:
+
+  For each pair of surfaces (dsA, dsB) within the entity:
+    For each vertex V in dsA->verts[]:
+      For each vertex W in dsB->verts[]:
+        If VectorCompare(V.xyz, W.xyz):
+          Record this shared vertex.
+    If dsA and dsB share >= 2 collinear vertices, they share an edge.
+    Register a surfaceNeighbor_t link between them.
+
+This is still O(N^2) in the number of surfaces, but we can optimize with
+spatial bucketing (hash grid on vertex positions) to reduce it to O(N * k).
+The per-vertex comparison can use a hash table for O(1) lookup.
+
+4.3 Corner Detection
+--------------------
+Once the graph is built, identifying sharp corners is trivial. For any surface
+`dsA`, we walk its `surfaceNeighbors` list. For each neighbor `dsB`, we check the
+angle between their face normals.
+
+The threshold is configurable (e.g., 30 degrees):
+    CHAMFER_ANGLE_THRESHOLD = 30.0 degrees
+    dot_threshold = cos(30 * M_PI / 180.0) ~= 0.866
+
+Two touching surfaces qualify for chamfering at their shared edge if:
+    DotProduct(normalA, normalB) < dot_threshold
+
+4.4 Skip Conditions
+-------------------
+Do NOT chamfer:
+  - Patch surfaces or miscModel surfaces
+  - Surfaces with SURF_NODRAW or SURF_SKY flags
+  - Surfaces whose shader has surfaceFlags & SURF_NOLIGHTMAP (no lighting data)
+
+NOTE: The feature applies even when dsA and dsB have DIFFERENT shaders. They
+will not be merged into the same trisoup later, but the normal modification
+is per-vertex and per-surface -- each surface is modified independently. The
+key is that both sides produce the EXACT SAME blended normal value for that
+shared edge position, guaranteeing matching lighting regardless of shader.
+
+
+==============================================================================
+5. THE BLENDED NORMAL
+==============================================================================
+
+For a pair of surfaces (dsA, dsB) meeting at a sharp corner:
+
+    vec3_t normalA = mapplanes[dsA->side->planenum].normal;
+    vec3_t normalB = mapplanes[dsB->side->planenum].normal;
+
+    vec3_t blendedNormal;
+    VectorAdd(normalA, normalB, blendedNormal);
+    VectorNormalize(blendedNormal, blendedNormal);
+
+This is the half-angle bisector normal. For a 90-degree corner (wall meets
+floor), this produces a 45-degree normal pointing equally away from both faces.
+
+The lighting engine interpolates between vertex normals across triangle surfaces.
+When the outer corner vertices have the blended normal and the inner support edge
+vertices have the flat face normal, the lighting smoothly transitions from the
+"rounded corner" highlight to the flat face lighting within the thin strip.
+
+
+==============================================================================
+6. THE POLYGON INSET (CORE ALGORITHM)
+==============================================================================
+
+This operation is performed INDEPENDENTLY on each surface (dsA and dsB).
+We describe it for one surface dsA.
+
+Let the shared corner edge chain on dsA be the vertex sequence:
+    C[0], C[1], ..., C[M-1]   (these are indices into ds->verts[])
+
+where C[0] and C[M-1] are the true "corner" endpoints (they are NOT collinear
+with both neighbors, i.e., they are actual polygon corners, not T-junctions).
+
+6.1 Computing the Inset Direction
+----------------------------------
+For each pair of consecutive chain vertices C[k] and C[k+1]:
+    edgeDir = normalize(verts[C[k+1]].xyz - verts[C[k]].xyz)
+    insetDir = cross(faceNormal, edgeDir)
+    // insetDir is perpendicular to the edge, lying in the face plane,
+    // pointing into the face interior.
+    VectorNormalize(insetDir, insetDir)
+
+This is the direction in which we push each vertex inward.
+
+6.2 Inset Vertex Position
+--------------------------
+The naive inset for each chain vertex C[k] is:
+    inset_xyz = verts[C[k]].xyz + insetDir * CHAMFER_WIDTH
+
+where CHAMFER_WIDTH is typically 1.0 to 4.0 world units.
+
+CORNER CASE - where two adjacent edges meet at an endpoint of the chain
+(at C[0] or C[M-1], these vertices are corners of the polygon, not
+T-junction points):
+    The two adjacent edges have different inset directions.
+    The inset vertex must lie at the INTERSECTION of the two inset lines,
+    not just at a simple offset. Compute:
+        line1: passes through (verts[C[0]].xyz + insetDir_of_edge0 * W)
+               in direction edgeDir_of_edge0
+        line2: passes through (verts[C[0]].xyz + insetDir_of_prev_edge * W)
+               in direction edgeDir_of_prev_edge
+        Intersect these two lines in the face plane to find the true corner
+        inset position.
+    This avoids gaps and overlaps at polygon corners.
+    If the two inset lines are nearly parallel (very acute angle < 10 deg),
+    clamp the intersection distance to avoid runaway offsets.
+
+6.3 UV Coordinates for Inset Vertices
+---------------------------------------
+The texture UVs for inset vertices should be computed from the inset xyz
+position using the same formula used in DrawSurfaceForSide() (see Section 9).
+This is mathematically exact and costs nothing.
+
+However, since the strip is only ~2 world units wide, simply copying the UV
+from the original outer vertex produces sub-pixel error and is an acceptable
+shortcut for the initial implementation.
+
+6.4 The New Vertex Data
+------------------------
+For each inset vertex, construct a new drawVert_t:
+    xyz    = computed inset position
+    normal = faceNormal (flat)
+    st     = computed from xyz (see Section 9), or copied from outer vertex
+    color  = copied from the original outer vertex
+    lightmap = zeroed (AllocateLightmaps will compute it)
+
+
+==============================================================================
+==============================================================================
+7. REBUILDING INTO TWO SURFACES (CORE FIX)
+==============================================================================
+
+To prevent self-intersecting polygons and degenerate triangulation, a single face
+and its chamfer strip CANNOT be represented as a single N-gon loop. We must
+explicitly split the original face into two separate `mapDrawSurface_t` structures.
+
+7.1 The Inner Body Surface
+--------------------------
+The original `mapDrawSurface_t` (dsA) is modified to become the inner body.
+We simply replace its outer corner vertices with the new `inset_verts`.
+
+Let the original polygon have N vertices: V[0], V[1], ..., V[N-1]
+Let the corner edge chain occupy vertices C[0]..C[M-1] (consecutive in the loop)
+
+    new_body_verts = []
+    for i = 0 to N-1:
+        if V[i] is in the corner chain C[0]..C[M-1]:
+            // Replace with the corresponding inset vertex
+            int k = index_in_chain(i)
+            new_body_verts.append( inset_vert[k] )
+            new_body_verts.last().normal = faceNormal  // strictly flat
+        else:
+            new_body_verts.append( copy of V[i] )
+            new_body_verts.last().normal = faceNormal  // strictly flat
+
+    free(dsA->verts);
+    dsA->verts = new_body_verts;
+    dsA->numVerts = N;
+
+This produces a perfectly valid, simple, convex N-gon that retains the original
+flat normals. It represents the original face, just shrunk slightly at the corner.
+
+7.2 The Chamfer Strip Surface
+-----------------------------
+We create a BRAND NEW `mapDrawSurface_t` specifically for the chamfer strip.
+
+    strip_ds = AllocDrawSurf();
+    // Copy shader, plane, fog, decals, etc. from dsA to strip_ds
+    strip_ds->shaderInfo = dsA->shaderInfo;
+    strip_ds->side = dsA->side;
+    strip_ds->planeNum = dsA->planeNum;
+    strip_ds->samplesize = dsA->samplesize;
+    // ... copy all other relevant properties
+
+    // The strip is a polygon that loops around the M outer vertices and M inner vertices
+    strip_ds->numVerts = M * 2;
+    strip_ds->verts = malloc( M * 2 * sizeof(drawVert_t) );
+
+    // Build the strip polygon loop
+    // Forward along the outer edge
+    for k = 0 to M-1:
+        strip_ds->verts[k] = copy of V[C[k]]
+        strip_ds->verts[k].normal = blendedNormal  // SMOOTHED CORNER NORMAL
+
+    // Backward along the inner edge
+    for k = 0 to M-1:
+        strip_ds->verts[M + k] = inset_vert[M - 1 - k]
+        strip_ds->verts[M + k].normal = faceNormal // FLAT FACE NORMAL
+
+This creates a perfectly valid convex polygon (a quad, or a strip of quads if
+M > 2) that connects the outer corner to the inner body.
+
+7.3 Why this is perfect
+-----------------------
+- Both the Inner Body and the Chamfer Strip are mathematically perfect convex
+  N-gons. The engine's standard `SurfaceAsTristrip()` will triangulate them
+  flawlessly without any special logic.
+- They are emitted as separate `MST_PLANAR` surfaces.
+- If you later implement `MergePlanarToTrisoups()`, it will look at the Inner
+  Body and the Chamfer Strip, see they share the same plane and shader, and
+  automatically vacuum them both up into a single, highly optimized
+  `MST_TRIANGLE_SOUP` draw call anyway!
+
+
+==============================================================================
+8. NORMAL ASSIGNMENT SUMMARY
+==============================================================================
+
+Vertex type                         Normal to assign
+----------------------------------------------------------
+Inner Body Surface vertices         faceNormal (flat)
+Chamfer Strip - Outer vertices      blendedNormal (smooth corner)
+Chamfer Strip - Inner vertices      faceNormal (flat)
+
+The result:
+- The flat face body retains perfect flat normal -> uniform lighting.
+- The tiny strip at the corner has:
+  - Outer edge: blended normal -> picks up the corner highlight.
+  - Inner edge: flat normal -> transitions back to flat face lighting.
+- Width of the transition = CHAMFER_WIDTH world units (1-4 units).
+
+
+==============================================================================
+9. UV / LIGHTMAP CONSIDERATIONS
+==============================================================================
+
+The inset vertices are added at world positions that are CHAMFER_WIDTH units
+inside the original face boundary. Their UV coordinates should be interpolated
+accordingly using the same texture mapping formula as DrawSurfaceForSide():
+
+For old brushes (BPRIMIT_OLDBRUSHES):
+    st[0] = vecs[0][3] + DotProduct(vecs[0], xyz)
+    st[1] = vecs[1][3] + DotProduct(vecs[1], xyz)
+    st[0] /= si->width
+    st[1] /= si->height
+
+For new brush primitives (BPRIMIT_NEWBRUSHES):
+    x = DotProduct(xyz, texX)  // texX/texY from ComputeAxisBase(faceNormal)
+    y = DotProduct(xyz, texY)
+    st[0] = texMat[0][0]*x + texMat[0][1]*y + texMat[0][2]
+    st[1] = texMat[1][0]*x + texMat[1][1]*y + texMat[1][2]
+
+This produces perfectly correct UVs for the inset vertices on BOTH surfaces.
+The lightmap UV (lightmap[0][0..1]) is left zeroed. AllocateLightmaps will
+compute it perfectly for both surfaces since they are separate N-gons.
+
+
+==============================================================================
+10. CODE LOCATION AND FUNCTIONS
+==============================================================================
+
+All chamfering code lives at the END of q3map/tjunction.c, separated by a
+large block comment divider:
+
+    /***********************************************************************
+     *                                                                     *
+     *  EDGE CHAMFERING - Smooth corner lighting via support edge insertion *
+     *                                                                     *
+     ***********************************************************************/
+
+This keeps the code in a single file since it shares the same compilation unit
+as the T-junction logic and can reference static helpers like ColinearEdge()
+if needed. The adjacency graph builder also lives here.
+
+Functions (all at end of tjunction.c):
+---------------------------------------
+
+    // Configuration
+    #define CHAMFER_DEFAULT_WIDTH   2.0f    // world units
+    #define CHAMFER_ANGLE_THRESHOLD 0.866f  // cos(30 degrees)
+
+    // Build the adjacency graph by comparing final vertex positions
+    void BuildSurfaceAdjacencyGraph(entity_t *e);
+
+    // Compute the inset vertices for a chain on one surface
+    static void ComputeInsetChain(
+        mapDrawSurface_t *ds,
+        int *chainIndices,
+        int chainLen,
+        float chamferWidth,
+        drawVert_t *outInsetVerts  // output: M new inset vertices
+    );
+
+    // Rebuild the inner body and spawn the new strip surface
+    static void ApplyChamferToSurface(
+        mapDrawSurface_t *ds,
+        int *chainIndices,
+        int chainLen,
+        drawVert_t *insetVerts,
+        vec3_t blendedNormal
+    );
+
+    // Main entry point, called from bsp.c
+    void ChamferSurfaceEdges(entity_t *e);
+
+Declarations in q3map/qbsp.h:
+    extern surfaceNeighbor_t *surfaceNeighbors[];
+    void BuildSurfaceAdjacencyGraph(entity_t *e);
+    void ChamferSurfaceEdges(entity_t *e);
+    extern qboolean nochamfer;
+
+Call sites in q3map/bsp.c (in both ProcessWorldModel and ProcessSubModel):
+    if (!notjunc) {
+        FixTJunctions(e);
+    }
+
+    if (!nochamfer) {
+        ChamferSurfaceEdges(e);   // [NEW]
+    }
+
+    MakeEntityDecals(e);
+
+NOTE: ChamferSurfaceEdges works whether or not FixTJunctions ran. If notjunc
+is set, the adjacency graph builder still finds shared edges from the final
+vertex positions. The only difference is that without T-junction splitting,
+the shared edge chains may have fewer intermediate vertices (just the original
+2 corner endpoints instead of a chain with T-junction subdivisions).
+
+
+==============================================================================
+11. ChamferSurfaceEdges() PSEUDOCODE — SIMULTANEOUS SINGLE-PASS REBUILD
+==============================================================================
+
+CRITICAL DESIGN DECISION: We must NOT process chamfer edges one at a time.
+At any vertex where two chamfered edges meet (e.g., floor corner where two
+walls converge), sequential processing would move the corner vertex on the
+first pass, corrupting the geometry for the second pass and leaving a hole.
+
+Instead, for each surface we:
+  1. Collect ALL edges that need chamfering (scanning all neighbors).
+  2. Compute ALL inset vertex positions from the ORIGINAL, untouched data.
+  3. Rebuild the Inner Body polygon ONCE with all inset positions applied.
+  4. Spawn one Chamfer Strip per chamfered edge.
+
+At a vertex where two chamfered edges meet, the inset position is the
+LINE-LINE INTERSECTION of the two inset lines (mitre joint math), computed
+in step 2 before anything has moved.
+
+// Per-surface chamfer work descriptor
+typedef struct surfaceChamferEdge_s {
+    int   chainIndices[MAX_SURFACE_VERTS];  // indices into ds->verts[]
+    int   chainLen;
+    vec3_t blendedNormal;
+} surfaceChamferEdge_t;
+
+void ChamferSurfaceEdges(entity_t *e)
+{
+    float chamferWidth = chamfer_global_width;  // default CHAMFER_DEFAULT_WIDTH
+
+    // 1. Build the Surface Adjacency Graph from final vertex data
+    BuildSurfaceAdjacencyGraph(e);
+
+    // Cache count: numMapDrawSurfs grows as we spawn strips
+    int numBaseDrawSurfs = numMapDrawSurfs;
+
+    // 2. For each original surface
+    for (int i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        if (!IsChamferCandidate(dsA)) continue;
+
+        // -- Collect ALL edges on this surface that need chamfering --
+        surfaceChamferEdge_t edges[MAX_SURFACE_VERTS];  // at most N edges
+        int numEdges = 0;
+
+        for (surfaceNeighbor_t *nb = surfaceNeighbors[i]; nb; nb = nb->next)
+        {
+            int j = nb->neighborSurfaceNum;
+            mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+            if (!IsChamferCandidate(dsB)) continue;
+
+            vec3_t normalA, normalB;
+            VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
+            VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+            float dot = DotProduct(normalA, normalB);
+            if (dot > CHAMFER_ANGLE_THRESHOLD) continue;
+            if (dot < -CHAMFER_ANGLE_THRESHOLD) continue;
+
+            // Record this edge for the simultaneous rebuild
+            memcpy(edges[numEdges].chainIndices, nb->sharedChainIndicesA,
+                   nb->sharedChainLen * sizeof(int));
+            edges[numEdges].chainLen = nb->sharedChainLen;
+            VectorAdd(normalA, normalB, edges[numEdges].blendedNormal);
+            VectorNormalize(edges[numEdges].blendedNormal, edges[numEdges].blendedNormal);
+            numEdges++;
+        }
+
+        if (numEdges == 0) continue;
+
+        // -- Compute ALL inset positions from original vertex data --
+        // insetMap[v] holds the inset xyz for original vertex v, or {0} if
+        // that vertex is not on any chamfered edge.
+        // At a vertex shared by two edges, the inset is the LINE-LINE
+        // INTERSECTION of the two perpendicular inset lines (mitre joint).
+        drawVert_t insetMap[MAX_SURFACE_VERTS];
+        memset(insetMap, 0, sizeof(insetMap));
+
+        ComputeAllInsets(dsA, edges, numEdges, chamferWidth, insetMap);
+        // (See below for ComputeAllInsets internals)
+
+        // -- Rebuild the Inner Body ONCE with all insets applied --
+        // -- Spawn one Chamfer Strip per edge --
+        ApplyAllChamfers(dsA, edges, numEdges, insetMap);
+    }
+}
+
+// ComputeAllInsets:
+//   For each chamfered edge, compute the perpendicular inset direction.
+//   For each vertex in the chain:
+//     - If the vertex is shared by EXACTLY ONE chamfered edge -> simple offset.
+//     - If shared by TWO chamfered edges (polygon corner where two strips meet)
+//       -> intersect the two inset lines to find the mitre joint position.
+//   Result is stored in insetMap[originalVertexIndex].
+
+// ApplyAllChamfers:
+//   1. Build new Inner Body verts: for each original vert, if it appears in
+//      any chamfer chain, replace with insetMap[v]; else copy unchanged.
+//      Replace dsA->verts in-place. numVerts is unchanged.
+//   2. For each edge e in edges[]:
+//      spawn a strip: outer chain uses original xyz + blendedNormal,
+//      inner chain uses insetMap positions + faceNormal.
+
+IsChamferCandidate(ds):
+    return ds->numVerts > 0
+        && ds->side != NULL
+        && !ds->patch
+        && !ds->miscModel
+        && !ds->flareSurface
+        && !(ds->shaderInfo->surfaceFlags & (SURF_NODRAW|SURF_SKY|SURF_NOLIGHTMAP));
+
+
+==============================================================================
+12. PERFORMANCE AND TRISOUP MERGING
+==============================================================================
+
+By building the Surface Adjacency Graph, we completely eliminate the massive
+O(N^2) bottleneck that normally plagues BSP post-processing.
+Chamfering scales linearly with the number of surfaces: O(N * k) where k is the
+number of neighbors (typically < 10).
+
+Furthermore, this graph is the ultimate foundation for the future
+`MergePlanarToTrisoups` pass.
+To merge planar surfaces into a Trisoup, you simply perform a Flood Fill on
+this exact same adjacency graph:
+  1. Start at Surface 1.
+  2. Check its neighbors. If a neighbor has the same shader and plane, add it
+     to the Trisoup.
+  3. Check that neighbor's neighbors, and so on.
+
+This turns Trisoup generation from an expensive search problem into a trivial
+1-millisecond traversal!
+
+
+==============================================================================
+13. KNOWN EDGE CASES AND RISKS
+==============================================================================
+
+a) T-VERTICES AT CHAIN ENDPOINTS
+   C[0] and C[M-1] are the endpoints of the chain. They may or may not be true
+   polygon corners (some T-junction vertices can appear at the exact endpoint
+   position if a third surface terminated there). Always check if C[0] and C[M-1]
+   are true polygon corners by examining their prev/next neighbors -- if the
+   prev-neighbor is NOT collinear with the chain, it's a real corner.
+
+b) VERY NARROW FACES
+   If the face is narrower than 2 * CHAMFER_WIDTH, the inset from two opposing
+   edges would overlap, inverting the polygon. Guard: skip chamfering on edge
+   chains where the face width (measured perpendicular to the chain) is less
+   than 3 * CHAMFER_WIDTH.
+
+c) MULTIPLE CHAMFERED EDGES ON ONE SURFACE — THE 3D CORNER PROBLEM
+   A face sitting at a 3D room corner may have 2 or even 3 chamfered edges.
+   Sequential processing (chamfer edge A, then chamfer edge B) is INVALID:
+   after edge A moves the shared corner vertex, edge B's inset is computed
+   from a corrupted position, leaving a triangular hole at the corner.
+
+   The ONLY correct approach is the simultaneous single-pass rebuild (Section 11):
+     1. Collect ALL chamfered edges for this surface without modifying anything.
+     2. Compute ALL inset positions from the original, untouched vertex data.
+     3. At any polygon vertex where TWO chamfered edges meet, compute the
+        MITRE JOINT: intersect the two inset lines in the face plane to find
+        the shared inner corner. This is the classic picture-frame mitre math:
+            line1 = inset of edge A, passing through (V + insetDirA * W)
+            line2 = inset of edge B, passing through (V + insetDirB * W)
+            mitrePoint = line-line intersection in the face plane
+     4. Rebuild the Inner Body once. Spawn one strip per edge.
+
+   Result: the two Chamfer Strips share edge V->mitrePoint as a perfect mitre
+   joint diagonal. Zero gaps, zero overlaps. The diagonal is a hard edge
+   between the two strips (correct: it IS the geometric corner crease).
+
+d) SURFACES THAT LATER GET MERGED INTO TRISOUPS
+   Each chamfered edge spawns one new strip surface (2*M verts). For a surface
+   with K chamfered edges, the total new surfaces = K strips. The future
+   trisoup merge counts vertices per strip independently, so this remains safe.
+
+e) SURFACE NORMAL INCONSISTENCY CHECK
+   After rebuilding the Inner Body polygon, verify that the winding order is
+   still consistent (all cross products of adjacent edge pairs point in the same
+   direction as the face normal). If the inset produced a degenerate or
+   inverted polygon, discard the chamfer for that surface entirely and restore
+   the original vertices.
+
+
+==============================================================================
+14. CONCAVE VS. CONVEX CORNERS
+==============================================================================
+
+This feature is designed for CONVEX corners (like the base of a wall meeting
+the floor) AND CONCAVE corners (like the inside corner of a room). BOTH
+benefit from the chamfer:
+
+  - Convex corner (exterior, e.g. top edge of a step): the blended normal
+    points outward. The chamfer creates a visible highlight catch.
+
+  - Concave corner (interior, e.g. wall meets floor inside a room): the blended
+    normal points inward into the room. The chamfer creates a soft shadow
+    transition instead of a hard crease.
+
+There is no need to discriminate -- apply the same algorithm to both.
+
+The only case to skip is when the two surfaces are nearly parallel (dot > 0.97)
+or opposing/backfacing (dot < -0.97), which the angle threshold already handles.
+
+
+==============================================================================
+15. COMPILER FLAG
+==============================================================================
+
+The feature should be guarded by a global flag for debugging/opt-out:
+    extern qboolean nochamfer;   // default qfalse
+
+Declared in qbsp.h, set in main() arg parsing:
+    if (!strcmp(token, "-nochamfer")) nochamfer = qtrue;
+
+Call site in bsp.c:
+    if (!nochamfer) {
+        ChamferSurfaceEdges(e);
+    }
+
+An optional width override:
+    if (!strcmp(token, "-chamferwidth")) {
+        chamfer_global_width = atof(NextToken());
+    }

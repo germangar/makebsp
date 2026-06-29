@@ -69,5 +69,98 @@ While the architecture perfectly supports this, legacy engine constraints must b
 > 
 > The `MergePlanarToTrisoups` algorithm **must** track its accumulated vertex/index count. If `current_verts + next_polygon_verts >= ENGINE_MAX_LIMIT`, it must close the current Trisoup, emit it, and start a fresh Trisoup for the remaining surfaces in the room.
 
+> [!WARNING]
+> **Lightmap Texture Space (Sample Size constraints)**
+> We must track the physical world-space area of the surfaces being merged relative to their `samplesize`. If the accumulated area requires a lightmap that exceeds the maximum atlas texture size (e.g., 512x512) to maintain the desired luxel density, the merging must be halted for the current Trisoup and a new one started.
+
 ## Conclusion
 This approach elegantly turns a classic BSP compiler into a modern static-mesh generator. The collision and portal algorithms remain untouched and robust, while the visual output is optimized into chunked, single-draw-call Trisoups with automatically generated lightmap atlases via `xatlas`.
+
+## 7. Corner Smoothing Geometry (Support Edges / Edge Chamfering)
+
+During the merging process, sharp intersections between planar surfaces (like a 90-degree wall/floor corner) create harsh lighting divisions. The fix is to automatically generate **Support Edges** (also called "Holding Edges" or "Edge Chamfering with custom normals"). This is the same technique used in hard-surface 3D modelling to make edges catch light smoothly without high-poly subdivision.
+
+### 7.1 State of Surfaces at the Injection Point
+
+Understanding the exact data state is critical. By the time `MergePlanarToTrisoups` would run, the surfaces have progressed through the following stages:
+
+1. **`DrawSurfaceForSide()`** converts each brush winding into a `mapDrawSurface_t`. At this point, `ds->verts[i].xyz` are explicit 3D coordinates, and `ds->verts[i].normal` is set to a copy of the flat face plane normal. The surface is a simple convex N-gon loop. **No index buffer yet** (`ds->numIndexes` is 0).
+
+2. **`MergeSides()`** may join coplanar same-shader surfaces into larger convex polygons via convex hull, but they remain flat N-gon vertex loops.
+
+3. **`FixTJunctions()`** calls `FixSurfaceJunctions()` on every planar surface, which walks each edge and inserts extra colinear vertices where neighboring surfaces required splits. After this, a wall polygon is no longer just 4 vertices; it may be many more, with clusters of colinear vertices running along any edge shared with the floor or ceiling.
+
+**Conclusion:** At the injection point, each `mapDrawSurface_t` is a flat convex polygon stored as an ordered vertex loop in `ds->verts[0..numVerts-1]`. There is no index buffer. Triangulation happens later, inside `AllocateLightmaps` when the surface is routed to the `miscModel` (xatlas) path.
+
+> [!IMPORTANT]
+> This is exactly why we must do edge chamfering **before** triangulation. After xatlas triangulates the mesh, inserting a support edge would slice through diagonal triangle edges, creating degenerate slivers. Before triangulation, we only have a flat convex polygon loop — and inserting a parallel offset edge into a convex polygon is clean, well-defined geometry.
+
+### 7.2 The Critical Problem: T-Junction Vertices on Corner Edges
+
+The corner edge between a wall and a floor is no longer a simple edge from vertex A to vertex B. After `FixTJunctions`, that logical edge may contain 10+ colinear vertices, each inserted to match T-junction splits from adjacent surfaces.
+
+This means a **"corner edge" is not one edge — it is a chain of collinear sub-edges**, all sharing the same boundary of the adjacent face. This is the core geometric challenge.
+
+### 7.3 The Correct Algorithm: Per-Face 2D Polygon Inset
+
+The cleanest approach is to operate entirely within the 2D coordinate space of each face's plane, independently, before any merging into a Trisoup. Here is the full step-by-step:
+
+**Step 1 — Identify Corner Edges**
+
+Walk all surface pairs after `FixTJunctions`. For each pair `(dsA, dsB)` where at least one surface borders the other (they share colinear edge vertices), compute the dot product of their plane normals:
+```c
+float dot = DotProduct(normalA, normalB);
+// dot < cos(30°) → angle > 30° → mark as a sharp corner
+if (dot < CORNER_SMOOTH_THRESHOLD) {
+    // mark the shared edge chain on dsA and dsB for chamfering
+}
+```
+The shared edge detection reuses the same principle as `WindingsShareEdge()` in `surface.c`, but extended to work on collinear vertex chains (sequences of vertices lying on the same line).
+
+**Step 2 — Compute the Smoothed Normal at the Corner**
+
+For the corner's shared edge, compute the blended normal. It is the normalized sum of the two face normals:
+```c
+vec3_t blendedNormal;
+VectorAdd(normalA, normalB, blendedNormal);
+VectorNormalize(blendedNormal, blendedNormal);
+```
+This is the normal that will be assigned to the real outer corner vertices.
+
+**Step 3 — Compute the 2D Inset Vertices**
+
+For each vertex `V` in the shared corner edge chain on surface `dsA`:
+
+1. Find the **edge direction** of the shared boundary: `edgeDir = normalize(nextVertex - V)`.
+2. Find the **inset direction**: the vector perpendicular to `edgeDir` and lying in the plane of face `dsA`, pointing inward. This is: `insetDir = cross(planeNormal, edgeDir)`.
+3. The new **inner support vertex** is: `V_inner = V + insetDir * CHAMFER_WIDTH` (e.g., `CHAMFER_WIDTH = 1.0` unit).
+
+Note: At corners between two chamfered edges (i.e., at the endpoint of the chain, where two edges meet), the inset vertex is found by intersecting the two inset lines in the plane, not by simple offset. This avoids gaps or overlaps at polygon corners.
+
+**Step 4 — Rebuild the Polygon**
+
+Replace the original polygon vertex loop with the new topology. For surface `dsA`:
+
+- Original: `[... V_prev, V0, V1, V2 ..., V_last, V_next ...]` (where V0..V_last is the shared edge chain)
+- New: `[... V_prev, V0, V1, V2 ..., V_last, V_next ..., V_last_inner, ..., V1_inner, V0_inner ]`
+
+That is: insert the inset support vertices as a new run of vertices at the end of the chain, creating a thin "strip" polygon around the original corner edge. The body of the polygon is now the inner face with slightly smaller dimensions.
+
+**Step 5 — Assign Normals**
+
+- All original `V_prev`, `V_next`, and inner body vertices: **retain the flat face normal** unchanged.
+- The original corner vertices `V0..V_last`: assign the **blended normal** from Step 2.
+- The new inner support vertices `V0_inner..V_last_inner`: assign the **flat face normal** (they mark the "start" of the flat region).
+
+**Step 6 — Triangulate Cleanly**
+
+Because we split the polygon *before* triangulation, both the inner face polygon and the border strip polygon are still simple convex (or near-convex) polygons. A simple triangle fan from vertex 0 on each sub-polygon produces clean geometry with no degenerate triangles.
+
+### 7.4 Cross-Shader Applicability
+
+This chamfer technique applies even when the two intersecting surfaces have **different shaders** and will not be merged into the same Trisoup. The normals at the corner vertices are modified independently on each face, but are set to the **exact same blended normal vector**. Since both surfaces share the exact same 3D position and normal at that corner, the lighting calculation produces a seamless, matching gradient from both sides of the texture seam, creating the visual illusion of a smooth bevel even across a shader change.
+
+### 7.5 Choosing `CHAMFER_WIDTH`
+
+The width of the chamfer strip should be very small relative to the face size — typically **1 to 4 units** in Quake world units. It should be narrow enough to be invisible as geometry, but wide enough that the normal interpolation from `blendedNormal` to `flatNormal` happens over enough screen pixels to produce a smooth gradient. This value could be exposed as a global compiler option or a per-shader parameter.
+

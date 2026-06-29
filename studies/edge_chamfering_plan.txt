@@ -1,0 +1,99 @@
+# Edge Chamfering — Implementation Plan
+
+Smooth corner lighting at sharp brush edges by inserting thin chamfer strips with blended vertex normals. Based on the audited design document [edge_chamfering.txt](file:///e:/CODE/antigravity/makebsp/studies/edge_chamfering.txt).
+
+## Proposed Changes
+
+### Global Declarations
+
+#### [MODIFY] [qbsp.h](file:///e:/CODE/antigravity/makebsp/q3map/qbsp.h)
+
+Add near the existing type definitions:
+- `surfaceNeighbor_t` struct (linked-list node: `neighborSurfaceNum`, `sharedChainIndicesA[]`, `sharedChainIndicesB[]`, `sharedChainLen`, `*next`).
+- `surfaceChamferEdge_t` struct (work descriptor: `chainIndices[]`, `chainLen`, `blendedNormal`).
+- `extern surfaceNeighbor_t *surfaceNeighbors[];` — global adjacency graph.
+- `extern qboolean nochamfer;`
+- `extern float chamfer_global_width;`
+- `void BuildSurfaceAdjacencyGraph(entity_t *e);`
+- `void ChamferSurfaceEdges(entity_t *e);`
+
+---
+
+### Pipeline Integration
+
+#### [MODIFY] [bsp.c](file:///e:/CODE/antigravity/makebsp/q3map/bsp.c)
+
+In **both** `ProcessWorldModel` and `ProcessSubModel`, insert after `FixTJunctions`:
+
+```c
+if (!nochamfer) {
+    ChamferSurfaceEdges(e);
+}
+```
+
+Add arg parsing in the command-line loop alongside `notjunc`:
+```c
+else if (!strcmp(argv[i], "-nochamfer"))
+    nochamfer = qtrue;
+else if (!strcmp(argv[i], "-chamferwidth"))
+    chamfer_global_width = atof(argv[++i]);
+```
+
+---
+
+### Core Implementation
+
+#### [MODIFY] [tjunction.c](file:///e:/CODE/antigravity/makebsp/q3map/tjunction.c)
+
+Append all new code **at the end of the file**, after `FixTJunctions()`, separated by:
+
+```c
+/***********************************************************************
+ *                                                                     *
+ *  EDGE CHAMFERING - Smooth corner lighting via support edge insertion *
+ *                                                                     *
+ ***********************************************************************/
+```
+
+**`BuildSurfaceAdjacencyGraph(entity_t *e)`**
+- Iterates all surfaces within the entity.
+- Compares vertex positions to find shared collinear chains (using `VectorCompare` with epsilon).
+- Registers bidirectional `surfaceNeighbor_t` links.
+
+**`ChamferSurfaceEdges(entity_t *e)` — Simultaneous Single-Pass Rebuild**
+
+> [!IMPORTANT]
+> Sequential chamfering (edge A, then edge B) is **geometrically invalid** at 3D corners. After edge A moves the shared corner vertex, edge B's inset is computed from a corrupted position, leaving a triangular hole. The simultaneous single-pass approach is the only correct method.
+
+For each surface:
+1. **Collect ALL edges** needing chamfering by walking `surfaceNeighbors[]` — without modifying any geometry.
+2. **Compute ALL insets** via `ComputeAllInsets()` from the **original, untouched** vertex positions.
+   - Simple vertices (on one chain only): perpendicular offset.
+   - Corner vertices (on two chains): **mitre joint** — intersect the two inset lines in the face plane.
+3. **Rebuild the Inner Body once** with all inset positions applied in a single pass.
+4. **Spawn one Chamfer Strip** per chamfered edge.
+
+**`static ComputeAllInsets()`**
+- Iterates all collected edges to build an `insetMap[vertexIndex]` lookup.
+- For single-edge vertices: `inset = xyz + cross(faceNormal, edgeDir) * CHAMFER_WIDTH`.
+- For two-edge corner vertices: compute line-line intersection of the two inset lines to find the mitre point.
+- Clamps mitre intersection distance to avoid runaway offsets at very acute angles.
+
+**`static ApplyAllChamfers()`**
+- Rebuilds Inner Body in-place: chain vertices → `insetMap` positions with `faceNormal`. Vertex count unchanged.
+- Spawns one `AllocDrawSurf()` strip per edge: outer chain gets `blendedNormal`, inner chain gets `faceNormal`.
+
+**`static IsChamferCandidate()`**
+- Returns false for patches, misc_models, flare surfaces, NODRAW/SKY/NOLIGHTMAP shaders.
+
+## Verification Plan
+
+### Automated
+- Run `build.ps1` to verify compilation with zero warnings.
+
+### Manual
+- Compile a test map with `testmapbuild - Embree - deluxe.bat`.
+- Run with `-nochamfer` to compare before/after.
+- Inspect a 3D room corner in-engine to verify:
+  - Smooth lighting gradient at wall/floor edges.
+  - Clean mitre joint at the triple corner with no gaps or holes.
