@@ -33,6 +33,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define POINTSCALE_SOFT 10.0f
 #define POINTSCALE_SMOOTHSTEP 50.0f
 
+float   ambient_color_scale = 1.0f;
+
 qboolean nodirect;
 qboolean noambient;
 qboolean patchshadows = qtrue;
@@ -1702,6 +1704,9 @@ void LightMain(void)
     } else {
         VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
     }
+    
+    // Always apply the 76% scale heuristic for ambient light
+    ambient_color_scale = 0.76f;
 
     const char *ambientStr = ValueForKey(&entities[0], "ambient");
     f = ambientStr[0] ? (float)atof(ambientStr) : 0.0f;
