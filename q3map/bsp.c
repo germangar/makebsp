@@ -41,6 +41,8 @@ qboolean fakemap;
 qboolean notjunc;
 qboolean nomerge;
 qboolean nofog;
+qboolean chamferedges;
+float chamfer_global_width = 2.0f;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
@@ -218,6 +220,11 @@ void ProcessWorldModel(void)
         FixTJunctions(e);
     }
 
+    if (chamferedges)
+    {
+        ChamferSurfaceEdges(e);
+    }
+
     MakeEntityDecals(e);
 
     GenerateHalos(e);
@@ -299,6 +306,11 @@ void ProcessSubModel(void)
     if (!nomerge)
     {
         MergeSides(e, tree); // !@# testing
+    }
+
+    if (chamferedges)
+    {
+        ChamferSurfaceEdges(e);
     }
 
     // add in any vertexes required to fix tjunctions
@@ -788,6 +800,15 @@ int main(int argc, char **argv)
             notjunc = qtrue;
             _printf("no tjunction fixing\n");
         }
+        else if (!strcmp(argv[i], "-chamferedges"))
+        {
+            chamferedges = qtrue;
+        }
+        else if (!strcmp(argv[i], "-chamferwidth"))
+        {
+            chamfer_global_width = atof(argv[i + 1]);
+            i++;
+        }
         else if (!strcmp(argv[i], "-expand"))
         {
             testExpand = qtrue;
@@ -926,8 +947,11 @@ int main(int argc, char **argv)
                 "   nosubdivide    = don't subdivide large surfaces\n"
                 "   leaktest       = abort on first leak found\n"
                 "   verboseentities = verbose entity processing output\n"
-                "   nocurves       = ignore curved surfaces (patches)\n"
+                "   nomerge        = don't merge brush faces\n"
                 "   notjunc        = skip T-junction narrowing and fixing\n"
+                "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
+                "   -chamferwidth  = size of the chamfer strip (default 2.0)\n"
+                "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
                 "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n"

@@ -4,7 +4,7 @@
 > **Purpose of this Document**: This is NOT a log, a status report, or a change history. It is a high-level technical summary of the project's architecture, characteristics, and non-obvious logic. It is designed to provide AI coding assistants with immediate, high-fidelity context about the codebase before starting work.
 
 ## 1. Project Overview
-This project is a heavily modernized fork of the Quake III Arena BSP toolchain (`makebsp.exe` and `makelight.exe`) which primary target is the FBSP format used by the QFusion engine. The primary goal is to achieve high-fidelity, cinema-grade lighting for legacy engines (QFusion, etc.) by replacing 1990s integer-based arithmetic with modern 32-bit floating-point ray tracing and advanced geometry libraries.
+This project is a heavily modernized bsp compiler and lightamp baker (`makebsp.exe` and `makelight.exe`) which primary target is the FBSP format used by the QFusion engine. The primary goal is to achieve high-fidelity, cinema-grade lighting for legacy engines (QFusion, etc.) by replacing 1990s integer-based arithmetic with modern 32-bit floating-point ray tracing and advanced geometry libraries.
 
 ## 2. Core Architecture: High-Precision Lighting
 The most significant architectural change is the transition from the legacy 8-bit integer lighting pipeline to a full **32-bit Floating Point Pipeline**.

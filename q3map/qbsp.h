@@ -196,6 +196,29 @@ typedef struct drawsurf_s
     char decalgroup[128];   // group string for _decal projection filtering
 } mapDrawSurface_t;
 
+#define MAX_CHAMFER_VERTS 256
+
+typedef struct surfaceNeighbor_s {
+    int neighborSurfaceNum;
+    int sharedChainIndicesA[MAX_CHAMFER_VERTS];
+    int sharedChainIndicesB[MAX_CHAMFER_VERTS];
+    int sharedChainLen;
+    struct surfaceNeighbor_s *next;
+} surfaceNeighbor_t;
+
+typedef struct surfaceChamferEdge_s {
+    int   chainIndices[MAX_CHAMFER_VERTS];
+    int   chainLen;
+    vec3_t blendedNormal;
+} surfaceChamferEdge_t;
+
+extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
+extern qboolean chamferedges;
+extern float chamfer_global_width;
+
+void BuildSurfaceAdjacencyGraph(entity_t *e);
+void ChamferSurfaceEdges(entity_t *e);
+
 typedef struct drawSurfRef_s
 {
     struct drawSurfRef_s *nextRef;

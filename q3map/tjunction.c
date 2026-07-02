@@ -42,6 +42,10 @@ typedef struct edgeLine_s
     edgePoint_t chain; // unused element of doubly linked list
 } edgeLine_t;
 
+#define	MAX_TJ_FACES	1024
+
+surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
+
 typedef struct
 {
     float length;
@@ -610,4 +614,380 @@ void FixTJunctions(entity_t *ent)
     qprintf("%6i naturally ordered\n", c_natural);
     qprintf("%6i rotated orders\n", c_rotate);
     qprintf("%6i can't order\n", c_cant);
+}
+static qboolean IsChamferCandidate(mapDrawSurface_t *ds)
+{
+    if (ds->numVerts <= 0 || ds->side == NULL) return qfalse;
+    if (ds->patch || ds->miscModel || ds->flareSurface || ds->isDecal) return qfalse;
+    if (ds->shaderInfo && (ds->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NOLIGHTMAP))) return qfalse;
+    return qtrue;
+}
+
+/*
+================
+BuildSurfaceAdjacencyGraph
+================
+*/
+void BuildSurfaceAdjacencyGraph(entity_t *e)
+{
+    int i, j, v, w;
+    mapDrawSurface_t *dsA, *dsB;
+
+    qprintf("----- BuildSurfaceAdjacencyGraph -----\n");
+    memset(surfaceNeighbors, 0, sizeof(surfaceNeighbors));
+
+    for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
+    {
+        dsA = &mapDrawSurfs[i];
+        if (!IsChamferCandidate(dsA)) continue;
+
+        for (j = i + 1; j < numMapDrawSurfs; j++)
+        {
+            dsB = &mapDrawSurfs[j];
+            if (!IsChamferCandidate(dsB)) continue;
+
+            // Find shared vertices
+            surfaceNeighbor_t nbA = {0}, nbB = {0};
+            
+            for (v = 0; v < dsA->numVerts; v++)
+            {
+                for (w = 0; w < dsB->numVerts; w++)
+                {
+                    if (VectorCompare(dsA->verts[v].xyz, dsB->verts[w].xyz))
+                    {
+                        if (nbA.sharedChainLen < MAX_CHAMFER_VERTS) {
+                            nbA.sharedChainIndicesA[nbA.sharedChainLen] = v;
+                            nbA.sharedChainIndicesB[nbA.sharedChainLen] = w;
+                            nbA.sharedChainLen++;
+                        }
+                        
+                        if (nbB.sharedChainLen < MAX_CHAMFER_VERTS) {
+                            nbB.sharedChainIndicesA[nbB.sharedChainLen] = w;
+                            nbB.sharedChainIndicesB[nbB.sharedChainLen] = v;
+                            nbB.sharedChainLen++;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (nbA.sharedChainLen >= 2)
+            {
+                surfaceNeighbor_t *newNbA = malloc(sizeof(surfaceNeighbor_t));
+                *newNbA = nbA;
+                newNbA->neighborSurfaceNum = j;
+                newNbA->next = surfaceNeighbors[i];
+                surfaceNeighbors[i] = newNbA;
+
+                surfaceNeighbor_t *newNbB = malloc(sizeof(surfaceNeighbor_t));
+                *newNbB = nbB;
+                newNbB->neighborSurfaceNum = i;
+                newNbB->next = surfaceNeighbors[j];
+                surfaceNeighbors[j] = newNbB;
+            }
+        }
+    }
+}
+
+/*
+================
+ComputeAllInsets
+================
+*/
+static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, int numEdges, float chamferWidth, drawVert_t *insetMap)
+{
+    int i, j, v;
+    vec3_t faceNormal;
+    qboolean edgeChamfered[MAX_CHAMFER_VERTS];
+    vec3_t edgeLineOrigin[MAX_CHAMFER_VERTS];
+    vec3_t edgeLineDir[MAX_CHAMFER_VERTS];
+    
+    memset(edgeChamfered, 0, sizeof(edgeChamfered));
+    VectorCopy(mapplanes[ds->side->planenum].normal, faceNormal);
+
+    for (i = 0; i < numEdges; i++) {
+        surfaceChamferEdge_t *edge = &edges[i];
+        for (j = 0; j < edge->chainLen - 1; j++) {
+            edgeChamfered[edge->chainIndices[j]] = qtrue;
+        }
+    }
+
+    for (v = 0; v < ds->numVerts; v++) {
+        int next_v = (v + 1) % ds->numVerts;
+        vec3_t edgeDir;
+        VectorSubtract(ds->verts[next_v].xyz, ds->verts[v].xyz, edgeDir);
+        VectorNormalize(edgeDir, edgeDir);
+        
+        vec3_t insetDir;
+#if DEBUG_SHOW_CHAMFERS
+        CrossProduct(faceNormal, edgeDir, insetDir);
+#else
+        CrossProduct(edgeDir, faceNormal, insetDir);
+#endif
+        VectorNormalize(insetDir, insetDir);
+        
+        VectorCopy(ds->verts[v].xyz, edgeLineOrigin[v]);
+        VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, edgeLineOrigin[v]);
+        VectorCopy(edgeDir, edgeLineDir[v]);
+    }
+
+    for (v = 0; v < ds->numVerts; v++) {
+        int prev_v = (v - 1 + ds->numVerts) % ds->numVerts;
+        int next_v = (v + 1) % ds->numVerts;
+        
+        if (edgeChamfered[prev_v] && edgeChamfered[v]) {
+            vec3_t p1, d1, p2, d2;
+            VectorCopy(edgeLineOrigin[prev_v], p1);
+            VectorCopy(edgeLineDir[prev_v], d1);
+            VectorCopy(edgeLineOrigin[v], p2);
+            VectorCopy(edgeLineDir[v], d2);
+            
+            float a = DotProduct(d1, d1);
+            float b = DotProduct(d1, d2);
+            float c = DotProduct(d2, d2);
+            vec3_t w0;
+            VectorSubtract(p1, p2, w0);
+            float d = DotProduct(d1, w0);
+            float e = DotProduct(d2, w0);
+            
+            float det = a * c - b * b;
+            float dist = 0.0f;
+            if (fabs(det) > 0.001f) {
+                dist = (b * e - c * d) / det;
+            }
+            
+            VectorMA(p1, dist, d1, insetMap[v].xyz);
+            
+            float maxMove = chamferWidth * 4.0f;
+            vec3_t diff_corner;
+            VectorSubtract(insetMap[v].xyz, ds->verts[v].xyz, diff_corner);
+            if (VectorLength(diff_corner) > maxMove) {
+                VectorNormalize(diff_corner, diff_corner);
+                VectorMA(ds->verts[v].xyz, maxMove, diff_corner, insetMap[v].xyz);
+            }
+        } 
+        else if (edgeChamfered[v]) {
+            vec3_t edgeDir;
+            VectorSubtract(ds->verts[next_v].xyz, ds->verts[v].xyz, edgeDir);
+            VectorNormalize(edgeDir, edgeDir);
+            
+            vec3_t insetDir;
+#if DEBUG_SHOW_CHAMFERS
+            CrossProduct(faceNormal, edgeDir, insetDir);
+#else
+            CrossProduct(edgeDir, faceNormal, insetDir);
+#endif
+            VectorNormalize(insetDir, insetDir);
+            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+        }
+        else if (edgeChamfered[prev_v]) {
+            vec3_t edgeDir;
+            VectorSubtract(ds->verts[v].xyz, ds->verts[prev_v].xyz, edgeDir);
+            VectorNormalize(edgeDir, edgeDir);
+            
+            vec3_t insetDir;
+#if DEBUG_SHOW_CHAMFERS
+            CrossProduct(faceNormal, edgeDir, insetDir);
+#else
+            CrossProduct(edgeDir, faceNormal, insetDir);
+#endif
+            VectorNormalize(insetDir, insetDir);
+            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+        }
+        else {
+            VectorCopy(ds->verts[v].xyz, insetMap[v].xyz);
+        }
+    }
+}
+
+/*
+================
+ChamferSurfaceEdges
+================
+*/
+void ChamferSurfaceEdges(entity_t *e)
+{
+    int i;
+    int numBaseDrawSurfs;
+    drawVert_t *globalInsets[MAX_MAP_DRAW_SURFS_LIMIT];
+    
+    qprintf("----- ChamferSurfaceEdges (V3: Normal Bending) -----\n");
+    memset(globalInsets, 0, sizeof(globalInsets));
+    BuildSurfaceAdjacencyGraph(e);
+    numBaseDrawSurfs = numMapDrawSurfs;
+    
+    // Pass 1: Compute inner bodies (insets)
+    for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        surfaceChamferEdge_t edges[MAX_CHAMFER_VERTS];
+        int numEdges = 0;
+        surfaceNeighbor_t *nb;
+        
+        if (!IsChamferCandidate(dsA)) continue;
+
+        for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
+        {
+            int j = nb->neighborSurfaceNum;
+            mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+            vec3_t normalA, normalB;
+            float dot;
+            
+            VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
+            VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+            
+            dot = DotProduct(normalA, normalB);
+            if (dot > 0.866f || dot < -0.866f) continue;
+
+            qboolean isShared[MAX_CHAMFER_VERTS];
+            memset(isShared, 0, sizeof(isShared));
+            for (int k = 0; k < nb->sharedChainLen; k++) {
+                isShared[nb->sharedChainIndicesA[k]] = qtrue;
+            }
+            
+            for (int v = 0; v < dsA->numVerts; v++) {
+                int prev_v = (v - 1 + dsA->numVerts) % dsA->numVerts;
+                if (isShared[v] && !isShared[prev_v]) {
+                    int curr = v;
+                    int chainLen = 0;
+                    while (isShared[curr] && chainLen < dsA->numVerts) {
+                        edges[numEdges].chainIndices[chainLen++] = curr;
+                        curr = (curr + 1) % dsA->numVerts;
+                    }
+                    if (chainLen >= 2 && numEdges < MAX_CHAMFER_VERTS) {
+                        edges[numEdges].chainLen = chainLen;
+                        
+                        // Compute blended normal for this edge
+                        vec3_t blended;
+                        VectorAdd(normalA, normalB, blended);
+                        VectorNormalize(blended, blended);
+                        VectorCopy(blended, edges[numEdges].blendedNormal);
+                        
+                        numEdges++;
+                    }
+                }
+            }
+        }
+
+        if (numEdges > 0)
+        {
+            globalInsets[i] = malloc(dsA->numVerts * sizeof(drawVert_t));
+            memset(globalInsets[i], 0, dsA->numVerts * sizeof(drawVert_t));
+            ComputeAllInsets(dsA, edges, numEdges, chamfer_global_width, globalInsets[i]);
+        }
+    }
+
+    // Pass 2: Generate normal-bending strips on the flat faces
+    for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        surfaceNeighbor_t *nb;
+        vec3_t faceNormal;
+        
+        if (!globalInsets[i]) continue;
+        VectorCopy(mapplanes[dsA->side->planenum].normal, faceNormal);
+
+        for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
+        {
+            int j = nb->neighborSurfaceNum;
+            mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+            vec3_t normalB;
+            float dot;
+            
+            VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+            dot = DotProduct(faceNormal, normalB);
+            if (dot > 0.866f || dot < -0.866f) continue;
+
+            vec3_t blendedNormal;
+            VectorAdd(faceNormal, normalB, blendedNormal);
+            VectorNormalize(blendedNormal, blendedNormal);
+
+            qboolean isShared[MAX_CHAMFER_VERTS];
+            memset(isShared, 0, sizeof(isShared));
+            for (int k = 0; k < nb->sharedChainLen; k++) {
+                isShared[nb->sharedChainIndicesA[k]] = qtrue;
+            }
+            
+            for (int v = 0; v < dsA->numVerts; v++) {
+                int prev_v = (v - 1 + dsA->numVerts) % dsA->numVerts;
+                if (isShared[v] && !isShared[prev_v]) {
+                    int curr = v;
+                    int chainLen = 0;
+                    int chain[MAX_CHAMFER_VERTS];
+                    
+                    while (isShared[curr] && chainLen < dsA->numVerts) {
+                        chain[chainLen++] = curr;
+                        curr = (curr + 1) % dsA->numVerts;
+                    }
+                    
+                    if (chainLen >= 2) {
+                        mapDrawSurface_t *strip = AllocDrawSurf();
+                        strip->shaderInfo = dsA->shaderInfo;
+                        strip->mapBrush = dsA->mapBrush;
+                        strip->side = dsA->side;
+                        strip->planeNum = dsA->planeNum;
+                        strip->samplesize = dsA->samplesize;
+                        strip->lightmapScale = dsA->lightmapScale;
+                        
+                        strip->numVerts = chainLen * 2;
+                        strip->verts = malloc(strip->numVerts * sizeof(drawVert_t));
+                        
+                        int numQuads = chainLen - 1;
+                        strip->numIndexes = numQuads * 6;
+                        strip->indexes = malloc(strip->numIndexes * sizeof(int));
+                        
+                        for (int k = 0; k < chainLen; k++) {
+                            int vIdx = chain[k];
+                            
+                            // Outer edge of strip (touches the ORIGINAL sharp corner)
+                            strip->verts[k] = dsA->verts[vIdx];
+                            // Bend the normal at the sharp corner!
+                            VectorCopy(blendedNormal, strip->verts[k].normal);
+                            
+                            // Inner edge of strip (touches the NEW inner body)
+                            strip->verts[chainLen + k] = globalInsets[i][vIdx];
+                            // Keep the flat normal here so it blends smoothly into the inner body!
+                            VectorCopy(faceNormal, strip->verts[chainLen + k].normal);
+                        }
+                        
+                        int idx = 0;
+                        for (int k = 0; k < numQuads; k++) {
+                            int o1 = k;
+                            int o2 = k + 1;
+                            int i1 = chainLen + k;
+                            int i2 = chainLen + k + 1;
+                            
+                            // Winding for Quake 3 (CW)
+                            strip->indexes[idx++] = o1;
+                            strip->indexes[idx++] = o2;
+                            strip->indexes[idx++] = i2;
+                            
+                            strip->indexes[idx++] = o1;
+                            strip->indexes[idx++] = i2;
+                            strip->indexes[idx++] = i1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 3: Shrink Inner Bodies (Replaces original geometry with the inset geometry)
+    for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
+    {
+        if (globalInsets[i]) {
+            mapDrawSurface_t *ds = &mapDrawSurfs[i];
+            vec3_t faceNormal;
+            VectorCopy(mapplanes[ds->side->planenum].normal, faceNormal);
+            
+            for (int v = 0; v < ds->numVerts; v++) {
+                if (VectorLength(globalInsets[i][v].normal) > 0.1f) {
+                    VectorCopy(globalInsets[i][v].xyz, ds->verts[v].xyz);
+                    VectorCopy(globalInsets[i][v].st, ds->verts[v].st);
+                    VectorCopy(faceNormal, ds->verts[v].normal);
+                }
+            }
+            free(globalInsets[i]);
+        }
+    }
 }

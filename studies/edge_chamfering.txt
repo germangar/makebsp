@@ -21,7 +21,27 @@ The chamfering pass is completely independent from any future planar surface
 merging into trisoups. Surfaces that are later eligible for merging will carry
 their chamfered vertex data through that stage without modification.
 
+==============================================================================
+[UPDATE: V3 IMPLEMENTED]
 
+NOTE: The original theoretical approach described in this document (V1/V2)
+attempted to create a true geometric bevel (physically removing the sharp
+corner and bridging the gap with a diagonal polygon). This approach was 
+discarded during implementation because it physically shrinks the structural 
+geometry, causing unacceptable geometric discrepancies.
+
+The final implemented architecture (V3) uses **Normal Bending**.
+Instead of cutting off the corner, the flat faces are subdivided into an 
+inner body and a border strip. The border strip connects the shrunk inner 
+body back to the ORIGINAL geometric corner. The original sharp corner is 
+fully preserved geometrically, but the vertices on the strip receive blended 
+normals to create an optical illusion of a bevel.
+
+Furthermore, `ChamferSurfaceEdges()` now runs BEFORE `FixTJunctions()` to 
+avoid tearing fractured edges.
+
+For the exact final pipeline and architecture, refer to `edge_chamfering_plan.txt`.
+==============================================================================
 ==============================================================================
 1. DATA STRUCTURES (AUDIT)
 ==============================================================================
@@ -712,3 +732,68 @@ An optional width override:
     if (!strcmp(token, "-chamferwidth")) {
         chamfer_global_width = atof(NextToken());
     }
+
+==============================================================================
+16. IMPLEMENTATION GOTCHAS & POST-FIXES
+==============================================================================
+
+During initial implementation and testing, two critical bugs were discovered
+and fixed in the geometry rebuild phase. They are documented here to prevent
+regression.
+
+A. The "Black Hole" Uninitialized Vertex Bug
+Symptom: Huge, mangled triangles stretching towards the world origin (0, 0, 0).
+Cause: `BuildSurfaceAdjacencyGraph` simply gathered a set of shared vertices
+between two faces. If a face shared multiple disconnected segments with the
+same neighbor (e.g. a wall split by a window), the set was not a single contiguous
+chain. The strip generation logic expected a single chain, bailed out early on
+the gap, and left the remainder of the strip's vertex array uninitialized. `malloc`
+left these as (0, 0, 0).
+Fix: The shared vertex extraction was rewritten in `ChamferSurfaceEdges` to explicitly
+group shared vertices into contiguous sub-chains using an `isShared` boolean map.
+Each contiguous sub-chain spawns its own distinct chamfer strip.
+
+B. The Coplanar Seam "Wedge Gap" Bug
+Symptom: V-shaped black gaps opening up between flat, coplanar floor tiles
+radiating from pillar corners.
+Cause: When computing the inset for the floor polygon, the algorithm ignored
+non-chamfered edges (the coplanar seams between floor tiles). It only pushed
+the corner vertex perpendicularly away from the pillar. Because the two floor
+tiles pushed their shared corner in two different perpendicular directions (due to
+the angled pillar), they tore apart along the seam.
+Fix: 2D Line-Line Intersection for ALL corners!
+We now compute an inset line for ALL edges of a polygon. Chamfered edges are
+offset by `chamferWidth`, while non-chamfered edges are offset by `0`. The new
+corner vertex is ALWAYS the mathematical intersection of the two inset lines.
+This elegantly constrains the corner vertex to slide perfectly along the coplanar
+seam, sealing the gap identically for both floor polygons.
+
+C. The Mangled Triangle Fan Bug
+Symptom: Bizarre, overlapping, and self-intersecting triangles on strips with
+length > 2.
+Cause: Relying on the engine/BSP compiler to triangulate the `mapDrawSurface_t`
+as a default triangle fan originating from `verts[0]`. While a triangle fan works
+for a single quad, fanning from an outer corner across the inner bend of a long
+strip causes massive overlapping.
+Fix: Explicit index generation. We now allocate `strip->indexes` and populate it
+manually with perfectly alternating triangles (two per quad segment) in `ApplyAllChamfers`.
+
+
+## Documented Issues & Solutions (During V3 Implementation)
+
+1. **Triangle Stretching to Origin (0,0,0):**
+   - *Issue*: New chamfer strip vertices were appearing at the world origin.
+   - *Solution*: DrawSurfaces created via AllocDrawSurf() need properly allocated erts and indexes arrays using malloc. Leaving them unallocated caused out-of-bounds zero memory reads.
+
+2. **Splits on Coplanar Surfaces:**
+   - *Issue*: Chamfer strips were being generated on perfectly flat planar seams, ripping them open.
+   - *Solution*: Added a CHAMFER_ANGLE_THRESHOLD dot-product check in the adjacency graph builder. If two adjacent faces are nearly coplanar (or perfectly flat), they are skipped.
+
+3. **Triangles Missing and Strips Tearing:**
+   - *Issue*: Strips were tearing into bow-tie quads and being culled by the engine.
+   - *Solution*: Moved ChamferSurfaceEdges to run BEFORE FixTJunctions. T-Junctions fracture edges, and trying to chamfer fractured edges causes asymmetric tearing. Chamfering pristine polygons works perfectly, and FixTJunctions stitches the new subdivisions afterward. Also corrected the triangle triangulation winding to be Clockwise (CW) which Quake 3 expects.
+
+4. **Corners Displacing Inward (Loss of Original Geometric Shape):**
+   - *Issue*: The V2 algorithm physically removed the sharp corner and bridged a diagonal strip, effectively shrinking the structural geometry.
+   - *Solution*: Switched to V3 (Normal Bending Architecture). The faces are subdivided: an inner body is shrunk, and a border strip is spawned connecting the shrunk edge back to the ORIGINAL sharp corner. The geometry remains 100% perfectly flat and sharp, but the corner vertices get blended normals for the optical illusion of a bevel.
+

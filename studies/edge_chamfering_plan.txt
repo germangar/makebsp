@@ -1,18 +1,28 @@
-# Edge Chamfering — Implementation Plan
+# Edge Chamfering (Normal Bending) — Implementation Plan
 
-Smooth corner lighting at sharp brush edges by inserting thin chamfer strips with blended vertex normals. Based on the audited design document [edge_chamfering.txt](file:///e:/CODE/antigravity/makebsp/studies/edge_chamfering.txt).
+Smooth corner lighting at sharp structural edges by inserting thin border strips with bent vertex normals, creating an optical illusion of a rounded bevel without altering the actual collision geometry. Based on the audited design document `edge_chamfering.txt`.
+
+## Architecture Overview (V3: Normal Bending)
+
+Instead of creating true geometric bevels (which shrink structural boundaries), we employ a normal bending strategy:
+1. **Inner Body Shifting:** The original flat face is shrunk inward by `chamferWidth`. This new "inner body" retains perfectly flat surface normals.
+2. **Subdivision Strips:** A coplanar strip is spawned to fill the gap between the shrunk inner body and the original sharp corner.
+3. **Normal Blending:** Vertices on the strip touching the inner body keep the flat face normal. Vertices on the strip touching the original sharp corner receive a blended normal (average of the two meeting faces).
+4. **Result:** The lighting engine natively interpolates across the strip, producing a smooth gradient on an otherwise perfectly sharp geometric corner.
+
+---
 
 ## Proposed Changes
 
 ### Global Declarations
 
-#### [MODIFY] [qbsp.h](file:///e:/CODE/antigravity/makebsp/q3map/qbsp.h)
+#### [MODIFY] q3map/qbsp.h
 
 Add near the existing type definitions:
 - `surfaceNeighbor_t` struct (linked-list node: `neighborSurfaceNum`, `sharedChainIndicesA[]`, `sharedChainIndicesB[]`, `sharedChainLen`, `*next`).
 - `surfaceChamferEdge_t` struct (work descriptor: `chainIndices[]`, `chainLen`, `blendedNormal`).
 - `extern surfaceNeighbor_t *surfaceNeighbors[];` — global adjacency graph.
-- `extern qboolean nochamfer;`
+- `extern qboolean chamferedges;`
 - `extern float chamfer_global_width;`
 - `void BuildSurfaceAdjacencyGraph(entity_t *e);`
 - `void ChamferSurfaceEdges(entity_t *e);`
@@ -21,20 +31,26 @@ Add near the existing type definitions:
 
 ### Pipeline Integration
 
-#### [MODIFY] [bsp.c](file:///e:/CODE/antigravity/makebsp/q3map/bsp.c)
+#### [MODIFY] q3map/bsp.c
 
-In **both** `ProcessWorldModel` and `ProcessSubModel`, insert after `FixTJunctions`:
+In **both** `ProcessWorldModel` and `ProcessSubModel`, insert BEFORE `FixTJunctions`:
+
+> [!IMPORTANT]
+> `ChamferSurfaceEdges` MUST run before `FixTJunctions`. Running it after causes the algorithm to process fractured edges (slivered by T-junction resolution), resulting in torn and unaligned strips. Running it first operates on pristine polygons, allowing `FixTJunctions` to correctly sew up the new subdivisions afterward.
 
 ```c
-if (!nochamfer) {
+if (chamferedges) {
     ChamferSurfaceEdges(e);
+}
+if (!notjunc) {
+    FixTJunctions(e);
 }
 ```
 
 Add arg parsing in the command-line loop alongside `notjunc`:
 ```c
-else if (!strcmp(argv[i], "-nochamfer"))
-    nochamfer = qtrue;
+else if (!strcmp(argv[i], "-chamferedges"))
+    chamferedges = qtrue;
 else if (!strcmp(argv[i], "-chamferwidth"))
     chamfer_global_width = atof(argv[++i]);
 ```
@@ -43,48 +59,34 @@ else if (!strcmp(argv[i], "-chamferwidth"))
 
 ### Core Implementation
 
-#### [MODIFY] [tjunction.c](file:///e:/CODE/antigravity/makebsp/q3map/tjunction.c)
+#### [MODIFY] q3map/tjunction.c
 
-Append all new code **at the end of the file**, after `FixTJunctions()`, separated by:
-
-```c
-/***********************************************************************
- *                                                                     *
- *  EDGE CHAMFERING - Smooth corner lighting via support edge insertion *
- *                                                                     *
- ***********************************************************************/
-```
+Append all new code **at the end of the file**, after `FixTJunctions()`.
 
 **`BuildSurfaceAdjacencyGraph(entity_t *e)`**
 - Iterates all surfaces within the entity.
-- Compares vertex positions to find shared collinear chains (using `VectorCompare` with epsilon).
+- Discards non-structural faces (patches, misc_models, decals).
+- Compares vertex positions to find shared collinear chains.
 - Registers bidirectional `surfaceNeighbor_t` links.
 
-**`ChamferSurfaceEdges(entity_t *e)` — Simultaneous Single-Pass Rebuild**
-
-> [!IMPORTANT]
-> Sequential chamfering (edge A, then edge B) is **geometrically invalid** at 3D corners. After edge A moves the shared corner vertex, edge B's inset is computed from a corrupted position, leaving a triangular hole. The simultaneous single-pass approach is the only correct method.
-
+**`ChamferSurfaceEdges(entity_t *e)` — V3 Normal Bending Pass**
 For each surface:
-1. **Collect ALL edges** needing chamfering by walking `surfaceNeighbors[]` — without modifying any geometry.
-2. **Compute ALL insets** via `ComputeAllInsets()` from the **original, untouched** vertex positions.
-   - Simple vertices (on one chain only): perpendicular offset.
-   - Corner vertices (on two chains): **mitre joint** — intersect the two inset lines in the face plane.
-3. **Rebuild the Inner Body once** with all inset positions applied in a single pass.
-4. **Spawn one Chamfer Strip** per chamfered edge.
+1. **Pass 1: Compute Inner Bodies (Insets)**
+   - Uses `ComputeAllInsets()` to trace the geometric border of the shrunk inner polygon.
+   - Saves these computed coordinates into a temporary `globalInsets[]` array.
+2. **Pass 2: Generate Subdivision Strips**
+   - Allocates new `mapDrawSurface_t` strips.
+   - Emits quads bridging the `globalInsets` boundary to the original untouched vertices.
+   - Applies the flat face normal to the inner boundary and the calculated `blendedNormal` to the outer geometric corner.
+   - Enforces Clockwise (CW) winding order for all generated quads to avoid Quake 3 back-face culling.
+3. **Pass 3: Replace Original Geometry**
+   - Replaces the coordinates of the original large structural face with the computed `globalInsets` coordinates.
 
 **`static ComputeAllInsets()`**
 - Iterates all collected edges to build an `insetMap[vertexIndex]` lookup.
-- For single-edge vertices: `inset = xyz + cross(faceNormal, edgeDir) * CHAMFER_WIDTH`.
-- For two-edge corner vertices: compute line-line intersection of the two inset lines to find the mitre point.
-- Clamps mitre intersection distance to avoid runaway offsets at very acute angles.
-
-**`static ApplyAllChamfers()`**
-- Rebuilds Inner Body in-place: chain vertices → `insetMap` positions with `faceNormal`. Vertex count unchanged.
-- Spawns one `AllocDrawSurf()` strip per edge: outer chain gets `blendedNormal`, inner chain gets `faceNormal`.
-
-**`static IsChamferCandidate()`**
-- Returns false for patches, misc_models, flare surfaces, NODRAW/SKY/NOLIGHTMAP shaders.
+- Calculates an inward perpendicular offset. For CW triangles, `CrossProduct(edgeDir, faceNormal)`.
+- For corners meeting two chamfered edges, calculates a standard 2D line-line intersection to find the mitre point.
+- Clamps extreme mitre extensions (caused by highly acute angles) to a multiple of `chamferWidth`.
 
 ## Verification Plan
 
@@ -92,8 +94,15 @@ For each surface:
 - Run `build.ps1` to verify compilation with zero warnings.
 
 ### Manual
-- Compile a test map with `testmapbuild - Embree - deluxe.bat`.
-- Run with `-nochamfer` to compare before/after.
+- Compile a test map with `makebsp -chamferedges`.
 - Inspect a 3D room corner in-engine to verify:
-  - Smooth lighting gradient at wall/floor edges.
-  - Clean mitre joint at the triple corner with no gaps or holes.
+  - Smooth lighting gradient across the geometric corner.
+  - No gaps, holes, or visible seams at the mitres.
+
+## Post-Implementation Errata
+
+**Bug Fixes Integrated:**
+1. **Triangle Stretching to Origin (0,0,0):** DrawSurfaces created via `AllocDrawSurf()` must have their `verts` and `indexes` explicitly allocated via `malloc`.
+2. **Splits on Coplanar Surfaces:** Added a `CHAMFER_ANGLE_THRESHOLD` dot-product check (`> 0.866f`). Perfectly flat adjoining polygons are ignored.
+3. **Missing Triangles (CW Winding):** Quads generated for the strips must explicitly be triangulated in Clockwise order `(o1, o2, i2), (o1, i2, i1)` to render properly in the Quake 3 engine.
+4. **Z-Fighting Avoidance:** The algorithm achieves perfectly flush coplanar strips by strictly shrinking Face A, rather than just spawning strips blindly on top of it.
