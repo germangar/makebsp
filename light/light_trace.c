@@ -370,15 +370,20 @@ static void AddBrushesToEmbree(RTCScene scene)
 
         b = &dbrushes[i];
 
-        if (dshaders[b->shaderNum].contentFlags &
-            (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
-             CONTENTS_TRANSLUCENT))
+        qboolean skipBrush = qfalse;
+        for (j = 0; j < b->numSides; j++)
         {
-            continue;
+            s = &dbrushsides[b->firstSide + j];
+            if ((dshaders[s->shaderNum].contentFlags &
+                 (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
+                  CONTENTS_TRANSLUCENT)) ||
+                (dshaders[s->shaderNum].surfaceFlags & SURF_SKY))
+            {
+                skipBrush = qtrue;
+                break;
+            }
         }
-
-        // Sky brushes never occlude light!
-        if (dshaders[b->shaderNum].surfaceFlags & SURF_SKY)
+        if (skipBrush)
         {
             continue;
         }
@@ -391,7 +396,11 @@ static void AddBrushesToEmbree(RTCScene scene)
             w = BaseWindingForPlane(p->normal, p->dist);
             for (k = 0; k < b->numSides && w; k++)
             {
-                p2 = &dplanes[dbrushsides[b->firstSide + k].planeNum];
+                if (k == j)
+                {
+                    continue;
+                }
+                p2 = &dplanes[dbrushsides[b->firstSide + k].planeNum ^ 1];
                 ChopWindingInPlace(&w, p2->normal, p2->dist, 0.0f);
             }
 
