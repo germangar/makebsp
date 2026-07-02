@@ -113,7 +113,7 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
     int nLen = 0;
 
     // Extensions to check exactly in this order
-    const char *exts[] = {".tga", ".TGA", ".jpg", ".JPG", ".png", ".PNG", ".bmp", ".BMP", NULL};
+    const char *exts[] = {".tga", ".TGA", ".jpg", ".JPG", ".png", ".PNG", ".bmp", ".BMP", ".ktx", ".KTX", NULL};
 
     char base[1024];
     strcpy(base, filename);
@@ -206,7 +206,11 @@ static void LoadShaderImage(shaderInfo_t *si)
 
 // load the image to get dimensions and color
 loadTga:
-    if (bTGA)
+    if (nLen >= 12 && buffer[0] == 0xAB && buffer[1] == 0x4B && buffer[2] == 0x54 && buffer[3] == 0x58)
+    {
+        LoadKTXFromMemory(buffer, nLen, &si->pixels, &si->width, &si->height);
+    }
+    else if (bTGA)
     {
         LoadImageFromBuffer(buffer, nLen, &si->pixels, &si->width, &si->height);
     }

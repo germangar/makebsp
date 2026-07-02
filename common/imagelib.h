@@ -37,3 +37,4 @@ void Load32BitImage(const char *name, unsigned **pixels, int *width,
                     int *height);
 
 void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height);
+void LoadKTXFromMemory(byte *buffer, int buflen, byte **pixels, int *width, int *height);
