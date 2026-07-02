@@ -179,6 +179,7 @@ Uses axial-snapped extrusion direction for side planes (Garux clipModel_default)
 static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
                                          float extrudeDist, shaderInfo_t *si)
 {
+    si = GetCollisionShaderInfo(si);
     int N = poly->numVerts;
     int numSides = N + 2; /* front + back + N edges */
 
@@ -317,6 +318,7 @@ static __attribute__((unused)) bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ri
                                      clipTri_t *tris, int *fanTriIndices, int fanTriCount,
                                      float *verts, float extrudeDist, shaderInfo_t *si)
 {
+    si = GetCollisionShaderInfo(si);
     int N = fanTriCount;
     int numSides = 2 * N; /* N front faces + N back faces */
 
@@ -762,6 +764,7 @@ Optimized version:
 */
 bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
 {
+    si = GetCollisionShaderInfo(si);
     bspbrush_t *hulls_list = NULL;
     float *verts = (float *)mesh->verts;
     unsigned int *indices = (unsigned int *)mesh->tris;

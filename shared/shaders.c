@@ -970,6 +970,30 @@ static void ShaderPakCallback(const char *filename)
     }
 }
 
+/*
+====================
+RegisterMiscModelClipShader
+Registers our hardcoded base clip shader for misc_models so we don't rely
+on game-specific clip shaders like common/fullclip or common/weaponclip.
+====================
+*/
+static void RegisterMiscModelClipShader(void)
+{
+    shaderInfo_t *si = AllocShaderInfo();
+    strcpy(si->shader, "textures/common/_miscmodelclip");
+    si->surfaceFlags = SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NOMARKS | SURF_NODLIGHT;
+    si->contents = CONTENTS_SOLID | CONTENTS_TRANSLUCENT;
+    si->width = 64;
+    si->height = 64;
+
+    shaderInfo_t *si2 = AllocShaderInfo();
+    strcpy(si2->shader, "common/_miscmodelclip");
+    si2->surfaceFlags = SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NOMARKS | SURF_NODLIGHT;
+    si2->contents = CONTENTS_SOLID | CONTENTS_TRANSLUCENT;
+    si2->width = 64;
+    si2->height = 64;
+}
+
 void LoadShaderInfo(void)
 {
     char searchPath[1024];
@@ -980,6 +1004,8 @@ void LoadShaderInfo(void)
 
     numLoadedShaderFiles = 0;
     numShaderInfo = 0;
+
+    RegisterMiscModelClipShader();
 
     for (p = 0; p < numVFSPaths; p++)
     {

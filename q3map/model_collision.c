@@ -608,6 +608,24 @@ void FreeCollisionHull(colHull_t *hull)
 
 /*
 ====================
+GetCollisionShaderInfo
+
+Creates or retrieves a dedicated collision shaderInfo_t that inherits
+surfaceparms from the visual model shader, then injects CONTENTS_TRANSLUCENT
+and SURF_NODRAW so the collision brushes do not occlude light or draw visually.
+====================
+*/
+shaderInfo_t *GetCollisionShaderInfo(shaderInfo_t *si)
+{
+    if (si != NULL && (si->contents & CONTENTS_TRANSLUCENT))
+    {
+        return si;
+    }
+    return ShaderInfoForShader("textures/common/_miscmodelclip");
+}
+
+/*
+====================
 BrushFromHull
 
 Converts a convex hull (triangle soup) into a bspbrush_t.
@@ -617,6 +635,7 @@ Deduplicates coplanar faces by finding unique plane indices.
 
 bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
 {
+    si = GetCollisionShaderInfo(si);
     int i, j;
     int numUniquePlanes = 0;
     int uniquePlanes[MAX_BRUSH_SIDES];
@@ -632,49 +651,33 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
     // For each triangle, find its unique plane
     for (i = 0; i < hull->numTris; i++)
     {
-        int idx0 = hull->tris[i][0];
-        int idx1 = hull->tris[i][1];
-        int idx2 = hull->tris[i][2];
+        vec3_t *p0 = &hull->verts[hull->tris[i][0]];
+        vec3_t *p1 = &hull->verts[hull->tris[i][1]];
+        vec3_t *p2 = &hull->verts[hull->tris[i][2]];
 
-        vec3_t p0, p1, p2;
-        VectorCopy(hull->verts[idx0], p0);
-        VectorCopy(hull->verts[idx1], p1);
-        VectorCopy(hull->verts[idx2], p2);
-
-        // Check for degenerate triangle (near zero area)
-        vec3_t t1, t2, cross;
-        VectorSubtract(p1, p0, t1);
-        VectorSubtract(p2, p0, t2);
-        CrossProduct(t1, t2, cross);
-        float area = VectorLength(cross);
-        if (area < 0.001f)
-        {
-            c_degenerate_triangles++;
-            continue;
-        }
-
-        // MapPlaneFromPoints computes normal pointing OUT for CW triangles.
-        // If our mesh is CCW (standard), feeding MapPlaneFromPoints(p0, p2, p1)
-        // gives the correct outgoing normal.
-        int planenum = MapPlaneFromPoints(p0, p2, p1);
+        int planenum = MapPlaneFromPoints(*p0, *p2, *p1);
         if (planenum == -1)
         {
-            c_degenerate_triangles++;
             continue;
         }
 
-        // Deduplicate against existing planes in this brush
+        vec3_t d1, d2, cross;
+        VectorSubtract(*p1, *p0, d1);
+        VectorSubtract(*p2, *p0, d2);
+        CrossProduct(d1, d2, cross);
+        float area = VectorLength(cross) * 0.5f;
+
         for (j = 0; j < numUniquePlanes; j++)
         {
-            if (uniquePlanes[j] == planenum)
+            if (uniquePlanes[j] == planenum || uniquePlanes[j] == (planenum ^ 1))
             {
-                // Track the largest triangle per plane (for fallback windings)
                 if (area > maxPlaneArea[j])
                 {
+                    uniquePlanes[j] = planenum;
                     maxPlaneArea[j] = area;
-                    VectorCopy(p0, trianglePoints[j][0]);
-                    VectorCopy(p1, trianglePoints[j][1]);
-                    VectorCopy(p2, trianglePoints[j][2]);
+                    VectorCopy(*p0, trianglePoints[j][0]);
+                    VectorCopy(*p1, trianglePoints[j][1]);
+                    VectorCopy(*p2, trianglePoints[j][2]);
                 }
                 break;
             }
@@ -689,9 +692,9 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
             }
             uniquePlanes[numUniquePlanes] = planenum;
             maxPlaneArea[numUniquePlanes] = area;
-            VectorCopy(p0, trianglePoints[numUniquePlanes][0]);
-            VectorCopy(p1, trianglePoints[numUniquePlanes][1]);
-            VectorCopy(p2, trianglePoints[numUniquePlanes][2]);
+            VectorCopy(*p0, trianglePoints[numUniquePlanes][0]);
+            VectorCopy(*p1, trianglePoints[numUniquePlanes][1]);
+            VectorCopy(*p2, trianglePoints[numUniquePlanes][2]);
             numUniquePlanes++;
         }
     }
@@ -705,7 +708,7 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
     b = AllocBrush(numUniquePlanes + 6);
     b->numsides = numUniquePlanes;
     b->detail = qtrue;
-    b->contents = CONTENTS_SOLID | CONTENTS_TRANSLUCENT | CONTENTS_DETAIL;
+    b->contents = si->contents;
     b->contentShader = si;
 
     for (i = 0; i < numUniquePlanes; i++)
@@ -732,17 +735,37 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
             if (b->sides[i].winding)
             {
                 FreeWinding(b->sides[i].winding);
+                b->sides[i].winding = NULL;
             }
+        }
+
+        qboolean anyFallbackFailed = qfalse;
+        for (i = 0; i < numUniquePlanes; i++)
+        {
             b->sides[i].winding = AllocWinding(3);
             b->sides[i].winding->numpoints = 3;
             VectorCopy(trianglePoints[i][0], b->sides[i].winding->points[0]);
             VectorCopy(trianglePoints[i][1], b->sides[i].winding->points[1]);
             VectorCopy(trianglePoints[i][2], b->sides[i].winding->points[2]);
+
+            // Snap winding to plane
+            for (int k = 0; k < 3; k++)
+            {
+                vec_t dist = DotProduct(b->sides[i].winding->points[k], mapplanes[b->sides[i].planenum].normal) - mapplanes[b->sides[i].planenum].dist;
+                VectorMA(b->sides[i].winding->points[k], -dist, mapplanes[b->sides[i].planenum].normal, b->sides[i].winding->points[k]);
+            }
+
+            if (WindingArea(b->sides[i].winding) < 0.1f)
+            {
+                anyFallbackFailed = qtrue;
+                break;
+            }
         }
-        if (!BoundBrush(b))
+
+        if (anyFallbackFailed)
         {
-            c_degenerate_hulls++;
             FreeBrush(b);
+            c_degenerate_hulls++;
             return NULL;
         }
     }
@@ -762,6 +785,7 @@ Converts an array of convex hulls to a linked list of brushes.
 */
 bspbrush_t *BrushesFromHulls(colHull_t **hulls, int numHulls, shaderInfo_t *si)
 {
+    si = GetCollisionShaderInfo(si);
     int i;
     bspbrush_t *list = NULL;
 
@@ -1103,7 +1127,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
         return;
     }
 
-    shaderInfo_t *caulk = ShaderInfoForShader("textures/common/caulk");
+    shaderInfo_t *caulk = ShaderInfoForShader("textures/common/_miscmodelclip");
     qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
 
     if (category == MC_TERRAIN || category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)

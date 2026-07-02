@@ -37,4 +37,5 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si);
 bspbrush_t *BrushesFromHulls(colHull_t **hulls, int numHulls, shaderInfo_t *si);
 bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si);
 bspbrush_t *CombineBrushes(bspbrush_t *list, bspbrush_t *newBrushes);
+shaderInfo_t *GetCollisionShaderInfo(shaderInfo_t *si);
 #endif
