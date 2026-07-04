@@ -135,6 +135,7 @@ List of additions and modifications made to shader parsing and features compared
 - **q3map_surfacelight_fadeout <value>**: Percentage of the surface light's reach to use for a softness fade at the cutoff (0.0 to 1.0).
 - **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality. Instead it will only contribute color/energy (to prevent bumpmap distortions caused by trim lights).
 - **q3map_backsplash_nodeluxe**: Prevents the surface light's backsplash from influencing the deluxe map's directionality.
+- **q3map_deluxe_minangle <value>**: Alias: `q3map_deluxeminangle`. Overrides the minimum incidence angle threshold (in degrees, 0.0 to 89.0) for deluxemap directionality on this material. Useful for softening or clamping deluxemap angles on specific surfaces without changing global defaults.
 - **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
 - **q3map_maxsamplesize <value>**: Enforces a minimum lightmap resolution (quality floor) by establishing a maximum limit on the surface's `samplesize` value. Ignored during `-fast` compilations.
 - **q3map_minsmooth <value>**: Enforces a minimum lightmap smooth filter radius. It only acts if the global setting has a smaller smooth value than the requested minimum. Can be overridden by an entity's `smooth` key.
