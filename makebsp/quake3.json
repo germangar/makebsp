@@ -39,6 +39,8 @@
   "smoothPasses": 4, /* passes of blurring lightmaps */
   "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
   "exposurefilter": "off", /* [ off, softknee, reinhard, filmic ] */
+  "saturation": 1.00, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
+  "saturationRamp": "off", /* [ off, filmic, power, midtone ] */
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",

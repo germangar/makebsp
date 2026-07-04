@@ -173,6 +173,8 @@ List of additions and modifications made to shader parsing and features compared
 - **shading**: Global light shading mode. Valid modes are: halflambert, lambert, quadratic, doublequadratic, unreal. Default lambert.
 - **attenuation**: Global default distance falloff model for lights. Valid modes are: standard, soft, linear, unreal, smoothstep.
 - **exposurefilter**: Global tonemapping exposure filter. Valid modes are: softknee, reinhard, filmic, linear (or off). Default reinhard.
+- **saturation**: Global lightmap saturation multiplier (1.0 = normal, 1.5 = +50%, 0.0 = greyscale).
+- **saturationramp**: Saturation contrast curve (prevents clipping in highlights/shadows). Valid modes are: filmic, power, halfpower, midtone, off.
 - **cutoff**: Minimum energy threshold before any light is completely culled. Defaults to the global game.json minLightAdd value.
 - **fadeout**: Percentage of a light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
 - **backsplashspot**: Default entity spotlight backsplash fraction (0.0 to 1.0).
@@ -408,6 +410,8 @@ These switches change the primary mode of the executable.
 
 **Post-Processing & Filtering**
 - `-exposurefilter <type>`: Highlight compression filter (softknee, reinhard, filmic). To reduce hotspots.
+- `-saturation <F>`: Global lightmap saturation multiplier (1.0 = normal, 1.5 = +50%, 0.0 = greyscale).
+- `-saturationramp <type>`: Saturation contrast curve (prevents clipping). Valid modes: filmic, power, halfpower, midtone, off.
 - `-antialiasing <N>`: Number of post-process anti-aliasing passes (The smooth filter is better, IMO).
 - `-smoothpasses <N>`: Number of lightmap smoothing/blurring passes.
 - `-smooth <R>`: Radius for smoothing and jittered supersampling.

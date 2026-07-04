@@ -1,4 +1,5 @@
 #include "light.h"
+#include "lightdata.h"
 #include <omp.h>
 #include <math.h>
 #include <stdlib.h>
@@ -1146,7 +1147,69 @@ static void StitchEdgesCPU(void) {
     Q_Free(tF);
 }
 
+// Saturation Ramp Hardcoded Constants
+#define SATRAMP_FILMIC_TOE_K        0.05f   // Toe roll-off constant for Filmic ramp
+#define SATRAMP_FILMIC_NORM_SCALE   1.05f   // Normalization multiplier so white reaches 1.0
+#define SATRAMP_POWER_GAMMA         3.0f    // Inverted cubic exponent for Power ramp
+
+static inline void ApplySaturationToVector(float *rgb, float sat, satRamp_t ramp) {
+    if (sat < 1.0f) {
+        ramp = SATRAMP_OFF; // Ramps are designed to protect shadows when boosting; ignore them for desaturation.
+    }
+    float lum = rgb[0] * 0.2126f + rgb[1] * 0.7152f + rgb[2] * 0.0722f;
+    // Normalize luminance relative to the map's peak intensity (so ramps scale across the entire HDR range)
+    float maxLum = maxLightIntensity > 1.0f ? maxLightIntensity : 1.0f;
+    float clampLum = lum / maxLum;
+    
+    if (clampLum < 0.0f) clampLum = 0.0f;
+    if (clampLum > 1.0f) clampLum = 1.0f;
+
+    float lumaFactor = 1.0f;
+    switch (ramp) {
+    case SATRAMP_FILMIC:
+        lumaFactor = (clampLum * SATRAMP_FILMIC_NORM_SCALE) / (clampLum + SATRAMP_FILMIC_TOE_K);
+        break;
+    case SATRAMP_POWER:
+        {
+            float inv = 1.0f - clampLum;
+            lumaFactor = 1.0f - (inv * inv * inv); // gamma 3.0
+        }
+        break;
+    case SATRAMP_HALF_POWER:
+        {
+            float inv = 1.0f - clampLum;
+            float powerCurve = 1.0f - (inv * inv * inv);
+            lumaFactor = 0.25f + 0.5f * powerCurve; // 50/50 mix of final raw + final power
+        }
+        break;
+    case SATRAMP_MIDTONE:
+        {
+            float diff = 2.0f * clampLum - 1.0f;
+            diff = diff * diff; // diff squared
+            lumaFactor = 1.0f - (diff * diff); // power of 4 wide bell
+        }
+        break;
+    case SATRAMP_OFF:
+    default:
+        lumaFactor = 1.0f;
+        break;
+    }
+
+    float boost = sat - 1.0f;
+    if (ramp != SATRAMP_OFF) {
+        boost *= 2.0f; // Compensation factor: ramps suppress saturation in shadows, so double the peak boost
+    }
+
+    float effectiveSat = 1.0f + boost * lumaFactor;
+    if (effectiveSat < 0.0f) effectiveSat = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        rgb[i] = lum + effectiveSat * (rgb[i] - lum);
+        if (rgb[i] < 0.0f) rgb[i] = 0.0f;
+    }
+}
+
 void PostProcessLightmaps(void) {
+    ScanLightmapIntensity();
     lightmapAA=game->antialiasingPasses; lightmapSmoothRadius=game->defaultSmoothRadius; lightmapSmoothPasses=game->defaultSmoothPasses;
     _printf("--- Post Processing ---\n"); BuildPlanarSurfaceIndex(); double start=I_FloatTime();
     if (useOpenCL) {
@@ -1220,5 +1283,48 @@ void PostProcessLightmaps(void) {
         }
         Q_Free(tF); _printf("Done\n");
     }
+
+    if (game->saturation != 1.0f) {
+        const char *rampStr = "off";
+        if (game->saturationRamp == SATRAMP_FILMIC) rampStr = "filmic";
+        else if (game->saturationRamp == SATRAMP_POWER) rampStr = "power";
+        else if (game->saturationRamp == SATRAMP_HALF_POWER) rampStr = "halfpower";
+        else if (game->saturationRamp == SATRAMP_MIDTONE) rampStr = "midtone";
+
+        _printf("  Applying saturation filter (%.2f, ramp: %s): ", game->saturation, rampStr);
+        float sat = game->saturation;
+        satRamp_t ramp = game->saturationRamp;
+        
+        // 1. Lightmaps
+        int numPixels = numLightBytes / 3;
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < numPixels; i++) {
+            if (lightAlphaMask && !lightAlphaMask[i]) continue;
+            ApplySaturationToVector(&lightFloats[i * 3], sat, ramp);
+        }
+        
+        // 2. Vertex lighting
+        if (internalDrawVerts) {
+            #pragma omp parallel for schedule(static)
+            for (int i = 0; i < numDrawVerts; i++) {
+                for (int j = 0; j < 4; j++) {
+                    ApplySaturationToVector(internalDrawVerts[i].color[j], sat, ramp);
+                }
+            }
+        }
+        
+        // 3. Volumetric Lightgrid
+        if (gridData32) {
+            #pragma omp parallel for schedule(static)
+            for (int i = 0; i < numGridPoints; i++) {
+                for (int j = 0; j < 4; j++) {
+                    ApplySaturationToVector(gridData32[i].ambient[j], sat, ramp);
+                    ApplySaturationToVector(gridData32[i].directed[j], sat, ramp);
+                }
+            }
+        }
+        _printf("Done\n");
+    }
+
     _printf("  Total filtering time: %.2f seconds\n", I_FloatTime()-start); FreePlanarSurfaceIndex();
 }

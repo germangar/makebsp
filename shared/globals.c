@@ -60,6 +60,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
         TONEMAP_REINHARD, // exposureFilter
+        1.25f,      // saturation
+        SATRAMP_HALF_POWER, // saturationRamp
         0.1f,       // cutoff
         0.0f,       // fadeout
         0.1f,       // backSplashSpot
@@ -110,6 +112,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
         TONEMAP_LINEAR, // exposureFilter
+        1.0f,       // saturation
+        SATRAMP_OFF, // saturationRamp
         0.1f,       // cutoff
         0.0f,       // fadeout
         0.1f,       // backSplashSpot
