@@ -489,7 +489,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                       vec3_t dir, vec3_t energy,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
-                      int numLights, traceWork_t *tw);
+                      int numLights, traceWork_t *tw, float deluxeMinAngle);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
 					qboolean forceSunLight, float scale, light_t **lightList,
 					int numLights, traceWork_t *tw);

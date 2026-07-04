@@ -707,12 +707,12 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
 /*
 ========================
-AccumulateContribution
+MergeAccumulatedState
 ========================
 */
 void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
                            const vec3_t addColor, const vec3_t addDir,
-                           const vec3_t addEnergy, const vec3_t normal)
+                           const vec3_t addEnergy, const vec3_t normal, float deluxeMinAngle)
 {
     int i;
     vec3_t currentRadiance, addedRadiance, targetRadiance;
@@ -790,12 +790,13 @@ void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
     }
 
     // Step 4.5: Angle Floor (if enabled)
-    if (game->deluxeMinAngle > 0.0f)
+    float effDeluxeMinAngle = (deluxeMinAngle >= 0.0f) ? deluxeMinAngle : game->deluxeMinAngle;
+    if (effDeluxeMinAngle > 0.0f)
     {
         // deluxeMinAngle is the angle TO THE SURFACE.
         // The angle to the normal is 90 - deluxeMinAngle.
         // cos(90 - A) = sin(A).
-        float minCos = sin(game->deluxeMinAngle * (M_PI / 180.0f));
+        float minCos = sin(effDeluxeMinAngle * (M_PI / 180.0f));
         if (w < minCos)
         {
             float wNeeded = minCos;
@@ -823,7 +824,7 @@ void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
         }
     }
 
-    // Step 5: Commit (store pure radiance, w division deferred to DownConvert)
+    // Step 5: Commit
     for (i = 0; i < 3; i++)
         color[i] = targetRadiance[i];
 
@@ -831,7 +832,7 @@ void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
     VectorCopy(energyNew, energy);
 }
 
-void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal)
+void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal, float deluxeMinAngle)
 {
     if (!color)
         return;
@@ -863,7 +864,7 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
 
     VectorCopy(cont->irradiance, addEnergy);
 
-    MergeAccumulatedState(color, dir, energy, addColor, addDir, addEnergy, normal);
+    MergeAccumulatedState(color, dir, energy, addColor, addDir, addEnergy, normal, deluxeMinAngle);
 }
 
 /*
@@ -1159,7 +1160,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                       vec3_t dir, vec3_t energy,
                       qboolean testOcclusion, qboolean forceSunLight,
                       qboolean applyColorFilter, light_t **lightList,
-                      int numLights, traceWork_t *tw)
+                      int numLights, traceWork_t *tw, float deluxeMinAngle)
 {
     light_t *light;
     contribution_t cont;
@@ -1178,7 +1179,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
     {
         if (SunToPlane(origin, normal, &cont, applyColorFilter, tw))
         {
-            AccumulateContribution(color, dir, energy, &cont, normal);
+            AccumulateContribution(color, dir, energy, &cont, normal, deluxeMinAngle);
         }
     }
 
@@ -1194,7 +1195,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                     VectorCopy(dir, cont.dir);
                     cont.isGlow = qfalse;
                 }
-                AccumulateContribution(color, dir, energy, &cont, normal);
+                AccumulateContribution(color, dir, energy, &cont, normal, deluxeMinAngle);
             }
         }
     }
@@ -1209,7 +1210,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                     VectorCopy(dir, cont.dir);
                     cont.isGlow = qfalse;
                 }
-                AccumulateContribution(color, dir, energy, &cont, normal);
+                AccumulateContribution(color, dir, energy, &cont, normal, deluxeMinAngle);
             }
         }
     }
@@ -1244,13 +1245,13 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
         {
             VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
             LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, testOcclusion,
-                             forceSunLight, qfalse, lightList, numLights, tw);
+                             forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
         }
         else
         {
             VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
             LightingAtSample(v_origin, normal, sample, NULL, NULL, testOcclusion,
-                             forceSunLight, qfalse, lightList, numLights, tw);
+                             forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
         }
 
         if (scale >= 0)
@@ -2007,7 +2008,7 @@ void TraceLights(int num)
                     if (deluxe)
                     {
                         LightingAtSample(origin, normal, subColor, subDir, subEnergy,
-                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
+                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw, si->deluxeMinAngle);
                         VectorAdd(accumColor, subColor, accumColor);
                         VectorAdd(accumDir, subDir, accumDir);
                         VectorAdd(accumEnergy, subEnergy, accumEnergy);
@@ -2016,7 +2017,7 @@ void TraceLights(int num)
                     else
                     {
                         LightingAtSample(origin, normal, subColor, NULL, NULL,
-                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw);
+                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw, si->deluxeMinAngle);
                         VectorAdd(accumColor, subColor, accumColor);
                     }
                 }

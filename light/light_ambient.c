@@ -314,6 +314,7 @@ void TraceAmbient(int num)
 
     realSurfIndex = surfaceWorkOrder[num];
     ds = &drawSurfaces[realSurfIndex];
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
     
     surfWeight = ds->numVerts;
     if (ds->lightmapNum[0] >= 0) {
@@ -461,7 +462,7 @@ void TraceAmbient(int num)
                     VectorCopy(normal, normalizedBent);
 
                 MergeAccumulatedState(existColor, existDir, existEnergy,
-                                      ambColor, normalizedBent, ambColor, normal);
+                                      ambColor, normalizedBent, ambColor, normal, si->deluxeMinAngle);
 
                 deluxeFloats[k * 3 + 0] = existDir[0];
                 deluxeFloats[k * 3 + 1] = existDir[1];
