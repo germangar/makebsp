@@ -188,7 +188,7 @@ List of additions and modifications made to shader parsing and features compared
 **Lightmaps & Rendering Passes**
 - **samplesize**: Global default lightmap sample size in game units (e.g., 16). Default depends on game profile (4 or 8).
 - **deluxe**: Enable (1) or disable (0) deluxe mapping globally (direction maps). Default depends on game profile (1 or 0).
-- **deluxe_minangle**: Minimum angle (in degrees) to blend deluxemaps (0 to 90). Higher value = softer bumpmapping. Default depends on game profile (15.0 or 40.0).
+- **deluxe_minangle**: Minimum angle (in degrees) to blend deluxemaps (0 to 90). Higher value = softer bumpmapping. Default depends on game profile (15.0 or 40.0). Can be overridden per-material using `q3map_deluxe_minangle`.
 - **supersample**: Global supersampling trace radius (e.g., 0.5 or 2.0). Defaults to 0 (disabled). Exceeding 8.0 is not recommended.
 - **smooth**: Global lightmap smooth filter radius. Defaults to 0.35. Set to 0.0 to disable global smoothing.
 - **smoothpasses**: Number of smoothing passes applied to the lightmaps. Defaults to 4.
@@ -405,7 +405,7 @@ These switches change the primary mode of the executable.
 
 **Deluxe Mapping (Directional Lightmaps)**
 - `-deluxe <0|1>`: Enable (1) or disable (0) deluxemapping (direction maps).
-- `-deluxe_minangle <A>`: Clamp the minimum incidence angle for deluxe vectors (the higher the value the less 'bumpmapped').
+- `-deluxe_minangle <A>`: Clamp the minimum incidence angle for deluxe vectors (the higher the value the less 'bumpmapped'). Can be overridden per-material using `q3map_deluxe_minangle`.
 - `-deluxe_radiosity_exaggerate <F>`: Exaggerate the incidence angle for bounced light. (may produce glitches on specular surfaces)
 - `-deluxe_ambient_exaggerate <F>`: Exaggerate the incidence angle for ambient light. (Its impact is very low no matter how big it is)
 
