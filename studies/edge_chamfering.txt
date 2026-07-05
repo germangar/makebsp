@@ -165,13 +165,19 @@ The `ChamferSurfaceEdges` function operates in 3 strictly separated passes over
 all draw surfaces in the entity. This prevents consecutive modifications from
 corrupting shared vertex positions.
 
-PASS 1: COMPUTE INNER BODIES (INSETS)
--------------------------------------
+PASS 1: COMPUTE INNER BODIES (INSETS & DELTA-UVs)
+-------------------------------------------------
 For every candidate surface `dsA`, we scan all its neighbors.
 If an edge qualifies for chamfering, we flag it.
+When allocating `globalInsets[i]`, we use `memcpy` to copy the entire `dsA->verts`
+array. This ensures every inset vertex inherits the original `.st`, `.color`,
+`.normal`, and scratch variables.
 We call `ComputeAllInsets()` to trace the geometric border of the shrunk inner
-polygon. These computed coordinates are saved into a temporary `globalInsets[i]`
-array. The original geometry is NOT modified yet.
+polygon, which overwrites `.xyz` in `globalInsets[i]`.
+Finally, we loop through all vertices and call `ShiftVertexUV(...)` to calculate
+the exact linear texture coordinate shift ($\Delta st$) corresponding to the spatial
+displacement ($\Delta xyz = new\_xyz - old\_xyz$).
+The original geometry is NOT modified yet.
 
 PASS 2: GENERATE SUBDIVISION STRIPS
 -----------------------------------
@@ -180,16 +186,25 @@ strips to fill the gap.
 For every chamfered edge chain:
 - We allocate a new strip surface with `chainLen * 2` vertices.
 - We copy properties (shader, plane, side) from the parent surface.
-- The strip bridges the `globalInsets` boundary to the original untouched
-  outer boundary.
-- The outer boundary vertices receive the `blendedNormal` (smoothed corner).
-- The inner boundary vertices receive the `faceNormal` (flat).
+- The outer boundary vertices (`strip->verts[k]`) receive `dsA->verts[vIdx]`
+  (original corner `.xyz` and `.st`) with `blendedNormal`.
+- The inner boundary vertices (`strip->verts[innerSlot]`) receive `globalInsets[i][vIdx]`
+  (inset `.xyz` and shifted `.st`) with flat `faceNormal`.
+- This ensures textures bridge smoothly across the bevel strip without stretching.
 
 PASS 3: SHRINK INNER BODIES
 ---------------------------
-Finally, we overwrite the coordinates of the original large structural face
-(`dsA->verts[v].xyz`) with the `globalInsets` coordinates computed in Pass 1.
-The original face is now safely shrunk and perfectly flat.
+Finally, we overwrite both the coordinates (`dsA->verts[v].xyz`) and texture UVs
+(`dsA->verts[v].st`) of the original large structural face with `globalInsets[i][v]`.
+The original face is now safely shrunk, perfectly flat, and its textures remain
+locked in 3D world space without sliding or distorting.
+
+**Note on Pass 3 Bug Fix:** Previously, Pass 3 guarded updates with:
+`if (VectorLength(globalInsets[i][v].normal) > 0.1f)`
+Because `ComputeAllInsets()` only computes `.xyz` and leaves `.normal` at `{0,0,0}`,
+this condition evaluated to `0.0f > 0.1f` (always false), leaving the original
+surfaces completely untouched and Z-fighting with the strips. This check was removed
+so that every vertex of the inner body is reliably overwritten with its inset data.
 
 
 ==============================================================================
@@ -233,7 +248,80 @@ This perfectly forms an `OuterA -> OuterB -> InnerB -> InnerA` clockwise perimet
 
 
 ==============================================================================
-8. KNOWN EDGE CASES & ERRATA
+8. TEXTURE COORDINATE PRESERVATION (DELTA-UV SHIFTING)
+==============================================================================
+
+When vertex world positions (`.xyz`) shift inward without updating texture UV
+coordinates (`.st`), texture mapping distorts severely:
+1. **On Chamfer Strips:** Outer and inner vertices share identical `.st`, causing
+   the texture to stretch infinitely across the width of the bevel (horizontal smearing).
+2. **On Shrunk Faces:** Moving the outer border inward while retaining old `.st`
+   compresses and shifts the texture across the main face.
+
+**The Integer Shift Trap (Why Absolute UVs Fail):**
+In `q3map/surface.c`, when `DrawSurfaceForSide` creates a brush face, it calculates
+raw texture coordinates and then applies an integer normalization step:
+```c
+mins[0] = floor(mins[0]);
+mins[1] = floor(mins[1]);
+for (i = 0; i < w->numpoints; i++) {
+    ds->verts[i].st[0] -= mins[0];
+    ds->verts[i].st[1] -= mins[1];
+}
+```
+Because textures wrap every 1.0 unit, subtracting integer multiples keeps floating-point
+numbers small and precise without altering visual rendering. If we recomputed absolute
+UVs from raw world coordinates on inner strip vertices without applying that exact same
+integer shift, outer and inner vertices on a strip would suffer an integer mismatch
+(e.g., outer `.st = 0.2`, inner `.st = 5.15`), causing textures to wrap 5 times across
+a 2-unit bevel!
+
+**The Delta-UV Solution:**
+Because texture projection on a planar face is an affine linear equation ($f(x) = M \cdot x + C$),
+the derivative is constant ($f(x + \Delta x) - f(x) = M \cdot \Delta x$). Any constant
+integer normalization shifts or origin offsets ($C$) completely cancel out!
+
+We calculate the **Delta-UV** ($\Delta st$) directly from spatial displacement
+($\Delta xyz = new\_xyz - old\_xyz$) using the native engine projection formulas,
+and add it directly to `old_st`.
+
+**Exact Implementation Pseudo-Code (`q3map/tjunction.c`):**
+```c
+static void ShiftVertexUV(mapDrawSurface_t *ds, drawVert_t *dv, const vec3_t old_xyz, const vec3_t new_xyz)
+{
+    side_t *s = ds->side;
+    shaderInfo_t *si = ds->shaderInfo;
+    if (!s || !si) return;
+
+    vec3_t delta;
+    VectorSubtract(new_xyz, old_xyz, delta);
+    if (VectorLength(delta) < 0.001f) return; // No movement, no UV change
+
+    if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES)
+    {
+        if (si->width && si->height) {
+            dv->st[0] += DotProduct(s->vecs[0], delta) / si->width;
+            dv->st[1] += DotProduct(s->vecs[1], delta) / si->height;
+        }
+    }
+    else
+    {
+        vec3_t texX, texY;
+        ComputeAxisBase(mapplanes[s->planenum].normal, texX, texY);
+        float dx = DotProduct(delta, texX);
+        float dy = DotProduct(delta, texY);
+        dv->st[0] += s->texMat[0][0] * dx + s->texMat[0][1] * dy;
+        dv->st[1] += s->texMat[1][0] * dx + s->texMat[1][1] * dy;
+    }
+}
+```
+By invoking `ShiftVertexUV` during Pass 1 on `globalInsets[i]`, every inset vertex
+gains exact, continuous texture coordinates that propagate cleanly to both Pass 2
+(strip inner edges) and Pass 3 (shrunk main faces).
+
+
+==============================================================================
+9. KNOWN EDGE CASES & ERRATA
 ==============================================================================
 
 A. Triangle Stretching to Origin (0,0,0)
@@ -252,3 +340,14 @@ C. Z-Fighting Avoidance
    existing geometry. Because they never overlap physically, Z-fighting is avoided.
    (The inner border of the strip shares the exact same coordinates as the outer
    border of the shrunk parent face).
+
+D. Pass 3 Normal Length Guard Removal
+   Previously, Pass 3 guarded shrinking with `if (VectorLength(globalInsets[i][v].normal) > 0.1f)`.
+   Because `ComputeAllInsets()` leaves `.normal` at zero, this prevented original
+   faces from shrinking. Removing this guard allowed clean geometric reduction.
+
+E. Texture Integer Wrapping Trap (Delta-UV)
+   Direct world-space UV recomputation conflicts with `surface.c` integer UV
+   normalization (`floor(mins)`), causing multi-wrap texture distortion on strips.
+   Using Delta-UV (`new_st = old_st + M * delta_xyz`) completely bypasses integer
+   offsets and guarantees seamless texture continuity.

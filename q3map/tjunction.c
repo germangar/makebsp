@@ -798,6 +798,34 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
     }
 }
 
+static void ShiftVertexUV(mapDrawSurface_t *ds, drawVert_t *dv, const vec3_t old_xyz, const vec3_t new_xyz)
+{
+    side_t *s = ds->side;
+    shaderInfo_t *si = ds->shaderInfo;
+    if (!s || !si) return;
+
+    vec3_t delta;
+    VectorSubtract(new_xyz, old_xyz, delta);
+    if (VectorLength(delta) < 0.001f) return;
+
+    if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES)
+    {
+        if (si->width && si->height) {
+            dv->st[0] += DotProduct(s->vecs[0], delta) / si->width;
+            dv->st[1] += DotProduct(s->vecs[1], delta) / si->height;
+        }
+    }
+    else
+    {
+        vec3_t texX, texY;
+        ComputeAxisBase(mapplanes[s->planenum].normal, texX, texY);
+        float dx = DotProduct(delta, texX);
+        float dy = DotProduct(delta, texY);
+        dv->st[0] += s->texMat[0][0] * dx + s->texMat[0][1] * dy;
+        dv->st[1] += s->texMat[1][0] * dx + s->texMat[1][1] * dy;
+    }
+}
+
 /*
 ================
 ChamferSurfaceEdges
@@ -870,8 +898,11 @@ void ChamferSurfaceEdges(entity_t *e)
         if (numEdges > 0)
         {
             globalInsets[i] = malloc(dsA->numVerts * sizeof(drawVert_t));
-            memset(globalInsets[i], 0, dsA->numVerts * sizeof(drawVert_t));
+            memcpy(globalInsets[i], dsA->verts, dsA->numVerts * sizeof(drawVert_t));
             ComputeAllInsets(dsA, edges, numEdges, chamfer_global_width, globalInsets[i]);
+            for (int v = 0; v < dsA->numVerts; v++) {
+                ShiftVertexUV(dsA, &globalInsets[i][v], dsA->verts[v].xyz, globalInsets[i][v].xyz);
+            }
         }
     }
 
@@ -946,8 +977,7 @@ void ChamferSurfaceEdges(entity_t *e)
                             // Inner edge: reverse order [chainLen..2*chainLen-1]
                             // Reversing closes the perimeter: last outer -> first inner
                             int innerSlot = chainLen + (chainLen - 1 - k);
-                            strip->verts[innerSlot] = dsA->verts[vIdx];
-                            VectorCopy(globalInsets[i][vIdx].xyz, strip->verts[innerSlot].xyz);
+                            strip->verts[innerSlot] = globalInsets[i][vIdx];
                             VectorCopy(faceNormal, strip->verts[innerSlot].normal);
                         }
                     }
@@ -964,6 +994,7 @@ void ChamferSurfaceEdges(entity_t *e)
             
             for (int v = 0; v < ds->numVerts; v++) {
                 VectorCopy(globalInsets[i][v].xyz, ds->verts[v].xyz);
+                VectorCopy(globalInsets[i][v].st, ds->verts[v].st);
             }
             free(globalInsets[i]);
         }

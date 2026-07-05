@@ -11,7 +11,8 @@ Instead of creating true geometric bevels (which shrink structural boundaries), 
 1. **Inner Body Shifting:** The original flat face is shrunk inward by `chamferWidth`. This new "inner body" retains perfectly flat surface normals.
 2. **Subdivision Strips:** A coplanar strip is spawned to fill the gap between the shrunk inner body and the original sharp corner.
 3. **Normal Blending:** Vertices on the strip touching the inner body keep the flat face normal. Vertices on the strip touching the original sharp corner receive a blended normal (average of the two meeting faces).
-4. **Result:** The lighting engine natively interpolates across the strip, producing a smooth gradient on an otherwise perfectly sharp geometric corner.
+4. **Texture Preservation:** Vertices that shift spatially have their UV coordinates (`.st`) adjusted linearly via Delta-UV shifting ($\Delta st = M \cdot \Delta xyz$), preventing texture stretching across the strip or warping on the main face.
+5. **Result:** The lighting engine natively interpolates across the strip, producing a smooth gradient on an otherwise perfectly sharp geometric corner with pristine texture mapping.
 
 ---
 
@@ -72,11 +73,17 @@ Append all new code **at the end of the file**, after `FixTJunctions()`.
 - Compares vertex positions to find shared collinear chains.
 - Registers bidirectional `surfaceNeighbor_t` links.
 
+**`static void ShiftVertexUV(...)` — Delta-UV Helper**
+- Calculates spatial displacement vector: `delta = new_xyz - old_xyz`.
+- Computes exact texture coordinate shift using `s->vecs` (old brushes) or `s->texMat` with `ComputeAxisBase` (new brushes).
+- Adds delta directly to `dv->st`, avoiding integer wrapping traps from `surface.c` normalization.
+
 **`ChamferSurfaceEdges(entity_t *e)` — V3 Normal Bending Pass**
 For each surface:
-1. **Pass 1: Compute Inner Bodies (Insets)**
-   - Uses `ComputeAllInsets()` to trace the geometric border of the shrunk inner polygon.
-   - Saves these computed coordinates into a temporary `globalInsets[]` array.
+1. **Pass 1: Compute Inner Bodies (Insets & Delta-UVs)**
+   - Uses `memcpy` when allocating `globalInsets[]` to inherit all original attributes (`.st`, `.color`, `.normal`).
+   - Uses `ComputeAllInsets()` to trace the geometric border of the shrunk inner polygon (`.xyz`).
+   - Invokes `ShiftVertexUV()` on all vertices to adjust `.st` coordinates linearly for their new inset positions.
 2. **Pass 2: Generate Subdivision Strips**
    - Allocates new `mapDrawSurface_t` strips.
    - Emits quads bridging the `globalInsets` boundary to the original untouched vertices.
@@ -105,7 +112,8 @@ for (int k = 0; k < chainLen; k++) {
 }
 ```
 3. **Pass 3: Replace Original Geometry**
-   - Replaces the coordinates of the original large structural face with the computed `globalInsets` coordinates.
+   - Replaces both coordinates (`dsA->verts[v].xyz`) and texture UVs (`dsA->verts[v].st`) of the original large structural face with the computed `globalInsets` data.
+   - Removes any obsolete normal-length guards so shrinking executes unconditionally.
 
 **`static ComputeAllInsets()`**
 - Iterates all collected edges to build an `insetMap[vertexIndex]` lookup.
@@ -123,6 +131,7 @@ for (int k = 0; k < chainLen; k++) {
 - Inspect a 3D room corner in-engine to verify:
   - Smooth lighting gradient across the geometric corner.
   - No gaps, holes, or visible seams at the mitres.
+  - Textures map seamlessly across the bevel strip without stretching or distortion.
 
 ## Post-Implementation Errata
 
@@ -131,3 +140,5 @@ for (int k = 0; k < chainLen; k++) {
 2. **Splits on Coplanar Surfaces:** Added a `CHAMFER_ANGLE_THRESHOLD` dot-product check (`> 0.866f`). Perfectly flat adjoining polygons are ignored.
 3. **Missing Triangles (The Bow-Tie Winding Bug):** Quads generated for the strips MUST be laid out in a continuous perimeter loop (Outer forward, Inner reversed). If laid out as `[Outer0, Outer1, Inner0, Inner1]`, they form a figure-8 bow-tie. The BSP compiler (`SurfaceAsTristrip`) chokes on this, generating degenerate triangles and collapsing the strip into a single visible diagonal triangle. Explicit index buffers (`strip->indexes`) are completely ignored for brush faces, so the winding order is the only way to fix it.
 4. **Z-Fighting Avoidance:** The algorithm achieves perfectly flush coplanar strips by strictly shrinking Face A, rather than just spawning strips blindly on top of it.
+5. **Shriking Original Surfaces (Pass 3 bugfix):** In Pass 3, previously a normal check `if (VectorLength(globalInsets[i][v].normal) > 0.1f)` prevented the original surfaces from shrinking because `ComputeAllInsets()` only populates `.xyz`, leaving `.normal` at zero. This check was removed so `ds->verts[v].xyz` and `.st` are reliably overwritten with the inset coordinates.
+6. **Texture Coordinate Preservation (Delta-UV Shifting):** Shifting vertex `.xyz` coordinates inward without updating texture UV coordinates (`.st`) causes severe texture stretching across bevel strips and distortion on the main faces. Because `surface.c` applies an integer normalization step (`st -= floor(mins)`), computing absolute UVs from world origin causes integer wrapping mismatches. To fix this, a helper function `ShiftVertexUV` computes the exact linear delta ($\Delta st$) from spatial movement ($\Delta xyz = new\_xyz - old\_xyz$) using the native projection equations (`BPRIMIT_OLDBRUSHES` and `BPRIMIT_NEWBRUSHES`). This delta is added directly to the original `.st`, locking textures in world space across all surface fragments without integer jumps.
