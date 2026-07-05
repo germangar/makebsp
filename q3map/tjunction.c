@@ -946,7 +946,8 @@ void ChamferSurfaceEdges(entity_t *e)
                             // Inner edge: reverse order [chainLen..2*chainLen-1]
                             // Reversing closes the perimeter: last outer -> first inner
                             int innerSlot = chainLen + (chainLen - 1 - k);
-                            strip->verts[innerSlot] = globalInsets[i][vIdx];
+                            strip->verts[innerSlot] = dsA->verts[vIdx];
+                            VectorCopy(globalInsets[i][vIdx].xyz, strip->verts[innerSlot].xyz);
                             VectorCopy(faceNormal, strip->verts[innerSlot].normal);
                         }
                     }
@@ -960,15 +961,9 @@ void ChamferSurfaceEdges(entity_t *e)
     {
         if (globalInsets[i]) {
             mapDrawSurface_t *ds = &mapDrawSurfs[i];
-            vec3_t faceNormal;
-            VectorCopy(mapplanes[ds->side->planenum].normal, faceNormal);
             
             for (int v = 0; v < ds->numVerts; v++) {
-                if (VectorLength(globalInsets[i][v].normal) > 0.1f) {
-                    VectorCopy(globalInsets[i][v].xyz, ds->verts[v].xyz);
-                    VectorCopy(globalInsets[i][v].st, ds->verts[v].st);
-                    VectorCopy(faceNormal, ds->verts[v].normal);
-                }
+                VectorCopy(globalInsets[i][v].xyz, ds->verts[v].xyz);
             }
             free(globalInsets[i]);
         }
