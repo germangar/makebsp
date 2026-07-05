@@ -1,5 +1,8 @@
 # Edge Chamfering (Normal Bending) — Implementation Plan
 
+> [!CAUTION]
+> **CRITICAL ARCHITECTURAL RULE:** We CANNOT modify the geometry boundaries. We can make subdivisions in the planar surfaces, but NOT move any of their boundary edges. Creating true geometric diagonal bevels would create holes in the geometry where this corner meets a perpendicular plane, like a wall corner meeting a floor. We can only manipulate the normals and create edge subdivisions, but nothing else. Never attempt to move external boundary edges or create physical bevels.
+
 Smooth corner lighting at sharp structural edges by inserting thin border strips with bent vertex normals, creating an optical illusion of a rounded bevel without altering the actual collision geometry. Based on the audited design document `edge_chamfering.txt`.
 
 ## Architecture Overview (V3: Normal Bending)
@@ -78,7 +81,29 @@ For each surface:
    - Allocates new `mapDrawSurface_t` strips.
    - Emits quads bridging the `globalInsets` boundary to the original untouched vertices.
    - Applies the flat face normal to the inner boundary and the calculated `blendedNormal` to the outer geometric corner.
-   - Enforces Clockwise (CW) winding order for all generated quads to avoid Quake 3 back-face culling.
+   - Enforces a Closed Perimeter Winding Order for all generated strips to allow Quake 3 to correctly auto-triangulate them.
+
+**Perimeter Winding Order Pseudo-Code:**
+When building the `strip->verts` array, vertices MUST be laid out so they trace the contiguous outer boundary of the polygon in a closed loop. Because `strip->side` is preserved, the compiler ignores explicit index buffers and attempts to auto-triangulate the loop natively.
+```c
+strip->numVerts = chainLen * 2;
+strip->verts = malloc(strip->numVerts * sizeof(drawVert_t));
+strip->numIndexes = 0; // Handled implicitly by SurfaceAsTristrip
+
+for (int k = 0; k < chainLen; k++) {
+    int vIdx = chain[k];
+
+    // Outer edge: forward order [0..chainLen-1]
+    strip->verts[k] = dsA->verts[vIdx];
+    VectorCopy(blendedNormal, strip->verts[k].normal);
+
+    // Inner edge: REVERSE order [chainLen..2*chainLen-1]
+    // Reversing closes the perimeter loop: last outer -> first inner
+    int innerSlot = chainLen + (chainLen - 1 - k);
+    strip->verts[innerSlot] = globalInsets[i][vIdx];
+    VectorCopy(faceNormal, strip->verts[innerSlot].normal);
+}
+```
 3. **Pass 3: Replace Original Geometry**
    - Replaces the coordinates of the original large structural face with the computed `globalInsets` coordinates.
 
@@ -104,5 +129,5 @@ For each surface:
 **Bug Fixes Integrated:**
 1. **Triangle Stretching to Origin (0,0,0):** DrawSurfaces created via `AllocDrawSurf()` must have their `verts` and `indexes` explicitly allocated via `malloc`.
 2. **Splits on Coplanar Surfaces:** Added a `CHAMFER_ANGLE_THRESHOLD` dot-product check (`> 0.866f`). Perfectly flat adjoining polygons are ignored.
-3. **Missing Triangles (CW Winding):** Quads generated for the strips must explicitly be triangulated in Clockwise order `(o1, o2, i2), (o1, i2, i1)` to render properly in the Quake 3 engine.
+3. **Missing Triangles (The Bow-Tie Winding Bug):** Quads generated for the strips MUST be laid out in a continuous perimeter loop (Outer forward, Inner reversed). If laid out as `[Outer0, Outer1, Inner0, Inner1]`, they form a figure-8 bow-tie. The BSP compiler (`SurfaceAsTristrip`) chokes on this, generating degenerate triangles and collapsing the strip into a single visible diagonal triangle. Explicit index buffers (`strip->indexes`) are completely ignored for brush faces, so the winding order is the only way to fix it.
 4. **Z-Fighting Avoidance:** The algorithm achieves perfectly flush coplanar strips by strictly shrinking Face A, rather than just spawning strips blindly on top of it.

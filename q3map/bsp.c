@@ -215,14 +215,14 @@ void ProcessWorldModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    if (!notjunc)
-    {
-        FixTJunctions(e);
-    }
-
     if (chamferedges)
     {
         ChamferSurfaceEdges(e);
+    }
+
+    if (!notjunc)
+    {
+        FixTJunctions(e);
     }
 
     MakeEntityDecals(e);
@@ -803,10 +803,12 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-chamferedges"))
         {
             chamferedges = qtrue;
+            _printf("edge chamfering enabled\n");
         }
         else if (!strcmp(argv[i], "-chamferwidth"))
         {
             chamfer_global_width = atof(argv[i + 1]);
+            _printf("chamfer width = %f\n", chamfer_global_width);
             i++;
         }
         else if (!strcmp(argv[i], "-expand"))

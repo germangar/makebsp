@@ -727,7 +727,9 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
         VectorNormalize(insetDir, insetDir);
         
         VectorCopy(ds->verts[v].xyz, edgeLineOrigin[v]);
-        VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, edgeLineOrigin[v]);
+        if (edgeChamfered[v]) {
+            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, edgeLineOrigin[v]);
+        }
         VectorCopy(edgeDir, edgeLineDir[v]);
     }
 
@@ -735,7 +737,7 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
         int prev_v = (v - 1 + ds->numVerts) % ds->numVerts;
         int next_v = (v + 1) % ds->numVerts;
         
-        if (edgeChamfered[prev_v] && edgeChamfered[v]) {
+        if (edgeChamfered[prev_v] || edgeChamfered[v]) {
             vec3_t p1, d1, p2, d2;
             VectorCopy(edgeLineOrigin[prev_v], p1);
             VectorCopy(edgeLineDir[prev_v], d1);
@@ -754,9 +756,33 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
             float dist = 0.0f;
             if (fabs(det) > 0.001f) {
                 dist = (b * e - c * d) / det;
+                VectorMA(p1, dist, d1, insetMap[v].xyz);
             }
-            
-            VectorMA(p1, dist, d1, insetMap[v].xyz);
+            else {
+                if (edgeChamfered[v]) {
+                    vec3_t edgeDir, insetDir;
+                    VectorSubtract(ds->verts[next_v].xyz, ds->verts[v].xyz, edgeDir);
+                    VectorNormalize(edgeDir, edgeDir);
+#if DEBUG_SHOW_CHAMFERS
+                    CrossProduct(faceNormal, edgeDir, insetDir);
+#else
+                    CrossProduct(edgeDir, faceNormal, insetDir);
+#endif
+                    VectorNormalize(insetDir, insetDir);
+                    VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+                } else {
+                    vec3_t edgeDir, insetDir;
+                    VectorSubtract(ds->verts[v].xyz, ds->verts[prev_v].xyz, edgeDir);
+                    VectorNormalize(edgeDir, edgeDir);
+#if DEBUG_SHOW_CHAMFERS
+                    CrossProduct(faceNormal, edgeDir, insetDir);
+#else
+                    CrossProduct(edgeDir, faceNormal, insetDir);
+#endif
+                    VectorNormalize(insetDir, insetDir);
+                    VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+                }
+            }
             
             float maxMove = chamferWidth * 4.0f;
             vec3_t diff_corner;
@@ -766,34 +792,6 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
                 VectorMA(ds->verts[v].xyz, maxMove, diff_corner, insetMap[v].xyz);
             }
         } 
-        else if (edgeChamfered[v]) {
-            vec3_t edgeDir;
-            VectorSubtract(ds->verts[next_v].xyz, ds->verts[v].xyz, edgeDir);
-            VectorNormalize(edgeDir, edgeDir);
-            
-            vec3_t insetDir;
-#if DEBUG_SHOW_CHAMFERS
-            CrossProduct(faceNormal, edgeDir, insetDir);
-#else
-            CrossProduct(edgeDir, faceNormal, insetDir);
-#endif
-            VectorNormalize(insetDir, insetDir);
-            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
-        }
-        else if (edgeChamfered[prev_v]) {
-            vec3_t edgeDir;
-            VectorSubtract(ds->verts[v].xyz, ds->verts[prev_v].xyz, edgeDir);
-            VectorNormalize(edgeDir, edgeDir);
-            
-            vec3_t insetDir;
-#if DEBUG_SHOW_CHAMFERS
-            CrossProduct(faceNormal, edgeDir, insetDir);
-#else
-            CrossProduct(edgeDir, faceNormal, insetDir);
-#endif
-            VectorNormalize(insetDir, insetDir);
-            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
-        }
         else {
             VectorCopy(ds->verts[v].xyz, insetMap[v].xyz);
         }
@@ -928,43 +926,28 @@ void ChamferSurfaceEdges(entity_t *e)
                         strip->planeNum = dsA->planeNum;
                         strip->samplesize = dsA->samplesize;
                         strip->lightmapScale = dsA->lightmapScale;
-                        
+
+                        // Vertices are laid out in perimeter (winding) order so that
+                        // SurfaceAsTristrip can auto-triangulate them correctly:
+                        //   [0 .. chainLen-1]         = outer verts, forward order
+                        //   [chainLen .. 2*chainLen-1] = inner verts, REVERSE order
+                        // This gives a closed clockwise perimeter: OuterA->OuterB->InnerB->InnerA
                         strip->numVerts = chainLen * 2;
                         strip->verts = malloc(strip->numVerts * sizeof(drawVert_t));
-                        
-                        int numQuads = chainLen - 1;
-                        strip->numIndexes = numQuads * 6;
-                        strip->indexes = malloc(strip->numIndexes * sizeof(int));
-                        
+                        strip->numIndexes = 0; // SurfaceAsTristrip generates indexes at emit time
+
                         for (int k = 0; k < chainLen; k++) {
                             int vIdx = chain[k];
-                            
-                            // Outer edge of strip (touches the ORIGINAL sharp corner)
+
+                            // Outer edge: forward order [0..chainLen-1]
                             strip->verts[k] = dsA->verts[vIdx];
-                            // Bend the normal at the sharp corner!
                             VectorCopy(blendedNormal, strip->verts[k].normal);
-                            
-                            // Inner edge of strip (touches the NEW inner body)
-                            strip->verts[chainLen + k] = globalInsets[i][vIdx];
-                            // Keep the flat normal here so it blends smoothly into the inner body!
-                            VectorCopy(faceNormal, strip->verts[chainLen + k].normal);
-                        }
-                        
-                        int idx = 0;
-                        for (int k = 0; k < numQuads; k++) {
-                            int o1 = k;
-                            int o2 = k + 1;
-                            int i1 = chainLen + k;
-                            int i2 = chainLen + k + 1;
-                            
-                            // Winding for Quake 3 (CW)
-                            strip->indexes[idx++] = o1;
-                            strip->indexes[idx++] = o2;
-                            strip->indexes[idx++] = i2;
-                            
-                            strip->indexes[idx++] = o1;
-                            strip->indexes[idx++] = i2;
-                            strip->indexes[idx++] = i1;
+
+                            // Inner edge: reverse order [chainLen..2*chainLen-1]
+                            // Reversing closes the perimeter: last outer -> first inner
+                            int innerSlot = chainLen + (chainLen - 1 - k);
+                            strip->verts[innerSlot] = globalInsets[i][vIdx];
+                            VectorCopy(faceNormal, strip->verts[innerSlot].normal);
                         }
                     }
                 }
