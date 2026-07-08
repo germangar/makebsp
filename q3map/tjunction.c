@@ -852,6 +852,34 @@ void ChamferSurfaceEdges(entity_t *e)
         
         if (!IsChamferCandidate(dsA)) continue;
 
+        // ----------------------------------------------------
+        // ADAPTIVE CHAMFER WIDTH & SAFEGUARDS (10x Ratio)
+        // ----------------------------------------------------
+        float min_edge = 999999.0f;
+        for (int v = 0; v < dsA->numVerts; v++) {
+            int next_v = (v + 1) % dsA->numVerts;
+            vec3_t edgeDir;
+            VectorSubtract(dsA->verts[next_v].xyz, dsA->verts[v].xyz, edgeDir);
+            float len = VectorLength(edgeDir);
+            if (len < min_edge) {
+                min_edge = len;
+            }
+        }
+
+        float surface_chamfer_width = chamfer_global_width;
+        float required_space = 10.0f * chamfer_global_width;
+
+        if (min_edge < required_space) {
+            // Scale down to maintain the 10x ratio
+            surface_chamfer_width = min_edge / 10.0f;
+        }
+
+        if (surface_chamfer_width < 1.0f) {
+            // Surface is too small to safely chamfer, leave it entirely original
+            continue;
+        }
+        // ----------------------------------------------------
+
         for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
         {
             int j = nb->neighborSurfaceNum;
@@ -899,7 +927,7 @@ void ChamferSurfaceEdges(entity_t *e)
         {
             globalInsets[i] = malloc(dsA->numVerts * sizeof(drawVert_t));
             memcpy(globalInsets[i], dsA->verts, dsA->numVerts * sizeof(drawVert_t));
-            ComputeAllInsets(dsA, edges, numEdges, chamfer_global_width, globalInsets[i]);
+            ComputeAllInsets(dsA, edges, numEdges, surface_chamfer_width, globalInsets[i]);
             for (int v = 0; v < dsA->numVerts; v++) {
                 ShiftVertexUV(dsA, &globalInsets[i][v], dsA->verts[v].xyz, globalInsets[i][v].xyz);
             }

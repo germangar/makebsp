@@ -133,6 +133,21 @@ Skip Conditions:
   - Flare surfaces.
   - Surfaces with SURF_NODRAW, SURF_SKY, or SURF_NOLIGHTMAP flags.
 
+ADAPTIVE CHAMFER WIDTH & SAFEGUARDS (10x RATIO)
+-----------------------------------------------
+To prevent inverted geometry or Z-fighting when a face is too narrow or small to
+support the configured `chamfer_global_width`, each surface calculates an adaptive
+safe width in Pass 1:
+1. Minimum Edge Calculation: Iterate all vertices to find the shortest geometric
+   edge length (`min_edge`).
+2. 10x Ratio Heuristic: The surface must be at least 10 times larger than the
+   chamfer width (`required_space = 10.0f * chamfer_global_width`).
+   If `min_edge < required_space`, we scale the chamfer width down proportionally
+   to maintain the exact 10x ratio (`surface_chamfer_width = min_edge / 10.0f`).
+3. Hard Safeguard: If after scaling down, `surface_chamfer_width < 1.0f`, the face
+   is too small to safely chamfer. The surface is skipped entirely (`continue`),
+   leaving it untouched and safe.
+
 
 ==============================================================================
 5. THE POLYGON INSET (2D LINE INTERSECTION MATH)
@@ -351,3 +366,9 @@ E. Texture Integer Wrapping Trap (Delta-UV)
    normalization (`floor(mins)`), causing multi-wrap texture distortion on strips.
    Using Delta-UV (`new_st = old_st + M * delta_xyz`) completely bypasses integer
    offsets and guarantees seamless texture continuity.
+
+F. Inverted Polygons on Narrow Faces
+   Applying a uniform chamfer width to very small or thin faces causes the inset
+   lines to cross, inverting the polygon and causing Z-fighting/holes. Added a
+   10x Ratio safeguard (`surface_chamfer_width = min_edge / 10.0f`) that dynamically
+   scales down the bevel width or aborts (`< 1.0f`) on small geometry.
