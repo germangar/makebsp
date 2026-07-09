@@ -32,6 +32,7 @@ typedef struct {
     int noDeluxeInfluence;
     int noDeluxeInfluenceBacksplash;
     int castShadows;
+    qboolean isPlanar;
 } extraSurface_t;
 
 typedef enum { SHADING_MODEL_LAMBERT, SHADING_MODEL_HALFLAMBERT, SHADING_MODEL_QUADRATIC, SHADING_MODEL_DOUBLEQUADRATIC, SHADING_MODEL_UNREAL } shadingModel_t;

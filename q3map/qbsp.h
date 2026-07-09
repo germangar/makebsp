@@ -171,6 +171,7 @@ typedef struct drawsurf_s
     // for misc_models only
     qboolean miscModel;
     qboolean planarDerived; // true for atomic trisoups merged from planar surfaces (e.g. chamfers)
+    qboolean isPlanar;      // true if this trisoup was derived from flat coplanar surface(s)
 
     qboolean flareSurface;
     float samplesize;
@@ -222,7 +223,8 @@ extern float chamfer_global_width;
 void BuildSurfaceAdjacencyGraph(entity_t *e);
 void ChamferSurfaceEdges(entity_t *e);
 void MergeChamferStripsIntoParents(entity_t *e);
-void MergeCoplanarTrisoups(entity_t *e);
+void MergeParentedTrisoups(entity_t *e);
+void MergeAdjacentTrisoups(entity_t *e);
 
 typedef struct drawSurfRef_s
 {

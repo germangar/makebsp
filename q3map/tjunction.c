@@ -1422,13 +1422,13 @@ void MergeChamferStripsIntoParents(entity_t *e)
 
 /*
 ==================
-MergeCoplanarTrisoups
+MergeParentedTrisoups
 
-Groups adjacent atomic trisoups (derived from planar surfaces) that share the same
-plane and shader into unified meshes, then generates a single UV map for each group.
+Groups parented atomic trisoups (derived from planar surfaces) that share the same
+plane and shader into unified meshes.
 ==================
 */
-void MergeCoplanarTrisoups(entity_t *e)
+void MergeParentedTrisoups(entity_t *e)
 {
     int i, j;
     int numSurfsAtStart = numMapDrawSurfs;
@@ -1436,7 +1436,7 @@ void MergeCoplanarTrisoups(entity_t *e)
     qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
     memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
 
-    qprintf("----- MergeCoplanarTrisoups -----\n");
+    qprintf("----- MergeParentedTrisoups -----\n");
 
     for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
     {
@@ -1537,9 +1537,201 @@ void MergeCoplanarTrisoups(entity_t *e)
             numMergedGroups++;
         }
         
-        GenerateAtomicUVsWithXAtlas(dsA);
+        dsA->isPlanar = qtrue;
     }
 
     free(visited);
     qprintf("%6i multi-surface trisoups merged\n", numMergedGroups);
+}
+
+
+/*
+==================
+ComputeSurfaceArea3D
+==================
+*/
+static float ComputeSurfaceArea3D(const mapDrawSurface_t *ds)
+{
+    float area3D = 0.0f;
+    for (int i = 0; i < ds->numIndexes; i += 3)
+    {
+        vec3_t s1, s2, cross;
+        VectorSubtract(ds->verts[ds->indexes[i + 1]].xyz, ds->verts[ds->indexes[i]].xyz, s1);
+        VectorSubtract(ds->verts[ds->indexes[i + 2]].xyz, ds->verts[ds->indexes[i]].xyz, s2);
+        CrossProduct(s1, s2, cross);
+        area3D += 0.5f * VectorLength(cross);
+    }
+    return area3D;
+}
+
+/*
+==================
+SurfacesShareEdge
+==================
+*/
+static qboolean SurfacesShareEdge(const mapDrawSurface_t *dsA, const mapDrawSurface_t *dsB, float epsilon)
+{
+    int sharedVerts = 0;
+    float epsSq = epsilon * epsilon;
+
+    for (int i = 0; i < dsA->numVerts; i++)
+    {
+        for (int j = 0; j < dsB->numVerts; j++)
+        {
+            vec3_t diff;
+            VectorSubtract(dsA->verts[i].xyz, dsB->verts[j].xyz, diff);
+            if (DotProduct(diff, diff) <= epsSq)
+            {
+                sharedVerts++;
+                if (sharedVerts >= 2)
+                    return qtrue;
+                break;
+            }
+        }
+    }
+    return qfalse;
+}
+
+/*
+==================
+MergeAdjacentTrisoups
+
+Global optimization pass that merges adjacent MST_TRIANGLE_SOUP surfaces sharing
+the same shader and compatible properties, respecting lightmap size budgets.
+Finally generates lightmap UVs for all surviving trisoups.
+==================
+*/
+void MergeAdjacentTrisoups(entity_t *e)
+{
+    int i, j;
+    int numSurfsAtStart = numMapDrawSurfs;
+    int numMergedGroups = 0;
+    qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
+    memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
+
+    int *group = malloc(numSurfsAtStart * sizeof(int));
+
+    qprintf("----- MergeAdjacentTrisoups -----\n");
+
+    for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        if (visited[i])
+            continue;
+        if (!dsA->miscModel || dsA->numVerts <= 0 || dsA->numIndexes <= 0)
+            continue;
+
+        visited[i] = qtrue;
+        int groupSize = 0;
+        group[groupSize++] = i;
+
+        float groupArea = ComputeSurfaceArea3D(dsA);
+        qboolean allPlanar = dsA->isPlanar;
+
+        for (int head = 0; head < groupSize; head++)
+        {
+            mapDrawSurface_t *currDs = &mapDrawSurfs[group[head]];
+
+            for (j = e->firstDrawSurf; j < numSurfsAtStart; j++)
+            {
+                if (visited[j])
+                    continue;
+
+                mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+                if (!dsB->miscModel || dsB->numVerts <= 0 || dsB->numIndexes <= 0)
+                    continue;
+
+                if (currDs->shaderInfo != dsB->shaderInfo)
+                    continue;
+                if (currDs->fogNum != dsB->fogNum)
+                    continue;
+                if (fabs(currDs->samplesize - dsB->samplesize) > 0.001f)
+                    continue;
+                if (fabs(currDs->lightmapScale - dsB->lightmapScale) > 0.001f)
+                    continue;
+
+                if (!SurfacesShareEdge(currDs, dsB, 0.01f))
+                    continue;
+
+                float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
+                float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)samplesize;
+                float scaleVal = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
+                int targetRes = (int)ceil(sqrt(candidateArea) / sampleSizeVal * scaleVal);
+
+                int limit = LIGHTMAP_WIDTH - 2;
+                if (!dsA->enforceSampleSize)
+                    limit *= 2;
+
+                if (targetRes > limit)
+                    continue;
+
+                visited[j] = qtrue;
+                group[groupSize++] = j;
+                groupArea = candidateArea;
+
+                if (!dsB->isPlanar || dsB->planeNum != dsA->planeNum)
+                    allPlanar = qfalse;
+            }
+        }
+
+        if (groupSize > 1)
+        {
+            int totalVerts = 0;
+            int totalIndexes = 0;
+            for (int g = 0; g < groupSize; g++)
+            {
+                totalVerts += mapDrawSurfs[group[g]].numVerts;
+                totalIndexes += mapDrawSurfs[group[g]].numIndexes;
+            }
+
+            weldBuf_t welded;
+            welded.numVerts = 0;
+            welded.verts = malloc(totalVerts * sizeof(drawVert_t));
+
+            int *outIndexes = malloc(totalIndexes * sizeof(int));
+            int numOutIndexes = 0;
+
+            for (int g = 0; g < groupSize; g++)
+            {
+                mapDrawSurface_t *ds = &mapDrawSurfs[group[g]];
+                for (int idx = 0; idx < ds->numIndexes; idx++)
+                {
+                    outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, totalVerts, &ds->verts[ds->indexes[idx]]);
+                }
+
+                if (g > 0)
+                {
+                    if (ds->verts) free(ds->verts);
+                    if (ds->indexes) free(ds->indexes);
+                    ds->verts = NULL;
+                    ds->indexes = NULL;
+                    ds->numVerts = 0;
+                    ds->numIndexes = 0;
+                }
+            }
+
+            if (dsA->verts) free(dsA->verts);
+            if (dsA->indexes) free(dsA->indexes);
+
+            dsA->verts = welded.verts;
+            dsA->numVerts = welded.numVerts;
+            dsA->indexes = outIndexes;
+            dsA->numIndexes = numOutIndexes;
+
+            dsA->isPlanar = allPlanar;
+            numMergedGroups++;
+        }
+    }
+
+    for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
+    {
+        mapDrawSurface_t *ds = &mapDrawSurfs[i];
+        if (!ds->miscModel || ds->numVerts <= 0 || ds->numIndexes <= 0)
+            continue;
+        GenerateAtomicUVsWithXAtlas(ds);
+    }
+
+    free(group);
+    free(visited);
+    qprintf("%6i adjacent trisoup groups merged\n", numMergedGroups);
 }
