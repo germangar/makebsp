@@ -67,8 +67,8 @@ void VoxelCache_BakeAll(void);
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints);
 void MergeAccumulatedState(vec3_t color, vec3_t dir, vec3_t energy,
                            const vec3_t addColor, const vec3_t addDir,
-                           const vec3_t addEnergy, const vec3_t normal);
-void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal);
+                           const vec3_t addEnergy, const vec3_t normal, float deluxeMinAngle);
+void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contribution_t *cont, const vec3_t normal, float deluxeMinAngle);
 extern bspGridPoint32_t *gridData32;
 
 extern float maxLightIntensity;

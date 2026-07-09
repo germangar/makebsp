@@ -360,6 +360,26 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
             else
                 game->exposureFilter = TONEMAP_LINEAR;
         }
+        else if (!Q_stricmp(key, "saturation") && val->type == json_type_number)
+        {
+            game->saturation = (float)atof(json_value_as_number(val)->number);
+            if (game->saturation < 0.0f)
+                game->saturation = 0.0f;
+        }
+        else if (!Q_stricmp(key, "saturationRamp") && val->type == json_type_string)
+        {
+            const char *sr = json_value_as_string(val)->string;
+            if (!Q_stricmp(sr, "filmic"))
+                game->saturationRamp = SATRAMP_FILMIC;
+            else if (!Q_stricmp(sr, "power"))
+                game->saturationRamp = SATRAMP_POWER;
+            else if (!Q_stricmp(sr, "halfpower"))
+                game->saturationRamp = SATRAMP_HALF_POWER;
+            else if (!Q_stricmp(sr, "midtone"))
+                game->saturationRamp = SATRAMP_MIDTONE;
+            else
+                game->saturationRamp = SATRAMP_OFF;
+        }
         else if (!Q_stricmp(key, "enforceSampleSize"))
         {
             if (val->type == json_type_true)
@@ -503,6 +523,26 @@ void JSON_ExportGame(const char *filename, game_t *game)
         break;
     }
 
+    const char *satRampStr;
+    switch (game->saturationRamp)
+    {
+    case SATRAMP_FILMIC:
+        satRampStr = "filmic";
+        break;
+    case SATRAMP_POWER:
+        satRampStr = "power";
+        break;
+    case SATRAMP_HALF_POWER:
+        satRampStr = "halfpower";
+        break;
+    case SATRAMP_MIDTONE:
+        satRampStr = "midtone";
+        break;
+    default:
+        satRampStr = "off";
+        break;
+    }
+
     sprintf(buffer,
             "{\n"
             "  \"game\": \"%s\",\n"
@@ -545,6 +585,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"smoothPasses\": %d, /* passes of blurring lightmaps */\n"
             "  \"smoothRadius\": %.2f, /* fractional values accepted. Minimum 0.1 */\n"
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
+            "  \"saturation\": %.2f, /* Multiplier (1.0 = normal, 0.0 = grayscale) */\n"
+            "  \"saturationRamp\": \"%s\", /* [ off, filmic, power, midtone ] */\n"
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
@@ -578,7 +620,11 @@ void JSON_ExportGame(const char *filename, game_t *game)
 
             game->antialiasingPasses,
             game->superSampleRadius,
-            game->defaultSmoothPasses, game->defaultSmoothRadius, filterStr,
+            game->defaultSmoothPasses,
+            game->defaultSmoothRadius,
+            filterStr,
+            game->saturation,
+            satRampStr,
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",

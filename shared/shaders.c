@@ -315,6 +315,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->forceSunLight = qfalse;
     si->noDeluxeInfluence = qfalse;
     si->noDeluxeInfluenceBacksplash = qfalse;
+    si->deluxeMinAngle = -1.0f;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
     si->materialImage[0] = 0;
@@ -655,6 +656,16 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             if (!Q_stricmp(token, "q3map_backsplash_nodeluxe"))
             {
                 si->noDeluxeInfluenceBacksplash = qtrue;
+                continue;
+            }
+
+            // q3map_deluxe_minangle <value> or q3map_deluxeminangle <value>
+            if (!Q_stricmp(token, "q3map_deluxe_minangle") || !Q_stricmp(token, "q3map_deluxeminangle"))
+            {
+                GetToken(qfalse);
+                si->deluxeMinAngle = atof(token);
+                if (si->deluxeMinAngle < 0.0f) si->deluxeMinAngle = 0.0f;
+                if (si->deluxeMinAngle > 89.0f) si->deluxeMinAngle = 89.0f;
                 continue;
             }
 

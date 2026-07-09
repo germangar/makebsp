@@ -145,6 +145,20 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         else if (!Q_stricmp(val, "filmic")) game->exposureFilter = TONEMAP_FILMIC;
         else game->exposureFilter = TONEMAP_LINEAR;
     }
+    val = ValueForKey(ent, "saturation");
+    if (val[0] && !HasArg("-saturation", argc, argv)) {
+        game->saturation = atof(val);
+        if (game->saturation < 0.0f) game->saturation = 0.0f;
+    }
+
+    val = ValueForKey(ent, "saturationramp");
+    if (val[0] && !HasArg("-saturationramp", argc, argv)) {
+        if (!Q_stricmp(val, "filmic")) game->saturationRamp = SATRAMP_FILMIC;
+        else if (!Q_stricmp(val, "power")) game->saturationRamp = SATRAMP_POWER;
+        else if (!Q_stricmp(val, "halfpower")) game->saturationRamp = SATRAMP_HALF_POWER;
+        else if (!Q_stricmp(val, "midtone")) game->saturationRamp = SATRAMP_MIDTONE;
+        else game->saturationRamp = SATRAMP_OFF;
+    }
 
     val = ValueForKey(ent, "shading");
     if (val[0] && !HasArg("-shading", argc, argv)) {
@@ -612,6 +626,19 @@ int main(int argc, char **argv) {
                 game->exposureFilter = TONEMAP_LINEAR;
             }
             i++;
+        } else if (!strcmp(argv[i], "-saturation")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-saturation requires a numeric value");
+            game->saturation = (float)atof(argv[i + 1]);
+            if (game->saturation < 0.0f) game->saturation = 0.0f;
+            i++;
+        } else if (!strcmp(argv[i], "-saturationramp")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-saturationramp requires a mode (off, filmic, power, midtone)");
+            if (!Q_stricmp(argv[i + 1], "filmic")) game->saturationRamp = SATRAMP_FILMIC;
+            else if (!Q_stricmp(argv[i + 1], "power")) game->saturationRamp = SATRAMP_POWER;
+            else if (!Q_stricmp(argv[i + 1], "halfpower")) game->saturationRamp = SATRAMP_HALF_POWER;
+            else if (!Q_stricmp(argv[i + 1], "midtone")) game->saturationRamp = SATRAMP_MIDTONE;
+            else game->saturationRamp = SATRAMP_OFF;
+            i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
             game->hdr = HDR_8BIT;
         } else if (!strcmp(argv[i], "-fast")) {
@@ -695,6 +722,8 @@ int main(int argc, char **argv) {
                 "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
                 "                         Worldspawn: ambient_sky <R G B>, ambient_ground <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
+                "   saturation <F>   = set global light saturation multiplier (default: 1.0)\n"
+                "   saturationramp <mode> = saturation roll-off curve (off, filmic, power, midtone)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
         exit(0);

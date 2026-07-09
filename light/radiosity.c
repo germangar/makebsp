@@ -583,7 +583,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         }
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
+                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
@@ -660,7 +660,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         }
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
-                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal);
+                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
                 }
 
@@ -748,7 +748,7 @@ static void RadiosityIntegrateVertexSurface(int surfIdx) {
                 cont.angle = cosDst;
                 cont.isGlow = qfalse;
                 
-                AccumulateContribution(accum, NULL, NULL, &cont, dstNormal);
+                AccumulateContribution(accum, NULL, NULL, &cont, dstNormal, 0.0f);
             }
         }
         
@@ -1342,7 +1342,7 @@ static void RadiosityMerge(const float *srcBuffer) {
             MergeAccumulatedState(
                 &lightFloats[i * 3], &deluxeFloats[i * 3], &energyFloats[i * 3],
                 &srcBuffer[i * 3], radDir, &accumRadiosityEnergyFloats[i * 3],
-                &normalFloats[i * 3]
+                &normalFloats[i * 3], -1.0f
             );
         } else {
             VectorAdd(lightFloats + i * 3, srcBuffer + i * 3, lightFloats + i * 3);

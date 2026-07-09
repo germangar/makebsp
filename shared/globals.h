@@ -51,6 +51,7 @@ typedef enum {
 
 
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
+typedef enum { SATRAMP_OFF, SATRAMP_FILMIC, SATRAMP_POWER, SATRAMP_HALF_POWER, SATRAMP_MIDTONE } satRamp_t;
 
 extern int samplesize;
 extern char source[1024];
@@ -93,6 +94,8 @@ typedef struct {
 	shadingModel_t   sunShadingModel;
 	attenuationModel_t attenuationModel;
     tonemap_t   exposureFilter;
+    float       saturation;
+    satRamp_t   saturationRamp;
     float       minLightAdd;
     float       fadeout;
     float       backSplashSpot;

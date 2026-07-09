@@ -167,9 +167,17 @@ void ComputeMAOPoint(int num)
     float skyOpen    = (skyWeight    > 0.0f) ? 1.0f / skyWeight    : 0.0f;
     float groundOpen = (groundWeight > 0.0f) ? 1.0f / groundWeight : 0.0f;
 
-    maoAmbient[num * 3 + 0] = skyAccum[0] * skyOpen + groundAccum[0] * groundOpen;
-    maoAmbient[num * 3 + 1] = skyAccum[1] * skyOpen + groundAccum[1] * groundOpen;
-    maoAmbient[num * 3 + 2] = skyAccum[2] * skyOpen + groundAccum[2] * groundOpen;
+    float skyScale = skyOpen;
+    float groundScale = groundOpen;
+    
+    if (ambient_color_scale > 0.0f) {
+        skyScale /= ambient_color_scale;
+        groundScale /= ambient_color_scale;
+    }
+
+    maoAmbient[num * 3 + 0] = skyAccum[0] * skyScale + groundAccum[0] * groundScale;
+    maoAmbient[num * 3 + 1] = skyAccum[1] * skyScale + groundAccum[1] * groundScale;
+    maoAmbient[num * 3 + 2] = skyAccum[2] * skyScale + groundAccum[2] * groundScale;
 }
 
 /*
@@ -306,6 +314,7 @@ void TraceAmbient(int num)
 
     realSurfIndex = surfaceWorkOrder[num];
     ds = &drawSurfaces[realSurfIndex];
+    shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
     
     surfWeight = ds->numVerts;
     if (ds->lightmapNum[0] >= 0) {
@@ -453,7 +462,7 @@ void TraceAmbient(int num)
                     VectorCopy(normal, normalizedBent);
 
                 MergeAccumulatedState(existColor, existDir, existEnergy,
-                                      ambColor, normalizedBent, ambColor, normal);
+                                      ambColor, normalizedBent, ambColor, normal, si->deluxeMinAngle);
 
                 deluxeFloats[k * 3 + 0] = existDir[0];
                 deluxeFloats[k * 3 + 1] = existDir[1];
