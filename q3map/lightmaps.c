@@ -172,18 +172,24 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
     if (scale < 0.01)
         scale = 0.01;
 
-    // Enforce dynamic minimum lightmap area
-    float uvWidth = max_s - min_s;
-    float uvHeight = max_t - min_t;
-    float uvArea = uvWidth * uvHeight;
-    if (uvArea > 0.0001f)
+    // Enforce dynamic minimum lightmap area.
+    // This floor is bypassed for planar-derived atomic trisoups (like merged chamfers)
+    // because their scale is already correctly computed from physics and their UVs are 
+    // densely packed, preventing small chamfer bevels from inflating to 192x192.
+    if (!ds->planarDerived)
     {
-        float minDimension = 192.0f;
-        float targetArea = minDimension * minDimension;
-        float minScale = sqrt(targetArea / uvArea);
-        if (scale < minScale)
+        float uvWidth = max_s - min_s;
+        float uvHeight = max_t - min_t;
+        float uvArea = uvWidth * uvHeight;
+        if (uvArea > 0.0001f)
         {
-            scale = minScale;
+            float minDimension = 192.0f;
+            float targetArea = minDimension * minDimension;
+            float minScale = sqrt(targetArea / uvArea);
+            if (scale < minScale)
+            {
+                scale = minScale;
+            }
         }
     }
 

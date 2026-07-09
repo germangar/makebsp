@@ -20,6 +20,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
+#include "xatlas_c.h"
+#include <stdint.h>
+
+static int s_chamferBaseDrawSurfs = 0;
+
+static qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon)
+{
+    return (fabs(a[0] - b[0]) < epsilon && fabs(a[1] - b[1]) < epsilon && fabs(a[2] - b[2]) < epsilon);
+}
+
 
 typedef struct edgePoint_s
 {
@@ -954,6 +964,7 @@ void ChamferSurfaceEdges(entity_t *e)
     memset(globalInsets, 0, sizeof(globalInsets));
     BuildSurfaceAdjacencyGraph(e);
     numBaseDrawSurfs = numMapDrawSurfs;
+    s_chamferBaseDrawSurfs = numBaseDrawSurfs;
     
     // Pass 1: Compute inner bodies (insets)
     for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
@@ -1091,6 +1102,8 @@ void ChamferSurfaceEdges(entity_t *e)
                     }
                     
                     if (chainLen >= 2) {
+                        dsA->parentSurfaceNum = i;
+
                         mapDrawSurface_t *strip = AllocDrawSurf();
                         strip->parentSurfaceNum = i;
                         strip->shaderInfo = dsA->shaderInfo;
@@ -1143,4 +1156,390 @@ void ChamferSurfaceEdges(entity_t *e)
             free(globalInsets[i]);
         }
     }
+}
+
+
+
+/*
+=============================================================================
+ATOMIC UNIT TRISOUP MERGING (PHASE 1)
+=============================================================================
+*/
+
+typedef struct
+{
+    int numVerts;
+    drawVert_t *verts;
+} weldBuf_t;
+
+static int WeldMergedVertex(weldBuf_t *buf, int maxVerts, const drawVert_t *v)
+{
+    for (int i = 0; i < buf->numVerts; i++)
+    {
+        if (VectorsNearEqual(buf->verts[i].xyz, v->xyz, 0.01f) &&
+            VectorsNearEqual(buf->verts[i].normal, v->normal, 0.05f) &&
+            fabs(buf->verts[i].st[0] - v->st[0]) < 0.001f &&
+            fabs(buf->verts[i].st[1] - v->st[1]) < 0.001f)
+        {
+            return i;
+        }
+    }
+    if (buf->numVerts >= maxVerts)
+    {
+        return buf->numVerts - 1;
+    }
+    buf->verts[buf->numVerts] = *v;
+    return buf->numVerts++;
+}
+
+static void GenerateAtomicUVsWithXAtlas(mapDrawSurface_t *ds)
+{
+    if (ds->numVerts < 3 || ds->numIndexes < 3)
+        return;
+
+    float *positions = malloc(ds->numVerts * 3 * sizeof(float));
+    for (int i = 0; i < ds->numVerts; i++)
+    {
+        positions[i * 3 + 0] = ds->verts[i].xyz[0];
+        positions[i * 3 + 1] = ds->verts[i].xyz[1];
+        positions[i * 3 + 2] = ds->verts[i].xyz[2];
+    }
+
+    uint32_t *indices = malloc(ds->numIndexes * sizeof(uint32_t));
+    for (int i = 0; i < ds->numIndexes; i++)
+    {
+        indices[i] = (uint32_t)ds->indexes[i];
+    }
+
+    xatlasMeshDecl decl;
+    xatlasMeshDeclInit(&decl);
+    decl.vertexPositionData = positions;
+    decl.vertexPositionStride = sizeof(float) * 3;
+    decl.vertexCount = (uint32_t)ds->numVerts;
+    decl.indexData = indices;
+    decl.indexCount = (uint32_t)ds->numIndexes;
+    decl.indexFormat = xatlasIndexFormat_UInt32;
+
+    xatlasAtlas *atlas = xatlasCreate();
+    if (!atlas)
+    {
+        free(positions);
+        free(indices);
+        return;
+    }
+
+    if (xatlasAddMesh(atlas, &decl, 1) != xatlasAddMeshError_Success)
+    {
+        xatlasDestroy(atlas);
+        free(positions);
+        free(indices);
+        return;
+    }
+
+    xatlasAddMeshJoin(atlas);
+
+    xatlasChartOptions chartOpts;
+    xatlasChartOptionsInit(&chartOpts);
+    xatlasComputeCharts(atlas, &chartOpts);
+
+    float area3D = 0.0f;
+    for (int i = 0; i < ds->numIndexes; i += 3)
+    {
+        vec3_t s1, s2, cross;
+        VectorSubtract(ds->verts[ds->indexes[i + 1]].xyz, ds->verts[ds->indexes[i]].xyz, s1);
+        VectorSubtract(ds->verts[ds->indexes[i + 2]].xyz, ds->verts[ds->indexes[i]].xyz, s2);
+        CrossProduct(s1, s2, cross);
+        area3D += 0.5f * VectorLength(cross);
+    }
+
+    float sampleSizeVal = ds->samplesize > 0.0f ? ds->samplesize : (float)samplesize;
+    float scaleVal = ds->lightmapScale > 0.0f ? ds->lightmapScale : 1.0f;
+    int targetRes = (int)ceil(sqrt(area3D) / sampleSizeVal * scaleVal);
+    if (targetRes > LIGHTMAP_WIDTH - 2)
+        targetRes = LIGHTMAP_WIDTH - 2;
+    if (targetRes < 16)
+        targetRes = 16;
+
+    xatlasPackOptions packOpts;
+    xatlasPackOptionsInit(&packOpts);
+    packOpts.padding = 2;
+    packOpts.texelsPerUnit = 0.0f;
+    packOpts.resolution = targetRes;
+    xatlasPackCharts(atlas, &packOpts);
+
+    if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
+    {
+        xatlasDestroy(atlas);
+        free(positions);
+        free(indices);
+        return;
+    }
+
+    xatlasMesh *xm = &atlas->meshes[0];
+
+    // If xatlas split any vertices at UV seams, rebuild ds->verts
+    if (1)
+    {
+        drawVert_t *newVerts = malloc(xm->vertexCount * sizeof(drawVert_t));
+        for (uint32_t i = 0; i < xm->vertexCount; i++)
+        {
+            newVerts[i] = ds->verts[xm->vertexArray[i].xref];
+        }
+        free(ds->verts);
+        ds->verts = newVerts;
+        ds->numVerts = (int)xm->vertexCount;
+
+        ds->numIndexes = (int)xm->indexCount;
+        for (int i = 0; i < ds->numIndexes; i++)
+        {
+            ds->indexes[i] = (int)xm->indexArray[i];
+        }
+    }
+
+    for (uint32_t i = 0; i < xm->vertexCount; i++)
+    {
+        ds->verts[i].lightmap[0][0] = xm->vertexArray[i].uv[0] / (float)atlas->width;
+        ds->verts[i].lightmap[0][1] = xm->vertexArray[i].uv[1] / (float)atlas->height;
+    }
+
+    xatlasDestroy(atlas);
+    free(positions);
+    free(indices);
+}
+
+/*
+==================
+MergeChamferStripsIntoParents
+
+Merges each inset planar fragment (parentSurfaceNum == -1) with its own
+immediate child chamfer strips into an atomic MST_TRIANGLE_SOUP mesh.
+==================
+*/
+void MergeChamferStripsIntoParents(entity_t *e)
+{
+    int i, j, k;
+    int c_mergedParents = 0;
+    int c_mergedStrips = 0;
+    int numSurfsAtStart = numMapDrawSurfs;
+
+    qprintf("----- MergeChamferStripsIntoParents -----\n");
+
+    for (i = e->firstDrawSurf; i < s_chamferBaseDrawSurfs; i++)
+    {
+        mapDrawSurface_t *parent = &mapDrawSurfs[i];
+        if (parent->numVerts < 3)
+            continue;
+
+        if (!IsChamferCandidate(parent))
+            continue;
+
+
+
+        int maxVerts = 8192;
+        int maxIndexes = 32768;
+
+        weldBuf_t welded;
+        welded.numVerts = 0;
+        welded.verts = malloc(maxVerts * sizeof(drawVert_t));
+
+        int *outIndexes = malloc(maxIndexes * sizeof(int));
+        int numOutIndexes = 0;
+
+        // Step 1: Triangulate parent fragment N-gon as CCW fan from vertex 0
+        for (k = 1; k <= parent->numVerts - 2; k++)
+        {
+            if (numOutIndexes + 3 > maxIndexes)
+                break;
+            outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, &parent->verts[0]);
+            outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, &parent->verts[k]);
+            outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, &parent->verts[k + 1]);
+        }
+
+        // Step 2: Triangulate each child chamfer strip and weld vertices
+        for (j = s_chamferBaseDrawSurfs; j < numSurfsAtStart; j++)
+        {
+            mapDrawSurface_t *strip = &mapDrawSurfs[j];
+            if (strip->parentSurfaceNum != i || strip->numVerts < 4)
+                continue;
+
+            int chainLen = strip->numVerts / 2;
+            for (k = 0; k <= chainLen - 2; k++)
+            {
+                if (numOutIndexes + 6 > maxIndexes)
+                    break;
+
+                drawVert_t *OuterA = &strip->verts[k];
+                drawVert_t *OuterB = &strip->verts[k + 1];
+                drawVert_t *InnerB = &strip->verts[2 * chainLen - 2 - k];
+                drawVert_t *InnerA = &strip->verts[2 * chainLen - 1 - k];
+
+                // Tri 1 (CCW): OuterA -> OuterB -> InnerB
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, OuterA);
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, OuterB);
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, InnerB);
+
+                // Tri 2 (CCW): OuterA -> InnerB -> InnerA
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, OuterA);
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, InnerB);
+                outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, InnerA);
+            }
+
+            strip->numVerts = 0;
+            if (strip->verts)
+            {
+                free(strip->verts);
+                strip->verts = NULL;
+            }
+            if (strip->indexes)
+            {
+                free(strip->indexes);
+                strip->indexes = NULL;
+                strip->numIndexes = 0;
+            }
+            c_mergedStrips++;
+        }
+
+        // Step 3: Promote parent to atomic Trisoup (miscModel = qtrue)
+        if (parent->verts)
+            free(parent->verts);
+        if (parent->indexes)
+            free(parent->indexes);
+
+        parent->verts = welded.verts;
+        parent->numVerts = welded.numVerts;
+        parent->indexes = outIndexes;
+        parent->numIndexes = numOutIndexes;
+        parent->miscModel = qtrue;
+        parent->planarDerived = qtrue;
+
+        c_mergedParents++;
+    }
+
+    qprintf("%6i atomic parents merged\n", c_mergedParents);
+    qprintf("%6i child strips absorbed\n", c_mergedStrips);
+}
+
+
+/*
+==================
+MergeCoplanarTrisoups
+
+Groups adjacent atomic trisoups (derived from planar surfaces) that share the same
+plane and shader into unified meshes, then generates a single UV map for each group.
+==================
+*/
+void MergeCoplanarTrisoups(entity_t *e)
+{
+    int i, j;
+    int numSurfsAtStart = numMapDrawSurfs;
+    int numMergedGroups = 0;
+    qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
+    memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
+
+    qprintf("----- MergeCoplanarTrisoups -----\n");
+
+    for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
+    {
+        if (visited[i])
+            continue;
+
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        if (!dsA->planarDerived || !dsA->miscModel || dsA->numVerts <= 0)
+            continue;
+
+        int component[MAX_MAP_DRAW_SURFS_LIMIT];
+        int numComponent = 0;
+        
+        component[numComponent++] = i;
+        visited[i] = qtrue;
+
+        for (int head = 0; head < numComponent; head++)
+        {
+            int currIdx = component[head];
+            mapDrawSurface_t *currDs = &mapDrawSurfs[currIdx];
+
+            for (j = i + 1; j < numSurfsAtStart; j++)
+            {
+                if (visited[j])
+                    continue;
+
+                mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+                if (!dsB->planarDerived || !dsB->miscModel || dsB->numVerts <= 0)
+                    continue;
+
+                if (currDs->planeNum != dsB->planeNum || currDs->shaderInfo != dsB->shaderInfo)
+                    continue;
+
+                qboolean canMerge = qfalse;
+                if (currDs->side && dsB->side && currDs->side == dsB->side && currDs->mapBrush == dsB->mapBrush)
+                {
+                    canMerge = qtrue;
+                }
+                else
+                {
+                    int parentA = (currDs->parentSurfaceNum != -1) ? currDs->parentSurfaceNum : currIdx;
+                    int parentB = (dsB->parentSurfaceNum != -1) ? dsB->parentSurfaceNum : j;
+                    if (parentA == parentB || parentA == j || parentB == currIdx)
+                    {
+                        canMerge = qtrue;
+                    }
+                }
+
+                if (canMerge)
+                {
+                    visited[j] = qtrue;
+                    component[numComponent++] = j;
+                }
+            }
+        }
+
+        if (numComponent > 1)
+        {
+            int maxVerts = 32768;
+            int maxIndexes = 65536;
+
+            weldBuf_t welded;
+            welded.numVerts = 0;
+            welded.verts = malloc(maxVerts * sizeof(drawVert_t));
+
+            int *outIndexes = malloc(maxIndexes * sizeof(int));
+            int numOutIndexes = 0;
+
+            for (int c = 0; c < numComponent; c++)
+            {
+                mapDrawSurface_t *ds = &mapDrawSurfs[component[c]];
+                for (int k = 0; k < ds->numIndexes; k++)
+                {
+                    if (numOutIndexes >= maxIndexes)
+                        break;
+                    outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, &ds->verts[ds->indexes[k]]);
+                }
+
+                if (ds != dsA)
+                {
+                    ds->numVerts = 0;
+                    if (ds->verts) free(ds->verts);
+                    if (ds->indexes) free(ds->indexes);
+                    ds->verts = NULL;
+                    ds->indexes = NULL;
+                    ds->numIndexes = 0;
+                }
+            }
+
+            if (dsA->verts) free(dsA->verts);
+            if (dsA->indexes) free(dsA->indexes);
+
+            dsA->verts = welded.verts;
+            dsA->numVerts = welded.numVerts;
+            dsA->indexes = outIndexes;
+            dsA->numIndexes = numOutIndexes;
+
+            numMergedGroups++;
+        }
+        
+        GenerateAtomicUVsWithXAtlas(dsA);
+    }
+
+    free(visited);
+    qprintf("%6i multi-surface trisoups merged\n", numMergedGroups);
 }

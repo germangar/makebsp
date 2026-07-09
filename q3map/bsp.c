@@ -224,6 +224,8 @@ void ProcessWorldModel(void)
     if (chamferedges || chamfersubdivide)
     {
         ChamferSurfaceEdges(e);
+        MergeChamferStripsIntoParents(e);
+        MergeCoplanarTrisoups(e);
     }
 
     if (!notjunc && !chamfersubdivide)
@@ -322,6 +324,8 @@ void ProcessSubModel(void)
     if (chamferedges || chamfersubdivide)
     {
         ChamferSurfaceEdges(e);
+        MergeChamferStripsIntoParents(e);
+        MergeCoplanarTrisoups(e);
     }
 
     // add in any vertexes required to fix tjunctions
