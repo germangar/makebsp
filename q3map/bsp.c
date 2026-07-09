@@ -42,6 +42,7 @@ qboolean notjunc;
 qboolean nomerge;
 qboolean nofog;
 qboolean chamferedges;
+qboolean chamfersubdivide;
 float chamfer_global_width = 2.0f;
 qboolean nosubdivide;
 qboolean testExpand;
@@ -215,12 +216,17 @@ void ProcessWorldModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    if (chamferedges)
+    if (chamfersubdivide)
+    {
+        ChopTjunctions(e);
+    }
+
+    if (chamferedges || chamfersubdivide)
     {
         ChamferSurfaceEdges(e);
     }
 
-    if (!notjunc)
+    if (!notjunc && !chamfersubdivide)
     {
         FixTJunctions(e);
     }
@@ -308,13 +314,18 @@ void ProcessSubModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    if (chamferedges)
+    if (chamfersubdivide)
+    {
+        ChopTjunctions(e);
+    }
+
+    if (chamferedges || chamfersubdivide)
     {
         ChamferSurfaceEdges(e);
     }
 
     // add in any vertexes required to fix tjunctions
-    if (!notjunc)
+    if (!notjunc && !chamfersubdivide)
     {
         FixTJunctions(e);
     }
@@ -805,6 +816,12 @@ int main(int argc, char **argv)
             chamferedges = qtrue;
             _printf("edge chamfering enabled\n");
         }
+        else if (!strcmp(argv[i], "-chamfersubdivide"))
+        {
+            chamferedges = qtrue;
+            chamfersubdivide = qtrue;
+            _printf("edge chamfering & T-junction subdivision enabled\n");
+        }
         else if (!strcmp(argv[i], "-chamferwidth"))
         {
             chamfer_global_width = atof(argv[i + 1]);
@@ -952,6 +969,7 @@ int main(int argc, char **argv)
                 "   nomerge        = don't merge brush faces\n"
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
+                "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
                 "   -chamferwidth  = size of the chamfer strip (default 2.0)\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"

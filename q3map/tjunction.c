@@ -828,6 +828,112 @@ static void ShiftVertexUV(mapDrawSurface_t *ds, drawVert_t *dv, const vec3_t old
 
 /*
 ================
+ChopTjunctions
+================
+*/
+void ChopTjunctions(entity_t *e)
+{
+    int i, j, v, w;
+    int numChopped = 0;
+
+    qprintf("----- ChopTjunctions -----\n");
+
+    for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        qboolean chopped = qfalse;
+
+        if (!IsChamferCandidate(dsA)) continue;
+
+        for (j = e->firstDrawSurf; j < numMapDrawSurfs && !chopped; j++)
+        {
+            mapDrawSurface_t *dsB;
+            vec3_t normalA, normalB;
+            float dot;
+
+            if (i == j) continue;
+            dsB = &mapDrawSurfs[j];
+            if (!IsChamferCandidate(dsB)) continue;
+
+            VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
+            VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+            dot = DotProduct(normalA, normalB);
+            if (dot > 0.866f || dot < -0.866f) continue;
+
+            for (v = 0; v < dsA->numVerts && !chopped; v++)
+            {
+                int next_v = (v + 1) % dsA->numVerts;
+                vec3_t V0, V1, edgeDir;
+                float full_len;
+
+                VectorCopy(dsA->verts[v].xyz,      V0);
+                VectorCopy(dsA->verts[next_v].xyz, V1);
+
+                VectorSubtract(V1, V0, edgeDir);
+                full_len = VectorNormalize(edgeDir, edgeDir);
+                if (full_len < 0.1f) continue;
+
+                for (w = 0; w < dsB->numVerts && !chopped; w++)
+                {
+                    vec3_t V_B, toB, proj, perp, splitNormal;
+                    float t, perp_dist, splitDist;
+                    winding_t *w_in, *front, *back;
+
+                    VectorCopy(dsB->verts[w].xyz, V_B);
+
+                    VectorSubtract(V_B, V0, toB);
+                    t = DotProduct(toB, edgeDir);
+
+                    VectorScale(edgeDir, t, proj);
+                    VectorSubtract(toB, proj, perp);
+                    perp_dist = VectorLength(perp);
+
+                    if (perp_dist > POINT_ON_LINE_EPSILON) continue;
+                    if (t < ON_EPSILON) continue;
+                    if (t > full_len - ON_EPSILON) continue;
+
+                    VectorCopy(edgeDir, splitNormal);
+                    splitDist = DotProduct(V_B, splitNormal);
+
+                    w_in = WindingFromDrawSurf(dsA);
+                    front = NULL;
+                    back = NULL;
+                    ClipWindingEpsilon(w_in, splitNormal, splitDist, ON_EPSILON,
+                                       &front, &back);
+                    FreeWinding(w_in);
+
+                    if (!front || front->numpoints < 3 ||
+                        !back  || back->numpoints  < 3)
+                    {
+                        if (front) FreeWinding(front);
+                        if (back)  FreeWinding(back);
+                        continue;
+                    }
+
+                    dsA->numVerts = 0;
+
+                    DrawSurfaceForSide(dsA->mapBrush, dsA->side, front);
+                    DrawSurfaceForSide(dsA->mapBrush, dsA->side, back);
+                    FreeWinding(front);
+                    FreeWinding(back);
+
+                    numChopped++;
+                    chopped = qtrue;
+                }
+            }
+        }
+
+        if (chopped)
+        {
+            i--;
+        }
+    }
+
+    qprintf("%6i surfaces chopped for T-junctions\n", numChopped);
+}
+
+/*
+================
 ChamferSurfaceEdges
 ================
 */
@@ -1023,7 +1129,8 @@ void ChamferSurfaceEdges(entity_t *e)
             
             for (int v = 0; v < ds->numVerts; v++) {
                 VectorCopy(globalInsets[i][v].xyz, ds->verts[v].xyz);
-                VectorCopy(globalInsets[i][v].st, ds->verts[v].st);
+                ds->verts[v].st[0] = globalInsets[i][v].st[0];
+                ds->verts[v].st[1] = globalInsets[i][v].st[1];
             }
             free(globalInsets[i]);
         }

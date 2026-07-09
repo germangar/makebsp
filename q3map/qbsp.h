@@ -215,6 +215,7 @@ typedef struct surfaceChamferEdge_s {
 
 extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
 extern qboolean chamferedges;
+extern qboolean chamfersubdivide;
 extern float chamfer_global_width;
 
 void BuildSurfaceAdjacencyGraph(entity_t *e);
@@ -471,6 +472,7 @@ void FreeLightmaps(void);
 // tjunction.c
 
 void FixTJunctions(entity_t *e);
+void ChopTjunctions(entity_t *e);
 
 //=============================================================================
 
