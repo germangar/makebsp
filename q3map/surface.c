@@ -650,6 +650,7 @@ static void SubdivideDrawSurf_r(mapDrawSurface_t *ds, winding_t *w, float subdiv
     // emit this polygon
     newds = DrawSurfaceForSide(ds->mapBrush, ds->side, w);
     newds->fogNum = ds->fogNum;
+    newds->parentSurfaceNum = (ds->parentSurfaceNum != -1) ? ds->parentSurfaceNum : (int)(ds - mapDrawSurfs);
 }
 
 void SubdivideDrawSurf(mapDrawSurface_t *ds, winding_t *w, float subdivisions)

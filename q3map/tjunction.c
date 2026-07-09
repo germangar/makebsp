@@ -902,18 +902,24 @@ void ChopTjunctions(entity_t *e)
                                        &front, &back);
                     FreeWinding(w_in);
 
-                    if (!front || front->numpoints < 3 ||
-                        !back  || back->numpoints  < 3)
+                    if (!front || front->numpoints < 3 || WindingArea(front) < 1.0f ||
+                        !back  || back->numpoints  < 3 || WindingArea(back) < 1.0f)
                     {
                         if (front) FreeWinding(front);
                         if (back)  FreeWinding(back);
                         continue;
                     }
 
+                    int parentIdx = (dsA->parentSurfaceNum != -1) ? dsA->parentSurfaceNum : i;
+                    mapDrawSurface_t *dsFront;
+                    mapDrawSurface_t *dsBack;
+
                     dsA->numVerts = 0;
 
-                    DrawSurfaceForSide(dsA->mapBrush, dsA->side, front);
-                    DrawSurfaceForSide(dsA->mapBrush, dsA->side, back);
+                    dsFront = DrawSurfaceForSide(dsA->mapBrush, dsA->side, front);
+                    dsBack  = DrawSurfaceForSide(dsA->mapBrush, dsA->side, back);
+                    dsFront->parentSurfaceNum = parentIdx;
+                    dsBack->parentSurfaceNum  = parentIdx;
                     FreeWinding(front);
                     FreeWinding(back);
 
@@ -1132,6 +1138,7 @@ void ChamferSurfaceEdges(entity_t *e)
                 ds->verts[v].st[0] = globalInsets[i][v].st[0];
                 ds->verts[v].st[1] = globalInsets[i][v].st[1];
             }
+            ds->parentSurfaceNum = -1;
             free(globalInsets[i]);
         }
     }
