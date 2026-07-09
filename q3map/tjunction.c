@@ -979,6 +979,7 @@ void ChamferSurfaceEdges(entity_t *e)
                     
                     if (chainLen >= 2) {
                         mapDrawSurface_t *strip = AllocDrawSurf();
+                        strip->parentSurfaceNum = i;
                         strip->shaderInfo = dsA->shaderInfo;
                         strip->mapBrush = dsA->mapBrush;
                         strip->side = dsA->side;

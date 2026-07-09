@@ -64,6 +64,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->enforceSampleSize = game->enforceSampleSize;
     ds->noDeluxeInfluence = -1;
     ds->noDeluxeInfluenceBacksplash = -1;
+    ds->parentSurfaceNum = -1;
 
     return ds;
 }
