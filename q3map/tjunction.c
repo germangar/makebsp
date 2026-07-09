@@ -620,6 +620,7 @@ static qboolean IsChamferCandidate(mapDrawSurface_t *ds)
     if (ds->numVerts <= 0 || ds->side == NULL) return qfalse;
     if (ds->patch || ds->miscModel || ds->flareSurface || ds->isDecal) return qfalse;
     if (ds->shaderInfo && (ds->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NOLIGHTMAP))) return qfalse;
+    if (ds->shaderInfo && (ds->shaderInfo->contents & (CONTENTS_WATER | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_FOG))) return qfalse;
     return qtrue;
 }
 
