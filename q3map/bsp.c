@@ -43,6 +43,7 @@ qboolean nomerge;
 qboolean nofog;
 qboolean chamferedges;
 qboolean chamfersubdivide;
+qboolean mergetrisoups = qtrue;
 float chamfer_global_width = 2.0f;
 qboolean nosubdivide;
 qboolean testExpand;
@@ -221,14 +222,17 @@ void ProcessWorldModel(void)
         ChopTjunctions(e);
     }
 
-    if (chamferedges || chamfersubdivide)
+    if (chamferedges)
     {
         ChamferSurfaceEdges(e);
         MergeChamferStripsIntoParents(e);
         MergeParentedTrisoups(e);
     }
 
-    MergeAdjacentTrisoups(e);
+    if (mergetrisoups)
+    {
+        MergeAdjacentTrisoups(e);
+    }
 
     if (!notjunc && !chamfersubdivide)
     {
@@ -323,14 +327,17 @@ void ProcessSubModel(void)
         ChopTjunctions(e);
     }
 
-    if (chamferedges || chamfersubdivide)
+    if (chamferedges)
     {
         ChamferSurfaceEdges(e);
         MergeChamferStripsIntoParents(e);
         MergeParentedTrisoups(e);
     }
 
-    MergeAdjacentTrisoups(e);
+    if (mergetrisoups)
+    {
+        MergeAdjacentTrisoups(e);
+    }
 
     // add in any vertexes required to fix tjunctions
     if (!notjunc && !chamfersubdivide)
@@ -836,6 +843,12 @@ int main(int argc, char **argv)
             _printf("chamfer width = %f\n", chamfer_global_width);
             i++;
         }
+        else if (!strcmp(argv[i], "-mergetrisoups"))
+        {
+            mergetrisoups = atoi(argv[i + 1]) != 0;
+            _printf("adjacent trisoup merging = %d\n", mergetrisoups);
+            i++;
+        }
         else if (!strcmp(argv[i], "-expand"))
         {
             testExpand = qtrue;
@@ -979,6 +992,7 @@ int main(int argc, char **argv)
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
                 "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
                 "   -chamferwidth  = size of the chamfer strip (default 2.0)\n"
+                "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
