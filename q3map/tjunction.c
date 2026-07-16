@@ -634,6 +634,24 @@ static qboolean IsChamferCandidate(mapDrawSurface_t *ds)
     return qtrue;
 }
 
+static int ClassifySurfaceSide(const mapDrawSurface_t *ds, const vec3_t normal, float dist)
+{
+    qboolean front = qfalse;
+    qboolean back  = qfalse;
+    int i;
+
+    for (i = 0; i < ds->numVerts; i++) {
+        float d = DotProduct(ds->verts[i].xyz, normal) - dist;
+        if      (d >  LINE_POSITION_EPSILON) front = qtrue;
+        else if (d < -LINE_POSITION_EPSILON) back  = qtrue;
+    }
+
+    if (front && !back) return SIDE_FRONT;
+    if (back && !front) return SIDE_BACK;
+    if (front &&  back) return SIDE_CROSS;
+    return SIDE_ON; // all vertices exactly on the plane (degenerate, treated as CROSS to be safe)
+}
+
 /*
 ================
 BuildSurfaceAdjacencyGraph
@@ -689,6 +707,26 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
 
             if (nbA.sharedChainLen >= 2)
             {
+                // Reject near-parallel and anti-parallel surfaces
+                vec3_t normalA, normalB;
+                float distA = mapplanes[dsA->side->planenum].dist;
+                float distB = mapplanes[dsB->side->planenum].dist;
+                VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
+                VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+
+                float dot = DotProduct(normalA, normalB);
+                if (dot > 0.866f || dot < -0.866f) continue; // < 30 degrees or anti-parallel
+
+                // Classify where each face's interior sits relative to the other's plane
+                int sideA = ClassifySurfaceSide(dsA, normalB, distB);
+                int sideB = ClassifySurfaceSide(dsB, normalA, distA);
+
+                // Accept only: Convex (BACK/BACK) or Concave (FRONT/FRONT)
+                // Reject: mixed (FRONT/BACK or BACK/FRONT), CROSS, or ON
+                qboolean isSymmetric = ((sideA == SIDE_BACK  && sideB == SIDE_BACK)  ||
+                                        (sideA == SIDE_FRONT && sideB == SIDE_FRONT));
+                if (!isSymmetric) continue;
+
                 surfaceNeighbor_t *newNbA = malloc(sizeof(surfaceNeighbor_t));
                 *newNbA = nbA;
                 newNbA->neighborSurfaceNum = j;
@@ -880,6 +918,21 @@ void ChopTjunctions(entity_t *e)
             VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
             dot = DotProduct(normalA, normalB);
             if (dot > 0.866f || dot < -0.866f) continue;
+
+            // Reject mismatched backside contacts (`FRONT/BACK` or `BACK/FRONT`).
+            // Allows valid Convex (`BACK/BACK`), Concave (`FRONT/FRONT`), and spanning (`CROSS/*`) splits.
+            {
+                float distA = mapplanes[dsA->side->planenum].dist;
+                float distB = mapplanes[dsB->side->planenum].dist;
+                int sideA = ClassifySurfaceSide(dsA, normalB, distB);
+                int sideB = ClassifySurfaceSide(dsB, normalA, distA);
+
+                if ((sideA == SIDE_FRONT && sideB == SIDE_BACK) ||
+                    (sideA == SIDE_BACK  && sideB == SIDE_FRONT))
+                {
+                    continue; // Mismatched backside T-junction contact
+                }
+            }
 
             for (v = 0; v < dsA->numVerts && !chopped; v++)
             {
