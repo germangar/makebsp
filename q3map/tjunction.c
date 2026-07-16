@@ -1131,7 +1131,7 @@ void ChamferSurfaceEdges(entity_t *e)
             float dot;
             
             float target_width = (nb->isConcave && chamfer_concave_width >= 0.0f) ? chamfer_concave_width : chamfer_global_width;
-            if (target_width == 0.0f) continue;
+            if (target_width < MIN_CHAMFER_WIDTH) continue;
 
             float edge_width = target_width;
             if (min_edge < 4.0f * target_width) {
@@ -1196,9 +1196,22 @@ void ChamferSurfaceEdges(entity_t *e)
         if (!globalInsets[i]) continue;
         VectorCopy(mapplanes[dsA->side->planenum].normal, faceNormal);
 
+        float min_edge = 999999.0f;
+        for (int v = 0; v < dsA->numVerts; v++) {
+            int next_v = (v + 1) % dsA->numVerts;
+            vec3_t edgeDir;
+            VectorSubtract(dsA->verts[next_v].xyz, dsA->verts[v].xyz, edgeDir);
+            float len = VectorLength(edgeDir);
+            if (len < min_edge) {
+                min_edge = len;
+            }
+        }
+
         for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
         {
-            if (nb->isConcave && chamfer_concave_width == 0.0f) continue;
+            float target_width = (nb->isConcave && chamfer_concave_width >= 0.0f) ? chamfer_concave_width : chamfer_global_width;
+            if (target_width < MIN_CHAMFER_WIDTH) continue;
+            if (min_edge < 4.0f * target_width && (min_edge / 4.0f) < MIN_CHAMFER_WIDTH) continue;
 
             int j = nb->neighborSurfaceNum;
             mapDrawSurface_t *dsB = &mapDrawSurfs[j];
