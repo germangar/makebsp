@@ -1024,15 +1024,16 @@ void ChamferSurfaceEdges(entity_t *e)
             }
         }
 
+#define MIN_CHAMFER_WIDTH 0.5f
         float surface_chamfer_width = chamfer_global_width;
-        float required_space = 10.0f * chamfer_global_width;
+        float required_space = 4.0f * chamfer_global_width;
 
         if (min_edge < required_space) {
-            // Scale down to maintain the 10x ratio
-            surface_chamfer_width = min_edge / 10.0f;
+            // Scale down to maintain the 4x ratio
+            surface_chamfer_width = min_edge / 4.0f;
         }
 
-        if (surface_chamfer_width < 1.0f) {
+        if (surface_chamfer_width < MIN_CHAMFER_WIDTH) {
             // Surface is too small to safely chamfer, leave it entirely original
             continue;
         }
