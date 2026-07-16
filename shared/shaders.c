@@ -74,8 +74,8 @@ infoParm_t infoParms[] = {
 
     {"fog", 1, 0, CONTENTS_FOG},             // carves surfaces entering
     {"sky", 0, SURF_SKY, 0},                 // emit light from an environment map
-    {"lightfilter", 0, SURF_LIGHTFILTER, 0}, // filter light going through it
-    {"alphashadow", 0, SURF_ALPHASHADOW, 0}, // test light on a per-pixel basis
+    {"lightfilter", 0, SURF_LIGHTFILTER, CONTENTS_TRANSLUCENT}, // filter light going through it
+    {"alphashadow", 0, SURF_ALPHASHADOW, CONTENTS_TRANSLUCENT}, // test light on a per-pixel basis
     {"hint", 0, SURF_HINT, 0},               // use as a primary splitter
 
     // server attributes

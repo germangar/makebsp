@@ -657,6 +657,11 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
             dsB = &mapDrawSurfs[j];
             if (!IsChamferCandidate(dsB)) continue;
 
+            // Only register chamfer neighbors if their opacity/translucency matches
+            qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            qboolean transB = (dsB->shaderInfo && (dsB->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            if (transA != transB) continue;
+
             // Find shared vertices
             surfaceNeighbor_t nbA = {0}, nbB = {0};
             
@@ -865,6 +870,11 @@ void ChopTjunctions(entity_t *e)
             if (i == j) continue;
             dsB = &mapDrawSurfs[j];
             if (!IsChamferCandidate(dsB)) continue;
+
+            // Never slice an opaque surface across its face due to a transparent surface touching it (and vice-versa)
+            qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            qboolean transB = (dsB->shaderInfo && (dsB->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            if (transA != transB) continue;
 
             VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
             VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
