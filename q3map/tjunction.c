@@ -880,6 +880,30 @@ static void ShiftVertexUV(mapDrawSurface_t *ds, drawVert_t *dv, const vec3_t old
     }
 }
 
+static qboolean IsOriginalBrushEdge(mapDrawSurface_t *ds, vec3_t v1, vec3_t v2)
+{
+    int i;
+    bspbrush_t *brush = ds->mapBrush;
+    if (!brush) return qfalse;
+
+    for (i = 0; i < brush->numsides; i++)
+    {
+        side_t *side = &brush->sides[i];
+        plane_t *plane = &mapplanes[side->planenum];
+
+        if (side == ds->side) continue;
+
+        float d1 = DotProduct(v1, plane->normal) - plane->dist;
+        float d2 = DotProduct(v2, plane->normal) - plane->dist;
+
+        if (fabs(d1) < 0.1f && fabs(d2) < 0.1f)
+        {
+            return qtrue;
+        }
+    }
+    return qfalse;
+}
+
 /*
 ================
 ChopTjunctions
@@ -947,6 +971,14 @@ void ChopTjunctions(entity_t *e)
                 full_len = VectorNormalize(edgeDir, edgeDir);
                 if (full_len < 0.1f) continue;
 
+                // --- NEW LOGIC: Enforce Original Edge Check ---
+                // If dsA is already a fragment (split by an earlier chop), do not allow further chops along
+                // newly created internal edges (`V0->V1`). Only allow chops along true brush boundary edges.
+                if (dsA->parentSurfaceNum != -1 && !IsOriginalBrushEdge(dsA, V0, V1)) {
+                    continue;
+                }
+                // ----------------------------------------------
+
                 for (w = 0; w < dsB->numVerts && !chopped; w++)
                 {
                     vec3_t V_B, toB, proj, perp, splitNormal;
@@ -1010,30 +1042,6 @@ void ChopTjunctions(entity_t *e)
     }
 
     qprintf("%6i surfaces chopped for T-junctions\n", numChopped);
-}
-
-static qboolean IsOriginalBrushEdge(mapDrawSurface_t *ds, vec3_t v1, vec3_t v2)
-{
-    int i;
-    bspbrush_t *brush = ds->mapBrush;
-    if (!brush) return qfalse;
-
-    for (i = 0; i < brush->numsides; i++)
-    {
-        side_t *side = &brush->sides[i];
-        plane_t *plane = &mapplanes[side->planenum];
-
-        if (side == ds->side) continue;
-
-        float d1 = DotProduct(v1, plane->normal) - plane->dist;
-        float d2 = DotProduct(v2, plane->normal) - plane->dist;
-
-        if (fabs(d1) < 0.1f && fabs(d2) < 0.1f)
-        {
-            return qtrue;
-        }
-    }
-    return qfalse;
 }
 
 /*
