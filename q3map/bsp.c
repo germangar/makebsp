@@ -45,6 +45,7 @@ qboolean chamferedges;
 qboolean chamfersubdivide;
 qboolean mergetrisoups = qtrue;
 float chamfer_global_width = 2.0f;
+float chamfer_concave_width = -1.0f;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
@@ -843,6 +844,12 @@ int main(int argc, char **argv)
             _printf("chamfer width = %f\n", chamfer_global_width);
             i++;
         }
+        else if (!strcmp(argv[i], "-chamferconcavewidth"))
+        {
+            chamfer_concave_width = atof(argv[i + 1]);
+            _printf("chamfer concave width = %f\n", chamfer_concave_width);
+            i++;
+        }
         else if (!strcmp(argv[i], "-mergetrisoups"))
         {
             mergetrisoups = atoi(argv[i + 1]) != 0;
@@ -992,6 +999,7 @@ int main(int argc, char **argv)
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
                 "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
                 "   -chamferwidth  = size of the chamfer strip (default 2.0)\n"
+                "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferwidth, 0 skips concave chamfers)\n"
                 "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"

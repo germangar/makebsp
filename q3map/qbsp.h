@@ -206,18 +206,21 @@ typedef struct surfaceNeighbor_s {
     int sharedChainIndicesA[MAX_CHAMFER_VERTS];
     int sharedChainIndicesB[MAX_CHAMFER_VERTS];
     int sharedChainLen;
+    qboolean isConcave;
     struct surfaceNeighbor_s *next;
 } surfaceNeighbor_t;
 
 typedef struct surfaceChamferEdge_s {
     int   chainIndices[MAX_CHAMFER_VERTS];
     int   chainLen;
+    float width;
 } surfaceChamferEdge_t;
 
 extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
 extern qboolean chamferedges;
 extern qboolean chamfersubdivide;
 extern float chamfer_global_width;
+extern float chamfer_concave_width;
 
 void BuildSurfaceAdjacencyGraph(entity_t *e);
 void ChamferSurfaceEdges(entity_t *e);

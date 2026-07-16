@@ -727,15 +727,19 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
                                         (sideA == SIDE_FRONT && sideB == SIDE_FRONT));
                 if (!isSymmetric) continue;
 
+                qboolean isConcave = (sideA == SIDE_FRONT && sideB == SIDE_FRONT);
+
                 surfaceNeighbor_t *newNbA = malloc(sizeof(surfaceNeighbor_t));
                 *newNbA = nbA;
                 newNbA->neighborSurfaceNum = j;
+                newNbA->isConcave = isConcave;
                 newNbA->next = surfaceNeighbors[i];
                 surfaceNeighbors[i] = newNbA;
 
                 surfaceNeighbor_t *newNbB = malloc(sizeof(surfaceNeighbor_t));
                 *newNbB = nbB;
                 newNbB->neighborSurfaceNum = i;
+                newNbB->isConcave = isConcave;
                 newNbB->next = surfaceNeighbors[j];
                 surfaceNeighbors[j] = newNbB;
             }
@@ -748,21 +752,24 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
 ComputeAllInsets
 ================
 */
-static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, int numEdges, float chamferWidth, drawVert_t *insetMap)
+static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, int numEdges, drawVert_t *insetMap)
 {
     int i, j, v;
     vec3_t faceNormal;
     qboolean edgeChamfered[MAX_CHAMFER_VERTS];
+    float edgeWidth[MAX_CHAMFER_VERTS];
     vec3_t edgeLineOrigin[MAX_CHAMFER_VERTS];
     vec3_t edgeLineDir[MAX_CHAMFER_VERTS];
     
     memset(edgeChamfered, 0, sizeof(edgeChamfered));
+    memset(edgeWidth, 0, sizeof(edgeWidth));
     VectorCopy(mapplanes[ds->side->planenum].normal, faceNormal);
 
     for (i = 0; i < numEdges; i++) {
         surfaceChamferEdge_t *edge = &edges[i];
         for (j = 0; j < edge->chainLen - 1; j++) {
             edgeChamfered[edge->chainIndices[j]] = qtrue;
+            edgeWidth[edge->chainIndices[j]] = edge->width;
         }
     }
 
@@ -782,7 +789,7 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
         
         VectorCopy(ds->verts[v].xyz, edgeLineOrigin[v]);
         if (edgeChamfered[v]) {
-            VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, edgeLineOrigin[v]);
+            VectorMA(ds->verts[v].xyz, edgeWidth[v], insetDir, edgeLineOrigin[v]);
         }
         VectorCopy(edgeDir, edgeLineDir[v]);
     }
@@ -823,7 +830,7 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
                     CrossProduct(edgeDir, faceNormal, insetDir);
 #endif
                     VectorNormalize(insetDir, insetDir);
-                    VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+                    VectorMA(ds->verts[v].xyz, edgeWidth[v], insetDir, insetMap[v].xyz);
                 } else {
                     vec3_t edgeDir, insetDir;
                     VectorSubtract(ds->verts[v].xyz, ds->verts[prev_v].xyz, edgeDir);
@@ -834,11 +841,11 @@ static void ComputeAllInsets(mapDrawSurface_t *ds, surfaceChamferEdge_t *edges, 
                     CrossProduct(edgeDir, faceNormal, insetDir);
 #endif
                     VectorNormalize(insetDir, insetDir);
-                    VectorMA(ds->verts[v].xyz, chamferWidth, insetDir, insetMap[v].xyz);
+                    VectorMA(ds->verts[v].xyz, edgeWidth[prev_v], insetDir, insetMap[v].xyz);
                 }
             }
             
-            float maxMove = chamferWidth * 4.0f;
+            float maxMove = ((edgeWidth[prev_v] > edgeWidth[v]) ? edgeWidth[prev_v] : edgeWidth[v]) * 4.0f;
             vec3_t diff_corner;
             VectorSubtract(insetMap[v].xyz, ds->verts[v].xyz, diff_corner);
             if (VectorLength(diff_corner) > maxMove) {
@@ -1115,19 +1122,6 @@ void ChamferSurfaceEdges(entity_t *e)
         }
 
 #define MIN_CHAMFER_WIDTH 0.5f
-        float surface_chamfer_width = chamfer_global_width;
-        float required_space = 4.0f * chamfer_global_width;
-
-        if (min_edge < required_space) {
-            // Scale down to maintain the 4x ratio
-            surface_chamfer_width = min_edge / 4.0f;
-        }
-
-        if (surface_chamfer_width < MIN_CHAMFER_WIDTH) {
-            // Surface is too small to safely chamfer, leave it entirely original
-            continue;
-        }
-        // ----------------------------------------------------
 
         for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
         {
@@ -1136,6 +1130,15 @@ void ChamferSurfaceEdges(entity_t *e)
             vec3_t normalA, normalB;
             float dot;
             
+            float target_width = (nb->isConcave && chamfer_concave_width >= 0.0f) ? chamfer_concave_width : chamfer_global_width;
+            if (target_width == 0.0f) continue;
+
+            float edge_width = target_width;
+            if (min_edge < 4.0f * target_width) {
+                edge_width = min_edge / 4.0f;
+            }
+            if (edge_width < MIN_CHAMFER_WIDTH) continue;
+
             VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
             VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
             
@@ -1164,6 +1167,7 @@ void ChamferSurfaceEdges(entity_t *e)
 
                         if (IsOriginalBrushEdge(dsA, vStart, vEnd)) {
                             edges[numEdges].chainLen = chainLen;
+                            edges[numEdges].width = edge_width;
                             numEdges++;
                         }
                     }
@@ -1175,7 +1179,7 @@ void ChamferSurfaceEdges(entity_t *e)
         {
             globalInsets[i] = malloc(dsA->numVerts * sizeof(drawVert_t));
             memcpy(globalInsets[i], dsA->verts, dsA->numVerts * sizeof(drawVert_t));
-            ComputeAllInsets(dsA, edges, numEdges, surface_chamfer_width, globalInsets[i]);
+            ComputeAllInsets(dsA, edges, numEdges, globalInsets[i]);
             for (int v = 0; v < dsA->numVerts; v++) {
                 ShiftVertexUV(dsA, &globalInsets[i][v], dsA->verts[v].xyz, globalInsets[i][v].xyz);
             }
@@ -1194,6 +1198,8 @@ void ChamferSurfaceEdges(entity_t *e)
 
         for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
         {
+            if (nb->isConcave && chamfer_concave_width == 0.0f) continue;
+
             int j = nb->neighborSurfaceNum;
             mapDrawSurface_t *dsB = &mapDrawSurfs[j];
             vec3_t normalB;
