@@ -1046,6 +1046,35 @@ void ChopTjunctions(entity_t *e)
 
 /*
 ================
+ComputeVertexBlendedNormal
+For a given vertex vIdx on surface surfIdx, compute the true 3D blended normal by
+summing the pristine geometric plane normals of dsA plus every validated chamfer
+neighbor that shares this exact vertex.
+================
+*/
+static void ComputeVertexBlendedNormal(int surfIdx, int vIdx, const vec3_t faceNormal, vec3_t out)
+{
+    surfaceNeighbor_t *scanNb;
+    int m;
+
+    VectorCopy(faceNormal, out);
+
+    for (scanNb = surfaceNeighbors[surfIdx]; scanNb; scanNb = scanNb->next) {
+        for (m = 0; m < scanNb->sharedChainLen; m++) {
+            if (scanNb->sharedChainIndicesA[m] == vIdx) {
+                vec3_t n;
+                VectorCopy(mapplanes[mapDrawSurfs[scanNb->neighborSurfaceNum].side->planenum].normal, n);
+                VectorAdd(out, n, out);
+                break;
+            }
+        }
+    }
+
+    VectorNormalize(out, out);
+}
+
+/*
+================
 ChamferSurfaceEdges
 ================
 */
@@ -1135,13 +1164,6 @@ void ChamferSurfaceEdges(entity_t *e)
 
                         if (IsOriginalBrushEdge(dsA, vStart, vEnd)) {
                             edges[numEdges].chainLen = chainLen;
-                            
-                            // Compute blended normal for this edge
-                            vec3_t blended;
-                            VectorAdd(normalA, normalB, blended);
-                            VectorNormalize(blended, blended);
-                            VectorCopy(blended, edges[numEdges].blendedNormal);
-                            
                             numEdges++;
                         }
                     }
@@ -1180,10 +1202,6 @@ void ChamferSurfaceEdges(entity_t *e)
             VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
             dot = DotProduct(faceNormal, normalB);
             if (dot > 0.866f || dot < -0.866f) continue;
-
-            vec3_t blendedNormal;
-            VectorAdd(faceNormal, normalB, blendedNormal);
-            VectorNormalize(blendedNormal, blendedNormal);
 
             qboolean isShared[MAX_CHAMFER_VERTS];
             memset(isShared, 0, sizeof(isShared));
@@ -1234,7 +1252,7 @@ void ChamferSurfaceEdges(entity_t *e)
 
                             // Outer edge: forward order [0..chainLen-1]
                             strip->verts[k] = dsA->verts[vIdx];
-                            VectorCopy(blendedNormal, strip->verts[k].normal);
+                            ComputeVertexBlendedNormal(i, vIdx, faceNormal, strip->verts[k].normal);
 
                             // Inner edge: reverse order [chainLen..2*chainLen-1]
                             // Reversing closes the perimeter: last outer -> first inner

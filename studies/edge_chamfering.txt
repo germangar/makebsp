@@ -372,3 +372,22 @@ F. Inverted Polygons on Narrow Faces
    lines to cross, inverting the polygon and causing Z-fighting/holes. Added a
    10x Ratio safeguard (`surface_chamfer_width = min_edge / 10.0f`) that dynamically
    scales down the bevel width or aborts (`< 1.0f`) on small geometry.
+
+G. Backside T-Junction Chamfers (ClassifySurfaceSide)
+   Faces touching the backside of another face could falsely chamfer if they formed
+   a 90-degree angle. Added `ClassifySurfaceSide` to evaluate vertex signed distance.
+   Only perfectly symmetric corners (Convex `BACK/BACK` or Concave `FRONT/FRONT`)
+   are now permitted to chamfer in `BuildSurfaceAdjacencyGraph`.
+
+H. ChopTjunctions Zipper Cascade Prevention
+   Detail stairs touching the floor edge of a wall would trigger a vertical split.
+   The next stair step would hit the new vertical split and trigger a horizontal split,
+   zippering the entire wall into hundreds of triangles. Added `IsOriginalBrushEdge`
+   check to `ChopTjunctions` so fragments (`parentSurfaceNum != -1`) only chop if
+   touched along their original brush boundaries.
+
+I. Transparent/Opaque Cross-Slicing Prevention
+   Transparent surfaces (like water or glass) touching opaque structural walls would
+   cause `ChopTjunctions` to slice the structural wall across its face. A check was
+   added to ensure that a split is only allowed if both surfaces share the same
+   translucency state (`CONTENTS_TRANSLUCENT`).

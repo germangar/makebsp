@@ -212,7 +212,6 @@ typedef struct surfaceNeighbor_s {
 typedef struct surfaceChamferEdge_s {
     int   chainIndices[MAX_CHAMFER_VERTS];
     int   chainLen;
-    vec3_t blendedNormal;
 } surfaceChamferEdge_t;
 
 extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];

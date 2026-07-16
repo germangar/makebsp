@@ -40,5 +40,15 @@ Our focus has been on:
 - Resolves visual artifacts where structural faces would falsely chamfer around detail brushes or internal BSP/T-junction splits.
 - Ensures chamfer bevels only spawn on authentic geometric boundaries (like room corners or pillar bases) while keeping surfaces flush underneath adjacent geometry.
 
+### 6. Half-Space Corner Classification (`ClassifySurfaceSide`)
+- Implemented `ClassifySurfaceSide` to evaluate signed distance of vertices against an arbitrary plane.
+- Injected symmetric gate in `BuildSurfaceAdjacencyGraph` (ensuring only exact Convex `BACK/BACK` or Concave `FRONT/FRONT` corners are chamfered).
+- Injected mismatched-opposite gate in `ChopTjunctions` to reject false splits when surfaces touch from behind (e.g. `FRONT/BACK`).
+
+### 7. ChopTjunctions Enhancements (Zipper & Translucency)
+- Reused `IsOriginalBrushEdge` to evaluate whether a split fragment in `ChopTjunctions` should be further subdivided.
+- Stops the cascading "zipper effect" where detail stairs or multi-level contacts repeatedly slice across the interior of large structural faces by checking candidate edges against original brush bounding planes.
+- Added strict translucency state matching (`CONTENTS_TRANSLUCENT`). Prevents transparent volumes (water, glass) from inducing splits across opaque structural faces and vice-versa.
+
 ## Where We Are Going Next
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.
