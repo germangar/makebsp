@@ -35,5 +35,10 @@ Our focus has been on:
 - Observed significant reduction in draw calls: consolidated contiguous brush faces and chamfer strips into unified batches of ~2,000 to ~7,000 triangles per shader (e.g. `concretebunker0068` with 2,932 vertices / 6,927 triangles).
 - Confirmed that PVS cluster assignment (`FilterDrawsurfsIntoTree`) runs after merging, naturally placing references to merged trisoups in any PVS cluster they touch without popping.
 
+### 5. Original Brush Edge Heuristic for Chamfering
+- Implemented `IsOriginalBrushEdge` in `q3map/tjunction.c` to unilaterally evaluate if a chamfer candidate edge belongs to a face's original convex brush geometry.
+- Resolves visual artifacts where structural faces would falsely chamfer around detail brushes or internal BSP/T-junction splits.
+- Ensures chamfer bevels only spawn on authentic geometric boundaries (like room corners or pillar bases) while keeping surfaces flush underneath adjacent geometry.
+
 ## Where We Are Going Next
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.

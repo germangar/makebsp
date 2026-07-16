@@ -949,6 +949,30 @@ void ChopTjunctions(entity_t *e)
     qprintf("%6i surfaces chopped for T-junctions\n", numChopped);
 }
 
+static qboolean IsOriginalBrushEdge(mapDrawSurface_t *ds, vec3_t v1, vec3_t v2)
+{
+    int i;
+    bspbrush_t *brush = ds->mapBrush;
+    if (!brush) return qfalse;
+
+    for (i = 0; i < brush->numsides; i++)
+    {
+        side_t *side = &brush->sides[i];
+        plane_t *plane = &mapplanes[side->planenum];
+
+        if (side == ds->side) continue;
+
+        float d1 = DotProduct(v1, plane->normal) - plane->dist;
+        float d2 = DotProduct(v2, plane->normal) - plane->dist;
+
+        if (fabs(d1) < 0.1f && fabs(d2) < 0.1f)
+        {
+            return qtrue;
+        }
+    }
+    return qfalse;
+}
+
 /*
 ================
 ChamferSurfaceEdges
@@ -1033,15 +1057,21 @@ void ChamferSurfaceEdges(entity_t *e)
                         curr = (curr + 1) % dsA->numVerts;
                     }
                     if (chainLen >= 2 && numEdges < MAX_CHAMFER_VERTS) {
-                        edges[numEdges].chainLen = chainLen;
-                        
-                        // Compute blended normal for this edge
-                        vec3_t blended;
-                        VectorAdd(normalA, normalB, blended);
-                        VectorNormalize(blended, blended);
-                        VectorCopy(blended, edges[numEdges].blendedNormal);
-                        
-                        numEdges++;
+                        vec3_t vStart, vEnd;
+                        VectorCopy(dsA->verts[edges[numEdges].chainIndices[0]].xyz, vStart);
+                        VectorCopy(dsA->verts[edges[numEdges].chainIndices[chainLen - 1]].xyz, vEnd);
+
+                        if (IsOriginalBrushEdge(dsA, vStart, vEnd)) {
+                            edges[numEdges].chainLen = chainLen;
+                            
+                            // Compute blended normal for this edge
+                            vec3_t blended;
+                            VectorAdd(normalA, normalB, blended);
+                            VectorNormalize(blended, blended);
+                            VectorCopy(blended, edges[numEdges].blendedNormal);
+                            
+                            numEdges++;
+                        }
                     }
                 }
             }
@@ -1102,16 +1132,21 @@ void ChamferSurfaceEdges(entity_t *e)
                     }
                     
                     if (chainLen >= 2) {
-                        dsA->parentSurfaceNum = i;
+                        vec3_t vStart, vEnd;
+                        VectorCopy(dsA->verts[chain[0]].xyz, vStart);
+                        VectorCopy(dsA->verts[chain[chainLen - 1]].xyz, vEnd);
 
-                        mapDrawSurface_t *strip = AllocDrawSurf();
-                        strip->parentSurfaceNum = i;
-                        strip->shaderInfo = dsA->shaderInfo;
-                        strip->mapBrush = dsA->mapBrush;
-                        strip->side = dsA->side;
-                        strip->planeNum = dsA->planeNum;
-                        strip->samplesize = dsA->samplesize;
-                        strip->lightmapScale = dsA->lightmapScale;
+                        if (IsOriginalBrushEdge(dsA, vStart, vEnd)) {
+                            dsA->parentSurfaceNum = i;
+
+                            mapDrawSurface_t *strip = AllocDrawSurf();
+                            strip->parentSurfaceNum = i;
+                            strip->shaderInfo = dsA->shaderInfo;
+                            strip->mapBrush = dsA->mapBrush;
+                            strip->side = dsA->side;
+                            strip->planeNum = dsA->planeNum;
+                            strip->samplesize = dsA->samplesize;
+                            strip->lightmapScale = dsA->lightmapScale;
 
                         // Vertices are laid out in perimeter (winding) order so that
                         // SurfaceAsTristrip can auto-triangulate them correctly:
@@ -1140,6 +1175,7 @@ void ChamferSurfaceEdges(entity_t *e)
             }
         }
     }
+}
 
     // Pass 3: Shrink Inner Bodies (Replaces original geometry with the inset geometry)
     for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
