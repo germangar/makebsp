@@ -1875,6 +1875,14 @@ void TraceLights(int num)
             // Map current sample to global lightmap index for PrecacheTexelGeometry lookup
             int py = ds->lightmapOffset[0][1] * scale + j - currentGutter;
             int px = ds->lightmapOffset[0][0] * scale + i - currentGutter;
+
+            if (px < 0 || px >= LIGHTMAP_WIDTH * scale || py < 0 || py >= LIGHTMAP_HEIGHT * scale)
+            {
+                sampleHit[i][j] = qfalse;
+                occluded[i][j] = qtrue;
+                continue;
+            }
+
             int p = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py) * LIGHTMAP_WIDTH * scale + px;
 
             for (ss = 0; ss < actualSamples; ss++)
