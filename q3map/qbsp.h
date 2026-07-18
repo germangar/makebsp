@@ -625,4 +625,8 @@ extern int g_bBrushPrimit;
 
 void ComputeAxisBase(vec3_t normal, vec3_t texX, vec3_t texY);
 
+// autocaulk.c
+extern qboolean noautocaulk;
+void AutoCaulkBrushes(void);
+
 #endif

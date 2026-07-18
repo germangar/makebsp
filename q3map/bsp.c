@@ -821,6 +821,11 @@ int main(int argc, char **argv)
             notjunc = qtrue;
             _printf("no tjunction fixing\n");
         }
+        else if (!strcmp(argv[i], "-noautocaulk"))
+        {
+            noautocaulk = qtrue;
+            _printf("early face auto-caulking disabled\n");
+        }
         else if (!strcmp(argv[i], "-chamferedges"))
         {
             game->chamferEdges = qtrue;
@@ -990,6 +995,7 @@ int main(int argc, char **argv)
                 "   verboseentities = verbose entity processing output\n"
                 "   nomerge        = don't merge brush faces\n"
                 "   notjunc        = skip T-junction narrowing and fixing\n"
+                "   noautocaulk    = disable early face auto-caulking\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
                 "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
                 "   -chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
@@ -1088,6 +1094,8 @@ int main(int argc, char **argv)
 
     SetModelNumbers();
     SetLightStyles();
+
+    AutoCaulkBrushes();
 
     ProcessModels();
 
