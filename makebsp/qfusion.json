@@ -2,7 +2,7 @@
   "game": "qfusion",
   "rootDir": ".",
   "userDir": "",
-  "gameDir": "basewf",
+  "gameDir": "",
   "bspIdent": "FBSP",
   "bspVersion": 1,
   "lumpCount": 18,
@@ -41,6 +41,9 @@
   "exposurefilter": "reinhard", /* [ off, softknee, reinhard, filmic ] */
   "saturation": 1.25, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
   "saturationRamp": "halfpower", /* [ off, filmic, power, midtone ] */
+  "chamferEdges": true,
+  "chamferConvexWidth": 1.25,
+  "chamferConcaveWidth": 0.00,
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",

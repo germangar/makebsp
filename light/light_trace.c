@@ -114,7 +114,7 @@ void InitTracingGeometry(void)
         }
         else if (dsurf->surfaceType == MST_PATCH)
         {
-            float ssize = samplesize;
+            float ssize = game->defaultSampleSize;
             if (si->lightmapSampleSize)
                 ssize = si->lightmapSampleSize;
             mesh_t *subdivided = SubdividePatchForLighting(dsurf, ssize);

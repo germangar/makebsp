@@ -1442,7 +1442,7 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
         else
             newDs->samplesize = dp->si->lightmapSampleSize > 0 
                                 ? dp->si->lightmapSampleSize 
-                                : (float)samplesize;
+                                : (float)game->defaultSampleSize;
     }
     
     newDs->numVerts = m->numVerts;

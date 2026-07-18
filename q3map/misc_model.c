@@ -600,7 +600,7 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
             }
         }
 
-        int ssize_val = ssize ? ssize : samplesize;
+        int ssize_val = ssize ? ssize : game->defaultSampleSize;
         float targetResFloat = sqrt(area3D) / (float)ssize_val;
         targetResFloat *= lightmapScale;
         targetRes = (int)ceil(targetResFloat);
@@ -761,7 +761,7 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
             }
         }
 
-        int ssize_val = ssize ? ssize : samplesize;
+        int ssize_val = ssize ? ssize : game->defaultSampleSize;
         float targetResFloat = sqrt(area3D) / (float)ssize_val;
         targetResFloat *= lightmapScale;
         targetRes = (int)ceil(targetResFloat);
@@ -1139,13 +1139,13 @@ void LoadTriangleModels(entity_t *eparent)
                 uv_t *xatlasUVs = NULL;
                 int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
 
-                int ssize = samplesize;
+                int ssize = game->defaultSampleSize;
                 if (si && si->lightmapSampleSize > 0)
                     ssize = si->lightmapSampleSize;
                 
                 // Fast mode: ignore requests for higher resolution than the compilation setting
-                if (g_fast && ssize < samplesize)
-                    ssize = samplesize;
+                if (g_fast && ssize < game->defaultSampleSize)
+                    ssize = game->defaultSampleSize;
 
                 // Apply maxSampleSize floor (trisoup: use exact fractional value, rounded up to int for xatlas)
                 if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < (float)ssize)
@@ -1279,16 +1279,16 @@ void LoadTriangleModels(entity_t *eparent)
                     ds->fogNum = -1;
 
                     // Resolve sample size hierarchy (must be AFTER memset!)
-                    ds->samplesize = samplesize; // Start with global default
+                    ds->samplesize = game->defaultSampleSize; // Start with global default
                     if (si && si->lightmapSampleSize > 0)
                     {
                         ds->samplesize = si->lightmapSampleSize;
                     }
 
                     // Fast mode: ignore requests for higher resolution than the compilation setting
-                    if (g_fast && ds->samplesize < samplesize)
+                    if (g_fast && ds->samplesize < game->defaultSampleSize)
                     {
-                        ds->samplesize = samplesize;
+                        ds->samplesize = game->defaultSampleSize;
                     }
                     
                     // Apply maxSampleSize floor (trisoup: exact fractional value)

@@ -1831,7 +1831,7 @@ void TraceLights(int num)
 
     if (doSS)
     {
-        int ssize = samplesize;
+        int ssize = game->defaultSampleSize;
         if (si && si->lightmapSampleSize)
         {
             ssize = si->lightmapSampleSize;

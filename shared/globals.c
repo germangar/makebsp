@@ -6,7 +6,6 @@
 #include "json_parser.h"
 #include "../common/cmdlib.h"
 
-int samplesize = 0;
 char source[1024];
 char name[1024];
 
@@ -41,6 +40,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // externalLightmaps: if true, lightmaps are stored as external .tga files instead of inside the BSP
 
 		4,          // defaultSampleSize
+		qtrue,      // chamferEdges
+		1.25f,      // chamferConvexWidth
+		0.0f,       // chamferConcaveWidth
         qtrue,      // enforceSampleSize
         qtrue,      // forceUVGen
         HDR_8BIT,   // hdr
@@ -93,6 +95,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // exportLightmaps
 
 		8,          // defaultSampleSize
+		qtrue,      // chamferEdges
+		1.25f,      // chamferConvexWidth
+		0.0f,       // chamferConcaveWidth
         qtrue,       // enforceSampleSize
         qtrue,       // forceUVGen
         HDR_OFF,    // hdr

@@ -1130,7 +1130,9 @@ void ChamferSurfaceEdges(entity_t *e)
             vec3_t normalA, normalB;
             float dot;
             
-            float target_width = (nb->isConcave && chamfer_concave_width >= 0.0f) ? chamfer_concave_width : chamfer_global_width;
+            float cw = dsA->chamferConvexWidth >= 0.0f ? dsA->chamferConvexWidth : game->chamferConvexWidth;
+            float ccw = dsA->chamferConcaveWidth >= 0.0f ? dsA->chamferConcaveWidth : game->chamferConcaveWidth;
+            float target_width = (nb->isConcave && ccw >= 0.0f) ? ccw : cw;
             if (target_width < MIN_CHAMFER_WIDTH) continue;
 
             float edge_width = target_width;
@@ -1209,7 +1211,9 @@ void ChamferSurfaceEdges(entity_t *e)
 
         for (nb = surfaceNeighbors[i]; nb; nb = nb->next)
         {
-            float target_width = (nb->isConcave && chamfer_concave_width >= 0.0f) ? chamfer_concave_width : chamfer_global_width;
+            float cw = dsA->chamferConvexWidth >= 0.0f ? dsA->chamferConvexWidth : game->chamferConvexWidth;
+            float ccw = dsA->chamferConcaveWidth >= 0.0f ? dsA->chamferConcaveWidth : game->chamferConcaveWidth;
+            float target_width = (nb->isConcave && ccw >= 0.0f) ? ccw : cw;
             if (target_width < MIN_CHAMFER_WIDTH) continue;
             if (min_edge < 4.0f * target_width && (min_edge / 4.0f) < MIN_CHAMFER_WIDTH) continue;
 
@@ -1397,7 +1401,7 @@ static void GenerateAtomicUVsWithXAtlas(mapDrawSurface_t *ds)
         area3D += 0.5f * VectorLength(cross);
     }
 
-    float sampleSizeVal = ds->samplesize > 0.0f ? ds->samplesize : (float)samplesize;
+    float sampleSizeVal = ds->samplesize > 0.0f ? ds->samplesize : (float)game->defaultSampleSize;
     float scaleVal = ds->lightmapScale > 0.0f ? ds->lightmapScale : 1.0f;
     int targetRes = (int)ceil(sqrt(area3D) / sampleSizeVal * scaleVal);
     if (targetRes > LIGHTMAP_WIDTH - 2)
@@ -1799,7 +1803,7 @@ void MergeAdjacentTrisoups(entity_t *e)
                     continue;
 
                 float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
-                float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)samplesize;
+                float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
                 float scaleVal = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
                 int targetRes = (int)ceil(sqrt(candidateArea) / sampleSizeVal * scaleVal);
 

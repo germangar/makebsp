@@ -308,6 +308,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->lightmapSampleSize = 0;
     si->maxSampleSize = 0.0f;
     si->minSmoothRadius = -1.0f;
+    si->chamferConvexWidth = -1.0f;
+    si->chamferConcaveWidth = -1.0f;
     si->forceTraceLight = qfalse;
     si->forceVLight = qfalse;
     si->vertexShadows = qfalse;
@@ -682,6 +684,22 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             {
                 GetToken(qfalse);
                 si->lightmapSampleSize = atoi(token);
+                continue;
+            }
+
+            // q3map_chamfer_convexwidth <value>
+            if (!Q_stricmp(token, "q3map_chamfer_convexwidth"))
+            {
+                GetToken(qfalse);
+                si->chamferConvexWidth = atof(token);
+                continue;
+            }
+
+            // q3map_chamfer_concavewidth <value>
+            if (!Q_stricmp(token, "q3map_chamfer_concavewidth"))
+            {
+                GetToken(qfalse);
+                si->chamferConcaveWidth = atof(token);
                 continue;
             }
 

@@ -1006,7 +1006,7 @@ void BuildLocalSurfaces(void)
         if (ds->surfaceType == MST_PATCH)
         {
             shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-            int ssize = samplesize;
+            int ssize = game->defaultSampleSize;
             if (si && si->lightmapSampleSize)
                 ssize = si->lightmapSampleSize;
             localSurfaces[i].patchMesh = SubdividePatchForLighting(ds, (float)ssize);
@@ -1040,7 +1040,7 @@ void BuildLocalSurfaces(void)
     {
         dsurface_t *ds = &drawSurfaces[i];
         if (g_fast) {
-            int ri = 32 / samplesize;
+            int ri = 32 / game->defaultSampleSize;
             if (ri < 8) {
                 ri = 8;
             }
@@ -1054,7 +1054,7 @@ void BuildLocalSurfaces(void)
         if (ds->surfaceType == MST_TRIANGLE_SOUP && !g_fast)
         {
             shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
-            int ssize = samplesize;
+            int ssize = game->defaultSampleSize;
             if (si && si->lightmapSampleSize)
                 ssize = si->lightmapSampleSize;
 

@@ -329,7 +329,7 @@ void PatchMapDrawSurfs(entity_t *e)
         strncpy(ds->decalgroup, ValueForKey(&entities[scan->entitynum], "decalgroup"), sizeof(ds->decalgroup) - 1);
 
         // Resolve sample size hierarchy
-        ds->samplesize = samplesize; // Start with global default
+        ds->samplesize = game->defaultSampleSize; // Start with global default
         
         entity_t *originalEnt = &entities[scan->entitynum];
         
@@ -351,9 +351,9 @@ void PatchMapDrawSurfs(entity_t *e)
         }
 
         // Fast mode: ignore requests for higher resolution than the compilation setting
-        if (g_fast && ds->samplesize < samplesize)
+        if (g_fast && ds->samplesize < game->defaultSampleSize)
         {
-            ds->samplesize = samplesize;
+            ds->samplesize = game->defaultSampleSize;
         }
 
         if (!g_fast && scan->shaderInfo && scan->shaderInfo->maxSampleSize > 0.0f

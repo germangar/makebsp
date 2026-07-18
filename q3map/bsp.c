@@ -41,11 +41,8 @@ qboolean fakemap;
 qboolean notjunc;
 qboolean nomerge;
 qboolean nofog;
-qboolean chamferedges;
 qboolean chamfersubdivide;
 qboolean mergetrisoups = qtrue;
-float chamfer_global_width = 2.0f;
-float chamfer_concave_width = -1.0f;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
@@ -223,7 +220,7 @@ void ProcessWorldModel(void)
         ChopTjunctions(e);
     }
 
-    if (chamferedges)
+    if (game->chamferEdges)
     {
         ChamferSurfaceEdges(e);
         MergeChamferStripsIntoParents(e);
@@ -328,7 +325,7 @@ void ProcessSubModel(void)
         ChopTjunctions(e);
     }
 
-    if (chamferedges)
+    if (game->chamferEdges)
     {
         ChamferSurfaceEdges(e);
         MergeChamferStripsIntoParents(e);
@@ -600,9 +597,9 @@ static void ParseWorldspawnKeys(int argc, char **argv)
 
     val = ValueForKey(ent, "samplesize");
     if (val[0] && !HasArg("-samplesize", argc, argv)) {
-        samplesize = atoi(val);
-        if (samplesize < 1) samplesize = 1;
-        _printf("Worldspawn override: default lightmap sample size = %dx%d units\n", samplesize, samplesize);
+        game->defaultSampleSize = atoi(val);
+        if (game->defaultSampleSize < 1) game->defaultSampleSize = 1;
+        _printf("Worldspawn override: default lightmap sample size = %dx%d units\n", game->defaultSampleSize, game->defaultSampleSize);
     }
 
     val = ValueForKey(ent, "enforcesamplesize");
@@ -648,9 +645,6 @@ int main(int argc, char **argv)
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
-
-    // Apply game defaults before parsing CLI
-    samplesize = game->defaultSampleSize;
 
     // Pre-scan CLI for VFS path construction
     const char *cliPakPaths[MAX_VFS_PATHS];
@@ -829,25 +823,25 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-chamferedges"))
         {
-            chamferedges = qtrue;
+            game->chamferEdges = qtrue;
             _printf("edge chamfering enabled\n");
         }
         else if (!strcmp(argv[i], "-chamfersubdivide"))
         {
-            chamferedges = qtrue;
+            game->chamferEdges = qtrue;
             chamfersubdivide = qtrue;
             _printf("edge chamfering & T-junction subdivision enabled\n");
         }
-        else if (!strcmp(argv[i], "-chamferwidth"))
+        else if (!strcmp(argv[i], "-chamferconvexwidth"))
         {
-            chamfer_global_width = atof(argv[i + 1]);
-            _printf("chamfer width = %f\n", chamfer_global_width);
+            game->chamferConvexWidth = atof(argv[i + 1]);
+            _printf("chamfer convex width = %f\n", game->chamferConvexWidth);
             i++;
         }
         else if (!strcmp(argv[i], "-chamferconcavewidth"))
         {
-            chamfer_concave_width = atof(argv[i + 1]);
-            _printf("chamfer concave width = %f\n", chamfer_concave_width);
+            game->chamferConcaveWidth = atof(argv[i + 1]);
+            _printf("chamfer concave width = %f\n", game->chamferConcaveWidth);
             i++;
         }
         else if (!strcmp(argv[i], "-mergetrisoups"))
@@ -929,11 +923,11 @@ int main(int argc, char **argv)
         {
             if (i + 1 >= argc || argv[i + 1][0] == '-')
                 Error("-samplesize requires a numeric argument");
-            samplesize = atoi(argv[i + 1]);
-            if (samplesize < 1)
-                samplesize = 1;
+            game->defaultSampleSize = atoi(argv[i + 1]);
+            if (game->defaultSampleSize < 1)
+                game->defaultSampleSize = 1;
             i++;
-            _printf("lightmap sample size is %dx%d units\n", samplesize, samplesize);
+            _printf("lightmap sample size is %dx%d units\n", game->defaultSampleSize, game->defaultSampleSize);
         }
         else if (!strcmp(argv[i], "-guessuvs"))
         {
@@ -998,8 +992,8 @@ int main(int argc, char **argv)
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
                 "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
-                "   -chamferwidth  = size of the chamfer strip (default 2.0)\n"
-                "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferwidth, 0 skips concave chamfers)\n"
+                "   -chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
+                "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
                 "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
@@ -1102,7 +1096,7 @@ int main(int argc, char **argv)
     {
         char buf[64];
 
-        sprintf(buf, "%d", samplesize);
+        sprintf(buf, "%d", game->defaultSampleSize);
         SetKeyValue(&entities[0], "__texelsize", buf);
         sprintf(buf, "%d", game->lightmapSize);
         SetKeyValue(&entities[0], "_lightmapImageSize", buf);

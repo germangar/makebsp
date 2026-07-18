@@ -53,7 +53,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
 
     memset(ds, 0, sizeof(*ds));
 
-    ds->samplesize = samplesize;
+    ds->samplesize = game->defaultSampleSize;
     ds->smoothingRadius = -1.0f;
     ds->lightValue = -1.0f;
     VectorSet(ds->lightColor, -1.0f, -1.0f, -1.0f);
@@ -65,6 +65,8 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->noDeluxeInfluence = -1;
     ds->noDeluxeInfluenceBacksplash = -1;
     ds->parentSurfaceNum = -1;
+    ds->chamferConvexWidth = -1.0f;
+    ds->chamferConcaveWidth = -1.0f;
 
     return ds;
 }
@@ -191,6 +193,15 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     const char *enforceStr = ValueForKey(e, "enforcesamplesize");
     if (enforceStr[0])
         ds->enforceSampleSize = atoi(enforceStr);
+
+    // Resolve chamfer width overrides
+    const char *chamferWStr = ValueForKey(e, "chamfer_convexwidth");
+    if (chamferWStr[0])
+        ds->chamferConvexWidth = atof(chamferWStr);
+
+    const char *chamferCStr = ValueForKey(e, "chamfer_concavewidth");
+    if (chamferCStr[0])
+        ds->chamferConcaveWidth = atof(chamferCStr);
 }
 
 /*
@@ -234,10 +245,20 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
         ds->samplesize = si->lightmapSampleSize;
     }
 
-    // Fast mode: ignore requests for higher resolution than the compilation setting
-    if (g_fast && ds->samplesize < samplesize)
+    // Resolve chamfer width shader hierarchy
+    if (si && si->chamferConvexWidth >= 0.0f)
     {
-        ds->samplesize = samplesize;
+        ds->chamferConvexWidth = si->chamferConvexWidth;
+    }
+    if (si && si->chamferConcaveWidth >= 0.0f)
+    {
+        ds->chamferConcaveWidth = si->chamferConcaveWidth;
+    }
+
+    // Fast mode: ignore requests for higher resolution than the compilation setting
+    if (g_fast && ds->samplesize < game->defaultSampleSize)
+    {
+        ds->samplesize = game->defaultSampleSize;
     }
     
     // Apply maxSampleSize floor (planar: snap to next power of 2)

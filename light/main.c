@@ -58,8 +58,8 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     // These keys have been set by the bsp compiler
     const char *val = ValueForKey(ent, "__texelsize");
     if (val[0]) {
-        samplesize = atoi(val);
-        qprintf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", samplesize, samplesize);
+        game->defaultSampleSize = atoi(val);
+        qprintf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", game->defaultSampleSize, game->defaultSampleSize);
     }
 
     const char *lmSizeVal = ValueForKey(ent, "_lightmapImageSize");
@@ -766,9 +766,9 @@ int main(int argc, char **argv) {
 
     ParseWorldspawnKeys(argc, argv);
 
-    if (samplesize <= 0) {
-        samplesize = game->defaultSampleSize;
-        _printf("Defaulting lightmap sample size to %dx%d units (from game profile)\n", samplesize, samplesize);
+    if (game->defaultSampleSize <= 0) {
+        game->defaultSampleSize = 4;
+        _printf("Defaulting lightmap sample size to %dx%d units (fallback)\n", game->defaultSampleSize, game->defaultSampleSize);
     }
 
     ThreadSetDefault();

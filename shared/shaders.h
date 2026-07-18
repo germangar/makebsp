@@ -52,6 +52,9 @@ typedef struct shaderInfo_s
     float maxSampleSize;      // maximum lightmap sample size
     float minSmoothRadius;    // minimum smoothing radius
 
+    float chamferConvexWidth; // from "q3map_chamfer_convexwidth"
+    float chamferConcaveWidth; // from "q3map_chamfer_concavewidth"
+
     qboolean hasPasses; // false if the shader doesn't define any rendering passes
 
     qboolean globalTexture; // don't normalize texture repeats

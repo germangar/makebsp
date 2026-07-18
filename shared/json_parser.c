@@ -402,6 +402,20 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->haloShader = copystring(json_value_as_string(val)->string);
         }
+        else if (!Q_stricmp(key, "chamferEdges"))
+        {
+            if (val->type == json_type_true)
+                game->chamferEdges = qtrue;
+            else if (val->type == json_type_false)
+                game->chamferEdges = qfalse;
+        }
+        else if (!Q_stricmp(key, "chamferConvexWidth") && val->type == json_type_number) {
+            game->chamferConvexWidth = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "chamferConcaveWidth") && val->type == json_type_number)
+        {
+            game->chamferConcaveWidth = (float)atof(json_value_as_number(val)->number);
+        }
 
 
         el = el->next;
@@ -587,6 +601,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"exposurefilter\": \"%s\", /* [ off, softknee, reinhard, filmic ] */\n"
             "  \"saturation\": %.2f, /* Multiplier (1.0 = normal, 0.0 = grayscale) */\n"
             "  \"saturationRamp\": \"%s\", /* [ off, filmic, power, midtone ] */\n"
+            "  \"chamferEdges\": %s,\n"
+            "  \"chamferConvexWidth\": %.2f,\n"
+            "  \"chamferConcaveWidth\": %.2f,\n"
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
@@ -625,6 +642,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             filterStr,
             game->saturation,
             satRampStr,
+            game->chamferEdges ? "true" : "false",
+            game->chamferConvexWidth,
+            game->chamferConcaveWidth,
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",

@@ -340,7 +340,7 @@ static qboolean GetFilteredTexel(int sIdx, float px, float py, float *out, const
 static const float ssPattern8[][2] = { {0,0}, {-0.354f,-0.854f}, {0.354f,-0.354f}, {0.854f,0.146f}, {0.354f,0.646f}, {-0.146f,0.354f}, {-0.646f,-0.146f}, {-0.854f,0.354f} };
 
 static float GetSurfaceTexelSize(dsurface_t *ds) {
-    if (ds->numIndexes == 0) return (float)samplesize;
+    if (ds->numIndexes == 0) return (float)game->defaultSampleSize;
     float tW=0, tUV=0;
     for (int j=0; j<ds->numIndexes; j+=3) {
         for (int k=0; k<3; k++) {
@@ -357,7 +357,7 @@ static float GetSurfaceTexelSize(dsurface_t *ds) {
             }
         }
     }
-    return (tUV>0.001f) ? clamp(tW/tUV, 0.1f, 256.0f) : (float)samplesize;
+    return (tUV>0.001f) ? clamp(tW/tUV, 0.1f, 256.0f) : (float)game->defaultSampleSize;
 }
 void GpuLightmapState_Upload(void) {
     int s, x, y;

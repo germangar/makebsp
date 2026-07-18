@@ -29,7 +29,7 @@ Architecture:
 static float rad_intensity;    // Energy per bounce (conserved)
 static float rad_color_ratio;     // Greyscale vs colour bleeding
 float rad_min_energy    = 1.0f;   // Min brightness for emitters
-float rad_voxel_size    = 0.0f;   // Adaptive default: samplesize * game->radiosityInterval
+float rad_voxel_size    = 0.0f;   // Adaptive default: game->defaultSampleSize * game->radiosityInterval
 static float active_rad_ao_intensity = 0.0f; // Track pass-specific AO intensity
 float rad_angle_match   = 60.0f;  // Angle in degrees (Default: 60)
 static float rad_angle_match_cos = 0.5f;
@@ -1382,7 +1382,7 @@ void LightRadiosity(void) {
     _printf("--- Radiosity ---\n");
 
     if (rad_voxel_size <= 0.0f) {
-        rad_voxel_size = (float)(samplesize * game->radiosityInterval);
+        rad_voxel_size = (float)(game->defaultSampleSize * game->radiosityInterval);
     }
     if (rad_angle_match > 90.0f) rad_angle_match = 90.0f;
     rad_angle_match_cos = (float)cos(rad_angle_match * (M_PI / 180.0f));

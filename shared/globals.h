@@ -54,7 +54,6 @@ typedef enum {
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
 typedef enum { SATRAMP_OFF, SATRAMP_FILMIC, SATRAMP_POWER, SATRAMP_HALF_POWER, SATRAMP_MIDTONE } satRamp_t;
 
-extern int samplesize;
 extern char source[1024];
 extern char name[1024];
 
@@ -76,6 +75,9 @@ typedef struct {
 
 	// Lighting flags
 	int         defaultSampleSize;
+	qboolean    chamferEdges;
+	float       chamferConvexWidth;
+	float       chamferConcaveWidth;
     qboolean    enforceSampleSize;
     qboolean    forceUVGen;
     hdrFormat_t hdr;
