@@ -370,6 +370,7 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-lightmapimagesize <N>`: Forces a specific lightmap atlas size (e.g., 1024).
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.
 - `-guessuvs`: [Experimental] Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
+- `-noautocaulk`: Disables early automatic face caulking (by default, makebsp automatically strips and caulks redundant coplanar, contained, or fully submerged faces before BSP construction).
 - `-rootdir / -basepath / -fs_basepath <P>`: Set the engine root directory path. Can be specified multiple times to build layered search paths.
 - `-userdir / -fs_homepath <P>`: Set the user/home directory path (where the compiled BSP will be written). Can be specified multiple times.
 - `-gamedir / -fs_game <P>`: Set the active mod/game directory name. Can be specified multiple times.
