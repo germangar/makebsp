@@ -388,14 +388,15 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nosubdivide`: Disable subdivision of large surfaces.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.
-- `-chamferedges`: Enables automatic edge chamfering for smooth corner lighting.
-- `-chamfersubdivide`: Enables T-junction surface splitting prior to chamfering.
+- `-chamferedges`: Enables automatic edge chamfering for smooth corner lighting (automatically skipped when compiling with `-fast`).
+- `-chamfersubdivide`: Enables T-junction surface splitting prior to chamfering (automatically skipped when compiling with `-fast`).
 - `-chamferconvexwidth <V>`: Sets the global size of convex chamfer strips (default 1.25).
 - `-chamferconcavewidth <V>`: Sets the global size of concave chamfer strips (< 0 uses convex width, 0 skips concave chamfers).
 - `-saveprt`: Do not delete the .prt file after processing.
 - `-leaktest`: Abort immediately if a leak is found.
 - `-v`: Enable verbose output.
 - `-threads <N>`: Manually set the number of worker threads.
+- `-fast`: Drop quality for quick development tests (disables edge chamfering and ignores `q3map_maxsamplesize`).
 
 **Other Main Switches**
 These switches change the primary mode of the executable.
@@ -445,7 +446,7 @@ These switches change the primary mode of the executable.
 - `-softedges`: Enable soft filtering on patch edges (disabled by default).
 
 **Performance & Debug**
-- `-fast`: Drop quality for quick tests.
+- `-fast`: Drop quality for quick tests (disables edge chamfering in makebsp).
 - `-lowmem`: Enables memory-mapped file mode to reduce RAM usage on extremely large maps.
 - `-opencl <0|1>`: Enable (1) or disable (0) OpenCL GPU acceleration for supported passes.
 - `-exportlightmaps`: Export a copy of the lightmaps as images for visual inspection.

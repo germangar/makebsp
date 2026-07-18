@@ -922,7 +922,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "-fast"))
         {
             g_fast = qtrue;
-            _printf("fast compilation mode enabled\n");
+            game->chamferEdges = qfalse;
+            chamfersubdivide = qfalse;
+            _printf("fast compilation mode enabled (disabling edge chamfering)\n");
         }
         else if (!strcmp(argv[i], "-samplesize"))
         {
@@ -973,6 +975,13 @@ int main(int argc, char **argv)
         }
     }
 
+    if (g_fast && (game->chamferEdges || chamfersubdivide))
+    {
+        _printf("Note: -fast mode enabled, disabling edge chamfering.\n");
+        game->chamferEdges = qfalse;
+        chamfersubdivide = qfalse;
+    }
+
     if (i != argc - 1)
     {
         if (i < argc)
@@ -1011,7 +1020,7 @@ int main(int argc, char **argv)
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
-                "   fast           = fast compile (ignores q3map_maxsamplesize)\n"
+                "   fast           = fast compile (ignores q3map_maxsamplesize and disables chamfering)\n"
                 "   saveprt        = do not delete the .prt file after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
 
