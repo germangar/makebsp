@@ -391,3 +391,11 @@ I. Transparent/Opaque Cross-Slicing Prevention
    cause `ChopTjunctions` to slice the structural wall across its face. A check was
    added to ensure that a split is only allowed if both surfaces share the same
    translucency state (`CONTENTS_TRANSLUCENT`).
+
+J. Unified Chamfer Width Hierarchy
+   Replaced the ambiguous `chamferWidth` terminology with strictly separated 
+   `chamferConvexWidth` and `chamferConcaveWidth` across all structures. Built a 
+   hierarchical resolution pipeline: Game defaults (CLI/JSON) -> Shader Overrides 
+   (`q3map_chamfer_convexwidth`/`q3map_chamfer_concavewidth`) -> Entity Overrides 
+   (`chamfer_convexwidth`/`chamfer_concavewidth`). Expanding `shaderInfo_t` required 
+   a full clean rebuild of the engine to prevent ABI mismatch crashes in `makelight`.

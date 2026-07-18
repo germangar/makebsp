@@ -62,6 +62,14 @@ Our focus has been on:
 - Upgraded `ComputeAllInsets` and `ChamferSurfaceEdges` to track per-edge widths (`edges[numEdges].width`), enabling 2D line-line intersection math that cleanly joins faces where differing chamfer widths (e.g. 2.0 convex meeting 0.5 concave) intersect at a corner.
 - **`-chamferconcavewidth 0` & Automatic Trisoup Conversion**: When set to `0` (or when adaptive geometry scaling brings edge widths below `MIN_CHAMFER_WIDTH = 0.5f`), both Pass 1 and Pass 2 skip strip generation for those edges without forming degenerate strips. Existing `MergeChamferStripsIntoParents()` automatically promotes these planar surfaces (`IsChamferCandidate(parent)`) into atomic trisoups (`miscModel = qtrue; planarDerived = qtrue;`) so they merge smoothly into adjacent trisoup groups without needing special flags.
 
+### 10. Unified Chamfer Width Hierarchy & Entity/Shader Overrides
+- Replaced the ambiguous `chamferWidth` terminology with strictly separated `chamferConvexWidth` and `chamferConcaveWidth` across all structs (`game_t`, `extraSurface_t`, `shaderInfo_t`).
+- Built a deep control hierarchy in `DrawSurfaceForSide`:
+  1. **Game/CLI Defaults**: Global `-chamferconvexwidth` / `-chamferconcavewidth` (or JSON profile fallbacks).
+  2. **Shader Overrides**: `q3map_chamfer_convexwidth` and `q3map_chamfer_concavewidth` override the game defaults for specific materials.
+  3. **Entity Overrides**: `chamfer_convexwidth` and `chamfer_concavewidth` override both globals and shaders on a per-entity basis (`ResolveSurfaceExtraProperties`).
+- Resolved a critical ABI mismatch bug affecting `makelight.exe` that occurred after expanding the `shaderInfo_t` struct, causing corrupted memory offsets for lighting flags (e.g., `forceSunLight`, `twoSided`). Fixed via a full clean rebuild of the engine.
+
 ## Where We Are Going Next
 - **Early Auto-Caulk Pass**: Implement a pre-BSP face detection and caulking pass (documented in `ToDo.txt` Item 11) that detects coplanar facing brush faces and either caulks identical matches or caulks faces whose vertices are entirely enclosed inside a larger coplanar face.
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.
