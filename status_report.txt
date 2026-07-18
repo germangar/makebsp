@@ -50,5 +50,18 @@ Our focus has been on:
 - Stops the cascading "zipper effect" where detail stairs or multi-level contacts repeatedly slice across the interior of large structural faces by checking candidate edges against original brush bounding planes.
 - Added strict translucency state matching (`CONTENTS_TRANSLUCENT`). Prevents transparent volumes (water, glass) from inducing splits across opaque structural faces and vice-versa.
 
+### 8. True 3D Per-Vertex Blended Normals (`ComputeVertexBlendedNormal`)
+- Replaced static per-edge normal assignment in `ChamferSurfaceEdges` with dynamic 3D normal accumulation using `ComputeVertexBlendedNormal`.
+- At 3-way corners (cube tips, room corners), the helper dynamically sums and normalizes the pristine geometric plane normals (`mapplanes`) of all neighbor faces sharing a given vertex (`A + B + C`).
+- Eliminates "shadow" shading artifacts across 3-way junctions, producing crisp, bright specular/diffuse corner highlights that perfectly align across intersecting strips.
+- Cleaned up dead legacy code: removed the unused `blendedNormal` field from `surfaceChamferEdge_t` and deleted Pass 1 dead calculations.
+
+### 9. Independent Concave Chamfer Width (`-chamferconcavewidth`)
+- Introduced the `-chamferconcavewidth <float>` CLI switch (`chamfer_concave_width` global, defaulted to `-1.0f` fallback) to independently size concave joints (< 180° interior angle).
+- Utilizes `FRONT/FRONT` half-space symmetry in `BuildSurfaceAdjacencyGraph` to set `isConcave = qtrue` on neighbor connections (`surfaceNeighbor_t`).
+- Upgraded `ComputeAllInsets` and `ChamferSurfaceEdges` to track per-edge widths (`edges[numEdges].width`), enabling 2D line-line intersection math that cleanly joins faces where differing chamfer widths (e.g. 2.0 convex meeting 0.5 concave) intersect at a corner.
+- **`-chamferconcavewidth 0` & Automatic Trisoup Conversion**: When set to `0` (or when adaptive geometry scaling brings edge widths below `MIN_CHAMFER_WIDTH = 0.5f`), both Pass 1 and Pass 2 skip strip generation for those edges without forming degenerate strips. Existing `MergeChamferStripsIntoParents()` automatically promotes these planar surfaces (`IsChamferCandidate(parent)`) into atomic trisoups (`miscModel = qtrue; planarDerived = qtrue;`) so they merge smoothly into adjacent trisoup groups without needing special flags.
+
 ## Where We Are Going Next
+- **Early Auto-Caulk Pass**: Implement a pre-BSP face detection and caulking pass (documented in `ToDo.txt` Item 11) that detects coplanar facing brush faces and either caulks identical matches or caulks faces whose vertices are entirely enclosed inside a larger coplanar face.
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.
