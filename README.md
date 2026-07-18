@@ -6,15 +6,16 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
 - [💡 Key Features](#-key-features)
     - [1. High-Performance Ray Tracing (Intel Embree)](#1-high-performance-ray-tracing-intel-embree)
     - [2. 32-bit Floating Point Pipeline](#2-32-bit-floating-point-pipeline)
-    - [3. First-Class Model Support (misc_model)](#3-first-class-model-support-misc_model)
-    - [4. Brush-to-Light Generation (func_light)](#4-brush-to-light-generation-func_light)
-    - [5. In-Editor Configurable Surface Colors](#5-in-editor-configurable-surface-colors)
-    - [6. Automatic Light Halos](#6-automatic-light-halos)
-    - [7. Modernized Color & Lighting Models](#7-modernized-color--lighting-models)
-    - [8. Macro Ambient Occlusion (MAO)](#8-macro-ambient-occlusion-mao)
-    - [9. High-Quality 2D Filtering](#9-high-quality-2d-filtering)
-    - [10. Deluxe Mapping V2](#10-deluxe-mapping-v2)
+    - [3. Improved Model Support (misc_model)](#3-improved-model-support-misc_model)
+    - [4. Automatic Edge Chamfering](#4-automatic-edge-chamfering)
+    - [5. Deluxe Mapping V2](#5-deluxe-mapping-v2)
+    - [6. Macro Ambient Occlusion (MAO)](#6-macro-ambient-occlusion-mao)
+    - [7. Brush-to-Light Generation (func_light)](#7-brush-to-light-generation-func_light)
+    - [8. In-Editor Configurable Surface Colors](#8-in-editor-configurable-surface-colors)
+    - [9. Modernized Color & Lighting Models](#9-modernized-color--lighting-models)
+    - [10. High-Quality 2D Filtering](#10-high-quality-2d-filtering)
     - [11. Customizable Game Profiles (JSON)](#11-customizable-game-profiles-json)
+    - [12. Automatic Light Halos](#12-automatic-light-halos)
 - [🛠 Recommended Workflow](#-recommended-workflow)
 - [🎨 Shader Modifications](#-shader-modifications)
 - [📦 Entity Keys Reference](#-entity-keys-reference)
@@ -55,48 +56,59 @@ The legacy BSP-traversal ray caster has been replaced with the industry-standard
     - **LightWave:** `.lwo`
     - **Inter-Quake Model:** `.iqm`
 
-### 4. Brush-to-Light Generation (func_light)
-The `func_light` entity allows mappers to create complex light setups directly from brush geometry without any shader scripting.
-- **Surface & Spot Lights:** Any brush surface can be instantly turned into an emissive light source or a spotlight emitter.
-- **Ease of Use:** Mappers can control light intensity, color, and attenuation directly via entity keys, making high-quality emissive lighting accessible without modifying assets.
+### 4. Automatic Edge Chamfering
+A highly requested feature that physically rounds the sharp edges of structural and detail brushes, creating a bevel effect.
+- **Natural Highlights:** Prevents the classic "razor sharp" look of early 3D engines and naturally catches specular highlights on corners.
+- **Deep Control Hierarchy:** Chamfer width and concave/convex joint separation can be controlled globally via CLI or JSON profiles, overridden per-material in `.shader` files, or finely tuned on a per-entity basis using entity keys.
+- **T-Junction Preservation:** Integrates perfectly with the engine's T-junction fixing logic to guarantee watertight, crack-free meshes even after subdivision and corner contraction.
+- **Geometry Optimization (Trisoup Conversion):** As a byproduct of the chamfering pass, fragmented planar surfaces are automatically promoted and merged into larger, continuous triangle soups. This significantly reduces draw calls and ensures seamless lightmap filtering across complex brushwork that would otherwise be split into hundreds of individual surfaces.
 
-### 5. In-Editor Configurable Surface Colors
-Mappers can now tint and recolor materials directly within the map editor without having to author duplicate shader files (the shader must have been created for this purpose, tho).
-- **Entity Level Tinting:** By applying the `vertexcolor` key to entities like `misc_model` or `func_group`, the compiler automatically overrides the vertex colors of all associated surfaces.
-- **Workflow Efficiency:** This allows for rapid iteration and material reuse. For example, a single "car" model or "crate" brushwork group can be placed multiple times in a map, each tinted a different color exclusively via entity keys.
+### 5. Deluxe Mapping V2
+An improved, irradiance-preserving deluxe mapping system.
+- **Iterative Accumulation:** Light directions are resolved during each contribution, preventing "rim bloom" artifacts[1] and ensuring stable directional highlights even in areas with opposing light sources.
+- [1] It's not possible to fully eliminate them. They're part of the nature of deluxemapping, but they happen less often and the smooth filter can hide them when they happen.
 
-### 6. Automatic Light Halos
-Spotlights and directed light sources can now automatically generate volumetric "halos" (billboards) to simulate atmospheric scattering.
-- **Dynamic Sizing:** Halo dimensions are automatically calculated based on the light's intensity and radius, ensuring the visual effect matches the physical light cone.
-- **Shader Control:** Mappers can override the default halo effect using the `haloshader` key or disable it entirely for specific lights. The halo size can also be controlled with the `haloscale` key.
-- **Vertex Color Integration:** Halos inherit their color from the light source.
-
-### 7. Modernized Color & Lighting Models
-- **Global Color Pipeline:** A unified color parser supports floating-point RGB (0..1), integer RGB (0..255), and Hexadecimal codes (`#RRGGBB`).
-- **Artistic Integrity:** The compiler no longer automatically normalizes light colors. This preserves the original brightness and "mood" intended by the mapper.
-- **Advanced Shading Models:** Support for industry-standard attenuation models (Inverse-Square, Unreal, Smoothstep) and shading kernels (Half-Lambert, Quadratic).
-
-### 8. Macro Ambient Occlusion (MAO)
+### 6. Macro Ambient Occlusion (MAO)
 A new volumetric ambient occlusion pass computes spatial "openness" for both the light grid and lightmaps.
 - **Atmospheric Depth:** Large-scale features (caves, corridors, plazas) naturally darken or brighten based on their enclosure, grounding objects in the environment without requiring thousands of point lights.
 - **Bent Normals:** Per-texel ambient energy includes a directional hint (Bent Normal), ensuring normal maps respond correctly to the primary direction of incoming ambient light.
 
-### 9. High-Quality 2D Filtering
+### 7. Brush-to-Light Generation (func_light)
+The `func_light` entity allows mappers to create complex light setups directly from brush geometry without any shader scripting.
+- **Surface & Spot Lights:** Any brush surface can be instantly turned into an emissive light source or a spotlight emitter.
+- **Ease of Use:** Mappers can control light intensity, color, and attenuation directly via entity keys, making high-quality emissive lighting accessible without modifying assets.
+
+
+### 8. In-Editor Configurable Surface Colors
+Mappers can now tint and recolor materials directly within the map editor without having to author duplicate shader files (the shader must have been created for this purpose, tho).
+- **Entity Level Tinting:** By applying the `vertexcolor` key to entities like `misc_model` or `func_group`, the compiler automatically overrides the vertex colors of all associated surfaces.
+- **Workflow Efficiency:** This allows for rapid iteration and material reuse. For example, a single "car" model or "crate" brushwork group can be placed multiple times in a map, each tinted a different color exclusively via entity keys.
+
+
+### 9. Modernized Color & Lighting Models
+- **Global Color Pipeline:** A unified color parser supports floating-point RGB (0..1), integer RGB (0..255), and Hexadecimal codes (`#RRGGBB`).
+- **Artistic Integrity:** The compiler no longer automatically normalizes light colors. This preserves the original brightness and "mood" intended by the mapper.
+- **Advanced Shading Models:** Support for industry-standard attenuation models (Inverse-Square, Unreal, Smoothstep) and shading kernels (Half-Lambert, Quadratic).
+
+### 10. High-Quality 2D Filtering
 Post-process lightmap filtering has been rebuilt for maximum quality and seamlessness across geometry charts.
 - **Stitch Filtering:** The toolchain automatically identifies adjacent surfaces sharing world-space edges (partners) and performs cross-surface bilinear sampling to eliminate visible seams.
 - **Volumetric Filtering:** Specialized world-space filtering for complex "triangle soup" (models) ensures smooth lighting gradients even on meshes with disconnected UV islands.
 - **Per-Surface Customization:** Mappers can override the global smoothing settings on a per-entity basis using the `smooth` key, allowing for sharper shadows on some objects and softer, more diffuse lighting on others.
 - **GPU Acceleration:** All filtering and anti-aliasing passes are fully GPU-accelerated via OpenCL, allowing for high-quality multi-pass smoothing without significant compile-time penalties.
 
-### 10. Deluxe Mapping V2
-An improved, irradiance-preserving deluxe mapping system.
-- **Iterative Accumulation:** Light directions are resolved during each contribution, preventing "rim bloom" artifacts[1] and ensuring stable directional highlights even in areas with opposing light sources.
-- [1] It's not possible to fully eliminate them. They're part of the nature of deluxemapping, but they happen less often and the smooth filter can hide them when they happen.
-
 ### 11. Customizable Game Profiles (JSON)
 Externalized game-specific configurations into customizable JSON profiles.
 - **Engine Adaptability:** Mappers can easily define new profiles for different game engines, specifying unique BSP versions, lump counts, and hard limits (max verts/indexes).
 - **Global Defaults:** Every lighting parameter—including default lightmap sizes, shading models, and attenuation curves—can be tuned per game profile to ensure consistent results across different projects.
+
+### 12. Automatic Light Halos
+Spotlights and directed light sources can now automatically generate volumetric "halos" (billboards) to simulate atmospheric scattering.
+- **Dynamic Sizing:** Halo dimensions are automatically calculated based on the light's intensity and radius, ensuring the visual effect matches the physical light cone.
+- **Shader Control:** Mappers can override the default halo effect using the `haloshader` key or disable it entirely for specific lights. The halo size can also be controlled with the `haloscale` key.
+- **Vertex Color Integration:** Halos inherit their color from the light source.
+
+
 
 ---
 
@@ -139,6 +151,8 @@ List of additions and modifications made to shader parsing and features compared
 - **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
 - **q3map_maxsamplesize <value>**: Enforces a minimum lightmap resolution (quality floor) by establishing a maximum limit on the surface's `samplesize` value. Ignored during `-fast` compilations.
 - **q3map_minsmooth <value>**: Enforces a minimum lightmap smooth filter radius. It only acts if the global setting has a smaller smooth value than the requested minimum. Can be overridden by an entity's `smooth` key.
+- **q3map_chamfer_convexwidth <value>**: Overrides the width of the chamfered strip generated on convex edges for this material.
+- **q3map_chamfer_concavewidth <value>**: Overrides the width of the chamfered strip generated on concave (inner) joints for this material. Set to 0 to disable concave chamfering.
 
 ### Color Handling
 - **Global Application:** The new color processing pipeline applies globally. It works for shader commands (e.g., `q3map_lightRGB`, `q3map_lightColor`, `q3map_vertexcolor`) as well as entity keys (e.g., `color`, `_color`).
@@ -205,6 +219,8 @@ List of additions and modifications made to shader parsing and features compared
 **Geometry & BSP**
 - **blocksize**: Global size of BSP map splitting blocks (e.g., 1024).
 - **enforcesamplesize**: Forces makebsp to subdivide brushes to match the requested lightmap sample size. Integer boolean (1 or 0). Default 1.
+- **chamfer_convexwidth**: Global override for the width of the convex chamfer strips on worldspawn brushes.
+- **chamfer_concavewidth**: Global override for the width of the concave chamfer strips on worldspawn brushes.
 
 ### Entity: misc_model
 
@@ -238,6 +254,8 @@ List of additions and modifications made to shader parsing and features compared
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
+- **chamfer_convexwidth**: Overrides the chamfer width for convex edges on this group's surfaces.
+- **chamfer_concavewidth**: Overrides the chamfer width for concave edges on this group's surfaces.
 
 **Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.
@@ -280,6 +298,8 @@ List of additions and modifications made to shader parsing and features compared
 - **enforcesamplesize**: Subdivide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
+- **chamfer_convexwidth**: Overrides the chamfer width for convex edges on this entity's surfaces.
+- **chamfer_concavewidth**: Overrides the chamfer width for concave edges on this entity's surfaces.
 
 ### Entity: light
 
@@ -367,6 +387,10 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nosubdivide`: Disable subdivision of large surfaces.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.
+- `-chamferedges`: Enables automatic edge chamfering for smooth corner lighting.
+- `-chamfersubdivide`: Enables T-junction surface splitting prior to chamfering.
+- `-chamferconvexwidth <V>`: Sets the global size of convex chamfer strips (default 1.25).
+- `-chamferconcavewidth <V>`: Sets the global size of concave chamfer strips (< 0 uses convex width, 0 skips concave chamfers).
 - `-saveprt`: Do not delete the .prt file after processing.
 - `-leaktest`: Abort immediately if a leak is found.
 - `-v`: Enable verbose output.
