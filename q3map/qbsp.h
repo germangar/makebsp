@@ -219,7 +219,7 @@ typedef struct surfaceChamferEdge_s {
 } surfaceChamferEdge_t;
 
 extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
-extern qboolean chamfersubdivide;
+extern qboolean chamfernosubdivide;
 
 void BuildSurfaceAdjacencyGraph(entity_t *e);
 void ChamferSurfaceEdges(entity_t *e);

@@ -389,7 +389,7 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.
 - `-chamferedges`: Enables automatic edge chamfering for smooth corner lighting (automatically skipped when compiling with `-fast`).
-- `-chamfersubdivide`: Enables T-junction surface splitting prior to chamfering (automatically skipped when compiling with `-fast`).
+- `-chamfernosubdivide`: Disables T-junction surface splitting prior to chamfering.
 - `-chamferconvexwidth <V>`: Sets the global size of convex chamfer strips (default 1.25).
 - `-chamferconcavewidth <V>`: Sets the global size of concave chamfer strips (< 0 uses convex width, 0 skips concave chamfers).
 - `-saveprt`: Do not delete the .prt file after processing.

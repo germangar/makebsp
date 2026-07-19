@@ -41,7 +41,7 @@ qboolean fakemap;
 qboolean notjunc;
 qboolean nomerge;
 qboolean nofog;
-qboolean chamfersubdivide;
+qboolean chamfernosubdivide;
 qboolean mergetrisoups = qtrue;
 qboolean nosubdivide;
 qboolean testExpand;
@@ -215,7 +215,7 @@ void ProcessWorldModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    if (chamfersubdivide)
+    if (game->chamferEdges && !chamfernosubdivide)
     {
         ChopTjunctions(e);
     }
@@ -232,7 +232,7 @@ void ProcessWorldModel(void)
         MergeAdjacentTrisoups(e);
     }
 
-    if (!notjunc && !chamfersubdivide)
+    if (!notjunc && !(game->chamferEdges && !chamfernosubdivide))
     {
         FixTJunctions(e);
     }
@@ -320,7 +320,7 @@ void ProcessSubModel(void)
         MergeSides(e, tree); // !@# testing
     }
 
-    if (chamfersubdivide)
+    if (game->chamferEdges && !chamfernosubdivide)
     {
         ChopTjunctions(e);
     }
@@ -338,7 +338,7 @@ void ProcessSubModel(void)
     }
 
     // add in any vertexes required to fix tjunctions
-    if (!notjunc && !chamfersubdivide)
+    if (!notjunc && !(game->chamferEdges && !chamfernosubdivide))
     {
         FixTJunctions(e);
     }
@@ -831,11 +831,10 @@ int main(int argc, char **argv)
             game->chamferEdges = qtrue;
             _printf("edge chamfering enabled\n");
         }
-        else if (!strcmp(argv[i], "-chamfersubdivide"))
+        else if (!strcmp(argv[i], "-chamfernosubdivide"))
         {
-            game->chamferEdges = qtrue;
-            chamfersubdivide = qtrue;
-            _printf("edge chamfering & T-junction subdivision enabled\n");
+            chamfernosubdivide = qtrue;
+            _printf("T-junction surface splitting before chamfering disabled\n");
         }
         else if (!strcmp(argv[i], "-chamferconvexwidth"))
         {
@@ -923,7 +922,6 @@ int main(int argc, char **argv)
         {
             g_fast = qtrue;
             game->chamferEdges = qfalse;
-            chamfersubdivide = qfalse;
             _printf("fast compilation mode enabled (disabling edge chamfering)\n");
         }
         else if (!strcmp(argv[i], "-samplesize"))
@@ -975,11 +973,10 @@ int main(int argc, char **argv)
         }
     }
 
-    if (g_fast && (game->chamferEdges || chamfersubdivide))
+    if (g_fast && (game->chamferEdges))
     {
         _printf("Note: -fast mode enabled, disabling edge chamfering.\n");
         game->chamferEdges = qfalse;
-        chamfersubdivide = qfalse;
     }
 
     if (i != argc - 1)
@@ -1006,7 +1003,7 @@ int main(int argc, char **argv)
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   noautocaulk    = disable early face auto-caulking\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
-                "   chamfersubdivide = enable T-junction surface splitting before chamfering\n"
+                "   chamfernosubdivide = disable T-junction surface splitting before chamfering\n"
                 "   -chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
                 "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
                 "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
