@@ -29,12 +29,9 @@ static int lightmapSmoothPasses;
 
 typedef struct { vec3_t pos; vec3_t normal; qboolean valid; } pixelCache_t;
 
-#define BEVEL_STITCH_ANGLE_COS 0.5f // cos(60 degrees)
-
 typedef struct {
 	int surfaceNum; vec3_t origin; vec3_t vecs[2]; float invMagSq[2]; int width, height; int lmNum; int lmOffset[2];
 	vec3_t normal; float dist; int surfaceFlags; int contentFlags; int numPartners; int *partners;
-    int numStitchPartners; int *stitchPartners;
 	float smoothingRadius;
 } planarInfo_t;
 
@@ -127,8 +124,6 @@ void BuildPlanarSurfaceIndex(void) {
 		p->smoothingRadius = localSurfaces[i].smoothingRadius;
 		p->numPartners = 0;
 		p->partners = NULL;
-		p->numStitchPartners = 0;
-		p->stitchPartners = NULL;
 	}
 	if (numPlanarSurfaces == 0) return;
 	edgeRef_t *allEdges = Q_Alloc(numDrawIndexes * sizeof(edgeRef_t));
@@ -177,24 +172,6 @@ void BuildPlanarSurfaceIndex(void) {
                         float dot = DotProduct(p1->normal, p2->normal);
                         
                         if (dot < coplanarCos) {
-                            if (game->softEdges && dot >= BEVEL_STITCH_ANGLE_COS) {
-                                qboolean f=qfalse;
-                                for(int m=0; m<p1->numStitchPartners; m++) {
-                                    if(p1->stitchPartners[m]==s2) { f=qtrue; break; }
-                                }
-                                if(!f) {
-                                    p1->stitchPartners=realloc(p1->stitchPartners, (p1->numStitchPartners+1)*sizeof(int));
-                                    p1->stitchPartners[p1->numStitchPartners++]=s2;
-                                }
-                                f=qfalse;
-                                for(int m=0; m<p2->numStitchPartners; m++) {
-                                    if(p2->stitchPartners[m]==s1) { f=qtrue; break; }
-                                }
-                                if(!f) {
-                                    p2->stitchPartners=realloc(p2->stitchPartners, (p2->numStitchPartners+1)*sizeof(int));
-                                    p2->stitchPartners[p2->numStitchPartners++]=s1;
-                                }
-                            }
                             continue;
                         }
 
@@ -239,7 +216,6 @@ void FreePlanarSurfaceIndex(void) {
 	if (planarSurfaces) {
 		for (int i=0; i<numPlanarSurfaces; i++) {
 			if (planarSurfaces[i].partners) Q_Free(planarSurfaces[i].partners);
-			if (planarSurfaces[i].stitchPartners) Q_Free(planarSurfaces[i].stitchPartners);
 		}
 		Q_Free(planarSurfaces);
 	}
@@ -278,36 +254,6 @@ qboolean SampleLightmapWorldBilinear(int srcIdx, const vec3_t pos, const vec3_t 
 	return qfalse;
 }
 
-qboolean SampleLightmapWorldBilinearStitch(int srcIdx, const vec3_t pos, float *out, const float *buf) {
-	if (srcIdx<0 || srcIdx>=numPlanarSurfaces) return qfalse;
-	planarInfo_t *srcP = &planarSurfaces[srcIdx];
-	for (int i=0; i<srcP->numStitchPartners; i++) {
-		planarInfo_t *p = &planarSurfaces[srcP->stitchPartners[i]]; 
-        if (p->lmNum < 0) continue;
-        vec3_t d; VectorSubtract(pos, p->origin, d);
-		float u = DotProduct(d, p->vecs[0])*p->invMagSq[0], v = DotProduct(d, p->vecs[1])*p->invMagSq[1];
-		if (u<-0.51f || u>(float)p->width-0.49f || v<-0.51f || v>(float)p->height-0.49f) continue;
-		float ux=u-0.5f, vy=v-0.5f; int x0=(int)floorf(ux), y0=(int)floorf(vy); float fx=ux-x0, fy=vy-y0;
-		int x1=x0+1, y1=y0+1; x0=max(0,min(p->width-1,x0)); x1=max(0,min(p->width-1,x1)); y0=max(0,min(p->height-1,y0)); y1=max(0,min(p->height-1,y1));
-		int p00=(p->lmNum*LIGHTMAP_HEIGHT+p->lmOffset[1]+y0)*LIGHTMAP_WIDTH+p->lmOffset[0]+x0;
-		int p10=(p->lmNum*LIGHTMAP_HEIGHT+p->lmOffset[1]+y0)*LIGHTMAP_WIDTH+p->lmOffset[0]+x1;
-		int p01=(p->lmNum*LIGHTMAP_HEIGHT+p->lmOffset[1]+y1)*LIGHTMAP_WIDTH+p->lmOffset[0]+x0;
-		int p11=(p->lmNum*LIGHTMAP_HEIGHT+p->lmOffset[1]+y1)*LIGHTMAP_WIDTH+p->lmOffset[0]+x1;
-		float w00=(1-fx)*(1-fy), w10=fx*(1-fy), w01=(1-fx)*fy, w11=fx*fy;
-		if (lightAlphaMask[p00]==0) w00=0; 
-		if (lightAlphaMask[p10]==0) w10=0; 
-		if (lightAlphaMask[p01]==0) w01=0; 
-		if (lightAlphaMask[p11]==0) w11=0;
-		float sW = w00+w10+w01+w11;
-		if (sW>0.01f) {
-			for(int c=0; c<3; c++) {
-				out[c]=(w00*buf[p00*3+c]+w10*buf[p10*3+c]+w01*buf[p01*3+c]+w11*buf[p11*3+c])/sW;
-			}
-			return qtrue;
-		}
-	}
-	return qfalse;
-}
 
 static qboolean GetFilteredTexel(int sIdx, float px, float py, float *out, const float *buf) {
 	planarInfo_t *pI = &planarSurfaces[sIdx]; dsurface_t *ds = &drawSurfaces[pI->surfaceNum];
@@ -1107,45 +1053,6 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
     Q_Free(cP);
 }
 
-static void StitchEdgesCPU(void) {
-    size_t bytes = (size_t)numLightBytes * 4;
-    float *tF = Q_Alloc(bytes);
-    memcpy(tF, lightFloats, bytes);
-    
-    int prg = 0;
-    _printf("  Stitching soft edges: ");
-    #pragma omp parallel for schedule(dynamic,1)
-    for (int s=0; s<numPlanarSurfaces; s++) {
-        planarInfo_t *pI = &planarSurfaces[s];
-        if (pI->lmNum < 0) continue;
-        if (pI->numStitchPartners == 0) continue;
-        
-        for (int y=0; y<pI->height; y++) {
-            for (int x=0; x<pI->width; x++) {
-                int p = (pI->lmNum*LIGHTMAP_HEIGHT+pI->lmOffset[1]+y)*LIGHTMAP_WIDTH+pI->lmOffset[0]+x;
-                if (!lightAlphaMask[p]) continue;
-                
-                vec3_t wP;
-                VectorCopy(pI->origin, wP);
-                VectorMA(wP, x, pI->vecs[0], wP);
-                VectorMA(wP, y, pI->vecs[1], wP);
-                
-                float out[3];
-                if (SampleLightmapWorldBilinearStitch(s, wP, out, tF)) {
-                    for(int c=0; c<3; c++) {
-                        lightFloats[p*3+c] = lightFloats[p*3+c] * 0.75f + out[c] * 0.25f;
-                    }
-                }
-            }
-        }
-        int c;
-        #pragma omp atomic capture
-        c=++prg;
-        if(numPlanarSurfaces>=10 && (c*10/numPlanarSurfaces > (c-1)*10/numPlanarSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
-    }
-    _printf("Done\n");
-    Q_Free(tF);
-}
 
 // Saturation Ramp Hardcoded Constants
 #define SATRAMP_FILMIC_TOE_K        0.05f   // Toe roll-off constant for Filmic ramp
@@ -1240,10 +1147,7 @@ void PostProcessLightmaps(void) {
             _printf("Done\n");
         }
     }
-    
-    if (game->softEdges) {
-        StitchEdgesCPU();
-    }
+
     
     if (lightmapAA>0 || lightmapSmoothPasses>0) {
         _printf("  Volumetric Filtering: "); 

@@ -110,7 +110,6 @@ typedef struct {
 	int         antialiasingPasses;
 	int         defaultSmoothPasses;
 	float       defaultSmoothRadius;
-    qboolean    softEdges;
 
 	const char	*flareShader;
 	const char	*haloShader;

@@ -443,7 +443,6 @@ These switches change the primary mode of the executable.
 - `-smoothpasses <N>`: Number of lightmap smoothing/blurring passes.
 - `-smooth <R>`: Radius for smoothing and jittered supersampling.
 - `-supersample <radius>`: Enable trace-time supersampling using a 8x jittered pattern. The radius defines the spread of the jitter in world units (e.g., 0.5 or 1.0). Set to 0 to disable.
-- `-softedges`: Enable soft filtering on patch edges (disabled by default).
 
 **Performance & Debug**
 - `-fast`: Drop quality for quick tests (disables edge chamfering in makebsp).
