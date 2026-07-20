@@ -2211,6 +2211,319 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
 
 /*
 ==================
+DecimateCollinearBoundaries (Phase 2: Collinear Boundary Decimation)
+==================
+*/
+static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
+{
+    if (ds->numVerts < 3 || ds->numIndexes < 9) return;
+
+    int numVerts = ds->numVerts;   // post-Phase-1 compacted vertex count
+    int numTris  = ds->numIndexes / 3;
+
+    // STEP A: Precompute face normals from current post-Phase-1 geometry
+    vec3_t *faceNormals = malloc(numTris * sizeof(vec3_t));
+    for (int t = 0; t < numTris; t++) {
+        int i0 = ds->indexes[t*3+0];
+        int i1 = ds->indexes[t*3+1];
+        int i2 = ds->indexes[t*3+2];
+        vec3_t e1, e2, cross;
+        VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, e1);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, e2);
+        CrossProduct(e1, e2, cross);
+        if (VectorNormalize(cross, cross) < 1e-6f) {
+            VectorClear(faceNormals[t]);
+        } else {
+            VectorCopy(cross, faceNormals[t]);
+        }
+    }
+
+    // STEP B: Build vertToTriList from post-Phase-1 ds->indexes
+    int *vertToTriCount = calloc(numVerts, sizeof(int));
+    for (int i = 0; i < ds->numIndexes; i++)
+        vertToTriCount[ds->indexes[i]]++;
+
+    int **vertToTriList = malloc(numVerts * sizeof(int*));
+    for (int v = 0; v < numVerts; v++)
+        vertToTriList[v] = malloc(vertToTriCount[v] * sizeof(int));
+
+    int *triInsert = calloc(numVerts, sizeof(int));
+    for (int t = 0; t < numTris; t++) {
+        for (int k = 0; k < 3; k++) {
+            int v = ds->indexes[t*3+k];
+            vertToTriList[v][triInsert[v]++] = t;
+        }
+    }
+    free(triInsert);
+
+    // STEP C: Alive flags
+    qboolean *triAlive  = malloc(numTris  * sizeof(qboolean));
+    qboolean *vertAlive = malloc(numVerts * sizeof(qboolean));
+    for (int t = 0; t < numTris;  t++) triAlive[t]  = qtrue;
+    for (int v = 0; v < numVerts; v++) vertAlive[v] = qtrue;
+
+    // STEP D: Build initial boundary graph ONCE
+    int *boundaryCount = calloc(numVerts, sizeof(int));
+    int *bN1 = malloc(numVerts * sizeof(int));
+    int *bN2 = malloc(numVerts * sizeof(int));
+    for (int v = 0; v < numVerts; v++) { bN1[v] = -1; bN2[v] = -1; }
+
+    typedef struct { int v0, v1, count; } BEdge;
+    int maxEdges = numTris * 3;
+    BEdge *edgeTable = malloc(maxEdges * sizeof(BEdge));
+    int numEdges = 0;
+
+    for (int t = 0; t < numTris; t++) {
+        for (int k = 0; k < 3; k++) {
+            int va = ds->indexes[t*3 + k];
+            int vb = ds->indexes[t*3 + ((k+1)%3)];
+            if (va > vb) { int tmp = va; va = vb; vb = tmp; }
+
+            int found = 0;
+            for (int e = 0; e < numEdges; e++) {
+                if (edgeTable[e].v0 == va && edgeTable[e].v1 == vb) {
+                    edgeTable[e].count++;
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found && numEdges < maxEdges) {
+                edgeTable[numEdges].v0 = va;
+                edgeTable[numEdges].v1 = vb;
+                edgeTable[numEdges].count = 1;
+                numEdges++;
+            }
+        }
+    }
+
+    for (int e = 0; e < numEdges; e++) {
+        if (edgeTable[e].count != 1) continue;
+        int va = edgeTable[e].v0;
+        int vb = edgeTable[e].v1;
+        if      (bN1[va] == -1) bN1[va] = vb;
+        else if (bN2[va] == -1) bN2[va] = vb;
+        boundaryCount[va]++;
+        if      (bN1[vb] == -1) bN1[vb] = va;
+        else if (bN2[vb] == -1) bN2[vb] = va;
+        boundaryCount[vb]++;
+    }
+    free(edgeTable);
+
+    // STEP E: Greedy shortest-edge collapse loop
+    qboolean collapsedAny = qtrue;
+    while (collapsedAny) {
+        collapsedAny = qfalse;
+        float bestLenSq = 1e30f;
+        int bestV = -1, bestU = -1;
+
+        for (int v = 0; v < numVerts; v++) {
+            if (!vertAlive[v]) continue;
+            if (boundaryCount[v] != 2) continue;
+            int n1 = bN1[v], n2 = bN2[v];
+            if (n1 < 0 || n2 < 0 || !vertAlive[n1] || !vertAlive[n2]) continue;
+
+            int firstTri = -1;
+            for (int tv = 0; tv < vertToTriCount[v]; tv++) {
+                if (triAlive[vertToTriList[v][tv]]) {
+                    firstTri = vertToTriList[v][tv];
+                    break;
+                }
+            }
+            if (firstTri == -1) continue;
+
+            vec3_t refN;
+            VectorCopy(faceNormals[firstTri], refN);
+
+            qboolean locked = qfalse;
+            for (int tv = 0; tv < vertToTriCount[v] && !locked; tv++) {
+                int t = vertToTriList[v][tv];
+                if (!triAlive[t]) continue;
+                if (DotProduct(faceNormals[t], refN) < 0.999f) {
+                    locked = qtrue; break;
+                }
+                int *idx = &ds->indexes[t*3];
+                for (int k = 0; k < 3 && !locked; k++) {
+                    if (fabs(DotProduct(ds->verts[idx[k]].normal, refN)) < 0.999f)
+                        locked = qtrue;
+                }
+            }
+            if (locked) continue;
+
+            vec3_t d1, d2;
+            VectorSubtract(ds->verts[n1].xyz, ds->verts[v].xyz, d1);
+            VectorSubtract(ds->verts[n2].xyz, ds->verts[v].xyz, d2);
+            if (VectorNormalize(d1, d1) < 1e-6f) continue;
+            if (VectorNormalize(d2, d2) < 1e-6f) continue;
+            if (DotProduct(d1, d2) > -0.9999f) continue; // Corner or bent -> skip
+
+            int candidates[2] = { n1, n2 };
+            for (int ci = 0; ci < 2; ci++) {
+                int u = candidates[ci];
+                if (!vertAlive[u]) continue;
+
+                // Gate 2: Link Condition (count unique mutual neighbors w of v and u)
+                int linkCount = 0;
+                for (int tv = 0; tv < vertToTriCount[v]; tv++) {
+                    int t = vertToTriList[v][tv];
+                    if (!triAlive[t]) continue;
+                    int *idx = &ds->indexes[t*3];
+                    for (int k = 0; k < 3; k++) {
+                        int w = idx[k];
+                        if (w == v || w == u) continue;
+
+                        // Check if w already processed in an earlier triangle/index of v
+                        qboolean alreadyProcessed = qfalse;
+                        for (int tv2 = 0; tv2 <= tv && !alreadyProcessed; tv2++) {
+                            int t2 = vertToTriList[v][tv2];
+                            if (!triAlive[t2]) continue;
+                            int *idx2 = &ds->indexes[t2*3];
+                            int maxK = (tv2 == tv) ? k : 3;
+                            for (int k2 = 0; k2 < maxK; k2++) {
+                                if (idx2[k2] == w) { alreadyProcessed = qtrue; break; }
+                            }
+                        }
+                        if (alreadyProcessed) continue;
+
+                        qboolean isNeighborOfU = qfalse;
+                        for (int tu = 0; tu < vertToTriCount[u]; tu++) {
+                            int t2 = vertToTriList[u][tu];
+                            if (!triAlive[t2]) continue;
+                            int *idx2 = &ds->indexes[t2*3];
+                            if (idx2[0]==w || idx2[1]==w || idx2[2]==w) {
+                                isNeighborOfU = qtrue; break;
+                            }
+                        }
+                        if (isNeighborOfU) linkCount++;
+                    }
+                }
+                if (linkCount != 1) continue;
+
+                // Gate 1: Triangle Flip Test
+                qboolean flipped = qfalse;
+                for (int tv = 0; tv < vertToTriCount[v] && !flipped; tv++) {
+                    int t = vertToTriList[v][tv];
+                    if (!triAlive[t]) continue;
+                    int *idx = &ds->indexes[t*3];
+                    if (idx[0]==u || idx[1]==u || idx[2]==u) continue;
+
+                    float *p0 = ds->verts[(idx[0]==v) ? u : idx[0]].xyz;
+                    float *p1 = ds->verts[(idx[1]==v) ? u : idx[1]].xyz;
+                    float *p2 = ds->verts[(idx[2]==v) ? u : idx[2]].xyz;
+                    vec3_t e1, e2, newCross;
+                    VectorSubtract(p1, p0, e1);
+                    VectorSubtract(p2, p0, e2);
+                    CrossProduct(e1, e2, newCross);
+
+                    if (VectorLength(newCross) > 1e-5f &&
+                        DotProduct(newCross, faceNormals[t]) <= 0.0f)
+                        flipped = qtrue;
+                }
+                if (flipped) continue;
+
+                vec3_t diff;
+                VectorSubtract(ds->verts[v].xyz, ds->verts[u].xyz, diff);
+                float lenSq = DotProduct(diff, diff);
+                if (lenSq < bestLenSq) {
+                    bestLenSq = lenSq;
+                    bestV = v;
+                    bestU = u;
+                }
+            }
+        }
+
+        if (bestV == -1) break;
+
+        // EXECUTE COLLAPSE: bestV -> bestU
+        vertAlive[bestV] = qfalse;
+        for (int i = 0; i < ds->numIndexes; i++) {
+            if (ds->indexes[i] == bestV) ds->indexes[i] = bestU;
+        }
+
+        for (int tv = 0; tv < vertToTriCount[bestV]; tv++) {
+            int t = vertToTriList[bestV][tv];
+            if (!triAlive[t]) continue;
+            int *idx = &ds->indexes[t*3];
+            if (idx[0]==idx[1] || idx[1]==idx[2] || idx[2]==idx[0]) {
+                triAlive[t] = qfalse;
+            } else {
+                qboolean already = qfalse;
+                for (int tu = 0; tu < vertToTriCount[bestU]; tu++)
+                    if (vertToTriList[bestU][tu] == t) { already = qtrue; break; }
+                if (!already) {
+                    vertToTriList[bestU] = realloc(vertToTriList[bestU],
+                        (vertToTriCount[bestU]+1) * sizeof(int));
+                    vertToTriList[bestU][vertToTriCount[bestU]++] = t;
+                }
+            }
+        }
+        vertToTriCount[bestV] = 0;
+
+        int bPrev = (bN1[bestV] == bestU) ? bN2[bestV] : bN1[bestV];
+        if      (bN1[bestU] == bestV) bN1[bestU] = bPrev;
+        else if (bN2[bestU] == bestV) bN2[bestU] = bPrev;
+
+        if (bPrev >= 0) {
+            if      (bN1[bPrev] == bestV) bN1[bPrev] = bestU;
+            else if (bN2[bPrev] == bestV) bN2[bPrev] = bestU;
+        }
+
+        boundaryCount[bestV] = 0;
+        bN1[bestV] = -1;
+        bN2[bestV] = -1;
+
+        collapsedAny = qtrue;
+    }
+
+    // STEP F: Compact index buffer
+    int validIndexes = 0;
+    for (int t = 0; t < numTris; t++) {
+        if (!triAlive[t]) continue;
+        int i0 = ds->indexes[t*3+0];
+        int i1 = ds->indexes[t*3+1];
+        int i2 = ds->indexes[t*3+2];
+        if (i0==i1 || i1==i2 || i0==i2) continue;
+        ds->indexes[validIndexes+0] = i0;
+        ds->indexes[validIndexes+1] = i1;
+        ds->indexes[validIndexes+2] = i2;
+        validIndexes += 3;
+    }
+    ds->numIndexes = validIndexes;
+
+    // STEP G: Compact vertex buffer
+    int *remap = malloc(numVerts * sizeof(int));
+    for (int v = 0; v < numVerts; v++) remap[v] = -1;
+
+    drawVert_t *newVerts = malloc(numVerts * sizeof(drawVert_t));
+    int newNumVerts = 0;
+
+    for (int i = 0; i < ds->numIndexes; i++) {
+        int oldV = ds->indexes[i];
+        if (remap[oldV] == -1) {
+            remap[oldV] = newNumVerts;
+            newVerts[newNumVerts++] = ds->verts[oldV];
+        }
+        ds->indexes[i] = remap[oldV];
+    }
+
+    free(ds->verts);
+    ds->verts    = newVerts;
+    ds->numVerts = newNumVerts;
+
+    // Cleanup
+    free(remap);
+    free(triAlive);
+    free(vertAlive);
+    free(vertToTriCount);
+    for (int v = 0; v < numVerts; v++) free(vertToTriList[v]);
+    free(vertToTriList);
+    free(boundaryCount);
+    free(bN1);
+    free(bN2);
+    free(faceNormals);
+}
+
+/*
+==================
 DecimateAllTrisoups
 ==================
 */
@@ -2221,6 +2534,9 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
     int totalTrisRemoved = 0;
 
     qprintf("----- DecimateAllTrisoups -----\n");
+
+    int totalP1Verts = 0, totalP2Verts = 0;
+    int totalP1Tris = 0, totalP2Tris = 0;
 
     for (int i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
         mapDrawSurface_t *ds = &mapDrawSurfs[i];
@@ -2235,20 +2551,33 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
         int oldTris  = ds->numIndexes / 3;
 
         DecimateSingleTrisoup(ds);
+        int p1VertsRemoved = oldVerts - ds->numVerts;
+        int p1TrisRemoved  = oldTris  - (ds->numIndexes / 3);
+        
+        int midVerts = ds->numVerts;
+        int midTris  = ds->numIndexes / 3;
+        
+        DecimateCollinearBoundaries(ds);
+        int p2VertsRemoved = midVerts - ds->numVerts;
+        int p2TrisRemoved  = midTris  - (ds->numIndexes / 3);
 
-        int vertsRemoved = oldVerts - ds->numVerts;
-        int trisRemoved  = oldTris  - (ds->numIndexes / 3);
+        int vertsRemoved = p1VertsRemoved + p2VertsRemoved;
+        int trisRemoved  = p1TrisRemoved + p2TrisRemoved;
 
         if (vertsRemoved > 0 || trisRemoved > 0)
             numDecimated++;
 
         totalVertsRemoved += vertsRemoved;
         totalTrisRemoved  += trisRemoved;
+        totalP1Verts += p1VertsRemoved;
+        totalP2Verts += p2VertsRemoved;
+        totalP1Tris += p1TrisRemoved;
+        totalP2Tris += p2TrisRemoved;
     }
 
     qprintf("%6i trisoups decimated\n",    numDecimated);
-    qprintf("%6i vertices removed\n",      totalVertsRemoved);
-    qprintf("%6i triangles removed\n",     totalTrisRemoved);
+    qprintf("%6i vertices removed (%i in Phase 1 / %i in Phase 2)\n",      totalVertsRemoved, totalP1Verts, totalP2Verts);
+    qprintf("%6i triangles removed (%i in Phase 1 / %i in Phase 2)\n",     totalTrisRemoved, totalP1Tris, totalP2Tris);
 }
 
 /*
