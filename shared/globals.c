@@ -19,6 +19,7 @@ qboolean g_debugExportLightmaps = qfalse;
 qboolean g_debugMagentaTrisoups = qfalse;
 qboolean g_debugCyanPatches = qfalse;
 qboolean g_debugGreenPlanar = qfalse;
+qboolean nodecimateplanar = qfalse;
 
 game_t gameTemplates[MAX_GAMES] = {
 	{

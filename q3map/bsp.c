@@ -230,6 +230,12 @@ void ProcessWorldModel(void)
     if (mergetrisoups)
     {
         MergeAdjacentTrisoups(e);
+        CleanupAllTrisoups(e);
+        if (!nodecimateplanar)
+        {
+            DecimateAllTrisoups(e, qtrue);
+        }
+        GenerateTrisoupUVs(e);
     }
 
     if (!notjunc && !(game->chamferEdges && !chamfernosubdivide))
@@ -335,6 +341,12 @@ void ProcessSubModel(void)
     if (mergetrisoups)
     {
         MergeAdjacentTrisoups(e);
+        CleanupAllTrisoups(e);
+        if (!nodecimateplanar)
+        {
+            DecimateAllTrisoups(e, qtrue);
+        }
+        GenerateTrisoupUVs(e);
     }
 
     // add in any vertexes required to fix tjunctions
@@ -854,6 +866,11 @@ int main(int argc, char **argv)
             _printf("adjacent trisoup merging = %d\n", mergetrisoups);
             i++;
         }
+        else if (!strcmp(argv[i], "-nodecimateplanar"))
+        {
+            nodecimateplanar = qtrue;
+            _printf("planar trisoup decimation disabled\n");
+        }
         else if (!strcmp(argv[i], "-expand"))
         {
             testExpand = qtrue;
@@ -1007,6 +1024,7 @@ int main(int argc, char **argv)
                 "   -chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
                 "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
                 "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
+                "   -nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"

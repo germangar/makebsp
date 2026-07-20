@@ -123,6 +123,7 @@ extern qboolean g_debugExportLightmaps;
 extern qboolean g_debugMagentaTrisoups;
 extern qboolean g_debugCyanPatches;
 extern qboolean g_debugGreenPlanar;
+extern qboolean nodecimateplanar;
 
 #define MAX_GAMES 128
 extern int numGames;

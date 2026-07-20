@@ -226,6 +226,9 @@ void ChamferSurfaceEdges(entity_t *e);
 void MergeChamferStripsIntoParents(entity_t *e);
 void MergeParentedTrisoups(entity_t *e);
 void MergeAdjacentTrisoups(entity_t *e);
+void CleanupAllTrisoups(entity_t *e);
+void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar);
+void GenerateTrisoupUVs(entity_t *e);
 
 typedef struct drawSurfRef_s
 {

@@ -1,7 +1,7 @@
 # Status Report: Chamfer Strip & Global Trisoup Adjacency Merging
 
 ## What We Are Doing
-We are modernizing the Quake 3 / Warfork BSP compiler (`makebsp`) to produce clean, highly optimized geometry with chamfered edges and consolidated draw calls. 
+We are modernizing the Quake 3 / Warfork BSP compiler (`makebsp`) to produce clean, highly optimized geometry with chamfered edges and consolidated draw calls. We followed the plan outlined in "./studies/edge_chamfering_plan.txt".
 
 Our focus has been on:
 1. Merging chamfer strips with their parent planar fragments into atomic `MST_TRIANGLE_SOUP` meshes.
@@ -71,5 +71,4 @@ Our focus has been on:
 - Resolved a critical ABI mismatch bug affecting `makelight.exe` that occurred after expanding the `shaderInfo_t` struct, causing corrupted memory offsets for lighting flags (e.g., `forceSunLight`, `twoSided`). Fixed via a full clean rebuild of the engine.
 
 ## Where We Are Going Next
-- **Early Auto-Caulk Pass**: Implement a pre-BSP face detection and caulking pass (documented in `ToDo.txt` Item 11) that detects coplanar facing brush faces and either caulks identical matches or caulks faces whose vertices are entirely enclosed inside a larger coplanar face.
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.
