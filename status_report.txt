@@ -70,5 +70,19 @@ Our focus has been on:
   3. **Entity Overrides**: `chamfer_convexwidth` and `chamfer_concavewidth` override both globals and shaders on a per-entity basis (`ResolveSurfaceExtraProperties`).
 - Resolved a critical ABI mismatch bug affecting `makelight.exe` that occurred after expanding the `shaderInfo_t` struct, causing corrupted memory offsets for lighting flags (e.g., `forceSunLight`, `twoSided`). Fixed via a full clean rebuild of the engine.
 
+### 11. 2-Phase Planar Trisoup Decimation (`DecimateAllTrisoups`)
+- Extracted and generalized the exact duplicate/degenerate triangle purge into `CleanupAllTrisoups` (STEP 0), ensuring zero-area fragments generated during merging are cleanly removed before decimation.
+- **Phase 1 (Interior Shortest-Edge)**: Implemented `DecimateSingleTrisoup` which locks all outer boundaries and collapses redundant internal edges on flat surfaces. Features a strict normal firewall protecting chamfer bevel seams (`fabs(DotProduct) >= 0.999f`).
+- **Phase 2 (Collinear Boundary)**: Implemented `DecimateCollinearBoundaries` to unlock boundary vertices sitting exactly on straight lines (`180° ± 0.8°`).
+- Injected strong geometric constraints to prevent the 3D polygon outline from dragging inward (target vertices must be immediate boundary neighbors) and fixed topological gating to correctly identify safe planar collapses without double-counting mutual neighbors.
+- Added the `-nodecimateplanar` CLI switch to bypass both Phase 1 and Phase 2 while leaving `CleanupAllTrisoups` active.
+- Reduced vertex and triangle counts exponentially (e.g. over 1,600 redundant boundary vertices removed on `wdm1_015.map` flat walls), cleaning up geometry without altering mesh seams or UVs.
+
+### 12. Collinear Edge Point Synchronization (`InsertCollinearChamferVertices`)
+- Implemented a new **subdivision heuristic** (`InsertCollinearChamferVertices`) in `q3map/tjunction.c`, executed right before `BuildSurfaceAdjacencyGraph` in `ChamferSurfaceEdges`.
+- Resolves missing chamfer strips on surfaces subdivided by `ChopTjunctions` where the adjacent unchopped surface lacked matching midpoint vertices.
+- Automatically detects collinear midpoint vertices along candidate chamfer edges (`IsOriginalBrushEdge`) and safely synchronizes them into adjacent surface vertex loops with affine texture UV (`.st`) interpolation.
+- Added `InsertVertexIntoDrawSurf` helper to handle tight `malloc` buffer expansion safely without heap corruption.
+
 ## Where We Are Going Next
 - **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.

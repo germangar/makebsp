@@ -1082,6 +1082,181 @@ static void ComputeVertexBlendedNormal(int surfIdx, int vIdx, const vec3_t faceN
 
 /*
 ================
+InsertVertexIntoDrawSurf
+================
+*/
+static void InsertVertexIntoDrawSurf(mapDrawSurface_t *ds, int insertIdx, const drawVert_t *newVert)
+{
+    drawVert_t *newBuffer = malloc((ds->numVerts + 1) * sizeof(drawVert_t));
+
+    if (insertIdx > 0)
+        memcpy(newBuffer, ds->verts, insertIdx * sizeof(drawVert_t));
+
+    newBuffer[insertIdx] = *newVert;
+
+    if (insertIdx < ds->numVerts)
+        memcpy(&newBuffer[insertIdx + 1], &ds->verts[insertIdx],
+               (ds->numVerts - insertIdx) * sizeof(drawVert_t));
+
+    free(ds->verts);
+    ds->verts = newBuffer;
+    ds->numVerts++;
+}
+
+/*
+================
+InsertCollinearChamferVertices
+================
+*/
+static void InsertCollinearChamferVertices(entity_t *e)
+{
+    int i, j, v, w;
+
+    qprintf("----- InsertCollinearChamferVertices -----\n");
+
+    for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
+    {
+        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
+        if (!IsChamferCandidate(dsA)) continue;
+
+        for (j = i + 1; j < numMapDrawSurfs; j++)
+        {
+            mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+            if (!IsChamferCandidate(dsB)) continue;
+
+            qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            qboolean transB = (dsB->shaderInfo && (dsB->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
+            if (transA != transB) continue;
+
+            vec3_t normalA, normalB;
+            VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
+            VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
+            float dot = DotProduct(normalA, normalB);
+            if (dot > 0.866f || dot < -0.866f) continue;
+
+            // Direction 1: Vertices of dsA -> Edges of dsB
+            for (v = 0; v < dsA->numVerts; v++)
+            {
+                vec3_t vA;
+                VectorCopy(dsA->verts[v].xyz, vA);
+
+                qboolean alreadyInB = qfalse;
+                int check;
+                for (check = 0; check < dsB->numVerts; check++) {
+                    if (VectorsNearEqual(vA, dsB->verts[check].xyz, 0.1f)) {
+                        alreadyInB = qtrue;
+                        break;
+                    }
+                }
+                if (alreadyInB) continue;
+
+                for (w = 0; w < dsB->numVerts; w++)
+                {
+                    int next_w = (w + 1) % dsB->numVerts;
+                    vec3_t W0, W1, edgeDir, toA, perp;
+                    float full_len, t, perp_dist;
+
+                    VectorCopy(dsB->verts[w].xyz, W0);
+                    VectorCopy(dsB->verts[next_w].xyz, W1);
+
+                    VectorSubtract(W1, W0, edgeDir);
+                    full_len = VectorNormalize(edgeDir, edgeDir);
+                    if (full_len < 0.1f) continue;
+
+                    VectorSubtract(vA, W0, toA);
+                    t = DotProduct(toA, edgeDir);
+
+                    if (t < 0.1f || t > full_len - 0.1f) continue;
+
+                    vec3_t proj;
+                    VectorScale(edgeDir, t, proj);
+                    VectorSubtract(toA, proj, perp);
+                    perp_dist = VectorLength(perp);
+
+                    if (perp_dist > 0.25f) continue;
+
+                    if (!IsOriginalBrushEdge(dsB, W0, W1)) continue;
+
+                    float frac = t / full_len;
+
+                    drawVert_t newVert;
+                    memset(&newVert, 0, sizeof(newVert));
+
+                    VectorCopy(vA, newVert.xyz);
+                    newVert.st[0] = dsB->verts[w].st[0] + frac * (dsB->verts[next_w].st[0] - dsB->verts[w].st[0]);
+                    newVert.st[1] = dsB->verts[w].st[1] + frac * (dsB->verts[next_w].st[1] - dsB->verts[w].st[1]);
+                    VectorCopy(dsB->verts[w].normal, newVert.normal);
+                    memcpy(newVert.color, dsB->verts[w].color, sizeof(newVert.color));
+
+                    InsertVertexIntoDrawSurf(dsB, w + 1, &newVert);
+                    w++;
+                    break;
+                }
+            }
+
+            // Direction 2: Vertices of dsB -> Edges of dsA
+            for (w = 0; w < dsB->numVerts; w++)
+            {
+                vec3_t vB;
+                VectorCopy(dsB->verts[w].xyz, vB);
+
+                qboolean alreadyInA = qfalse;
+                int check;
+                for (check = 0; check < dsA->numVerts; check++) {
+                    if (VectorsNearEqual(vB, dsA->verts[check].xyz, 0.1f)) {
+                        alreadyInA = qtrue;
+                        break;
+                    }
+                }
+                if (alreadyInA) continue;
+
+                for (v = 0; v < dsA->numVerts; v++)
+                {
+                    int next_v = (v + 1) % dsA->numVerts;
+                    vec3_t V0, V1, edgeDir, toB, perp;
+                    float full_len, t, perp_dist;
+
+                    VectorCopy(dsA->verts[v].xyz, V0);
+                    VectorCopy(dsA->verts[next_v].xyz, V1);
+
+                    VectorSubtract(V1, V0, edgeDir);
+                    full_len = VectorNormalize(edgeDir, edgeDir);
+                    if (full_len < 0.1f) continue;
+
+                    VectorSubtract(vB, V0, toB);
+                    t = DotProduct(toB, edgeDir);
+                    if (t < 0.1f || t > full_len - 0.1f) continue;
+
+                    vec3_t proj;
+                    VectorScale(edgeDir, t, proj);
+                    VectorSubtract(toB, proj, perp);
+                    perp_dist = VectorLength(perp);
+                    if (perp_dist > 0.25f) continue;
+
+                    if (!IsOriginalBrushEdge(dsA, V0, V1)) continue;
+
+                    float frac = t / full_len;
+
+                    drawVert_t newVert;
+                    memset(&newVert, 0, sizeof(newVert));
+
+                    VectorCopy(vB, newVert.xyz);
+                    newVert.st[0] = dsA->verts[v].st[0] + frac * (dsA->verts[next_v].st[0] - dsA->verts[v].st[0]);
+                    newVert.st[1] = dsA->verts[v].st[1] + frac * (dsA->verts[next_v].st[1] - dsA->verts[v].st[1]);
+                    VectorCopy(dsA->verts[v].normal, newVert.normal);
+                    memcpy(newVert.color, dsA->verts[v].color, sizeof(newVert.color));
+
+                    InsertVertexIntoDrawSurf(dsA, v + 1, &newVert);
+                    v++;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/*
+================
 ChamferSurfaceEdges
 ================
 */
@@ -1093,6 +1268,7 @@ void ChamferSurfaceEdges(entity_t *e)
     
     qprintf("----- ChamferSurfaceEdges (V3: Normal Bending) -----\n");
     memset(globalInsets, 0, sizeof(globalInsets));
+    InsertCollinearChamferVertices(e);
     BuildSurfaceAdjacencyGraph(e);
     numBaseDrawSurfs = numMapDrawSurfs;
     s_chamferBaseDrawSurfs = numBaseDrawSurfs;
