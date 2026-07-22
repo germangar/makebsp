@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // map.c
 
 #include "qbsp.h"
+#include "map_export.h"
 
 int entitySourceBrushes; // to track editor brush numbers
 
@@ -1495,6 +1496,17 @@ void LoadMapFile(char *filename)
     {
     }
     _printf("--- LoadMapFile: %i entities loaded ---\n", num_entities);
+
+    if (g_bBrushPrimit == BPRIMIT_OLDBRUSHES)
+    {
+        char exportPath[1024];
+        strcpy(exportPath, filename);
+        StripExtension(exportPath);
+        strcat(exportPath, "_brushprimitives.map");
+
+        _printf("Legacy map format detected. Auto-exporting to: %s\n", exportPath);
+        ExportMapAsBrushPrimitives(exportPath);
+    }
 
     ProcessMapEntities();
 
