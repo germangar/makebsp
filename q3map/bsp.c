@@ -843,6 +843,11 @@ int main(int argc, char **argv)
             game->chamferEdges = qtrue;
             _printf("edge chamfering enabled\n");
         }
+        else if (!strcmp(argv[i], "-nochamferedges"))
+        {
+            game->chamferEdges = qfalse;
+            _printf("edge chamfering disabled\n");
+        }
         else if (!strcmp(argv[i], "-chamfernosubdivide"))
         {
             chamfernosubdivide = qtrue;
@@ -1020,11 +1025,12 @@ int main(int argc, char **argv)
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   noautocaulk    = disable early face auto-caulking\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
+                "   nochamferedges = explicitly disable edge chamfering\n"
                 "   chamfernosubdivide = disable T-junction surface splitting before chamfering\n"
-                "   -chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
-                "   -chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
-                "   -mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
-                "   -nodecimateplanar    = disable planar trisoup decimation pass\n"
+                "   chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
+                "   chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
+                "   mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
+                "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
