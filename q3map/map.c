@@ -1374,62 +1374,95 @@ qboolean ParseMapEntity(void)
         AdjustBrushesForOrigin(mapent);
     }
 
-    // group_info entities are just for editor grouping
-    // ignored
-    // FIXME: leak!
-    if (!strcmp("group_info", ValueForKey(mapent, "classname")))
-    {
-        num_entities--;
-        return qtrue;
-    }
-
-    // group entities are just for editor convenience
-    // toss all brushes into the world entity
-    if (!strcmp("func_group", ValueForKey(mapent, "classname")))
-    {
-        if (!strcmp("1", ValueForKey(mapent, "terrain")))
-        {
-            SetTerrainTextures();
-        }
-        MoveBrushesToWorld(mapent);
-        // We do NOT decrement num_entities here.
-        // This keeps the entity index valid so that DrawSurfaceForSide can
-        // resolve the sidecar overrides before the entity is stripped from the BSP.
-        return qtrue;
-    }
-
-    // func_light entities spawn a spotlight for every drawable brush side
-    if (!strcmp("func_light", ValueForKey(mapent, "classname")))
-    {
-        entity_t temp;
-
-        if (!strcmp("surface", ValueForKey(mapent, "type")) || 
-            !strcmp("surfacelight", ValueForKey(mapent, "type"))) 
-        {
-            MoveBrushesToWorld(mapent);
-            // We do NOT decrement num_entities here. 
-            // This keeps the entity index valid so that DrawSurfaceForSide can 
-            // resolve the sidecar overrides before the entity is stripped from the BSP.
-        } 
-        else 
-        {
-            // Copy the entity and decrement num_entities so that the generated
-            // lights overwrite the func_light slot in the global entities array.
-            temp = *mapent;
-            num_entities--;
-
-            ProcessFuncLight(&temp);
-            
-            // Fix entitynum pointing to the wrong entity slot after decrement
-            for (bspbrush_t *b = temp.brushes; b; b = b->next) {
-                b->entitynum = 0; 
-            }
-            MoveBrushesToWorld(&temp);
-        }
-        return qtrue;
-    }
-
     return qtrue;
+}
+
+//===================================================================
+
+/*
+================
+ProcessMapEntities
+
+Phase 2 of map loading. Iterates over the raw in-memory entities and executes
+all Quake 3 entity rules (func_group brush transfers, func_light spotlight
+generation, group_info disposal).
+
+IMPORTANT: Must never compact or re-index the entities[] array.
+b->entitynum indices are permanently stamped during Phase 1.
+================
+*/
+void ProcessMapEntities(void)
+{
+    int i;
+    // Cache count: ProcessFuncLight appends new light entities to the end.
+    // We must NOT process those newly appended entities in this loop.
+    int initial_num_entities = num_entities;
+
+    qprintf("--- ProcessMapEntities ---\n");
+
+    for (i = 0; i < initial_num_entities; i++)
+    {
+        entity_t *mapent = &entities[i];
+        const char *classname = ValueForKey(mapent, "classname");
+
+        // 1. group_info: editor-only metadata. Free memory (fix 25-year-old leak)
+        //    and null out epairs so UnparseEntities silently drops this slot.
+        //    No index compaction — slot stays at position i.
+        if (!strcmp("group_info", classname))
+        {
+            epair_t *ep, *next_ep;
+            for (ep = mapent->epairs; ep; ep = next_ep)
+            {
+                next_ep = ep->next;
+                free(ep->key);
+                free(ep->value);
+                free(ep);
+            }
+            mapent->epairs = NULL;
+            continue;
+        }
+
+        // 2. func_group: brushes move to worldspawn.
+        //    Entity slot is kept so b->entitynum lookups in surface.c remain valid
+        //    for sidecar property resolution (decalgroup, lightmapSampleSize, etc.).
+        if (!strcmp("func_group", classname))
+        {
+            if (!strcmp("1", ValueForKey(mapent, "terrain")))
+                SetTerrainTextures();
+            MoveBrushesToWorld(mapent); // sets mapent->brushes/patches = NULL
+            continue;
+        }
+
+        // 3. func_light
+        if (!strcmp("func_light", classname))
+        {
+            const char *type = ValueForKey(mapent, "type");
+
+            if (!strcmp("surface", type) || !strcmp("surfacelight", type))
+            {
+                // Surface lights: move brushes to world, keep entity slot alive
+                // for sidecar property lookup in DrawSurfaceForSide.
+                MoveBrushesToWorld(mapent);
+            }
+            else
+            {
+                // Point/spot lights: generate child light entities.
+                // Pass mapent directly (NOT a copy) so ProcessFuncLight can
+                // read its epairs. Do NOT decrement num_entities — slot is frozen.
+                // SpawnLightEntity appends to entities[num_entities++].
+                ProcessFuncLight(mapent);
+
+                // Patch entitynum on the func_light's brushes before moving them.
+                // The func_light slot will be silently dropped by UnparseEntities
+                // (no model key), so these brushes must point to worldspawn (0).
+                for (bspbrush_t *b = mapent->brushes; b; b = b->next)
+                    b->entitynum = 0;
+
+                MoveBrushesToWorld(mapent);
+            }
+            continue;
+        }
+    }
 }
 
 //===================================================================
@@ -1462,6 +1495,8 @@ void LoadMapFile(char *filename)
     {
     }
     _printf("--- LoadMapFile: %i entities loaded ---\n", num_entities);
+
+    ProcessMapEntities();
 
     ClearBounds(map_mins, map_maxs);
     for (b = entities[0].brushes; b; b = b->next)
