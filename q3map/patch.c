@@ -21,6 +21,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "qbsp.h"
 
+void FreeParseMesh(parseMesh_t *pm)
+{
+    FreeEpairs(pm->epairs);
+    free(pm->mesh.verts);
+    free(pm);
+}
+
 /*
 ================
 DrawSurfaceForMesh
@@ -326,20 +333,18 @@ void PatchMapDrawSurfs(entity_t *e)
         ds->shaderInfo = scan->shaderInfo;
         
         memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
-        strncpy(ds->decalgroup, ValueForKey(&entities[scan->entitynum], "decalgroup"), sizeof(ds->decalgroup) - 1);
+        strncpy(ds->decalgroup, ValueForEpair(scan->epairs, "decalgroup"), sizeof(ds->decalgroup) - 1);
 
         // Resolve sample size hierarchy
         ds->samplesize = game->defaultSampleSize; // Start with global default
-        
-        entity_t *originalEnt = &entities[scan->entitynum];
         
         if (scan->shaderInfo && scan->shaderInfo->lightmapSampleSize > 0)
         {
             ds->samplesize = scan->shaderInfo->lightmapSampleSize;
         }
-        const char *ent_sample_str = ValueForKey(originalEnt, "lightmapsamplesize");
+        const char *ent_sample_str = ValueForEpair(scan->epairs, "lightmapsamplesize");
         if (!ent_sample_str[0])
-            ent_sample_str = ValueForKey(originalEnt, "samplesize");
+            ent_sample_str = ValueForEpair(scan->epairs, "samplesize");
 
         if (ent_sample_str[0])
         {
@@ -376,13 +381,13 @@ void PatchMapDrawSurfs(entity_t *e)
             ds->smoothingRadius = scan->shaderInfo->minSmoothRadius;
         }
 
-        const char *rad_str = ValueForKey(originalEnt, "smooth");
+        const char *rad_str = ValueForEpair(scan->epairs, "smooth");
         if (rad_str[0])
         {
             ds->smoothingRadius = atof(rad_str);
         }
 
-        const char *vcolStr = ValueForKey(originalEnt, "vertexcolor");
+        const char *vcolStr = ValueForEpair(scan->epairs, "vertexcolor");
         if (vcolStr[0])
         {
             ds->overrideVertexColor = 1;
@@ -390,12 +395,12 @@ void PatchMapDrawSurfs(entity_t *e)
         }
 
         // upscale override
-        const char *upscaleStr = ValueForKey(originalEnt, "upscale");
+        const char *upscaleStr = ValueForEpair(scan->epairs, "upscale");
         if (upscaleStr[0])
             ds->upscale = atoi(upscaleStr);
 
         // supersample override
-        const char *ssStr = ValueForKey(originalEnt, "supersample");
+        const char *ssStr = ValueForEpair(scan->epairs, "supersample");
         if (ssStr[0])
         {
             float ssVal = atof(ssStr);

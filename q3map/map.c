@@ -1070,7 +1070,7 @@ void ParseBrush(void)
     // allow detail brushes to be removed
     if (nodetail && (buildBrush->contents & CONTENTS_DETAIL))
     {
-        FreeBrush(buildBrush);
+        buildBrush->numsides = 0;
         return;
     }
 
@@ -1078,7 +1078,7 @@ void ParseBrush(void)
     if (nowater && (buildBrush->contents &
                     (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER)))
     {
-        FreeBrush(buildBrush);
+        buildBrush->numsides = 0;
         return;
     }
 
@@ -1086,6 +1086,43 @@ void ParseBrush(void)
     if (!b)
     {
         return;
+    }
+}
+
+epair_t *CopyEpairs(epair_t *e)
+{
+    epair_t *head = NULL;
+    epair_t **tail = &head;
+
+    for (; e; e = e->next)
+    {
+        if (!strcmp(e->key, "classname") || !strcmp(e->key, "origin"))
+        {
+            continue;
+        }
+
+        epair_t *newep = malloc(sizeof(*newep));
+        newep->key = copystring(e->key);
+        newep->value = copystring(e->value);
+        newep->next = NULL;
+
+        *tail = newep;
+        tail = &newep->next;
+    }
+
+    return head;
+}
+
+void FreeEpairs(epair_t *e)
+{
+    epair_t *next;
+
+    for (; e; e = next)
+    {
+        next = e->next;
+        free(e->key);
+        free(e->value);
+        free(e);
     }
 }
 
@@ -1375,6 +1412,16 @@ qboolean ParseMapEntity(void)
         AdjustBrushesForOrigin(mapent);
     }
 
+    // Assign a copy of the entity epairs to all local geometry
+    for (bspbrush_t *b = mapent->brushes; b; b = b->next)
+    {
+        b->epairs = CopyEpairs(mapent->epairs);
+    }
+    for (parseMesh_t *pm = mapent->patches; pm; pm = pm->next)
+    {
+        pm->epairs = CopyEpairs(mapent->epairs);
+    }
+
     return qtrue;
 }
 
@@ -1411,14 +1458,7 @@ void ProcessMapEntities(void)
         //    No index compaction — slot stays at position i.
         if (!strcmp("group_info", classname))
         {
-            epair_t *ep, *next_ep;
-            for (ep = mapent->epairs; ep; ep = next_ep)
-            {
-                next_ep = ep->next;
-                free(ep->key);
-                free(ep->value);
-                free(ep);
-            }
+            FreeEpairs(mapent->epairs);
             mapent->epairs = NULL;
             continue;
         }
@@ -1431,6 +1471,8 @@ void ProcessMapEntities(void)
             if (!strcmp("1", ValueForKey(mapent, "terrain")))
                 SetTerrainTextures();
             MoveBrushesToWorld(mapent); // sets mapent->brushes/patches = NULL
+            FreeEpairs(mapent->epairs);
+            mapent->epairs = NULL;
             continue;
         }
 
@@ -1444,6 +1486,8 @@ void ProcessMapEntities(void)
                 // Surface lights: move brushes to world, keep entity slot alive
                 // for sidecar property lookup in DrawSurfaceForSide.
                 MoveBrushesToWorld(mapent);
+                FreeEpairs(mapent->epairs);
+                mapent->epairs = NULL;
             }
             else
             {

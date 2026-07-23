@@ -114,6 +114,12 @@ void UnparseEntities(void);
 void SetKeyValue(entity_t *ent, const char *key, const char *value);
 void RemoveKeyValue(entity_t *ent, const char *key);
 qboolean KeyMatches(const char *keyInMap, const char *keyRequested);
+
+const char *ValueForEpair(epair_t *epairs, const char *key);
+vec_t FloatForEpair(epair_t *epairs, const char *key);
+void GetVectorForEpair(epair_t *epairs, const char *key, vec3_t vec);
+void SetEpairValue(epair_t **epairs, const char *key, const char *value);
+
 const char *ValueForKey(const entity_t *ent, const char *key);
 // will return "" if not present
 

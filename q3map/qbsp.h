@@ -64,6 +64,7 @@ typedef struct parseMesh_s
     struct parseMesh_s *groupChain;
     
     int entitynum; // retains the original entity index (e.g. func_group)
+    epair_t *epairs; // Decoupled local properties
 } parseMesh_t;
 
 typedef struct bspface_s
@@ -118,6 +119,7 @@ typedef struct bspbrush_s
 
     int entitynum; // editor numbering
     int brushnum;  // editor numbering
+    epair_t *epairs; // Decoupled local properties
 
     struct shaderInfo_s *contentShader;
 
@@ -317,6 +319,11 @@ bspbrush_t *AllocBrush(int numsides);
 void FreeBrush(bspbrush_t *brushes);
 void FreeBrushList(bspbrush_t *brushes);
 bspbrush_t *CopyBrush(bspbrush_t *brush);
+
+void FreeParseMesh(parseMesh_t *pm);
+
+epair_t *CopyEpairs(epair_t *e);
+void FreeEpairs(epair_t *e);
 
 
 void PrintBrush(bspbrush_t *brush);

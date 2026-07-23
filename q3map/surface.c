@@ -84,7 +84,7 @@ DrawSurfaceForSide
 ResolveSurfaceExtraProperties
 =================
 */
-static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
+static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
 {
     // Resolve smoothing radius
     float globalSmooth = game->defaultSmoothRadius;
@@ -95,78 +95,69 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     if (ds->shaderInfo && ds->shaderInfo->minSmoothRadius >= 0.0f && ds->shaderInfo->minSmoothRadius > globalSmooth)
         ds->smoothingRadius = ds->shaderInfo->minSmoothRadius;
 
-    const char *radiusStr = ValueForKey(e, "smooth");
+    const char *radiusStr = ValueForEpair(epairs, "smooth");
     if (radiusStr[0])
         ds->smoothingRadius = atof(radiusStr);
 
-    // Resolve lighting overrides (func_light support)
-    // We inherit emission overrides if the entity is a func_light or a light.
-    // In some versions of the compiler, func_light is converted to a light entity
-    // at parsing time while keeping its brushes, so we must support both.
-    const char *classname = ValueForKey(e, "classname");
-    if (!Q_stricmp(classname, "func_light") || !Q_stricmp(classname, "light"))
+    // Resolve lighting overrides
+    const char *type = ValueForEpair(epairs, "type");
+    if (!Q_stricmp(type, "surface") || !Q_stricmp(type, "surfacelight"))
     {
-        // Only inherit emission overrides if explicitly marked as a surface light.
-        // For spotlights (type "spot" or default), these keys are for the spawned point lights.
-        const char *type = ValueForKey(e, "type");
-        if (!Q_stricmp(type, "surface") || !Q_stricmp(type, "surfacelight"))
+        const char *lightStr = ValueForEpair(epairs, "light");
+        if (lightStr[0])
+            ds->lightValue = atof(lightStr);
+
+        const char *colorStr = ValueForEpair(epairs, "color");
+        if (colorStr[0])
+            ParseColor(colorStr, ds->lightColor);
+
+        const char *bsStr = ValueForEpair(epairs, "backsplash");
+        if (bsStr[0])
+            ds->backsplashFraction = atof(bsStr) * 0.01f; // Convert percentage to fraction
+
+        const char *subdivideStr = ValueForEpair(epairs, "subdivide");
+        if (subdivideStr[0])
+            ds->lightSubdivide = atof(subdivideStr);
+
+        const char *cutoffStr = ValueForEpair(epairs, "cutoff");
+        if (cutoffStr[0])
+            ds->cutoff = atof(cutoffStr);
+
+        const char *fadeoutStr = ValueForEpair(epairs, "fadeout");
+        if (fadeoutStr[0])
+            ds->fadeout = atof(fadeoutStr);
+
+        const char *nodeluxeStr = ValueForEpair(epairs, "nodeluxe");
+        if (nodeluxeStr[0])
+            ds->noDeluxeInfluence = atoi(nodeluxeStr);
+
+        const char *bsNodeluxeStr = ValueForEpair(epairs, "backsplash_nodeluxe");
+        if (bsNodeluxeStr[0])
+            ds->noDeluxeInfluenceBacksplash = atoi(bsNodeluxeStr);
+
+        const char *attStr = ValueForEpair(epairs, "attenuation");
+        if (attStr[0])
         {
-            const char *lightStr = ValueForKey(e, "light");
-            if (lightStr[0])
-                ds->lightValue = atof(lightStr);
-
-            const char *colorStr = ValueForKey(e, "color");
-            if (colorStr[0])
-                ParseColor(colorStr, ds->lightColor);
-
-            const char *bsStr = ValueForKey(e, "backsplash");
-            if (bsStr[0])
-                ds->backsplashFraction = atof(bsStr) * 0.01f; // Convert percentage to fraction
-
-            const char *subdivideStr = ValueForKey(e, "subdivide");
-            if (subdivideStr[0])
-                ds->lightSubdivide = atof(subdivideStr);
-
-            const char *cutoffStr = ValueForKey(e, "cutoff");
-            if (cutoffStr[0])
-                ds->cutoff = atof(cutoffStr);
-
-            const char *fadeoutStr = ValueForKey(e, "fadeout");
-            if (fadeoutStr[0])
-                ds->fadeout = atof(fadeoutStr);
-
-            const char *nodeluxeStr = ValueForKey(e, "nodeluxe");
-            if (nodeluxeStr[0])
-                ds->noDeluxeInfluence = atoi(nodeluxeStr);
-
-            const char *bsNodeluxeStr = ValueForKey(e, "backsplash_nodeluxe");
-            if (bsNodeluxeStr[0])
-                ds->noDeluxeInfluenceBacksplash = atoi(bsNodeluxeStr);
-
-            const char *attStr = ValueForKey(e, "attenuation");
-            if (attStr[0])
+            ds->hasAttenuationOverride = qtrue;
+            if (!Q_stricmp(attStr, "soft"))
+                ds->attenuationModel = ATTENUATION_INVERSE;
+            else if (!Q_stricmp(attStr, "linear"))
+                ds->attenuationModel = ATTENUATION_LINEAR;
+            else if (!Q_stricmp(attStr, "standard"))
+                ds->attenuationModel = ATTENUATION_INVERSE_SQUARE;
+            else if (!Q_stricmp(attStr, "unreal"))
+                ds->attenuationModel = ATTENUATION_UNREAL;
+            else if (!Q_stricmp(attStr, "smoothstep"))
+                ds->attenuationModel = ATTENUATION_SMOOTHSTEP;
+            else
             {
-                ds->hasAttenuationOverride = qtrue;
-                if (!Q_stricmp(attStr, "soft"))
-                    ds->attenuationModel = ATTENUATION_INVERSE;
-                else if (!Q_stricmp(attStr, "linear"))
-                    ds->attenuationModel = ATTENUATION_LINEAR;
-                else if (!Q_stricmp(attStr, "standard"))
-                    ds->attenuationModel = ATTENUATION_INVERSE_SQUARE;
-                else if (!Q_stricmp(attStr, "unreal"))
-                    ds->attenuationModel = ATTENUATION_UNREAL;
-                else if (!Q_stricmp(attStr, "smoothstep"))
-                    ds->attenuationModel = ATTENUATION_SMOOTHSTEP;
-                else
-                {
-                    _printf("WARNING: Unknown attenuation mode '%s' on func_light entity\n", attStr);
-                    ds->hasAttenuationOverride = qfalse;
-                }
+                _printf("WARNING: Unknown attenuation mode '%s'\n", attStr);
+                ds->hasAttenuationOverride = qfalse;
             }
         }
     }
     // Resolve vertexcolor override (func_group, misc_model, etc)
-    const char *vcolStr = ValueForKey(e, "vertexcolor");
+    const char *vcolStr = ValueForEpair(epairs, "vertexcolor");
     if (vcolStr[0])
     {
         ds->overrideVertexColor = 1;
@@ -174,12 +165,12 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     }
 
     // Resolve upscale
-    const char *upscaleStr = ValueForKey(e, "upscale");
+    const char *upscaleStr = ValueForEpair(epairs, "upscale");
     if (upscaleStr[0])
         ds->upscale = atoi(upscaleStr);
 
     // Resolve supersample
-    const char *ssStr = ValueForKey(e, "supersample");
+    const char *ssStr = ValueForEpair(epairs, "supersample");
     if (ssStr[0])
     {
         float ssVal = atof(ssStr);
@@ -190,16 +181,16 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, entity_t *e)
     }
 
     // Resolve enforceSampleSize override
-    const char *enforceStr = ValueForKey(e, "enforcesamplesize");
+    const char *enforceStr = ValueForEpair(epairs, "enforcesamplesize");
     if (enforceStr[0])
         ds->enforceSampleSize = atoi(enforceStr);
 
     // Resolve chamfer width overrides
-    const char *chamferWStr = ValueForKey(e, "chamfer_convexwidth");
+    const char *chamferWStr = ValueForEpair(epairs, "chamfer_convexwidth");
     if (chamferWStr[0])
         ds->chamferConvexWidth = atof(chamferWStr);
 
-    const char *chamferCStr = ValueForKey(e, "chamfer_concavewidth");
+    const char *chamferCStr = ValueForEpair(epairs, "chamfer_concavewidth");
     if (chamferCStr[0])
         ds->chamferConcaveWidth = atof(chamferCStr);
 }
@@ -237,7 +228,7 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     ds->fogNum = -1;
 
     memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
-    strncpy(ds->decalgroup, ValueForKey(&entities[b->entitynum], "decalgroup"), sizeof(ds->decalgroup) - 1);
+    strncpy(ds->decalgroup, ValueForEpair(b->epairs, "decalgroup"), sizeof(ds->decalgroup) - 1);
 
     // Resolve sample size hierarchy
     if (si && si->lightmapSampleSize > 0)
@@ -275,7 +266,7 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     ds->lightmapScale = 1.0f;
 
     // Resolve sidecar properties from parent entity
-    ResolveSurfaceExtraProperties(ds, &entities[b->entitynum]);
+    ResolveSurfaceExtraProperties(ds, b->epairs);
 
     ds->numVerts = w->numpoints;
     ds->verts = malloc(ds->numVerts * sizeof(*ds->verts));

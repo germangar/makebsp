@@ -70,6 +70,7 @@ void FreeBrush(bspbrush_t *brushes)
     for (i = 0; i < brushes->numsides; i++)
         if (brushes->sides[i].winding)
             FreeWinding(brushes->sides[i].winding);
+    FreeEpairs(brushes->epairs);
     free(brushes);
 }
 
@@ -107,6 +108,7 @@ bspbrush_t *CopyBrush(bspbrush_t *brush)
 
     newbrush = AllocBrush(brush->numsides);
     memcpy(newbrush, brush, size);
+    newbrush->epairs = CopyEpairs(brush->epairs);
 
     for (i = 0; i < brush->numsides; i++)
     {
@@ -798,6 +800,7 @@ void SplitBrush(bspbrush_t *brush, int planenum, bspbrush_t **front,
         b[i]->numsides = 0;
         b[i]->next = NULL;
         b[i]->original = brush->original;
+        b[i]->epairs = CopyEpairs(brush->epairs);
     }
 
     // split all the current windings

@@ -985,8 +985,7 @@ clear_geometry:
             for (pm = e->patches; pm; pm = next_pm)
             {
                 next_pm = pm->next;
-                free(pm->mesh.verts); // Free Mesh verts (mesh itself is embedded in pm)
-                free(pm);
+                FreeParseMesh(pm);
             }
         }
         e->patches = NULL;

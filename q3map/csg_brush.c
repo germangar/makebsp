@@ -101,6 +101,7 @@ static qboolean CSGMergeBrushes(bspbrush_t *a, bspbrush_t *b, bspbrush_t **out)
     c->opaque = a->opaque;
     c->contents = a->contents;
     c->contentShader = a->contentShader;
+    c->epairs = CopyEpairs(a->epairs);
 
     // 3. Create windings for the candidate brush
     if (!CreateBrushWindings(c))

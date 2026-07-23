@@ -869,11 +869,11 @@ void PrintEntity(const entity_t *ent)
     }
 }
 
-void SetKeyValue(entity_t *ent, const char *key, const char *value)
+void SetEpairValue(epair_t **epairs, const char *key, const char *value)
 {
     epair_t *ep;
 
-    for (ep = ent->epairs; ep; ep = ep->next)
+    for (ep = *epairs; ep; ep = ep->next)
     {
         if (!strcmp(ep->key, key))
         {
@@ -883,10 +883,15 @@ void SetKeyValue(entity_t *ent, const char *key, const char *value)
         }
     }
     ep = malloc(sizeof(*ep));
-    ep->next = ent->epairs;
-    ent->epairs = ep;
+    ep->next = *epairs;
+    *epairs = ep;
     ep->key = copystring(key);
     ep->value = copystring(value);
+}
+
+void SetKeyValue(entity_t *ent, const char *key, const char *value)
+{
+    SetEpairValue(&ent->epairs, key, value);
 }
 
 void RemoveKeyValue(entity_t *ent, const char *key)
@@ -960,11 +965,11 @@ qboolean KeyMatches(const char *keyInMap, const char *keyRequested)
     return qfalse;
 }
 
-const char *ValueForKey(const entity_t *ent, const char *key)
+const char *ValueForEpair(epair_t *epairs, const char *key)
 {
     epair_t *ep;
 
-    for (ep = ent->epairs; ep; ep = ep->next)
+    for (ep = epairs; ep; ep = ep->next)
     {
         if (KeyMatches(ep->key, key))
         {
@@ -975,20 +980,30 @@ const char *ValueForKey(const entity_t *ent, const char *key)
     return "";
 }
 
-vec_t FloatForKey(const entity_t *ent, const char *key)
+const char *ValueForKey(const entity_t *ent, const char *key)
+{
+    return ValueForEpair(ent->epairs, key);
+}
+
+vec_t FloatForEpair(epair_t *epairs, const char *key)
 {
     const char *k;
 
-    k = ValueForKey(ent, key);
+    k = ValueForEpair(epairs, key);
     return atof(k);
 }
 
-void GetVectorForKey(const entity_t *ent, const char *key, vec3_t vec)
+vec_t FloatForKey(const entity_t *ent, const char *key)
+{
+    return FloatForEpair(ent->epairs, key);
+}
+
+void GetVectorForEpair(epair_t *epairs, const char *key, vec3_t vec)
 {
     const char *k;
     double v1, v2, v3;
 
-    k = ValueForKey(ent, key);
+    k = ValueForEpair(epairs, key);
 
     // scanf into doubles, then assign, so it is vec_t size independent
     v1 = v2 = v3 = 0;
@@ -996,4 +1011,9 @@ void GetVectorForKey(const entity_t *ent, const char *key, vec3_t vec)
     vec[0] = v1;
     vec[1] = v2;
     vec[2] = v3;
+}
+
+void GetVectorForKey(const entity_t *ent, const char *key, vec3_t vec)
+{
+    GetVectorForEpair(ent->epairs, key, vec);
 }
