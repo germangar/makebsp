@@ -1378,6 +1378,8 @@ void CreateTriangleModelCollision(entity_t *parent)
             entities[num_entities] = *(g->entity);
 
             // Update entity reference for all attached brushes
+            // NOTE: Generated collision brushes intentionally have epairs == NULL.
+            // They do not natively inherit map entity properties, and FreeEpairs safely ignores NULLs.
             for (bspbrush_t *b = entities[num_entities].brushes; b; b = b->next)
             {
                 b->entitynum = num_entities;

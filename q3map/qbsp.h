@@ -63,7 +63,7 @@ typedef struct parseMesh_s
     qboolean grouped; // used during shared edge grouping
     struct parseMesh_s *groupChain;
     
-    int entitynum; // retains the original entity index (e.g. func_group)
+    int entitynum; // original entity index for error diagnostics and collision grouping
     epair_t *epairs; // Decoupled local properties
 } parseMesh_t;
 
@@ -117,7 +117,7 @@ typedef struct bspbrush_s
 {
     struct bspbrush_s *next;
 
-    int entitynum; // editor numbering
+    int entitynum; // original entity index for error diagnostics and collision grouping
     int brushnum;  // editor numbering
     epair_t *epairs; // Decoupled local properties
 

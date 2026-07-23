@@ -814,6 +814,85 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
 
 /*
 ====================
+ResolveMiscModelSurfaceProperties
+
+Reads entity keys and applies them to the generated draw surface.
+====================
+*/
+static void ResolveMiscModelSurfaceProperties(mapDrawSurface_t *ds, entity_t *entity, modelInstance_t *inst)
+{
+    strncpy(ds->decalgroup, ValueForKey(entity, "decalgroup"), sizeof(ds->decalgroup) - 1);
+
+    const char *ssStr = ValueForKey(entity, "supersample");
+    if (ssStr[0]) {
+        float ssVal = atof(ssStr);
+        ds->superSampleRadius = (ssVal < 0.0f) ? 0.0f : ssVal;
+    } else {
+        ds->superSampleRadius = -1.0f;
+    }
+
+    const char *radStr = ValueForKey(entity, "smooth");
+    if (radStr[0]) {
+        ds->smoothingRadius = atof(radStr);
+    } else {
+        ds->smoothingRadius = -1.0f;
+    }
+    
+    // NOTE: This uses a global fallback to entities[0] because misc_model drawsurfaces 
+    // are not backed by brushes and do not natively inherit worldspawn epairs.
+    float globalSmooth = game->defaultSmoothRadius;
+    const char *wsSmooth = ValueForKey(&entities[0], "smooth");
+    if (wsSmooth[0])
+        globalSmooth = atof(wsSmooth);
+        
+    if (ds->smoothingRadius < 0.0f && ds->shaderInfo && ds->shaderInfo->minSmoothRadius >= 0.0f && ds->shaderInfo->minSmoothRadius > globalSmooth)
+        ds->smoothingRadius = ds->shaderInfo->minSmoothRadius;
+
+    const char *vcolStr = ValueForKey(entity, "vertexcolor");
+    if (vcolStr[0]) {
+        ds->overrideVertexColor = 1;
+        ParseColor(vcolStr, ds->vertexColor);
+    } else {
+        ds->overrideVertexColor = 0;
+    }
+
+    const char *upscaleStr = ValueForKey(entity, "upscale");
+    if (upscaleStr[0]) ds->upscale = atoi(upscaleStr);
+    else ds->upscale = 0;
+
+    const char *csStr = ValueForKey(entity, "castshadows");
+    if (!csStr[0]) csStr = ValueForKey(entity, "cs"); // alias
+    if (csStr[0]) ds->castShadows = atoi(csStr);
+    else ds->castShadows = -1;
+
+    // Resolve sample size hierarchy
+    // NOTE: samplesize clamping here intentionally differs from surface.c. 
+    // misc_model uses exact fractional values for efficient xatlas UV packing, 
+    // whereas planar brushes in surface.c must snap to power-of-2 for grid alignment.
+    ds->samplesize = game->defaultSampleSize; // Start with global default
+    if (ds->shaderInfo && ds->shaderInfo->lightmapSampleSize > 0)
+    {
+        ds->samplesize = ds->shaderInfo->lightmapSampleSize;
+    }
+
+    // Fast mode: ignore requests for higher resolution than the compilation setting
+    if (g_fast && ds->samplesize < game->defaultSampleSize)
+    {
+        ds->samplesize = game->defaultSampleSize;
+    }
+    
+    // Apply maxSampleSize floor (trisoup: exact fractional value)
+    if (!g_fast && ds->shaderInfo && ds->shaderInfo->maxSampleSize > 0.0f && ds->shaderInfo->maxSampleSize < ds->samplesize)
+    {
+        ds->samplesize = ds->shaderInfo->maxSampleSize;
+    }
+
+    // Entity-level lightmapscale for models
+    ds->lightmapScale = inst->lightmapScale;
+}
+
+/*
+====================
 LoadTriangleModels
 
 Initial pass to load and transform all misc_model entities.
@@ -941,50 +1020,6 @@ void LoadTriangleModels(entity_t *eparent)
             strncpy(inst->modelName, model, MAX_QPATH - 1);
             inst->modelName[MAX_QPATH - 1] = '\0';
             inst->creator = entity;
-
-            // smoothing_radius override
-            float smoothingRadius = -1.0f;
-            const char *radStr = ValueForKey(entity, "smooth");
-            if (radStr[0])
-            {
-                smoothingRadius = atof(radStr);
-            }
-
-            // vertexcolor override for all surfaces of this model instance
-            int overrideVertexColor = 0;
-            vec3_t vertexColor;
-            VectorClear(vertexColor);
-            const char *vcolStr = ValueForKey(entity, "vertexcolor");
-            if (vcolStr[0])
-            {
-                overrideVertexColor = 1;
-                ParseColor(vcolStr, vertexColor);
-            }
-
-            int upscale = 0;
-            const char *upscaleStr = ValueForKey(entity, "upscale");
-            if (upscaleStr[0])
-            {
-                upscale = atoi(upscaleStr);
-            }
-
-            int castShadows = -1;
-            const char *csStr = ValueForKey(entity, "castshadows");
-            if (!csStr[0]) csStr = ValueForKey(entity, "cs"); // alias
-            if (csStr[0])
-            {
-                castShadows = atoi(csStr);
-            }
-
-            // supersample override
-            float superSampleRadius = -1.0f;
-            const char *ssStr = ValueForKey(entity, "supersample");
-            if (ssStr[0])
-            {
-                superSampleRadius = atof(ssStr);
-                if (superSampleRadius < 0.0f)
-                    superSampleRadius = 0.0f;
-            }
 
             inst->lightmapScale = 1.0f;
             const char *ent_scale_str = ValueForKey(entity, "lightmapscale");
@@ -1254,51 +1289,12 @@ void LoadTriangleModels(entity_t *eparent)
                     inst->drawSurfs[inst->numDrawSurfs++] = ds;
                     ds->miscModel = qtrue;
                     
-                    memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
-                    strncpy(ds->decalgroup, ValueForKey(entity, "decalgroup"), sizeof(ds->decalgroup) - 1);
-
-                    ds->superSampleRadius = superSampleRadius;
-                    ds->smoothingRadius = smoothingRadius;
-                    
-                    float globalSmooth = game->defaultSmoothRadius;
-                    const char *wsSmooth = ValueForKey(&entities[0], "smooth");
-                    if (wsSmooth[0])
-                        globalSmooth = atof(wsSmooth);
-                    
-                    if (ds->smoothingRadius < 0.0f && si && si->minSmoothRadius >= 0.0f && si->minSmoothRadius > globalSmooth)
-                        ds->smoothingRadius = si->minSmoothRadius;
-                        
-                    ds->overrideVertexColor = overrideVertexColor;
-                    ds->upscale = upscale;
-                    ds->castShadows = castShadows;
-                    if (overrideVertexColor)
-                        VectorCopy(vertexColor, ds->vertexColor);
                     ds->planeNum = -1;
                     ds->shaderInfo = si;
                     ds->lightmapNum = -1;
                     ds->fogNum = -1;
 
-                    // Resolve sample size hierarchy (must be AFTER memset!)
-                    ds->samplesize = game->defaultSampleSize; // Start with global default
-                    if (si && si->lightmapSampleSize > 0)
-                    {
-                        ds->samplesize = si->lightmapSampleSize;
-                    }
-
-                    // Fast mode: ignore requests for higher resolution than the compilation setting
-                    if (g_fast && ds->samplesize < game->defaultSampleSize)
-                    {
-                        ds->samplesize = game->defaultSampleSize;
-                    }
-                    
-                    // Apply maxSampleSize floor (trisoup: exact fractional value)
-                    if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < ds->samplesize)
-                    {
-                        ds->samplesize = si->maxSampleSize;
-                    }
-
-                    // Entity-level lightmapscale for models
-                    ds->lightmapScale = inst->lightmapScale;
+                    ResolveMiscModelSurfaceProperties(ds, entity, inst);
 
                     _printf("Final samplesize for misc_model: %.1f, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
 

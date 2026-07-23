@@ -253,6 +253,10 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     }
     
     // Apply maxSampleSize floor (planar: snap to next power of 2)
+    // NOTE: samplesize clamping intentionally differs between planar brushes and misc_model.
+    // Planar lightmaps rely on strict grid alignment to prevent seams between adjacent walls, 
+    // requiring power-of-2 (or very clean integer) samplesizes. misc_model uses exact fractional 
+    // values for more efficient arbitrary UV packing. Do not unify these routines.
     if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < ds->samplesize)
     {
         int minPow2 = 1;

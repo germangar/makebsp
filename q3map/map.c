@@ -1464,13 +1464,21 @@ void ProcessMapEntities(void)
         }
 
         // 2. func_group: brushes move to worldspawn.
-        //    Entity slot is kept so b->entitynum lookups in surface.c remain valid
-        //    for sidecar property resolution (decalgroup, lightmapSampleSize, etc.).
         if (!strcmp("func_group", classname))
         {
-            if (!strcmp("1", ValueForKey(mapent, "terrain")))
-                SetTerrainTextures();
             MoveBrushesToWorld(mapent); // sets mapent->brushes/patches = NULL
+            FreeEpairs(mapent->epairs);
+            mapent->epairs = NULL;
+            continue;
+        }
+
+        // 2b. func_terrain: Dedicated terrain entity.
+        //     Generates terrain drawsurfaces from the child brushes, then moves
+        //     them to worldspawn as invisible collision.
+        if (!strcmp("func_terrain", classname))
+        {
+            SetTerrainTextures();
+            MoveBrushesToWorld(mapent);
             FreeEpairs(mapent->epairs);
             mapent->epairs = NULL;
             continue;
@@ -1484,7 +1492,6 @@ void ProcessMapEntities(void)
             if (!strcmp("surface", type) || !strcmp("surfacelight", type))
             {
                 // Surface lights: move brushes to world, keep entity slot alive
-                // for sidecar property lookup in DrawSurfaceForSide.
                 MoveBrushesToWorld(mapent);
                 FreeEpairs(mapent->epairs);
                 mapent->epairs = NULL;
@@ -1496,12 +1503,6 @@ void ProcessMapEntities(void)
                 // read its epairs. Do NOT decrement num_entities — slot is frozen.
                 // SpawnLightEntity appends to entities[num_entities++].
                 ProcessFuncLight(mapent);
-
-                // Patch entitynum on the func_light's brushes before moving them.
-                // The func_light slot will be silently dropped by UnparseEntities
-                // (no model key), so these brushes must point to worldspawn (0).
-                for (bspbrush_t *b = mapent->brushes; b; b = b->next)
-                    b->entitynum = 0;
 
                 MoveBrushesToWorld(mapent);
             }
