@@ -1959,6 +1959,11 @@ void MergeAdjacentTrisoups(entity_t *e)
         group[groupSize++] = i;
 
         float groupArea = ComputeSurfaceArea3D(dsA);
+        vec3_t groupMins, groupMaxs;
+        ClearBounds(groupMins, groupMaxs);
+        for (int v = 0; v < dsA->numVerts; v++)
+            AddPointToBounds(dsA->verts[v].xyz, groupMins, groupMaxs);
+
         qboolean allPlanar = dsA->isPlanar;
 
         for (int head = 0; head < groupSize; head++)
@@ -1989,15 +1994,35 @@ void MergeAdjacentTrisoups(entity_t *e)
                 float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
                 float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
                 float scaleVal = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
-                int targetRes = (int)ceil(sqrt(candidateArea) / sampleSizeVal * scaleVal);
-
                 int limit = LIGHTMAP_WIDTH - 2;
-                if (targetRes > limit)
+
+                // 1. Check 60% Area Rule
+                float maxArea = (limit * limit) * 0.6f;
+                float candidateAreaRes = (candidateArea / (sampleSizeVal * sampleSizeVal)) * (scaleVal * scaleVal);
+                if (candidateAreaRes > maxArea)
+                    continue;
+
+                // 2. Check Linear Length Rule via Bounding Box
+                vec3_t candidateMins, candidateMaxs;
+                VectorCopy(groupMins, candidateMins);
+                VectorCopy(groupMaxs, candidateMaxs);
+                for (int v = 0; v < dsB->numVerts; v++)
+                    AddPointToBounds(dsB->verts[v].xyz, candidateMins, candidateMaxs);
+                
+                vec3_t size;
+                VectorSubtract(candidateMaxs, candidateMins, size);
+                float maxDimension = size[0];
+                if (size[1] > maxDimension) maxDimension = size[1];
+                if (size[2] > maxDimension) maxDimension = size[2];
+
+                if ((maxDimension / sampleSizeVal * scaleVal) > limit)
                     continue;
 
                 visited[j] = qtrue;
                 group[groupSize++] = j;
                 groupArea = candidateArea;
+                VectorCopy(candidateMins, groupMins);
+                VectorCopy(candidateMaxs, groupMaxs);
 
                 if (!dsB->isPlanar || dsB->planeNum != dsA->planeNum)
                     allPlanar = qfalse;
