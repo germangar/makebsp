@@ -131,6 +131,18 @@ void ProcessWorldModel(void)
         ClipSidesIntoTree(e, tree);
     }
 
+    // Process all func_trisoup entities as part of the world model!
+    for (int i = 1; i < num_entities; i++)
+    {
+        entity_t *trisent = &entities[i];
+        if (trisent->epairs && !strcmp(ValueForKey(trisent, "classname"), "func_trisoup"))
+        {
+            ProcessFuncTrisoup(trisent);
+            FreeEpairs(trisent->epairs);
+            trisent->epairs = NULL;
+        }
+    }
+
     // save out information for visibility processing
     NumberClusters(tree);
     if (!leaked)
@@ -319,35 +331,35 @@ void ProcessSubModel(void)
         SubdivideDrawSurfs(e, tree);
     }
 
-    // merge together all common shaders on the same plane and remove
-    // all colinear points, so extra tjunctions won't be generated
-    if (!nomerge)
-    {
-        MergeSides(e, tree); // !@# testing
-    }
-
-    if (game->chamferEdges && !chamfernosubdivide)
-    {
-        ChopTjunctions(e);
-    }
-
-    if (game->chamferEdges)
-    {
-        ChamferSurfaceEdges(e);
-        MergeChamferStripsIntoParents(e);
-        MergeParentedTrisoups(e);
-    }
-
-    if (mergetrisoups)
-    {
-        MergeAdjacentTrisoups(e);
-        CleanupAllTrisoups(e);
-        if (!nodecimateplanar)
+        // merge together all common shaders on the same plane and remove
+        // all colinear points, so extra tjunctions won't be generated
+        if (!nomerge)
         {
-            DecimateAllTrisoups(e, qtrue);
+            MergeSides(e, tree); // !@# testing
         }
-        GenerateTrisoupUVs(e);
-    }
+
+        if (game->chamferEdges && !chamfernosubdivide)
+        {
+            ChopTjunctions(e);
+        }
+
+        if (game->chamferEdges)
+        {
+            ChamferSurfaceEdges(e);
+            MergeChamferStripsIntoParents(e);
+            MergeParentedTrisoups(e);
+        }
+
+        if (mergetrisoups)
+        {
+            MergeAdjacentTrisoups(e);
+            CleanupAllTrisoups(e);
+            if (!nodecimateplanar)
+            {
+                DecimateAllTrisoups(e, qtrue);
+            }
+            GenerateTrisoupUVs(e);
+        }
 
     // add in any vertexes required to fix tjunctions
     if (!notjunc && !(game->chamferEdges && !chamfernosubdivide))
@@ -394,7 +406,7 @@ void ProcessModels(void)
         qprintf("############### model %i ###############\n", nummodels);
         if (entity_num == 0)
             ProcessWorldModel();
-        else
+        else if (strcmp(ValueForKey(entity, "classname"), "func_trisoup"))
             ProcessSubModel();
 
         if (!verboseentities)

@@ -582,6 +582,17 @@ void ClipSidesIntoTree(entity_t *e, tree_t *tree);
 void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree);
 void GenerateHalos(entity_t *e);
 
+extern qboolean nodecimateplanar;
+
+// tjunction.c
+void FixTJunctions(entity_t *e);
+qboolean IsEdgeSharingCandidate(mapDrawSurface_t *ds);
+void InsertCollinearVertices(entity_t *e, float minDot, float maxDot, int targetEntityNum);
+qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon);
+
+// func_trisoup.c
+void ProcessFuncTrisoup(entity_t *e);
+
 //==============================================================================
 // decals.c
 

@@ -1829,7 +1829,7 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree)
     int refs;
     int c_surfs, c_refs;
 
-    qprintf("----- FilterDrawsurfsIntoTree -----\n");
+    _printf("----- FilterDrawsurfsIntoTree -----\n");
 
     c_surfs = 0;
     c_refs = 0;
@@ -1901,10 +1901,10 @@ void FilterDrawsurfsIntoTree(entity_t *e, tree_t *tree)
             c_refs += refs;
         }
     }
-    qprintf("%5i emited drawsurfs\n", c_surfs);
-    qprintf("%5i references\n", c_refs);
-    qprintf("%5i stripfaces\n", c_stripSurfaces);
-    qprintf("%5i fanfaces\n", c_fanSurfaces);
+    _printf("%5i emited drawsurfs\n", c_surfs);
+    _printf("%5i references\n", c_refs);
+    _printf("%5i stripfaces\n", c_stripSurfaces);
+    _printf("%5i fanfaces\n", c_fanSurfaces);
 }
 
 /*

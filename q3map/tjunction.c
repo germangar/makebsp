@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 static int s_chamferBaseDrawSurfs = 0;
 
-static qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon)
+qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon)
 {
     return (fabs(a[0] - b[0]) < epsilon && fabs(a[1] - b[1]) < epsilon && fabs(a[2] - b[2]) < epsilon);
 }
@@ -625,7 +625,7 @@ void FixTJunctions(entity_t *ent)
     qprintf("%6i rotated orders\n", c_rotate);
     qprintf("%6i can't order\n", c_cant);
 }
-static qboolean IsChamferCandidate(mapDrawSurface_t *ds)
+qboolean IsEdgeSharingCandidate(mapDrawSurface_t *ds)
 {
     if (ds->numVerts <= 0 || ds->side == NULL) return qfalse;
     if (ds->patch || ds->miscModel || ds->flareSurface || ds->isDecal) return qfalse;
@@ -668,12 +668,12 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
     for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
     {
         dsA = &mapDrawSurfs[i];
-        if (!IsChamferCandidate(dsA)) continue;
+        if (!IsEdgeSharingCandidate(dsA)) continue;
 
         for (j = i + 1; j < numMapDrawSurfs; j++)
         {
             dsB = &mapDrawSurfs[j];
-            if (!IsChamferCandidate(dsB)) continue;
+            if (!IsEdgeSharingCandidate(dsB)) continue;
 
             // Only register chamfer neighbors if their opacity/translucency matches
             qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
@@ -928,7 +928,7 @@ void ChopTjunctions(entity_t *e)
         mapDrawSurface_t *dsA = &mapDrawSurfs[i];
         qboolean chopped = qfalse;
 
-        if (!IsChamferCandidate(dsA)) continue;
+        if (!IsEdgeSharingCandidate(dsA)) continue;
 
         for (j = e->firstDrawSurf; j < numMapDrawSurfs && !chopped; j++)
         {
@@ -938,7 +938,7 @@ void ChopTjunctions(entity_t *e)
 
             if (i == j) continue;
             dsB = &mapDrawSurfs[j];
-            if (!IsChamferCandidate(dsB)) continue;
+            if (!IsEdgeSharingCandidate(dsB)) continue;
 
             // Never slice an opaque surface across its face due to a transparent surface touching it (and vice-versa)
             qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
@@ -1105,24 +1105,32 @@ static void InsertVertexIntoDrawSurf(mapDrawSurface_t *ds, int insertIdx, const 
 
 /*
 ================
-InsertCollinearChamferVertices
+InsertCollinearVertices
 ================
 */
-static void InsertCollinearChamferVertices(entity_t *e)
+void InsertCollinearVertices(entity_t *e, float minDot, float maxDot, int targetEntityNum)
 {
     int i, j, v, w;
 
-    qprintf("----- InsertCollinearChamferVertices -----\n");
+    qprintf("----- InsertCollinearVertices -----\n");
 
     for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
     {
         mapDrawSurface_t *dsA = &mapDrawSurfs[i];
-        if (!IsChamferCandidate(dsA)) continue;
+        if (targetEntityNum >= 0)
+        {
+            if (dsA->mapBrush == NULL || dsA->mapBrush->entitynum != targetEntityNum) continue;
+        }
+        if (!IsEdgeSharingCandidate(dsA)) continue;
 
         for (j = i + 1; j < numMapDrawSurfs; j++)
         {
             mapDrawSurface_t *dsB = &mapDrawSurfs[j];
-            if (!IsChamferCandidate(dsB)) continue;
+            if (targetEntityNum >= 0)
+            {
+                if (dsB->mapBrush == NULL || dsB->mapBrush->entitynum != targetEntityNum) continue;
+            }
+            if (!IsEdgeSharingCandidate(dsB)) continue;
 
             qboolean transA = (dsA->shaderInfo && (dsA->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
             qboolean transB = (dsB->shaderInfo && (dsB->shaderInfo->contents & CONTENTS_TRANSLUCENT)) ? qtrue : qfalse;
@@ -1132,7 +1140,7 @@ static void InsertCollinearChamferVertices(entity_t *e)
             VectorCopy(mapplanes[dsA->side->planenum].normal, normalA);
             VectorCopy(mapplanes[dsB->side->planenum].normal, normalB);
             float dot = DotProduct(normalA, normalB);
-            if (dot > 0.866f || dot < -0.866f) continue;
+            if (dot < minDot || dot > maxDot) continue;
 
             // Direction 1: Vertices of dsA -> Edges of dsB
             for (v = 0; v < dsA->numVerts; v++)
@@ -1268,7 +1276,7 @@ void ChamferSurfaceEdges(entity_t *e)
     
     qprintf("----- ChamferSurfaceEdges (V3: Normal Bending) -----\n");
     memset(globalInsets, 0, sizeof(globalInsets));
-    InsertCollinearChamferVertices(e);
+    InsertCollinearVertices(e, -0.866f, 0.866f, -1);
     BuildSurfaceAdjacencyGraph(e);
     numBaseDrawSurfs = numMapDrawSurfs;
     s_chamferBaseDrawSurfs = numBaseDrawSurfs;
@@ -1281,7 +1289,7 @@ void ChamferSurfaceEdges(entity_t *e)
         int numEdges = 0;
         surfaceNeighbor_t *nb;
         
-        if (!IsChamferCandidate(dsA)) continue;
+        if (!IsEdgeSharingCandidate(dsA)) continue;
 
         // ----------------------------------------------------
         // ADAPTIVE CHAMFER WIDTH & SAFEGUARDS (10x Ratio)
@@ -1655,7 +1663,7 @@ void MergeChamferStripsIntoParents(entity_t *e)
         if (parent->numVerts < 3)
             continue;
 
-        if (!IsChamferCandidate(parent))
+        if (!IsEdgeSharingCandidate(parent))
             continue;
 
 
@@ -1984,9 +1992,6 @@ void MergeAdjacentTrisoups(entity_t *e)
                 int targetRes = (int)ceil(sqrt(candidateArea) / sampleSizeVal * scaleVal);
 
                 int limit = LIGHTMAP_WIDTH - 2;
-                if (!dsA->enforceSampleSize)
-                    limit *= 2;
-
                 if (targetRes > limit)
                     continue;
 

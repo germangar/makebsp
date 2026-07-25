@@ -1472,6 +1472,13 @@ void ProcessMapEntities(void)
             continue;
         }
 
+        // 2c. func_trisoup: brushes move to worldspawn (preserve epairs for key lookup later).
+        if (!strcmp("func_trisoup", classname))
+        {
+            MoveBrushesToWorld(mapent);
+            continue;
+        }
+
         // 2b. func_terrain: Dedicated terrain entity.
         //     Generates terrain drawsurfaces from the child brushes, then moves
         //     them to worldspawn as invisible collision.
