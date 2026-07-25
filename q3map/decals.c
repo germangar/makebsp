@@ -800,6 +800,10 @@ void ProcessDecals(void)
             else
             {
                 GetVectorForKey(e, "angles", angles);
+                if (angles[0] == 0.0f && angles[1] == 0.0f && angles[2] == 0.0f)
+                {
+                    angles[1] = FloatForKey(e, "angle");
+                }
                 MiscDecalAngleVectors(angles, forward, right, up);
                 VectorCopy(forward, globalProjNormal);
             }
