@@ -382,7 +382,7 @@ typedef struct
 	int emitterCount;
 	vec3_t entityOrigin; // Offset for inline models
 	qboolean isEntity;	 // Entity membership flag
-	qboolean isPlanarPatch;
+	qboolean surfaceIsPlanar;
 	mesh_t *patchMesh; // Cached geometry for MST_PATCH
     int radInterval;
 

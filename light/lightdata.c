@@ -76,8 +76,9 @@ static void DilateLightmapAtlas(int width, int passes)
             if (sLM < 0)
                 continue;
 
-            // TEST: Disable dilation for triangle soups
-            if (ds->surfaceType == MST_TRIANGLE_SOUP)
+            // Skip dilation for standard (non-planar) trisoups only.
+            // isPlanar trisoups pass through to dilate inner islands and outer gutters.
+            if (ds->surfaceType == MST_TRIANGLE_SOUP && !localSurfaces[s].surfaceIsPlanar)
                 continue;
 
             int sX = ds->lightmapOffset[0][0];

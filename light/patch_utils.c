@@ -213,7 +213,7 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
         mesh = SubdivideMesh(srcMesh, 8.0f, 999.0f);
         PutMeshOnCurve(*mesh);
         
-        localSurfaces[(int)(ds - drawSurfaces)].isPlanarPatch = qtrue;
+        localSurfaces[(int)(ds - drawSurfaces)].surfaceIsPlanar = qtrue;
 
         subdivided = RemoveLinearMeshColumnsRows(mesh);
         FreeMesh(mesh);
@@ -238,7 +238,7 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
     PutMeshOnCurve(*mesh);
 
     /* Step 3: Record whether this is a planar patch for the lighting system. */
-    localSurfaces[(int)(ds - drawSurfaces)].isPlanarPatch = qfalse;
+    localSurfaces[(int)(ds - drawSurfaces)].surfaceIsPlanar = qfalse;
 
     /* Step 4: Remove co-linear rows/columns to keep the mesh lean.
        Matches q3map2's TessellatedMesh exactly:

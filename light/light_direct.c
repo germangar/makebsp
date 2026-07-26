@@ -106,6 +106,10 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
     vec3_t bestExtrapCentroid;
     VectorClear(bestExtrapCentroid);
 
+    // Identify if this surface is planar
+    int surfIndex = (int)(ds - drawSurfaces);
+    qboolean isPlanar = localSurfaces[surfIndex].surfaceIsPlanar;
+
     for (j = 0; j < ds->numIndexes; j += 3)
     {
         int i0 = drawIndexes[ds->firstIndex + j];
@@ -169,7 +173,8 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
         }
 
         // Dilation: if not inside, check if we are within the gutter distance
-        // For TriSoup, we always allow this if we have a gutter
+        // For standard (non-planar) TriSoup, we always allow this if we have a gutter
+        if (!isPlanar)
         {
             float dSq, dMin = 999999.0f;
             float t;

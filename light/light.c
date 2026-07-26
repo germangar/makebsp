@@ -1172,6 +1172,10 @@ void BuildLocalSurfaces(void)
         if (extra && i < numExtra && extra[i].castShadows != -1) {
             localSurfaces[i].castShadows = extra[i].castShadows ? qtrue : qfalse;
         }
+
+        if (extra && i < numExtra) {
+            localSurfaces[i].surfaceIsPlanar = extra[i].isPlanar;
+        }
     }
     if (extra)
         free(extra);
