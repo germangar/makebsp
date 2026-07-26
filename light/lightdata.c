@@ -794,7 +794,8 @@ void DownConvertLightingData(void)
             byte c[3];
             for (int k = 0; k < 3; k++)
             {
-                int val = (int)(localSurfaces[s].vertexColor[k] * 255.0f + 0.5f);
+                float applyScale = (game->hdr == HDR_8BIT) ? scale : 1.0f;
+                int val = (int)(localSurfaces[s].vertexColor[k] * 255.0f * applyScale + 0.5f);
                 if (val < 0) val = 0;
                 else if (val > 255) val = 255;
                 c[k] = (byte)val;
