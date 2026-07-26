@@ -84,5 +84,6 @@ Our focus has been on:
 - Automatically detects collinear midpoint vertices along candidate chamfer edges (`IsOriginalBrushEdge`) and safely synchronizes them into adjacent surface vertex loops with affine texture UV (`.st`) interpolation.
 - Added `InsertVertexIntoDrawSurf` helper to handle tight `malloc` buffer expansion safely without heap corruption.
 
-## Where We Are Going Next
-- **Brush-Touching Triangulation Improvements**: Investigate and optimize situations where brush faces are split or triangulated due to how they touch adjacent brushes, aiming to avoid unnecessary surface splits before or during merging.
+### 13. Brush-Touching Triangulation Improvements
+- Investigated and optimized situations where brush faces are split or triangulated due to how they touch adjacent brushes.
+- Avoided unnecessary surface splits before merging by introducing original brush edge constraints (`IsOriginalBrushEdge`), backface contact rejection, and exact collinear synchronization in `ChopTjunctions`.
