@@ -343,6 +343,20 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
             albedo[k] = si->averageColor[k] / 255.0f;
         }
 
+        // handle vertexcolor overrides so they become part of radiosity
+        if (localSurfaces[i].overrideVertexColor) {
+            float r = localSurfaces[i].vertexColor[0];
+            float g = localSurfaces[i].vertexColor[1];
+            float b = localSurfaces[i].vertexColor[2];
+            
+            // If the override color is not white, blend it 50/50 with the base texture albedo
+            if (r < 0.999f || g < 0.999f || b < 0.999f) {
+                for (k = 0; k < 3; k++) {
+                    albedo[k] = albedo[k] * 0.5f + localSurfaces[i].vertexColor[k] * 0.5f;
+                }
+            }
+        }
+
         int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? localSurfaces[i].radInterval : 1;
 
         for (ly = 0; ly < ds->lightmapHeight; ly += step) {
