@@ -35,8 +35,11 @@ typedef struct MRVoxelBitSet MRVoxelBitSet;
 
 typedef struct MRBox3f MRBox3f;
 typedef struct MRBox3i MRBox3i;
+typedef struct MRVector2f MRVector2f;
 typedef struct MRVector3f MRVector3f;
 typedef struct MRAffineXf3f MRAffineXf3f;
+typedef struct MRColor MRColor;
+typedef struct MRMeshAttributes MRMeshAttributes;
 
 typedef struct MRMeshTopology MRMeshTopology;
 typedef struct MRMesh MRMesh;

@@ -103,6 +103,11 @@ typedef struct MRDecimateResult
 /// Collapse edges in mesh region according to the settings
 MRMESHC_API MRDecimateResult mrDecimateMesh( MRMesh* mesh, const MRDecimateSettings* settings );
 
+/// Collapse edges in mesh region according to the settings, and correctly maps per-vertex attributes (UVs/Colors).
+/// \warning `settings->region` must be NULL! The decimation region is taken from the entire mesh.
+/// \param attrs Input attributes, and will be overwritten with newly allocated pointers (which the caller must free)
+MRMESHC_API MRDecimateResult mrMeshDecimateWithAttributes( MRMesh* mesh, MRMeshAttributes* attrs, const MRDecimateSettings* settings );
+
 /// parameters for \ref mrResolveMeshDegenerations
 typedef struct MRResolveMeshDegenSettings
 {

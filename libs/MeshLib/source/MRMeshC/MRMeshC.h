@@ -10,8 +10,19 @@
 #include "MRPointCloud.h"
 #include "MRPointsLoad.h"
 #include "MRPointsSave.h"
+#include "MRVector2.h"
+#include "MRColor.h"
 
 MR_EXTERN_C_BEGIN
+
+/// attributes associated with vertices
+typedef struct MRMeshAttributes
+{
+    MRVector2f* uvCoords;     ///< per-vertex UVs, indexed by VertId. May be NULL.
+    size_t      numUvs;       ///< capacity (points count)
+    MRColor*    vertColors;   ///< per-vertex colors, indexed by VertId. May be NULL.
+    size_t      numColors;    ///< capacity (points count)
+} MRMeshAttributes;
 
 /// Makes new mesh - result of boolean operation on mesh `A` and mesh `B`
 /// \param meshA Input mesh `A`

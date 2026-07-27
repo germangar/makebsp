@@ -7,7 +7,10 @@
 MR_SUPPRESS_WARNING_PUSH
 MR_SUPPRESS_WARNING( "-Wdeprecated-declarations", 4996 )
 #include "MRMesh/MRMeshDecimate.h"
+#include "MRMesh/MRObjectMeshData.h"
+#include "MRMesh/MRMesh.h"
 MR_SUPPRESS_WARNING_POP
+#include "MRMeshC.h"
 
 using namespace MR;
 
@@ -100,6 +103,93 @@ MRDecimateResult mrDecimateMesh( MRMesh* mesh_, const MRDecimateSettings* settin
     const auto res = decimateMesh( mesh, settings );
     // TODO: reinterpret_cast?
     // NOTE: C bool != C++ bool
+    return {
+        COPY_FROM( res, vertsDeleted )
+        COPY_FROM( res, facesDeleted )
+        COPY_FROM( res, errorIntroduced )
+        COPY_FROM( res, cancelled )
+    };
+}
+
+MRDecimateResult mrMeshDecimateWithAttributes( MRMesh* mesh_, MRMeshAttributes* attrs, const MRDecimateSettings* settings_ )
+{
+    ARG( mesh );
+
+    DecimateSettings settings;
+    if ( settings_ )
+    {
+        auto& src = *settings_;
+        settings = {
+            .strategy = auto_cast( settings_->strategy ),
+            COPY_FROM( src, maxError )
+            COPY_FROM( src, maxEdgeLen )
+            COPY_FROM( src, maxBdShift )
+            COPY_FROM( src, maxTriangleAspectRatio )
+            COPY_FROM( src, criticalTriAspectRatio )
+            COPY_FROM( src, tinyEdgeLength )
+            COPY_FROM( src, stabilizer )
+            COPY_FROM( src, optimizeVertexPos )
+            COPY_FROM( src, maxDeletedVertices )
+            COPY_FROM( src, maxDeletedFaces )
+            .region = nullptr, // REQUIRED to be null for decimateObjectMeshData
+            COPY_FROM( src, collapseNearNotFlippable )
+            COPY_FROM( src, touchNearBdEdges )
+            COPY_FROM( src, touchBdVerts )
+            COPY_FROM( src, maxAngleChange )
+            COPY_FROM( src, packMesh )
+            COPY_FROM( src, progressCallback )
+            COPY_FROM( src, subdivideParts )
+            COPY_FROM( src, decimateBetweenParts )
+            COPY_FROM( src, minFacesInPart )
+        };
+    }
+
+    MR::ObjectMeshData data;
+    data.mesh = std::make_shared<MR::Mesh>( mesh );
+
+    if ( attrs && attrs->uvCoords && attrs->numUvs > 0 )
+    {
+        auto* src = reinterpret_cast<MR::UVCoord*>( attrs->uvCoords );
+        data.uvCoordinates.vec_.assign( src, src + attrs->numUvs );
+    }
+    if ( attrs && attrs->vertColors && attrs->numColors > 0 )
+    {
+        auto* src = reinterpret_cast<MR::Color*>( attrs->vertColors );
+        data.vertColors.vec_.assign( src, src + attrs->numColors );
+    }
+
+    const auto res = MR::decimateObjectMeshData( data, settings );
+
+    mesh = std::move( *data.mesh );
+
+    if ( attrs )
+    {
+        if ( !data.uvCoordinates.empty() )
+        {
+            size_t cap = data.uvCoordinates.size();
+            MRVector2f* newUvs = (MRVector2f*)malloc( cap * sizeof( MRVector2f ) );
+            if ( newUvs )
+            {
+                free( attrs->uvCoords );
+                memcpy( newUvs, data.uvCoordinates.data(), cap * sizeof( MRVector2f ) );
+                attrs->uvCoords = newUvs;
+                attrs->numUvs = cap;
+            }
+        }
+        if ( !data.vertColors.empty() )
+        {
+            size_t cap = data.vertColors.size();
+            MRColor* newColors = (MRColor*)malloc( cap * sizeof( MRColor ) );
+            if ( newColors )
+            {
+                free( attrs->vertColors );
+                memcpy( newColors, data.vertColors.data(), cap * sizeof( MRColor ) );
+                attrs->vertColors = newColors;
+                attrs->numColors = cap;
+            }
+        }
+    }
+
     return {
         COPY_FROM( res, vertsDeleted )
         COPY_FROM( res, facesDeleted )

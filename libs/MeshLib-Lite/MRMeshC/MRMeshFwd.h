@@ -5,9 +5,7 @@
 #include <stdint.h>
 
 #ifdef _WIN32
-#   ifdef MRMESH_STATIC_LIB
-#       define MRMESHC_API
-#   elif defined( MRMeshC_EXPORTS )
+#   ifdef MRMeshC_EXPORTS
 #       define MRMESHC_API __declspec( dllexport )
 #   else
 #       define MRMESHC_API __declspec( dllimport )
@@ -37,8 +35,11 @@ typedef struct MRVoxelBitSet MRVoxelBitSet;
 
 typedef struct MRBox3f MRBox3f;
 typedef struct MRBox3i MRBox3i;
+typedef struct MRVector2f MRVector2f;
 typedef struct MRVector3f MRVector3f;
 typedef struct MRAffineXf3f MRAffineXf3f;
+typedef struct MRColor MRColor;
+typedef struct MRMeshAttributes MRMeshAttributes;
 
 typedef struct MRMeshTopology MRMeshTopology;
 typedef struct MRMesh MRMesh;

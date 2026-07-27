@@ -43,4 +43,8 @@ typedef struct MRBooleanResult
 /// \param operation CSG operation to perform
 MRMESHC_API MRBooleanResult mrBoolean( const MRMesh* meshA, const MRMesh* meshB, MRBooleanOperation operation, const MRBooleanParameters* params );
 
+/// Makes new mesh - result of boolean operation on mesh `A` and mesh `B`, natively interpolating attributes
+/// \param outAttrs Pointer to attributes structure, will be overwritten with newly allocated pointers containing the result attributes.
+MRMESHC_API MRBooleanResult mrBooleanWithAttributes( const MRMesh* meshA, const MRMeshAttributes* attrsA, const MRMesh* meshB, const MRMeshAttributes* attrsB, MRBooleanOperation operation, const MRBooleanParameters* params, MRMeshAttributes* outAttrs );
+
 MR_EXTERN_C_END
