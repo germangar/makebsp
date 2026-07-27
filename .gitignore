@@ -4,8 +4,13 @@ scripts/
 maps/
 textures/
 models/
+env/
+studies/
+q3map2_reference
 testmapbuild.bat
 libs/assimp_src/
+libs/embree
+libs/radeonrays
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
 
@@ -14,6 +19,7 @@ modeltest_modelsinfo.txt
 libs/coacd
 AGENTS.md
 .vscode/settings.json
+.antigravitycli
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/
@@ -36,3 +42,10 @@ libMRMeshC.dll
 *.dll
 libMRMesh.dll
 Debugging HACD Hull Generation chat.md
+compile.log
+exportmodels.bat
+planartrisoups_fixlightmaps_implementation_plan.md
+testvfs.bat
+makebsp.exe
+makelight.exe
+ToDo.txt
