@@ -57,7 +57,7 @@ The legacy BSP-traversal ray caster has been replaced with the industry-standard
     - **Inter-Quake Model:** `.iqm`
 
 ### 4. Automatic Edge Chamfering
-A highly requested feature that physically rounds the sharp edges of structural and detail brushes, creating a bevel effect.
+A highly requested feature that visually rounds the sharp edges of structural and detail brushes, creating a bevel effect.
 - **Natural Highlights:** Prevents the classic "razor sharp" look of early 3D engines and naturally catches specular highlights on corners.
 - **Deep Control Hierarchy:** Chamfer width and concave/convex joint separation can be controlled globally via CLI or JSON profiles, overridden per-material in `.shader` files, or finely tuned on a per-entity basis using entity keys.
 - **T-Junction Preservation:** Integrates perfectly with the engine's T-junction fixing logic to guarantee watertight, crack-free meshes even after subdivision and corner contraction.
@@ -250,6 +250,7 @@ List of additions and modifications made to shader parsing and features compared
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
 - **upscale**: Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the group's lightmaps.
+- **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
 - **enforcesamplesize**: Subividide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
@@ -262,6 +263,24 @@ List of additions and modifications made to shader parsing and features compared
 - **shader**: Specifies the base shader to use for terrain generation (required if terrain is "1").
 - **alphamap**: Path to the image file used to blend terrain layers (required if terrain is "1").
 - **layers**: Number of terrain layers to blend from the alphamap (required if terrain is "1").
+
+### Entity: func_trisoup
+
+Converts standard map brushes into a continuous, smoothed triangle soup (mesh). This is useful for creating complex organic shapes out of brushes and applying smooth vertex normal shading across them, similar to a 3D model.
+
+**Trisoup set up**
+- **shadeangle**: The angle threshold (in degrees) used to calculate smooth vertex normals across the mesh. Edges with an angle less than this value will have their normals blended for smooth lighting. Defaults to 46.0.
+
+**Brushes**
+- **smooth**: Lightmap smooth filter radius to use on this entity's surfaces.
+- **vertexcolor**: Overrides the vertex color for all surfaces of this group.
+- **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
+- **supersample**: Supersampling radius override for the entity's lightmaps.
+- **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
+- **enforcesamplesize**: Subdivide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
+- **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
+- **chamfer_convexwidth**: To do (Currently inactive because brushes are converted to a trisoup prior to the chamfering pass).
+- **chamfer_concavewidth**: To do (Currently inactive because brushes are converted to a trisoup prior to the chamfering pass).
 
 ### Entity: func_light
 
@@ -295,9 +314,11 @@ List of additions and modifications made to shader parsing and features compared
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
 - **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the entity's lightmaps.
+- **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
 - **enforcesamplesize**: Subdivide the surfaces if they can't match the samplesize. Integer boolean (1 or 0).
 - **castshadows**: Enable (1) or disable (0) the entity's brushes from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links `misc_model`s to this entity. Models with the matching `modelgroup` name will be bundled with it.
+- **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 - **chamfer_convexwidth**: Overrides the chamfer width for convex edges on this entity's surfaces.
 - **chamfer_concavewidth**: Overrides the chamfer width for concave edges on this entity's surfaces.
 
@@ -389,7 +410,10 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.
 - `-chamferedges`: Enables automatic edge chamfering for smooth corner lighting (automatically skipped when compiling with `-fast`).
+- `-nochamferedges`: Explicitly disables edge chamfering (overrides game profile defaults).
 - `-chamfernosubdivide`: Disables T-junction surface splitting prior to chamfering.
+- `-mergetrisoups <0|1>`: Enable/disable global merging of adjacent planar triangle soups (default 1).
+- `-nodecimateplanar`: Disable the planar trisoup decimation pass.
 - `-chamferconvexwidth <V>`: Sets the global size of convex chamfer strips (default 1.25).
 - `-chamferconcavewidth <V>`: Sets the global size of concave chamfer strips (< 0 uses convex width, 0 skips concave chamfers).
 - `-saveprt`: Do not delete the .prt file after processing.

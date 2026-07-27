@@ -235,6 +235,16 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     {
         ds->samplesize = si->lightmapSampleSize;
     }
+    const char *ent_sample_str = ValueForEpair(b->epairs, "samplesize");
+    if (!ent_sample_str[0])
+        ent_sample_str = ValueForEpair(b->epairs, "lightmapsamplesize");
+    
+    if (ent_sample_str[0])
+    {
+        int ent_sample = atoi(ent_sample_str);
+        if (ent_sample > 0)
+            ds->samplesize = ent_sample;
+    }
 
     // Resolve chamfer width shader hierarchy
     if (si && si->chamferConvexWidth >= 0.0f)

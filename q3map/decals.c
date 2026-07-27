@@ -1437,8 +1437,8 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
     // Resolve samplesize override
     {
         entity_t *e = &entities[dp->decalEntityNum];
-        const char *ssizeStr = ValueForKey(e, "lightmapsamplesize");
-        if (!ssizeStr[0]) ssizeStr = ValueForKey(e, "samplesize");
+        const char *ssizeStr = ValueForKey(e, "samplesize");
+        if (!ssizeStr[0]) ssizeStr = ValueForKey(e, "lightmapsamplesize");
         
         if (ssizeStr[0])
             newDs->samplesize = atof(ssizeStr);
