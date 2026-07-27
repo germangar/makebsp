@@ -22,9 +22,171 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qbsp.h"
 
+#define DUPLICATE_EPSILON  0.1f   // world-space vertex match tolerance
 #define AUTOCAULK_EPSILON  0.1f   // world-space vertex match tolerance
 
 qboolean noautocaulk = qfalse;
+
+/*
+==================
+BrushesAreEqual
+==================
+*/
+static qboolean BrushesAreEqual(bspbrush_t *b1, bspbrush_t *b2)
+{
+    int s1, s2;
+    int matchedSides = 0;
+
+    if (b1->numsides != b2->numsides)
+        return qfalse;
+
+    // Compare bounding boxes
+    for (int i = 0; i < 3; i++)
+    {
+        if (fabs(b1->mins[i] - b2->mins[i]) > DUPLICATE_EPSILON ||
+            fabs(b1->maxs[i] - b2->maxs[i]) > DUPLICATE_EPSILON)
+        {
+            return qfalse;
+        }
+    }
+
+    // Compare all sides
+    for (s1 = 0; s1 < b1->numsides; s1++)
+    {
+        side_t *side1 = &b1->sides[s1];
+        qboolean sideMatched = qfalse;
+
+        for (s2 = 0; s2 < b2->numsides; s2++)
+        {
+            side_t *side2 = &b2->sides[s2];
+
+            if (side1->planenum != side2->planenum) continue;
+            if (side1->bevel != side2->bevel) continue;
+            
+            // Only enforce shader and content flags for non-bevel sides
+            if (!side1->bevel)
+            {
+                if (side1->shaderInfo != side2->shaderInfo) continue;
+                if (side1->surfaceFlags != side2->surfaceFlags) continue;
+                
+                // Mask out CONTENTS_DETAIL and CONTENTS_STRUCTURAL flags to allow comparing structural vs detail
+                int c1 = side1->contents & ~(CONTENTS_DETAIL | CONTENTS_STRUCTURAL);
+                int c2 = side2->contents & ~(CONTENTS_DETAIL | CONTENTS_STRUCTURAL);
+                if (c1 != c2) continue;
+            }
+
+            sideMatched = qtrue;
+            break;
+        }
+
+        if (sideMatched)
+        {
+            matchedSides++;
+        }
+        else
+        {
+            return qfalse;
+        }
+    }
+
+    return (matchedSides == b1->numsides);
+}
+
+/*
+==================
+FilterDuplicateBrushes
+==================
+*/
+void FilterDuplicateBrushes(void)
+{
+    int numDuplicates = 0;
+
+    _printf("--- FilterDuplicateBrushes ---\n");
+
+    for (int i = 0; i < num_entities; i++)
+    {
+        entity_t *ent = &entities[i];
+        
+        // Skip entities with 0 or 1 brush
+        if (ent->brushes == NULL || ent->brushes->next == NULL)
+            continue;
+
+        bspbrush_t *prev = NULL;
+        bspbrush_t *b1 = ent->brushes;
+
+        while (b1 != NULL)
+        {
+            // Only filter solid, opaque brushes
+            if (!(b1->contents & CONTENTS_SOLID) || !b1->opaque || (b1->contents & CONTENTS_TRANSLUCENT))
+            {
+                prev = b1;
+                b1 = b1->next;
+                continue;
+            }
+
+            bspbrush_t *b2_prev = b1;
+            bspbrush_t *b2 = b1->next;
+            qboolean b1_deleted = qfalse;
+
+            while (b2 != NULL)
+            {
+                // Only compare solid, opaque brushes
+                if ((b2->contents & CONTENTS_SOLID) && b2->opaque && !(b2->contents & CONTENTS_TRANSLUCENT))
+                {
+                    if (BrushesAreEqual(b1, b2))
+                    {
+                        // Duplicate found. Decide which one to keep.
+                        // If one is detail and the other is structural, keep structural, delete detail.
+                        if (b1->detail && !b2->detail)
+                        {
+                            // Keep b2 (structural), delete b1 (detail)
+                            bspbrush_t *dup = b1;
+                            
+                            if (prev == NULL)
+                                ent->brushes = b1->next;
+                            else
+                                prev->next = b1->next;
+                            
+                            b1 = b1->next;
+                            FreeBrush(dup);
+                            numDuplicates++;
+                            b1_deleted = qtrue;
+                            break; // b1 is gone, break inner loop to continue outer loop
+                        }
+                        else
+                        {
+                            // Keep b1, delete b2 (if both are detail, both structural, or b1 structural and b2 detail)
+                            bspbrush_t *dup = b2;
+                            b2_prev->next = b2->next;
+                            b2 = b2->next;
+                            
+                            FreeBrush(dup);
+                            numDuplicates++;
+                            continue;
+                        }
+                    }
+                }
+                
+                b2_prev = b2;
+                if (b2 != NULL)
+                {
+                    b2 = b2->next;
+                }
+            }
+
+            if (!b1_deleted)
+            {
+                prev = b1;
+                b1 = b1->next;
+            }
+        }
+    }
+
+    if (numDuplicates > 0)
+    {
+        _printf("%i duplicate brushes removed\n", numDuplicates);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // IsFuncStatic(entity_t *e)

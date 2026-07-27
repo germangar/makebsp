@@ -473,7 +473,7 @@ void OnlyEnts(void)
     num_entities = 0;
 
     LoadMapFile(name);
-    ProcessDecals();
+    ParseDecalProjectors();
     SetModelNumbers();
     SetLightStyles();
 
@@ -1132,11 +1132,12 @@ int main(int argc, char **argv)
 
     ParseWorldspawnKeys(argc, argv);
 
-    ProcessDecals();
+    ParseDecalProjectors();
 
     SetModelNumbers();
     SetLightStyles();
 
+    FilterDuplicateBrushes();
     AutoCaulkBrushes();
 
     ProcessModels();

@@ -661,17 +661,17 @@ qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, v
 
 /*
 ================
-ProcessDecals
+ParseDecalProjectors
 Phase A
 ================
 */
-void ProcessDecals(void)
+void ParseDecalProjectors(void)
 {
     int i;
     parseMesh_t *pm;
     bspbrush_t *b;
     
-    _printf("--- ProcessDecals ---\n");
+    _printf("--- ParseDecalProjectors ---\n");
     numDecalProjectors = 0;
     
     for (i = 0; i < num_entities; i++)

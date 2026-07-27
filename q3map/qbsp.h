@@ -632,7 +632,7 @@ void FreeDecalMesh(decalMesh_t *m);
 void WeldDecalMesh(decalMesh_t *m, float epsilon);
 void ExtrudeDecalMesh(decalMesh_t *m);
 
-void ProcessDecals(void);
+void ParseDecalProjectors(void);
 void MakeEntityDecals(entity_t *e);
 
 //==============================================================================
@@ -648,6 +648,7 @@ void ComputeAxisBase(vec3_t normal, vec3_t texX, vec3_t texY);
 
 // autocaulk.c
 extern qboolean noautocaulk;
+void FilterDuplicateBrushes(void);
 void AutoCaulkBrushes(void);
 
 #endif
