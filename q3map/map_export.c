@@ -70,7 +70,8 @@ static void WriteBrush(FILE *f, bspbrush_t *b)
             shader += 9;
         }
 
-        fprintf(f, "%s 0 0 0\n", shader);
+        int exportContents = (s->contents & CONTENTS_DETAIL) ? CONTENTS_DETAIL : 0;
+        fprintf(f, "%s %d 0 0\n", shader, exportContents);
     }
     fprintf(f, "}\n}\n");
 }
