@@ -39,6 +39,31 @@ DRAWSURF CONSTRUCTION
 AllocDrawSurf
 =================
 */
+
+float SnapToNearestPowerOfTwo(float value)
+{
+    if (value <= 1.0f) return 1.0f;
+
+    // Find the largest power of 2 that is <= value
+    int lower = 1;
+    while ((lower << 1) <= (int)value)
+        lower <<= 1;
+    int upper = lower << 1;
+
+    // Rule: if value is under 4.0, always ceil (prevents dangerously tiny grids)
+    // Exception: if value already exactly equals a power of 2, return it as-is.
+    if (value < 4.0f)
+        return (value > (float)lower) ? (float)upper : (float)lower;
+
+    // Rule: round to the nearest power of 2. Ties round up.
+    return ((value - (float)lower) < ((float)upper - value)) ? (float)lower : (float)upper;
+}
+
+/*
+=================
+AllocDrawSurf
+=================
+*/
 mapDrawSurface_t *AllocDrawSurf(void)
 {
     mapDrawSurface_t *ds;
@@ -241,8 +266,8 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
     
     if (ent_sample_str[0])
     {
-        int ent_sample = atoi(ent_sample_str);
-        if (ent_sample > 0)
+        float ent_sample = atof(ent_sample_str);
+        if (ent_sample > 0.0f)
             ds->samplesize = ent_sample;
     }
 
@@ -466,7 +491,8 @@ void MergeDrawSurfs(entity_t *e)
                 continue;
             }
 
-            limit = (float)(LIGHTMAP_WIDTH - 3) * ds1->samplesize;
+            float effectiveSS = SnapToNearestPowerOfTwo(ds1->samplesize);
+            limit = (float)(LIGHTMAP_WIDTH - 3) * effectiveSS;
 
             for (j = i + 1; j < numBaseDrawSurfs; j++)
             {
@@ -754,7 +780,8 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree)
             // We subtract 3: 2 for the padding gutter, and 1 because
             // AllocateLightmapForSurface adds 1 to the bounds difference when
             // calculating texel size.
-            float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * ds->samplesize;
+            float effectiveSS = SnapToNearestPowerOfTwo(ds->samplesize);
+            float maxLightmapSubdiv = (float)(LIGHTMAP_WIDTH - 3) * effectiveSS;
 
             // Determine lightmap projection axes (logic mirrors
             // AllocateLightmapForSurface)

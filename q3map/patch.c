@@ -348,8 +348,8 @@ void PatchMapDrawSurfs(entity_t *e)
 
         if (ent_sample_str[0])
         {
-            int ent_sample = atoi(ent_sample_str);
-            if (ent_sample > 0)
+            float ent_sample = atof(ent_sample_str);
+            if (ent_sample > 0.0f)
             {
                 ds->samplesize = ent_sample;
             }

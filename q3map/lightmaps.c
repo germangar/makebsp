@@ -933,6 +933,15 @@ void AllocateLightmaps(entity_t *e)
         {
             continue; // leftover from a surface subdivision
         }
+
+        // Permanently snap samplesize to a power of 2 for planar surfaces and patches.
+        // These allocators project a world-space grid via floor/ceil math that requires
+        // exact powers of 2 to prevent lightmap seams between adjacent faces.
+        // Trisoups (miscModel) intentionally bypass this to retain exact float precision
+        // for xatlas UV packing.
+        if (!ds->miscModel && ds->samplesize > 0.0f && (ds->side || ds->patch))
+            ds->samplesize = SnapToNearestPowerOfTwo(ds->samplesize);
+
         if (!ds->patch && !ds->miscModel && ds->side)
         {
             VectorCopy(mapplanes[ds->side->planenum].normal, ds->lightmapVecs[2]);

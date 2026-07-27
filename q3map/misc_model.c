@@ -875,6 +875,15 @@ static void ResolveMiscModelSurfaceProperties(mapDrawSurface_t *ds, entity_t *en
         ds->samplesize = ds->shaderInfo->lightmapSampleSize;
     }
 
+    const char *ssizeStr = ValueForKey(entity, "samplesize");
+    if (!ssizeStr[0]) ssizeStr = ValueForKey(entity, "lightmapsamplesize");
+    if (ssizeStr[0])
+    {
+        float ent_sample = atof(ssizeStr);
+        if (ent_sample > 0.0f)
+            ds->samplesize = ent_sample;
+    }
+
     // Fast mode: ignore requests for higher resolution than the compilation setting
     if (g_fast && ds->samplesize < game->defaultSampleSize)
     {
