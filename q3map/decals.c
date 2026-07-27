@@ -6,6 +6,7 @@ _decal entity processing
 */
 
 #include "qbsp.h"
+#include "../libs/MeshLib-Lite/MRMeshC/MRMeshC.h"
 
 int numDecalProjectors = 0;
 decalProjector_t decalProjectors[MAX_DECAL_PROJECTORS];
@@ -1415,6 +1416,209 @@ void ExtrudeDecalMesh(decalMesh_t *m)
 
 /*
 ================
+DecimateDecalMesh
+================
+*/
+static void DecimateDecalMesh(decalMesh_t *m)
+{
+    int i;
+    MRMesh *mesh;
+    MRMeshAttributes attrs;
+    MRDecimateSettings settings;
+    MRDecimateResult result;
+    MRVector3f *positions;
+    MRThreeVertIds *triangles;
+    MRVector2f *uvs;
+    MRColor *colors;
+
+    if (m->numIndexes / 3 < 12)
+        return;
+
+    positions = malloc(m->numVerts * sizeof(MRVector3f));
+    uvs = malloc(m->numVerts * sizeof(MRVector2f));
+    colors = malloc(m->numVerts * sizeof(MRColor));
+    
+    for (i = 0; i < m->numVerts; i++)
+    {
+        positions[i].x = m->verts[i].xyz[0];
+        positions[i].y = m->verts[i].xyz[1];
+        positions[i].z = m->verts[i].xyz[2];
+        
+        uvs[i].x = m->verts[i].st[0];
+        uvs[i].y = m->verts[i].st[1];
+        
+        colors[i].r = m->verts[i].color[0][0];
+        colors[i].g = m->verts[i].color[0][1];
+        colors[i].b = m->verts[i].color[0][2];
+        colors[i].a = m->verts[i].color[0][3];
+    }
+
+    triangles = malloc((m->numIndexes / 3) * sizeof(MRThreeVertIds));
+    for (i = 0; i < m->numIndexes / 3; i++)
+    {
+        triangles[i][0].id = m->indexes[i * 3];
+        triangles[i][1].id = m->indexes[i * 3 + 1];
+        triangles[i][2].id = m->indexes[i * 3 + 2];
+    }
+
+    mesh = mrMeshFromTriangles(positions, m->numVerts, triangles, m->numIndexes / 3);
+    if (!mesh)
+    {
+        free(positions);
+        free(uvs);
+        free(colors);
+        free(triangles);
+        return;
+    }
+
+    memset(&attrs, 0, sizeof(attrs));
+    attrs.uvCoords = uvs;
+    attrs.numUvs = m->numVerts;
+    attrs.vertColors = colors;
+    attrs.numColors = m->numVerts;
+
+    settings = mrDecimateSettingsNew();
+    settings.maxError = 0.05f; // < MIN_EXTRUSION (0.075f) guarantees no Z-fighting
+    settings.touchNearBdEdges = false; // preserve boundaries
+    settings.touchBdVerts = false; // preserve boundaries
+    settings.stabilizer = 1e-6f;
+    settings.optimizeVertexPos = false; // guarantee vertices are only placed at extruded positions
+    settings.strategy = MRDecimateStrategyMinimizeError;
+    settings.packMesh = true; // MUST pack to remove invalid vertices/faces
+
+    result = mrMeshDecimateWithAttributes(mesh, &attrs, &settings);
+    
+    if (result.vertsDeleted > 0)
+    {
+        const MRVector3f *newPositions;
+        MRTriangulation *triangulation;
+        const MRThreeVertIds *newFaces;
+        size_t newVertCount;
+        size_t newFaceCount;
+        int activeFaces = 0;
+        
+        newPositions = mrMeshPoints(mesh);
+        newVertCount = mrMeshPointsNum(mesh);
+        
+        triangulation = mrMeshGetTriangulation(mesh);
+        newFaces = triangulation->data;
+        newFaceCount = triangulation->size;
+        
+        if (newVertCount > m->maxVerts)
+        {
+            m->maxVerts = newVertCount;
+            m->verts = realloc(m->verts, m->maxVerts * sizeof(drawVert_t));
+        }
+        
+        if (newFaceCount * 3 > m->maxIndexes)
+        {
+            m->maxIndexes = newFaceCount * 3;
+            m->indexes = realloc(m->indexes, m->maxIndexes * sizeof(int));
+        }
+        
+        m->numVerts = newVertCount;
+        
+        for (i = 0; i < newVertCount; i++)
+        {
+            memset(&m->verts[i], 0, sizeof(drawVert_t));
+            
+            m->verts[i].xyz[0] = newPositions[i].x;
+            m->verts[i].xyz[1] = newPositions[i].y;
+            m->verts[i].xyz[2] = newPositions[i].z;
+            
+            if (attrs.uvCoords)
+            {
+                m->verts[i].st[0] = attrs.uvCoords[i].x;
+                m->verts[i].st[1] = attrs.uvCoords[i].y;
+                m->verts[i].lightmap[0][0] = attrs.uvCoords[i].x;
+                m->verts[i].lightmap[0][1] = attrs.uvCoords[i].y;
+            }
+            
+            if (attrs.vertColors)
+            {
+                m->verts[i].color[0][0] = attrs.vertColors[i].r;
+                m->verts[i].color[0][1] = attrs.vertColors[i].g;
+                m->verts[i].color[0][2] = attrs.vertColors[i].b;
+                m->verts[i].color[0][3] = attrs.vertColors[i].a;
+            }
+            else
+            {
+                m->verts[i].color[0][0] = 255;
+                m->verts[i].color[0][1] = 255;
+                m->verts[i].color[0][2] = 255;
+                m->verts[i].color[0][3] = 255;
+            }
+        }
+        
+        for (i = 0; i < newFaceCount; i++)
+        {
+            if (newFaces[i][0].id < 0 || newFaces[i][0].id >= newVertCount ||
+                newFaces[i][1].id < 0 || newFaces[i][1].id >= newVertCount ||
+                newFaces[i][2].id < 0 || newFaces[i][2].id >= newVertCount)
+            {
+                continue; // Skip invalid faces to prevent heap corruption and NaN bounds
+            }
+
+            m->indexes[activeFaces * 3]     = newFaces[i][0].id;
+            m->indexes[activeFaces * 3 + 1] = newFaces[i][1].id;
+            m->indexes[activeFaces * 3 + 2] = newFaces[i][2].id;
+            activeFaces++;
+        }
+        m->numIndexes = activeFaces * 3;
+        
+        // Recompute normals
+        {
+            vec3_t *smoothNormals = malloc(m->numVerts * sizeof(vec3_t));
+            memset(smoothNormals, 0, m->numVerts * sizeof(vec3_t));
+            
+            for (i = 0; i < m->numIndexes; i += 3)
+            {
+                int i0 = m->indexes[i];
+                int i1 = m->indexes[i + 1];
+                int i2 = m->indexes[i + 2];
+                vec3_t e1, e2, faceNormal;
+                
+                VectorSubtract(m->verts[i1].xyz, m->verts[i0].xyz, e1);
+                VectorSubtract(m->verts[i2].xyz, m->verts[i0].xyz, e2);
+                CrossProduct(e1, e2, faceNormal);
+                
+                VectorAdd(smoothNormals[i0], faceNormal, smoothNormals[i0]);
+                VectorAdd(smoothNormals[i1], faceNormal, smoothNormals[i1]);
+                VectorAdd(smoothNormals[i2], faceNormal, smoothNormals[i2]);
+            }
+            
+            for (i = 0; i < m->numVerts; i++)
+            {
+                float len = VectorLength(smoothNormals[i]);
+                if (len > 0.0001f)
+                {
+                    VectorScale(smoothNormals[i], 1.0f / len, smoothNormals[i]);
+                }
+                else
+                {
+                    smoothNormals[i][0] = 0.0f;
+                    smoothNormals[i][1] = 0.0f;
+                    smoothNormals[i][2] = 1.0f;
+                }
+                
+                VectorCopy(smoothNormals[i], m->verts[i].normal);
+            }
+            free(smoothNormals);
+        }
+        
+        mrTriangulationFree(triangulation);
+    }
+
+    if (attrs.uvCoords) free(attrs.uvCoords);
+    if (attrs.vertColors) free(attrs.vertColors);
+    
+    mrMeshFree(mesh);
+    free(positions);
+    free(triangles);
+}
+
+/*
+================
 EmitDecalMeshAsMiscModel
 ================
 */
@@ -1527,6 +1731,7 @@ void MakeEntityDecals(entity_t *e)
         const char *decalGroup = ValueForKey(decalEnt, "decalgroup");
         decalMesh_t decalTrisoup;
         int firstProjectorIndex = -1;
+        qboolean hasPatchGeometry = qfalse;
         
         if (strcmp(classname, "_decal") != 0 && strcmp(classname, "misc_decal") != 0) continue;
         
@@ -1566,6 +1771,8 @@ void MakeEntityDecals(entity_t *e)
                     mesh_t srcMesh;
                     mesh_t *tess;
                     int x, y;
+                    
+                    hasPatchGeometry = qtrue;
                     
                     srcMesh.width = ds->patchWidth;
                     srcMesh.height = ds->patchHeight;
@@ -1657,6 +1864,10 @@ void MakeEntityDecals(entity_t *e)
             
             WeldDecalMesh(&decalTrisoup, 0.01f);
             ExtrudeDecalMesh(&decalTrisoup);
+            
+            if (hasPatchGeometry)
+                DecimateDecalMesh(&decalTrisoup);
+
             EmitDecalMeshAsMiscModel(&decalTrisoup, &decalProjectors[firstProjectorIndex], templateDs);
         }
         
