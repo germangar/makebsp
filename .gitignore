@@ -6,8 +6,12 @@ textures/
 models/
 env/
 cache/
+studies/
+q3map2_reference
 testmapbuild.bat
 libs/assimp_src/
+libs/embree
+libs/radeonrays
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
 .antigravitycli
@@ -15,6 +19,7 @@ yesterday_plan
 
 AGENTS.md
 .vscode/settings.json
+.antigravitycli
 
 *.bmp
 *.bsp 
@@ -43,7 +48,6 @@ libMRMeshC.dll
 *.a
 *.dll
 libMRMesh.dll
-
 light.exe
 makelight.exe
 q3light.exe
@@ -99,3 +103,4 @@ _decal_specs.txt
 light_wdm1_015.log
 compile_wdm1_015_geom.log
 planartrisoups_fixlightmaps_implementation_plan.md
+Debugging HACD Hull Generation chat.md
