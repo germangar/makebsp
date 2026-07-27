@@ -4,7 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef _WIN32
+#ifdef MRMESH_STATIC_LIB
+#   define MRMESHC_API
+#elif defined(_WIN32)
 #   ifdef MRMeshC_EXPORTS
 #       define MRMESHC_API __declspec( dllexport )
 #   else
