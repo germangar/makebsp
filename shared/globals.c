@@ -44,6 +44,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		qtrue,      // chamferEdges
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth
+		0.0f,       // decalExtrusion
         qtrue,      // enforceSampleSize
         qtrue,      // forceUVGen
         HDR_8BIT,   // hdr
@@ -98,6 +99,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		qtrue,      // chamferEdges
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth
+		0.0f,       // decalExtrusion
         qtrue,       // enforceSampleSize
         qtrue,       // forceUVGen
         HDR_OFF,    // hdr

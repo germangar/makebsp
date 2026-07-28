@@ -416,6 +416,10 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->chamferConcaveWidth = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "decalExtrusion") && val->type == json_type_number)
+        {
+            game->decalExtrusion = (float)atof(json_value_as_number(val)->number);
+        }
 
 
         el = el->next;
@@ -604,6 +608,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"chamferEdges\": %s,\n"
             "  \"chamferConvexWidth\": %.2f,\n"
             "  \"chamferConcaveWidth\": %.2f,\n"
+            "  \"decalExtrusion\": %.2f,\n"
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
@@ -645,6 +650,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->chamferEdges ? "true" : "false",
             game->chamferConvexWidth,
             game->chamferConcaveWidth,
+            game->decalExtrusion,
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",

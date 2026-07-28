@@ -44,6 +44,7 @@
   "chamferEdges": true,
   "chamferConvexWidth": 1.25,
   "chamferConcaveWidth": 0.00,
+  "decalExtrusion": 0.00,
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",

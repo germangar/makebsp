@@ -78,6 +78,7 @@ typedef struct {
 	qboolean    chamferEdges;
 	float       chamferConvexWidth;
 	float       chamferConcaveWidth;
+	float       decalExtrusion;
     qboolean    enforceSampleSize;
     qboolean    forceUVGen;
     hdrFormat_t hdr;

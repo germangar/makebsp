@@ -8,6 +8,7 @@ _decal entity processing
 #include "qbsp.h"
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshC.h"
 
+
 int numDecalProjectors = 0;
 decalProjector_t decalProjectors[MAX_DECAL_PROJECTORS];
 
@@ -1730,12 +1731,13 @@ void MakeEntityDecals(entity_t *e)
         const char *classname = ValueForKey(decalEnt, "classname");
         const char *decalGroup = ValueForKey(decalEnt, "decalgroup");
         decalMesh_t decalTrisoup;
+        decalMesh_t decalPatch;
         int firstProjectorIndex = -1;
-        qboolean hasPatchGeometry = qfalse;
         
         if (strcmp(classname, "_decal") != 0 && strcmp(classname, "misc_decal") != 0) continue;
         
         InitDecalMesh(&decalTrisoup);
+        InitDecalMesh(&decalPatch);
         
         for (i = 0; i < numDecalProjectors; i++)
         {
@@ -1771,8 +1773,6 @@ void MakeEntityDecals(entity_t *e)
                     mesh_t srcMesh;
                     mesh_t *tess;
                     int x, y;
-                    
-                    hasPatchGeometry = qtrue;
                     
                     srcMesh.width = ds->patchWidth;
                     srcMesh.height = ds->patchHeight;
@@ -1817,30 +1817,32 @@ void MakeEntityDecals(entity_t *e)
                             VectorCopy(idx[0]->xyz, w1->points[0]);
                             VectorCopy(idx[1]->xyz, w1->points[1]);
                             VectorCopy(idx[2]->xyz, w1->points[2]);
-                            AddWindingToDecalMesh(&localDp, w1, &decalTrisoup, qtrue);
+                            AddWindingToDecalMesh(&localDp, w1, &decalPatch, qtrue);
                             
                             w2 = AllocWinding(3);
                             w2->numpoints = 3;
                             VectorCopy(idx[0]->xyz, w2->points[0]);
                             VectorCopy(idx[2]->xyz, w2->points[1]);
                             VectorCopy(idx[3]->xyz, w2->points[2]);
-                            AddWindingToDecalMesh(&localDp, w2, &decalTrisoup, qtrue);
+                            AddWindingToDecalMesh(&localDp, w2, &decalPatch, qtrue);
                         }
                     }
                     FreeMesh(tess);
                 }
                 else
                 {
-                    int j;
+                    float simpleExtrusion = game->decalExtrusion;
+                    int j, k;
                     if (ds->numIndexes > 0)
                     {
                         for (j = 0; j < ds->numIndexes; j += 3)
                         {
                             winding_t *w = AllocWinding(3);
                             w->numpoints = 3;
-                            VectorCopy(ds->verts[ds->indexes[j]].xyz, w->points[0]);
-                            VectorCopy(ds->verts[ds->indexes[j+1]].xyz, w->points[1]);
-                            VectorCopy(ds->verts[ds->indexes[j+2]].xyz, w->points[2]);
+                            for (k = 0; k < 3; k++) {
+                                VectorCopy(ds->verts[ds->indexes[j+k]].xyz, w->points[k]);
+                                VectorMA(w->points[k], simpleExtrusion, ds->verts[ds->indexes[j+k]].normal, w->points[k]);
+                            }
                             AddWindingToDecalMesh(&localDp, w, &decalTrisoup, qfalse);
                         }
                     }
@@ -1848,8 +1850,10 @@ void MakeEntityDecals(entity_t *e)
                     {
                         winding_t *w = AllocWinding(ds->numVerts);
                         w->numpoints = ds->numVerts;
-                        for (j = 0; j < ds->numVerts; j++)
+                        for (j = 0; j < ds->numVerts; j++) {
                             VectorCopy(ds->verts[j].xyz, w->points[j]);
+                            VectorMA(w->points[j], simpleExtrusion, ds->verts[j].normal, w->points[j]);
+                        }
                         AddWindingToDecalMesh(&localDp, w, &decalTrisoup, qfalse);
                     }
                 }
@@ -1863,14 +1867,22 @@ void MakeEntityDecals(entity_t *e)
                 templateDs = &mapDrawSurfs[e->firstDrawSurf];
             
             WeldDecalMesh(&decalTrisoup, 0.01f);
-            ExtrudeDecalMesh(&decalTrisoup);
-            
-            if (hasPatchGeometry)
-                DecimateDecalMesh(&decalTrisoup);
-
             EmitDecalMeshAsMiscModel(&decalTrisoup, &decalProjectors[firstProjectorIndex], templateDs);
         }
         
+        if (decalPatch.numIndexes >= 3 && firstProjectorIndex != -1)
+        {
+            mapDrawSurface_t *templateDs = &mapDrawSurfs[0];
+            if (initialSurfs > e->firstDrawSurf)
+                templateDs = &mapDrawSurfs[e->firstDrawSurf];
+            
+            WeldDecalMesh(&decalPatch, 0.01f);
+            ExtrudeDecalMesh(&decalPatch);
+            DecimateDecalMesh(&decalPatch);
+            EmitDecalMeshAsMiscModel(&decalPatch, &decalProjectors[firstProjectorIndex], templateDs);
+        }
+        
         FreeDecalMesh(&decalTrisoup);
+        FreeDecalMesh(&decalPatch);
     }
 }
