@@ -120,8 +120,7 @@ void ProcessWorldModel(void)
         LeakFile(tree);
         if (leaktest)
         {
-            _printf("--- MAP LEAKED, ABORTING LEAKTEST ---\n");
-            exit(0);
+            Error("MAP LEAKED.");
         }
         leaked = qtrue;
 
