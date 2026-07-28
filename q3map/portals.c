@@ -607,6 +607,9 @@ qboolean FloodEntities(tree_t *tree)
         if (VectorCompare(origin, vec3_origin))
             continue;
 
+        if (!Q_stricmp(ValueForKey(&entities[i], "classname"), "misc_model"))
+            continue;
+
         origin[2] += 1; // so objects on floor are ok
 
         if (PlaceOccupant(headnode, origin, &entities[i]))
