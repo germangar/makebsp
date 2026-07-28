@@ -761,10 +761,6 @@ int main(int argc, char **argv)
     }
 
     // do a bsp if nothing else was specified
-    ClearCacheDirectory();
-
-
-
     tempsource[0] = '\0';
 
     for (i = 1; i < argc; i++)
@@ -1088,6 +1084,8 @@ int main(int argc, char **argv)
 
     strcpy(source, ExpandArg(argv[i]));
     StripExtension(source);
+
+    ClearCacheDirectory();
 
     // delete portal and line files
     sprintf(path, "%s.prt", source);

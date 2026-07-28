@@ -1230,6 +1230,12 @@ void ExtractFileBase(const char *path, char *dest)
 {
     const char *src;
 
+    if (!path || !path[0])
+    {
+        dest[0] = 0;
+        return;
+    }
+
     src = path + strlen(path) - 1;
 
     //
