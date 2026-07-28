@@ -67,9 +67,33 @@ void Broadcast_Setup(const char *dest) {
 
 static time_t lastBroadcastTime = 0;
 
+static int bufferedDots = 0;
+
 void Broadcast_Print(int level, const char *msg) {
     if (broadcastSocket < 0 || !msg) return;
     
+    if (strcmp(msg, ".") == 0) {
+        bufferedDots++;
+        if (bufferedDots < 32) return;
+    }
+
+    if (bufferedDots > 0 && strcmp(msg, ".") != 0) {
+        char temp[64];
+        memset(temp, '.', bufferedDots);
+        temp[bufferedDots] = '\0';
+        bufferedDots = 0;
+        Broadcast_Print(level, temp);
+    }
+    
+    const char *actualMsg = msg;
+    char dotBuf[64];
+    if (strcmp(msg, ".") == 0) {
+        memset(dotBuf, '.', bufferedDots);
+        dotBuf[bufferedDots] = '\0';
+        bufferedDots = 0;
+        actualMsg = dotBuf;
+    }
+
     lastBroadcastTime = time(NULL);
 
     char buffer[8192];
@@ -77,15 +101,15 @@ void Broadcast_Print(int level, const char *msg) {
     // Convert angle brackets to prevent breaking XML
     char safeMsg[4096];
     int j = 0;
-    for (int i = 0; msg[i] && j < sizeof(safeMsg) - 10; i++) {
-        if (msg[i] == '<') {
+    for (int i = 0; actualMsg[i] && j < sizeof(safeMsg) - 10; i++) {
+        if (actualMsg[i] == '<') {
             safeMsg[j++] = '&'; safeMsg[j++] = 'l'; safeMsg[j++] = 't'; safeMsg[j++] = ';';
-        } else if (msg[i] == '>') {
+        } else if (actualMsg[i] == '>') {
             safeMsg[j++] = '&'; safeMsg[j++] = 'g'; safeMsg[j++] = 't'; safeMsg[j++] = ';';
-        } else if (msg[i] == '&') {
+        } else if (actualMsg[i] == '&') {
             safeMsg[j++] = '&'; safeMsg[j++] = 'a'; safeMsg[j++] = 'm'; safeMsg[j++] = 'p'; safeMsg[j++] = ';';
         } else {
-            safeMsg[j++] = msg[i];
+            safeMsg[j++] = actualMsg[i];
         }
     }
     safeMsg[j] = '\0';
@@ -105,6 +129,14 @@ void Broadcast_Print(int level, const char *msg) {
 
 void Broadcast_Shutdown(void) {
     if (broadcastSocket >= 0) {
+        if (bufferedDots > 0) {
+            char temp[64];
+            memset(temp, '.', bufferedDots);
+            temp[bufferedDots] = '\0';
+            bufferedDots = 0;
+            Broadcast_Print(1, temp); // Flush remaining dots
+        }
+        
         // Send closing tag
         const char *closeStr = "</q3map_feedback>";
         int len = strlen(closeStr);

@@ -1,0 +1,72 @@
+======================================================
+CULLING EMITTERS IN SOLID (DETAIL BRUSHES)
+======================================================
+
+1. The Crash Reason (Embree Uninitialized)
+------------------------------------------
+When we initially enabled the `PointInSolid` test during `CreateSurfaceLights` to cull emitters inside solid geometry, the compiler instantly crashed. The root cause was that `PointInSolid` eventually calls `PointInTrisoup(start)`, which relies on the Embree geometry scene (`RTCScene g_scene`). 
+
+However, `CreateSurfaceLights` runs extremely early in the `light` pipeline—long before `InitTracingGeometry()` and `AddBrushesToEmbree()` are ever called. Consequently, `g_scene` was a NULL pointer, leading to a segfault. The immediate fix was to add a null pointer guard `if (g_scene == NULL) return qfalse;` inside `PointInTrisoup` to prevent the crash.
+
+
+2. Key Points of PointInOpaqueDetail
+------------------------------------------
+Because Embree isn't available yet during light creation, we implemented `PointInOpaqueDetail` to manually perform point-in-brush testing against detail brushes using the existing BSP data.
+
+Key mechanics:
+- It locates the BSP leaf the point resides in using `PointInLeafNum(start)`.
+- It iterates over all brushes (both structural and detail) referenced by that leaf.
+- It skips brushes that don't cast shadows (`brushCastsShadow[brushNum] == qfalse`), ensuring we don't cull lights inside non-opaque detail brushes.
+- It tests the point against every plane (side) of the brush. If the point is outside ANY plane, it cannot be inside the brush, so it skips to the next brush.
+- The Epsilon Trick (-0.05f): When generating an area light, its origin is pushed `0.1f` units away from the surface along its normal. If we strictly checked `d > 0.0f` to see if it was outside a brush, coplanar brushes or floating-point inaccuracies could mistakenly flag the extruded origin as being perfectly flush inside an adjacent detail brush, incorrectly culling it. By checking `d > -0.05f`, we ensure the point must be deeply buried (at least 0.05 units) inside the brush before we cull it.
+
+
+3. Full Function Implementation
+------------------------------------------
+qboolean PointInOpaqueDetail(vec3_t start)
+{
+    int leafNum = PointInLeafNum(start);
+    int i, j;
+    
+    // Check all brushes in this leaf
+    for (i = 0; i < dleafs[leafNum].numLeafBrushes; i++)
+    {
+        int brushNum = dleafbrushes[dleafs[leafNum].firstLeafBrush + i];
+        
+        // Only cull if it's an opaque brush
+        if (!brushCastsShadow[brushNum])
+            continue;
+            
+        dbrush_t *b = &dbrushes[brushNum];
+        
+        if (b->numSides == 0)
+            continue;
+            
+        qboolean inBrush = qtrue;
+        
+        for (j = 0; j < b->numSides; j++)
+        {
+            dbrushside_t *s = &dbrushsides[b->firstSide + j];
+            dplane_t *plane = &dplanes[s->planeNum];
+            float d = DotProduct(start, plane->normal) - plane->dist;
+            
+            // Allow coplanarity with a small epsilon smaller than 0.1f (light extrusion)
+            if (d > -0.05f)
+            {
+                inBrush = qfalse;
+                break;
+            }
+        }
+        
+        if (inBrush)
+        {
+            return qtrue; // Inside an opaque detail (or structural) brush
+        }
+    }
+    
+    return qfalse;
+}
+
+4. Next Steps (Deferring Emitter Generation)
+------------------------------------------
+Tomorrow we need to study if we can defer the generation of emitters from surfacelights (the CreateSurfaceLights step) until *after* the Embree geometry (g_scene) has been initialized. If we can successfully delay emitter generation, we can simply use the standard PointInSolid() check and let the raytracer flawlessly cull emitters inside patches and models as well.
