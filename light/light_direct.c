@@ -2257,11 +2257,13 @@ void TraceLights(int num)
                 {
                     if (!sampleHit[i][j])
                     {
-                        BITMAP_SET(unreachableMask, k);
+                        #pragma omp atomic
+                        unreachableMask[k >> 3] |= (1 << (k & 7));
                     }
                     else
                     {
-                        BITMAP_CLEAR(unreachableMask, k);
+                        #pragma omp atomic
+                        unreachableMask[k >> 3] &= ~(1 << (k & 7));
                     }
                 }
             }
