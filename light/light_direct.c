@@ -1077,7 +1077,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         add = CalculateAttenuation(light, dist, light->attenuationModel, DEFAULT_ATTN_OFFSET);
         
         // Early distance cull: skip expensive spotlight vector math if distance alone kills it
-        if (add <= MIN_LIGHT_ADD)
+        if (add <= 0.0f)
         {
             return qfalse;
         }
@@ -1137,7 +1137,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qfalse;
     }
 
-    if (add <= MIN_LIGHT_ADD)
+    if (add <= 0.0f)
     {
         return qfalse;
     }

@@ -747,7 +747,7 @@ void CreateEntityLights(void)
                 dl->fadeout = 1.0f;
         }
         else
-            dl->fadeout = 0.0f;
+            dl->fadeout = game->fadeout;
 
         const char *nodeluxeStr = ValueForKey(e, "nodeluxe");
         if (nodeluxeStr[0] && atoi(nodeluxeStr))
