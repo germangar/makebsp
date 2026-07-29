@@ -378,7 +378,7 @@ static void AddBrushesToEmbree(RTCScene scene)
                  (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
                   CONTENTS_TRANSLUCENT | CONTENTS_FOG |
                   CONTENTS_PLAYERCLIP | CONTENTS_MONSTERCLIP | CONTENTS_BOTCLIP)) ||
-                (dshaders[s->shaderNum].surfaceFlags & (SURF_SKY | SURF_NONSOLID)))
+                (dshaders[s->shaderNum].surfaceFlags & SURF_SKY))
             {
                 skipBrush = qtrue;
                 break;
