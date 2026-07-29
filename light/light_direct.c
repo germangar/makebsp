@@ -1249,14 +1249,28 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
         if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP)
         {
             VectorMA(dv->xyz, SAMPLE_NUDGE, dv->normal, v_origin);
-            LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, testOcclusion,
-                             forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
         }
         else
         {
             VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
-            LightingAtSample(v_origin, normal, sample, NULL, NULL, testOcclusion,
-                             forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
+        }
+
+        if (BoxInSolid(v_origin, 4.0f, qtrue))
+        {
+            VectorClear(sample);
+        }
+        else
+        {
+            if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP)
+            {
+                LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, testOcclusion,
+                                 forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
+            }
+            else
+            {
+                LightingAtSample(v_origin, normal, sample, NULL, NULL, testOcclusion,
+                                 forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
+            }
         }
 
         if (scale >= 0)
@@ -1405,24 +1419,22 @@ void PrecacheTexelGeometryThread(int i)
             
             vec3_t origin, normal, centroid;
             qboolean hit = qtrue;
+            float st[2];
+            mesh_t *mesh = localSurfaces[i].patchMesh;
+            
+            st[0] = (float)ds->lightmapOffset[0][0] + u;
+            st[1] = (float)ds->lightmapOffset[0][1] + v;
 
             if (ds->surfaceType == MST_TRIANGLE_SOUP)
             {
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + u;
-                st[1] = (float)ds->lightmapOffset[0][1] + v;
                 if (!TriSoupSamplePoint(ds, st, origin, normal, centroid))
                     hit = qfalse;
             }
             else if (ds->surfaceType == MST_PATCH)
             {
-                mesh_t *mesh = localSurfaces[i].patchMesh;
                 if (!mesh) {
                     hit = qfalse;
                 } else {
-                    float st[2];
-                    st[0] = (float)ds->lightmapOffset[0][0] + u;
-                    st[1] = (float)ds->lightmapOffset[0][1] + v;
                     if (!PatchSamplePoint(mesh, st, origin, normal, centroid))
                         hit = qfalse;
                 }
@@ -1436,11 +1448,20 @@ void PrecacheTexelGeometryThread(int i)
                 }
                 
                 // Validate if this texel actually falls inside the planar polygon
-                float st[2];
-                st[0] = (float)ds->lightmapOffset[0][0] + u;
-                st[1] = (float)ds->lightmapOffset[0][1] + v;
                 if (!PlanarSamplePointInside(ds, st, centroid))
                     hit = qfalse;
+            }
+
+            if (hit)
+            {
+                float texelSize = localSurfaces[i].sampleSize;
+                if (texelSize < 1.0f) texelSize = (float)game->defaultSampleSize;
+                texelSize /= scale;
+                
+                float margin = texelSize * 1.5f;
+                if (BoxInSolid(origin, margin, qtrue)) {
+                    hit = qfalse; // Cull deeply buried texel
+                }
             }
 
             if (hit)
@@ -2012,6 +2033,19 @@ void TraceLights(int num)
                 for (k = 0; k < 3; k++)
                 {
                     origin[k] = (float)base[k];
+                }
+
+                // If this is a supersample or differently scaled surface, PrecacheTexelGeometryThread didn't cull it.
+                // We MUST enforce the culling here, otherwise it receives direct sunlight in the void.
+                if (!(ss == 0 && scale == global_scale))
+                {
+                    float texelSize = localSurfaces[realSurfIndex].sampleSize;
+                    if (texelSize < 1.0f) texelSize = (float)game->defaultSampleSize;
+                    texelSize /= scale;
+                    float margin = texelSize * 1.5f;
+
+                    if (BoxInSolid(origin, margin, qtrue))
+                        continue;
                 }
 
                 vec3_t subColor, subDir, subEnergy;

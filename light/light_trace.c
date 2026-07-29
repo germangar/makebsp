@@ -461,6 +461,106 @@ void InitTrace(void)
     InitTracingGeometry();
 }
 
+qboolean BoxInOpaqueDetail(vec3_t start, float margin);
+
+/*
+===================
+BoxOnPlaneSide
+===================
+*/
+int BoxOnPlaneSide(vec3_t emins, vec3_t emaxs, dplane_t *p)
+{
+    float dist1, dist2;
+    float bpts[3], wpts[3];
+    int i;
+
+    for (i = 0; i < 3; i++)
+    {
+        if (p->normal[i] >= 0)
+        {
+            bpts[i] = emaxs[i];
+            wpts[i] = emins[i];
+        }
+        else
+        {
+            bpts[i] = emins[i];
+            wpts[i] = emaxs[i];
+        }
+    }
+
+    dist1 = DotProduct(bpts, p->normal) - p->dist;
+    dist2 = DotProduct(wpts, p->normal) - p->dist;
+
+    int sides = 0;
+    if (dist1 >= 0) sides = 1;
+    if (dist2 < 0) sides |= 2;
+
+    return sides;
+}
+
+/*
+===================
+BoxInSolid_r
+===================
+*/
+qboolean BoxInSolid_r(vec3_t mins, vec3_t maxs, int node)
+{
+    while (node >= 0)
+    {
+        dnode_t *dnode = &dnodes[node];
+        dplane_t *dplane = &dplanes[dnode->planeNum];
+        int sides = BoxOnPlaneSide(mins, maxs, dplane);
+
+        if (sides == 3)
+        {
+            // Box crosses plane, must be engulfed in BOTH children to be completely solid
+            return BoxInSolid_r(mins, maxs, dnode->children[0]) &&
+                   BoxInSolid_r(mins, maxs, dnode->children[1]);
+        }
+        if (sides == 1)
+            node = dnode->children[0];
+        else
+            node = dnode->children[1];
+    }
+
+    int leafNum = -node - 1;
+    if (dleafs[leafNum].cluster == -1)
+    {
+        return qtrue; // Solid leaf (including the void)
+    }
+    return qfalse; // Playable leaf
+}
+
+/*
+===================
+BoxInSolid
+===================
+*/
+qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly)
+{
+    vec3_t mins, maxs;
+    mins[0] = origin[0] - margin;
+    mins[1] = origin[1] - margin;
+    mins[2] = origin[2] - margin;
+    maxs[0] = origin[0] + margin;
+    maxs[1] = origin[1] + margin;
+    maxs[2] = origin[2] + margin;
+
+    // Check structural BSP bounds
+    if (BoxInSolid_r(mins, maxs, 0))
+    {
+        return qtrue;
+    }
+
+    if (structuralonly)
+    {
+        return qfalse;
+    }
+
+    // Check detail brushes volumetrically
+    return BoxInOpaqueDetail(origin, margin);
+}
+
 /*
 ===================
 PointInSolid
@@ -558,10 +658,10 @@ int PointInLeafNum(vec3_t start)
 
 /*
 ===================
-PointInOpaqueDetail
+BoxInOpaqueDetail
 ===================
 */
-qboolean PointInOpaqueDetail(vec3_t start)
+qboolean BoxInOpaqueDetail(vec3_t start, float margin)
 {
     int leafNum = PointInLeafNum(start);
     int i, j;
@@ -589,7 +689,7 @@ qboolean PointInOpaqueDetail(vec3_t start)
             float d = DotProduct(start, plane->normal) - plane->dist;
             
             // Allow coplanarity with a small epsilon smaller than 0.1f (light extrusion)
-            if (d > -0.05f)
+            if (d > -margin)
             {
                 inBrush = qfalse;
                 break;
@@ -612,7 +712,7 @@ PointInBrush
 */
 qboolean PointInBrush(vec3_t start) 
 { 
-    return PointInSolid_r(start, 0) || PointInOpaqueDetail(start); 
+    return PointInSolid_r(start, 0) || BoxInOpaqueDetail(start, 0.05f); 
 }
 
 /*

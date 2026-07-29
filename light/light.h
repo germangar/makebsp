@@ -396,6 +396,7 @@ typedef struct
     float superSampleRadius;
     int upscale;
     qboolean castShadows;
+    float sampleSize;
 } localSurface_t;
 extern localSurface_t *localSurfaces;
 extern qboolean brushCastsShadow[MAX_MAP_BRUSHES];
@@ -426,6 +427,7 @@ void InitTrace(void);
 void InitTracingGeometry(void);
 qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t filter);
 qboolean PointInTrisoup(vec3_t origin, vec3_t normal);
+qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);

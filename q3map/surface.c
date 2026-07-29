@@ -1484,6 +1484,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
 
     numDrawSurfaces++;
 
@@ -1578,6 +1579,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
 
     numDrawSurfaces++;
 
@@ -1678,6 +1680,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
 
     numDrawSurfaces++;
 

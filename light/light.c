@@ -1175,6 +1175,9 @@ void BuildLocalSurfaces(void)
 
         if (extra && i < numExtra) {
             localSurfaces[i].surfaceIsPlanar = extra[i].isPlanar;
+            localSurfaces[i].sampleSize = extra[i].sampleSize;
+        } else {
+            localSurfaces[i].sampleSize = (float)game->defaultSampleSize;
         }
     }
     if (extra)
