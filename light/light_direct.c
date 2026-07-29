@@ -1255,7 +1255,7 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
             VectorMA(dv->xyz, SAMPLE_NUDGE, normal, v_origin);
         }
 
-        if (BoxInSolid(v_origin, 4.0f, qtrue))
+        if (BoxInSolid(v_origin, 4.0f, qfalse))
         {
             VectorClear(sample);
         }
@@ -1459,7 +1459,7 @@ void PrecacheTexelGeometryThread(int i)
                 texelSize /= scale;
                 
                 float margin = texelSize * 1.5f;
-                if (BoxInSolid(origin, margin, qtrue)) {
+                if (BoxInSolid(origin, margin, qfalse)) {
                     hit = qfalse; // Cull deeply buried texel
                 }
             }

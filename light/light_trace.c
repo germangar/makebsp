@@ -676,9 +676,20 @@ qboolean BoxInOpaqueDetail(vec3_t start, float margin)
             continue;
             
         dbrush_t *b = &dbrushes[brushNum];
+        dshader_t *ds = &dshaders[b->shaderNum];
         
         if (b->numSides == 0)
             continue;
+            
+        // Ignore brushes that don't block light (translucent, liquids, clips, fog, sky)
+        // Note: We deliberately do NOT ignore SURF_NODRAW (caulk), because caulk is solid and blocks light.
+        if ((ds->contentFlags & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
+                                 CONTENTS_TRANSLUCENT | CONTENTS_FOG |
+                                 CONTENTS_PLAYERCLIP | CONTENTS_MONSTERCLIP | CONTENTS_BOTCLIP)) ||
+            (ds->surfaceFlags & SURF_SKY))
+        {
+            continue;
+        }
             
         qboolean inBrush = qtrue;
         
