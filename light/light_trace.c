@@ -517,11 +517,103 @@ qboolean PointInSolid_r(vec3_t start, int node)
 }
 
 /*
+===================
+PointInLeafNum
+===================
+*/
+int PointInLeafNum(vec3_t start)
+{
+    int node = 0;
+    while (node >= 0)
+    {
+        dnode_t *dnode = &dnodes[node];
+        dplane_t *dplane = &dplanes[dnode->planeNum];
+        double front;
+
+        int type = PlaneTypeForNormal(dplane->normal);
+        if (type <= PLANE_Z)
+        {
+            front = (double)start[type] - dplane->dist;
+        }
+        else
+        {
+            front = ((double)start[0] * dplane->normal[0] +
+                     (double)start[1] * dplane->normal[1] +
+                     (double)start[2] * dplane->normal[2]) -
+                    dplane->dist;
+        }
+
+        if (front >= 0)
+        {
+            node = dnode->children[0];
+        }
+        else
+        {
+            node = dnode->children[1];
+        }
+    }
+
+    return -node - 1;
+}
+
+/*
+===================
+PointInOpaqueDetail
+===================
+*/
+qboolean PointInOpaqueDetail(vec3_t start)
+{
+    int leafNum = PointInLeafNum(start);
+    int i, j;
+    
+    // Check all brushes in this leaf
+    for (i = 0; i < dleafs[leafNum].numLeafBrushes; i++)
+    {
+        int brushNum = dleafbrushes[dleafs[leafNum].firstLeafBrush + i];
+        
+        // Only cull if it's an opaque brush
+        if (!brushCastsShadow[brushNum])
+            continue;
+            
+        dbrush_t *b = &dbrushes[brushNum];
+        
+        if (b->numSides == 0)
+            continue;
+            
+        qboolean inBrush = qtrue;
+        
+        for (j = 0; j < b->numSides; j++)
+        {
+            dbrushside_t *s = &dbrushsides[b->firstSide + j];
+            dplane_t *plane = &dplanes[s->planeNum];
+            float d = DotProduct(start, plane->normal) - plane->dist;
+            
+            // Allow coplanarity with a small epsilon smaller than 0.1f (light extrusion)
+            if (d > -0.05f)
+            {
+                inBrush = qfalse;
+                break;
+            }
+        }
+        
+        if (inBrush)
+        {
+            return qtrue; // Inside an opaque detail (or structural) brush
+        }
+    }
+    
+    return qfalse;
+}
+
+/*
 =============
 PointInBrush
 =============
 */
-qboolean PointInBrush(vec3_t start) { return PointInSolid_r(start, 0); }
+qboolean PointInBrush(vec3_t start) 
+{ 
+    return PointInSolid_r(start, 0) || PointInOpaqueDetail(start); 
+}
 
 /*
 ===================
@@ -530,6 +622,9 @@ PointInTrisoup
 */
 qboolean PointInTrisoup(vec3_t origin, vec3_t normal)
 {
+    if (g_scene == NULL)
+        return qfalse;
+
     struct RTCRayHit rayhit;
     memset(&rayhit, 0, sizeof(rayhit));
     struct RTCIntersectArguments iargs;
