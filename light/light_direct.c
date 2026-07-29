@@ -232,7 +232,7 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
     }
 
     // If we found no exact match but found a valid extrapolation, use it
-    if (bestExtrapolatedDistSq < 999999.0f)
+    if (bestExtrapolatedDistSq < (float)GUTTER * GUTTER * 4.0f)
     {
         VectorCopy(bestExtrapOrigin, origin);
         VectorCopy(bestExtrapNormal, normal);
