@@ -1226,7 +1226,17 @@ void BuildLocalSurfaces(void)
             qboolean casts = modelCastsShadow[m];
             
             for (b = 0; b < dmodels[m].numBrushes; b++) {
-                brushCastsShadow[dmodels[m].firstBrush + b] = casts;
+                int brushNum = dmodels[m].firstBrush + b;
+                dbrush_t *brush = &dbrushes[brushNum];
+                dshader_t *ds = &dshaders[brush->shaderNum];
+                qboolean brushCasts = casts;
+                
+                if ((ds->contentFlags & (CONTENTS_FOG | CONTENTS_TRANSLUCENT | CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA)) ||
+                    (ds->surfaceFlags & (SURF_NODRAW | SURF_NONSOLID | SURF_SKY))) {
+                    brushCasts = qfalse;
+                }
+                
+                brushCastsShadow[brushNum] = brushCasts;
             }
             
             for (s = 0; s < dmodels[m].numSurfaces; s++) {
