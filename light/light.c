@@ -840,7 +840,8 @@ void CreateEntityLights(void)
                 bl->photons = rawIntensity * bsFraction * POINTSCALE_SOFT;
                 
                 // Configure specific cutoff and fadeout for backsplash
-                bl->min_light_add = 0.3f;
+                if (bl->min_light_add < 0.3f)
+                    bl->min_light_add = 0.3f;
                 bl->fadeout = 0.25f;
                 
                 bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET, bl->attenuationModel);
