@@ -60,9 +60,11 @@ void Broadcast_Setup(const char *dest) {
 
     // Send init string
     const char *initStr = "<?xml version=\"1.0\"?><q3map_feedback version=\"1\">";
-    int len = strlen(initStr);
-    send(broadcastSocket, (const char *)&len, 4, 0); 
-    send(broadcastSocket, initStr, len, 0);
+    int len = strlen(initStr) + 1;
+    char outBuffer[256];
+    memcpy(outBuffer, &len, 4);
+    memcpy(outBuffer + 4, initStr, len);
+    send(broadcastSocket, outBuffer, len + 4, 0);
 }
 
 static time_t lastBroadcastTime = 0;
@@ -116,12 +118,12 @@ void Broadcast_Print(int level, const char *msg) {
     
     snprintf(buffer, sizeof(buffer), "<message level=\"%d\">%s</message>", level, safeMsg);
     
-    int len = strlen(buffer);
-    if (send(broadcastSocket, (const char *)&len, 4, 0) <= 0) {
-        Broadcast_Shutdown();
-        return;
-    }
-    if (send(broadcastSocket, buffer, len, 0) <= 0) {
+    int len = strlen(buffer) + 1;
+    char outBuffer[8196]; // 8192 buffer + 4 byte header
+    memcpy(outBuffer, &len, 4);
+    memcpy(outBuffer + 4, buffer, len);
+    
+    if (send(broadcastSocket, outBuffer, len + 4, 0) <= 0) {
         Broadcast_Shutdown();
         return;
     }
@@ -139,10 +141,12 @@ void Broadcast_Shutdown(void) {
         
         // Send closing tag
         const char *closeStr = "</q3map_feedback>";
-        int len = strlen(closeStr);
+        int len = strlen(closeStr) + 1;
         // We ignore errors here because we are shutting down anyway
-        send(broadcastSocket, (const char *)&len, 4, 0); 
-        send(broadcastSocket, closeStr, len, 0);
+        char outBuffer[256];
+        memcpy(outBuffer, &len, 4);
+        memcpy(outBuffer + 4, closeStr, len);
+        send(broadcastSocket, outBuffer, len + 4, 0);
 
         // Graceful shutdown to ensure the final tag is actually sent
 #ifdef _WIN32
