@@ -441,6 +441,7 @@ void Bspinfo(int count, char **fileNames)
     {
         _printf("---------------------\n");
         strcpy(source, fileNames[i]);
+        StripExtension(source);
         DefaultExtension(source, ".bsp");
         f = fopen(source, "rb");
         if (f)
@@ -654,14 +655,24 @@ int main(int argc, char **argv)
         Error("usage: q3map [options] mapfile");
     }
 
+    // early check for connect so that early exits (like -info) can broadcast
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-connect") && i + 1 < argc) {
+            Broadcast_Setup(argv[i + 1]);
+            break;
+        }
+    }
+
     // check for general program options
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-info")) {
             Bspinfo(argc - (i + 1), argv + (i + 1));
+            Broadcast_Shutdown();
             return 0;
         }
         if (!strcmp(argv[i], "-exportmodels")) {
             ExportModels(argc - (i + 1), argv + (i + 1));
+            Broadcast_Shutdown();
             return 0;
         }
     }
@@ -755,6 +766,7 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-visonly")) {
             VisMain(argc, argv);
+            Broadcast_Shutdown();
             return 0;
         }
     }
@@ -1108,6 +1120,7 @@ int main(int argc, char **argv)
     if (onlyents)
     {
         OnlyEnts();
+        Broadcast_Shutdown();
         return 0;
     }
 
