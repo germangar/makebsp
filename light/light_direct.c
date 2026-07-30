@@ -1459,6 +1459,10 @@ void PrecacheTexelGeometryThread(int i)
                 texelSize /= scale;
                 
                 float margin = texelSize * 1.5f;
+                if (localSurfaces[i].upscale > 1) {
+                    margin *= 2.0f;
+                }
+                
                 if (BoxInSolid(origin, margin, qfalse)) {
                     hit = qfalse; // Cull deeply buried texel
                 }
@@ -2043,6 +2047,10 @@ void TraceLights(int num)
                     if (texelSize < 1.0f) texelSize = (float)game->defaultSampleSize;
                     texelSize /= scale;
                     float margin = texelSize * 1.5f;
+                    
+                    if (localSurfaces[realSurfIndex].upscale > 1) {
+                        margin *= 2.0f;
+                    }
 
                     if (BoxInSolid(origin, margin, qtrue))
                         continue;
