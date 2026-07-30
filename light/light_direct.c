@@ -172,9 +172,10 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
             return qtrue;
         }
 
-        // Dilation: if not inside, check if we are within the gutter distance
-        // For standard (non-planar) TriSoup, we always allow this if we have a gutter
-        if (!isPlanar)
+        // Extrapolation (Tracing Dilation): if not inside, check if we are within the gutter distance
+        // We now allow this for ALL trisoups (including planar-derived) because xatlas introduces padding gaps
+        // that must be mathematically bridged by the raytracer to prevent dead sub-pixels in Upscale.
+        // if (!isPlanar)
         {
             float dSq, dMin = 999999.0f;
             float t;
@@ -232,7 +233,12 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
     }
 
     // If we found no exact match but found a valid extrapolation, use it
-    if (bestExtrapolatedDistSq < (float)GUTTER * GUTTER * 4.0f)
+    // For planar-derived trisoups (which xatlas splits with padding), limit extrapolation to 1 texel
+    // to prevent pushing the origin deep into adjacent concave walls and causing false shadows.
+    // Standard trisoups (e.g. terrain) use the full 2 texel (4.0f) extrapolation limit.
+    float maxExtrapDistSq = isPlanar ? (float)GUTTER * GUTTER * 1.0f : (float)GUTTER * GUTTER * 4.0f;
+
+    if (bestExtrapolatedDistSq < maxExtrapDistSq)
     {
         VectorCopy(bestExtrapOrigin, origin);
         VectorCopy(bestExtrapNormal, normal);
