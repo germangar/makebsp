@@ -2370,18 +2370,47 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
 
     // STEP 6: Compact index buffer
     int validIndexes = 0;
+    int geomDegensRemoved = 0;
     for (int t = 0; t < numTris; t++) {
         if (!triAlive[t]) continue;
         int i0 = ds->indexes[t*3+0];
         int i1 = ds->indexes[t*3+1];
         int i2 = ds->indexes[t*3+2];
+        
+        // Topological degenerate (two identical indices)
         if (i0 == i1 || i1 == i2 || i0 == i2) continue;
+
+        // Geometric degenerate (aspect-ratio sliver check)
+        vec3_t ce1, ce2, ce3, cross;
+        VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, ce1);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, ce2);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i1].xyz, ce3);
+        
+        float len1Sq = DotProduct(ce1, ce1);
+        float len2Sq = DotProduct(ce2, ce2);
+        float len3Sq = DotProduct(ce3, ce3);
+        
+        if (len1Sq < 1e-6f || len2Sq < 1e-6f || len3Sq < 1e-6f) { geomDegensRemoved++; continue; }
+        
+        CrossProduct(ce1, ce2, cross);
+        float twiceArea = VectorLength(cross);
+        
+        float maxEdgeSq = len1Sq;
+        if (len2Sq > maxEdgeSq) maxEdgeSq = len2Sq;
+        if (len3Sq > maxEdgeSq) maxEdgeSq = len3Sq;
+        
+        float sliverMetric = twiceArea / maxEdgeSq;
+        if (sliverMetric < 0.001f) { geomDegensRemoved++; continue; }
+
         ds->indexes[validIndexes+0] = i0;
         ds->indexes[validIndexes+1] = i1;
         ds->indexes[validIndexes+2] = i2;
         validIndexes += 3;
     }
     ds->numIndexes = validIndexes;
+    if (geomDegensRemoved > 0) {
+        qprintf("    Purged %i zero-area sliver triangles in Phase 1\n", geomDegensRemoved);
+    }
 
     // STEP 7: Compact vertex buffer into fresh allocation
     int *remap = malloc(oldNumVerts * sizeof(int));
@@ -2682,18 +2711,47 @@ static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
 
     // STEP F: Compact index buffer
     int validIndexes = 0;
+    int geomDegensRemoved = 0;
     for (int t = 0; t < numTris; t++) {
         if (!triAlive[t]) continue;
         int i0 = ds->indexes[t*3+0];
         int i1 = ds->indexes[t*3+1];
         int i2 = ds->indexes[t*3+2];
-        if (i0==i1 || i1==i2 || i0==i2) continue;
+        
+        // Topological degenerate
+        if (i0 == i1 || i1 == i2 || i0 == i2) continue;
+
+        // Geometric degenerate (aspect-ratio sliver check)
+        vec3_t ce1, ce2, ce3, cross;
+        VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, ce1);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, ce2);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i1].xyz, ce3);
+        
+        float len1Sq = DotProduct(ce1, ce1);
+        float len2Sq = DotProduct(ce2, ce2);
+        float len3Sq = DotProduct(ce3, ce3);
+        
+        if (len1Sq < 1e-6f || len2Sq < 1e-6f || len3Sq < 1e-6f) { geomDegensRemoved++; continue; }
+        
+        CrossProduct(ce1, ce2, cross);
+        float twiceArea = VectorLength(cross);
+        
+        float maxEdgeSq = len1Sq;
+        if (len2Sq > maxEdgeSq) maxEdgeSq = len2Sq;
+        if (len3Sq > maxEdgeSq) maxEdgeSq = len3Sq;
+        
+        float sliverMetric = twiceArea / maxEdgeSq;
+        if (sliverMetric < 0.001f) { geomDegensRemoved++; continue; }
+
         ds->indexes[validIndexes+0] = i0;
         ds->indexes[validIndexes+1] = i1;
         ds->indexes[validIndexes+2] = i2;
         validIndexes += 3;
     }
     ds->numIndexes = validIndexes;
+    if (geomDegensRemoved > 0) {
+        qprintf("    Purged %i zero-area sliver triangles in Phase 2\n", geomDegensRemoved);
+    }
 
     // STEP G: Compact vertex buffer
     int *remap = malloc(numVerts * sizeof(int));
