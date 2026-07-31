@@ -2390,7 +2390,7 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         float len2Sq = DotProduct(ce2, ce2);
         float len3Sq = DotProduct(ce3, ce3);
         
-        if (len1Sq < 1e-6f || len2Sq < 1e-6f || len3Sq < 1e-6f) { geomDegensRemoved++; continue; }
+        if (len1Sq < 1e-9f || len2Sq < 1e-9f || len3Sq < 1e-9f) { geomDegensRemoved++; continue; }
         
         CrossProduct(ce1, ce2, cross);
         float twiceArea = VectorLength(cross);
@@ -2731,7 +2731,7 @@ static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
         float len2Sq = DotProduct(ce2, ce2);
         float len3Sq = DotProduct(ce3, ce3);
         
-        if (len1Sq < 1e-6f || len2Sq < 1e-6f || len3Sq < 1e-6f) { geomDegensRemoved++; continue; }
+        if (len1Sq < 1e-9f || len2Sq < 1e-9f || len3Sq < 1e-9f) { geomDegensRemoved++; continue; }
         
         CrossProduct(ce1, ce2, cross);
         float twiceArea = VectorLength(cross);
