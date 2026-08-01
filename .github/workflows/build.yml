@@ -1,0 +1,58 @@
+name: Build makebsp
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          make clean
+          make RELEASE=1
+
+      - name: Upload binaries
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: makebsp-windows
+          path: |
+            makebsp.exe
+            makelight.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Build
+        run: |
+          make clean
+          make RELEASE=1
+
+      - name: Upload binaries
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: makebsp-linux
+          path: |
+            makebsp
+            makelight
