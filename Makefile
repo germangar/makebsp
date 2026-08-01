@@ -28,13 +28,13 @@ CXX = g++
 
 ifeq ($(OS),Windows_NT)
     EXECUTABLE_EXT = .exe
-    CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/windows/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
+    CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/windows/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -D_WIN32 -DNDEBUG -D_CONSOLE -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -mconsole -static -lwsock32 -lws2_32 -lm -lstdc++ -fopenmp -Wl,--stack,16777216
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12 -Llibs/opencl/lib -lOpenCL -lcfgmgr32 -lruntimeobject -lole32 -lsetupapi
     GENERATE_KERNELS = powershell.exe -NoProfile -ExecutionPolicy Bypass -File stringify_kernels.ps1
 else
     EXECUTABLE_EXT = .elf
-    CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/coacd/public -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/linux/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -DNDEBUG -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
+    CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/linux/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -DNDEBUG -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -lpthread -ldl -lm -lstdc++ -fopenmp
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/linux/lib -lembree4 -ltbb12 -lOpenCL
     GENERATE_KERNELS = chmod +x stringify_kernels.sh && ./stringify_kernels.sh
@@ -44,7 +44,12 @@ ifeq ($(RELEASE), 1)
     CFLAGS += -DRELEASE_BUILD
 endif
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
-Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -Llibs/coacd/build -lcoacd -lz
+Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -lz
+
+ifeq ($(COACD_ENABLED), 1)
+    CFLAGS += -DCOACD_ENABLED -Ilibs/coacd/public
+    Q3MAP_LDFLAGS += -Llibs/coacd/build -lcoacd
+endif
 Q3LIGHT_LDFLAGS = $(BASE_LDFLAGS)
 
 # Directories

@@ -1140,7 +1140,11 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     }
     else
     {
+#ifdef COACD_ENABLED
         hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
+#else
+        hulls_list = GenerateHACDCollision(inst, caulk);
+#endif
     }
 
     if (hulls_list)

@@ -33,6 +33,9 @@ jobs:
           path: |
             makebsp.exe
             makelight.exe
+            embree4.dll
+            tbb12.dll
+            tbbmalloc.dll
 
   build-linux:
     runs-on: ubuntu-latest
@@ -56,3 +59,5 @@ jobs:
           path: |
             makebsp.elf
             makelight.elf
+            libs/embree/prebuilt/linux/lib/libembree4.so*
+            libs/embree/prebuilt/linux/lib/libtbb*.so*

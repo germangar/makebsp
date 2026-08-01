@@ -7,6 +7,8 @@ This file is part of Quake III Arena source code.
 ===========================================================================
 */
 
+#ifdef COACD_ENABLED
+
 #include "qbsp.h"
 #include "model_collision.h"
 #include "../libs/coacd_api.h"
@@ -291,3 +293,5 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
 
     return hulls_list;
 }
+
+#endif

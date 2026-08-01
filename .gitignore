@@ -46,6 +46,7 @@ libMRMeshC.dll
 # General build artifacts
 *.o
 *.a
+!libs/coacd/build/libcoacd.a
 *.dll
 libMRMesh.dll
 light.exe
