@@ -36,7 +36,7 @@ else
     EXECUTABLE_EXT = .elf
     CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/linux/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -DNDEBUG -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -lpthread -ldl -lm -lstdc++ -fopenmp
-    LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/linux/lib -lembree4 -ltbb12 -lOpenCL
+    LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/linux/lib -lembree4 -ltbb -lOpenCL
     GENERATE_KERNELS = chmod +x stringify_kernels.sh && ./stringify_kernels.sh
 endif
 
