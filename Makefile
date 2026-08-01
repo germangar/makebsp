@@ -255,11 +255,11 @@ $(OBJ_ASSIMP_DIR)/contrib/%.o: libs/assimp/src/contrib/%.cpp
 	$(CXX) $(ASSIMP_CXXFLAGS) -c $< -o $@
 
 # Compile rules for persistent MeshLib-Lite
-$(OBJ_LITE_DIR)/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
+$(OBJ_ML_DIR)/MRMesh/%.o: libs/MeshLib-Lite/MRMesh/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
-$(OBJ_LITE_DIR)/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
+$(OBJ_ML_DIR)/MRMeshC/%.o: libs/MeshLib-Lite/MRMeshC/%.cpp
 	mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++20 -O1 -Wno-sign-compare -c $< -o $@
 
