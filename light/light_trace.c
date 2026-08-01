@@ -67,7 +67,7 @@ void InitTracingGeometry(void)
         // because we want light to pass through them
         shaderInfo_t *si = ShaderInfoForShader(dshaders[dsurf->shaderNum].shader);
         if ((si->contents & CONTENTS_TRANSLUCENT) &&
-            !(si->surfaceFlags & SURF_ALPHASHADOW))
+            !(si->surfaceFlags & (SURF_ALPHASHADOW | SURF_LIGHTFILTER)))
         {
             continue;
         }
@@ -100,7 +100,7 @@ void InitTracingGeometry(void)
             }
 
             qboolean needsFilter = qfalse;
-            if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+            if (si->surfaceFlags & (SURF_ALPHASHADOW | SURF_LIGHTFILTER)) needsFilter = qtrue;
             if (!localSurfaces[i].castShadows) needsFilter = qtrue;
 
             if (needsFilter) {
@@ -158,7 +158,7 @@ void InitTracingGeometry(void)
             FreeMesh(subdivided);
 
             qboolean needsFilter = qfalse;
-            if (si->surfaceFlags & SURF_ALPHASHADOW) needsFilter = qtrue;
+            if (si->surfaceFlags & (SURF_ALPHASHADOW | SURF_LIGHTFILTER)) needsFilter = qtrue;
             if (!localSurfaces[i].castShadows) needsFilter = qtrue;
 
             if (needsFilter) {
@@ -185,7 +185,7 @@ Returns qfalse if the ray passes through (transparent or tinted).
 Multiplies 'filter' by the sampled texture color.
 ================
 */
-qboolean Trace_SampleFilter(shaderInfo_t *si, float s, float t, vec3_t filter)
+qboolean Trace_SampleFilter(shaderInfo_t *si, float s, float t, vec3_t filter, qboolean isLightFilter)
 {
     int x, y;
     byte *pixel;
@@ -224,9 +224,12 @@ qboolean Trace_SampleFilter(shaderInfo_t *si, float s, float t, vec3_t filter)
 
     // 3. Apply Tinting
     // Multiply cumulative filter by normalized texture RGB
-    filter[0] *= (float)pixel[0] / 255.0f;
-    filter[1] *= (float)pixel[1] / 255.0f;
-    filter[2] *= (float)pixel[2] / 255.0f;
+    if (isLightFilter)
+    {
+        filter[0] *= (float)pixel[0] / 255.0f;
+        filter[1] *= (float)pixel[1] / 255.0f;
+        filter[2] *= (float)pixel[2] / 255.0f;
+    }
 
     // 4. Determine if it blocks entirely
     // If alpha is high (> 250), we consider it fully opaque for occlusion.
@@ -235,7 +238,7 @@ qboolean Trace_SampleFilter(shaderInfo_t *si, float s, float t, vec3_t filter)
         return qtrue; // Blocks ray
     }
 
-    return qfalse; // Continues ray (tinted)
+    return qfalse; // Continues ray (tinted if lightfilter)
 }
 
 /*
@@ -292,7 +295,7 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
 
         shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
 
-        if (si->surfaceFlags & SURF_ALPHASHADOW)
+        if (si->surfaceFlags & (SURF_ALPHASHADOW | SURF_LIGHTFILTER))
         {
             float u = hit->u;
             float v = hit->v;
@@ -331,7 +334,7 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
             vec3_t dummyFilter = {1.0f, 1.0f, 1.0f};
             float *filterPtr = (tw && tw->trace) ? tw->trace->filter : dummyFilter;
 
-            if (Trace_SampleFilter(si, s, t, filterPtr))
+            if (Trace_SampleFilter(si, s, t, filterPtr, (si->surfaceFlags & SURF_LIGHTFILTER) != 0))
             {
                 // Opaque hit - keep the valid flag (blocks)
             }
