@@ -29,6 +29,28 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <dirent.h>
+#include <strings.h>
+#include <ctype.h>
+
+#define stricmp strcasecmp
+#define strnicmp strncasecmp
+#define strcmpi strcasecmp
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+static inline char* strlwr(char* s) {
+    char* tmp = s;
+    for (; *tmp; ++tmp) {
+        *tmp = tolower((unsigned char)*tmp);
+    }
+    return s;
+}
 #endif
 
 #include "unzip.h"

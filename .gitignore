@@ -47,6 +47,7 @@ libMRMeshC.dll
 *.o
 *.a
 !libs/coacd/build/libcoacd.a
+!libs/opencl/lib/libOpenCL.a
 *.dll
 libMRMesh.dll
 light.exe
