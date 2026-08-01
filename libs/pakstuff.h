@@ -23,7 +23,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define _PAKSTUFF_H_
 
 #include <stdio.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#define WINAPI
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif
