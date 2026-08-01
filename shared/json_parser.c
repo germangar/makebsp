@@ -109,8 +109,14 @@ void JSON_Free(struct json_value_s *value)
     }
 }
 
-qboolean JSON_LoadGame(const char *filename, game_t *game)
+static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int depth)
 {
+    if (depth > 4)
+    {
+        _printf("ERROR: Maximum game profile template depth exceeded (%d) when loading '%s'\n", depth, filename);
+        return qfalse;
+    }
+
     struct json_value_s *root = JSON_ReadFile(filename);
     if (!root)
         return qfalse;
@@ -122,13 +128,46 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         return qfalse;
     }
 
+    // Pre-pass: check for "template" key
     struct json_object_element_s *el = obj->start;
+    while (el)
+    {
+        if (!Q_stricmp(el->name->string, "template") && el->value->type == json_type_string)
+        {
+            const char *templateName = json_value_as_string(el->value)->string;
+            if (templateName[0] && Q_stricmp(templateName, "qfusion")) // Skip if empty or base qfusion template
+            {
+                char dir[1024];
+                char templatePath[1024];
+                ExtractFilePath(filename, dir);
+                sprintf(templatePath, "%s%s.json", dir, templateName);
+                if (FileExists(templatePath))
+                {
+                    _printf("Loading template game profile: %s\n", templatePath);
+                    JSON_LoadGame_Internal(templatePath, game, depth + 1);
+                }
+                else
+                {
+                    _printf("WARNING: Template profile '%s' not found for '%s'\n", templateName, filename);
+                }
+            }
+            break;
+        }
+        el = el->next;
+    }
+
+    // Main pass: load keys
+    el = obj->start;
     while (el)
     {
         const char *key = el->name->string;
         struct json_value_s *val = el->value;
 
-        if (!Q_stricmp(key, "game") && val->type == json_type_string)
+        if (!Q_stricmp(key, "template"))
+        {
+            // Already handled
+        }
+        else if (!Q_stricmp(key, "game") && val->type == json_type_string)
         {
             game->arg = copystring(json_value_as_string(val)->string);
         }
@@ -499,6 +538,11 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
     return qtrue;
 }
 
+qboolean JSON_LoadGame(const char *filename, game_t *game)
+{
+    return JSON_LoadGame_Internal(filename, game, 0);
+}
+
 void JSON_ExportGame(const char *filename, game_t *game)
 {
     char buffer[16384];
@@ -619,6 +663,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
     sprintf(buffer,
             "{\n"
             "  \"game\": \"%s\",\n"
+            "  \"template\": \"\",\n"
             "  \"rootDir\": \"%s\",\n"
             "  \"userDir\": \"%s\",\n"
             "  \"gameDir\": \"%s\",\n"

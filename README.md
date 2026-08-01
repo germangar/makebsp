@@ -17,6 +17,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
     - [11. Customizable Game Profiles (JSON)](#11-customizable-game-profiles-json)
     - [12. Automatic Light Halos](#12-automatic-light-halos)
 - [🛠 Recommended Workflow](#-recommended-workflow)
+- [⚙️ Game Profiles (makebspdata)](#-game-profiles-makebspdata)
 - [🎨 Shader Modifications](#-shader-modifications)
 - [📦 Entity Keys Reference](#-entity-keys-reference)
     - [worldspawn](#entity-worldspawn)
@@ -133,6 +134,47 @@ By following this hierarchy, your map source files (`.map`) remain portable and 
 > It is **highly recommended not to configure lighting directly inside your sky shaders** (e.g., using `q3map_surfacelight` or `q3map_sun`). 
 > - **Ambient Overlap:** The tool automatically calculates directional ambient irradiance from surfaces exposed to the sky (via the `ambient_sky` worldspawn key). If your sky shader also emits surface light, these two systems will overlap and blow out your lighting.
 > - **Sun Entities:** For sunlight, use a standard `light` entity and set the `sun` key to `1` (or add `-sun` to the entity name/class depending on your editor's setup). This produces the exact same result as a shader-based sun but allows you to control the sun's direction, color, and intensity on a per-map basis without needing to duplicate and modify shader files for every new map.
+
+---
+
+## ⚙️ Game Profiles (`makebspdata/`)
+
+The compiler uses a flexible, data-driven profile system powered by `.json` files located in the `makebspdata/` directory. By default, the compiler provides two core profiles: `qfusion.json` and `quake3.json`. 
+
+You can load a specific game profile at compile time using the `-game <name>` CLI argument.
+
+### 1. Atomic Overrides (Sparse Loading)
+The game profile parser is designed around **atomic loading**. When a `.json` profile is loaded, the compiler establishes the default Quake 3/QFusion settings in memory as a baseline. 
+
+If your `.json` file only contains a few keys (e.g., just `"flareShader": "my_flare"`), the compiler will safely load your specific overrides while keeping all other default settings intact. A game profile does not need to list every single property to be valid.
+
+### 2. Profile Inheritance (`"template"`)
+To maximize modularity, profiles can inherit from one another using the `"template"` key. 
+If your profile specifies `"template": "quake3"`, the compiler will automatically pause, load the entire `quake3.json` profile to establish a new baseline, and *then* apply your profile's specific keys on top.
+
+```json
+{
+  "game": "my_mod",
+  "template": "quake3",
+  "bspVersion": 47,
+  "flareShader": "textures/my_mod/custom_flare"
+}
+```
+*Note: The compiler has built-in infinite loop protection. If two profiles try to inherit each other in a circle, the compiler will cleanly break the loop (at a depth of 4) and throw a warning.*
+
+### 3. Custom Surface Parameters (`customSurfaceParms`)
+The compiler no longer relies strictly on hardcoded C arrays for surface flags. Modders can inject custom engine-specific `surfaceparm` flags directly into the compiler through the game profile!
+
+These parameters will be automatically recognized by the shader parser and mapped into the BSP surfaces.
+
+```json
+  "customSurfaceParms": [
+    { "name": "nowalljump", "clearSolid": false, "surfaceFlags": "0x400000", "contentFlags": 0 },
+    { "name": "forcefield", "clearSolid": true,  "surfaceFlags": 0, "contentFlags": "0x40000" }
+  ]
+```
+- **Base Support**: Supports both standard decimal integers (e.g. `4194304`) and hexadecimal strings (e.g. `"0x400000"`) for bit flags.
+- **clearSolid**: If set to `true`, surfaces using this parameter will have the `CONTENTS_SOLID` flag automatically stripped from them.
 
 ---
 
