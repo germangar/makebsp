@@ -14,6 +14,11 @@
 #include "unzip.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#ifndef byte
+typedef unsigned char byte;
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
