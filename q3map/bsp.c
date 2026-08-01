@@ -481,15 +481,42 @@ OnlyEnts
 void OnlyEnts(void)
 {
     char out[1024];
+    epair_t *preservedEpairs = NULL;
+    epair_t *ep;
 
     sprintf(out, "%s.bsp", source);
     LoadBSPFile(out);
+    
+    // Preserve compiler-injected worldspawn keys from the existing BSP
+    if (num_entities > 0)
+    {
+        for (ep = entities[0].epairs; ep; ep = ep->next)
+        {
+            if (!Q_stricmp(ep->key, "_lightingIntensity") ||
+                !Q_stricmp(ep->key, "_lightmapImageSize") ||
+                (ep->key[0] == '_' && ep->key[1] == '_'))
+            {
+                epair_t *newep = malloc(sizeof(epair_t));
+                newep->key = copystring(ep->key);
+                newep->value = copystring(ep->value);
+                newep->next = preservedEpairs;
+                preservedEpairs = newep;
+            }
+        }
+    }
+
     num_entities = 0;
 
     LoadMapFile(name);
     ParseDecalProjectors();
     SetModelNumbers();
     SetLightStyles();
+
+    // Re-inject preserved keys into the newly parsed map worldspawn
+    for (ep = preservedEpairs; ep; ep = ep->next)
+    {
+        SetKeyValue(&entities[0], ep->key, ep->value);
+    }
 
     UnparseEntities();
 
