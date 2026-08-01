@@ -58,6 +58,15 @@ typedef enum { SATRAMP_OFF, SATRAMP_FILMIC, SATRAMP_POWER, SATRAMP_HALF_POWER, S
 extern char source[1024];
 extern char name[1024];
 
+#define MAX_CUSTOM_SURFACEPARMS 64
+
+typedef struct {
+    char name[64];
+    int clearSolid;
+    int surfaceFlags;
+    int contents;
+} customSurfaceParm_t;
+
 typedef struct {
 	const char	*arg;			/* -game x */
 	const char	*rootDir;		/* default root directory */
@@ -115,6 +124,9 @@ typedef struct {
 
 	const char	*flareShader;
 	const char	*haloShader;
+
+	customSurfaceParm_t customSurfaceParms[MAX_CUSTOM_SURFACEPARMS];
+	int                 numCustomSurfaceParms;
 } game_t;
 
 extern float shadingModelSoftBias;

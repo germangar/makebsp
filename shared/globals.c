@@ -5,6 +5,7 @@
 #include "globals.h"
 #include "json_parser.h"
 #include "../common/cmdlib.h"
+#include "../common/surfaceflags.h"
 
 char source[1024];
 char name[1024];
@@ -79,7 +80,11 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // defaultSmoothPasses
 		0.35f,      // defaultSmoothRadius
 		"",         // flareShader
-		"halo"      // haloShader
+		"halo",     // haloShader
+		{
+			{ "nowalljump", 0, SURF_NOWALLJUMP, 0 }
+		},
+		1           // numCustomSurfaceParms
 	},
 	{
 		"quake3",

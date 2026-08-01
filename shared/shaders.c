@@ -43,62 +43,89 @@ int numShaderInfo;
 
 typedef struct
 {
-    char *name;
+    char name[64];
     int clearSolid, surfaceFlags, contents;
 } infoParm_t;
 
-infoParm_t infoParms[] = {
-    // server relevant contents
-    {"water", 1, 0, CONTENTS_WATER},
-    {"slime", 1, 0, CONTENTS_SLIME}, // mildly damaging
-    {"lava", 1, 0, CONTENTS_LAVA},   // very damaging
-    {"playerclip", 1, 0, CONTENTS_PLAYERCLIP},
-    {"monsterclip", 1, 0, CONTENTS_MONSTERCLIP},
-    {"nodrop", 1, 0, CONTENTS_NODROP}, // don't drop items or leave bodies
-                                       // (death fog, lava, etc)
-    {"nonsolid", 1, SURF_NONSOLID, 0}, // clears the solid flag
-    {"nosolid", 1, SURF_NONSOLID, 0},  // alias for nonsolid
+infoParm_t infoParms[256];
+int numInfoParms = 0;
 
+void RegisterInfoParm(const char *name, int clearSolid, int surfaceFlags, int contents)
+{
+    int i;
+    for (i = 0; i < numInfoParms; i++)
+    {
+        if (!Q_stricmp(infoParms[i].name, name))
+        {
+            infoParms[i].clearSolid = clearSolid;
+            infoParms[i].surfaceFlags = surfaceFlags;
+            infoParms[i].contents = contents;
+            return;
+        }
+    }
+    
+    if (numInfoParms < 256)
+    {
+        strncpy(infoParms[numInfoParms].name, name, sizeof(infoParms[0].name) - 1);
+        infoParms[numInfoParms].name[sizeof(infoParms[0].name) - 1] = '\0';
+        infoParms[numInfoParms].clearSolid = clearSolid;
+        infoParms[numInfoParms].surfaceFlags = surfaceFlags;
+        infoParms[numInfoParms].contents = contents;
+        numInfoParms++;
+    }
+}
 
-    // utility relevant attributes
-    {"origin", 1, 0, CONTENTS_ORIGIN},     // center of rotating brushes
-    {"trans", 0, 0, CONTENTS_TRANSLUCENT}, // don't eat contained surfaces
-    {"detail", 0, 0, CONTENTS_DETAIL},     // don't include in structural bsp
-    {"structural", 0, 0,
-     CONTENTS_STRUCTURAL},                           // force into structural bsp even if trnas
-    {"areaportal", 1, 0, CONTENTS_AREAPORTAL},       // divides areas
-    {"clusterportal", 1, 0, CONTENTS_CLUSTERPORTAL}, // for bots
-    {"donotenter", 1, 0, CONTENTS_DONOTENTER},       // for bots
-    {"botclip", 1, 0, CONTENTS_BOTCLIP},             // for bots
-    {"nobotclip", 0, 0, CONTENTS_NOBOTCLIP},         // don't use for bot clipping
+void InitSurfaceParms(void)
+{
+    int i;
+    numInfoParms = 0;
+    memset(infoParms, 0, sizeof(infoParms));
+    
+    RegisterInfoParm("water", 1, 0, CONTENTS_WATER);
+    RegisterInfoParm("slime", 1, 0, CONTENTS_SLIME);
+    RegisterInfoParm("lava", 1, 0, CONTENTS_LAVA);
+    RegisterInfoParm("playerclip", 1, 0, CONTENTS_PLAYERCLIP);
+    RegisterInfoParm("monsterclip", 1, 0, CONTENTS_MONSTERCLIP);
+    RegisterInfoParm("nodrop", 1, 0, CONTENTS_NODROP);
+    RegisterInfoParm("nonsolid", 1, SURF_NONSOLID, 0);
+    RegisterInfoParm("nosolid", 1, SURF_NONSOLID, 0);
+    RegisterInfoParm("origin", 1, 0, CONTENTS_ORIGIN);
+    RegisterInfoParm("trans", 0, 0, CONTENTS_TRANSLUCENT);
+    RegisterInfoParm("detail", 0, 0, CONTENTS_DETAIL);
+    RegisterInfoParm("structural", 0, 0, CONTENTS_STRUCTURAL);
+    RegisterInfoParm("areaportal", 1, 0, CONTENTS_AREAPORTAL);
+    RegisterInfoParm("clusterportal", 1, 0, CONTENTS_CLUSTERPORTAL);
+    RegisterInfoParm("donotenter", 1, 0, CONTENTS_DONOTENTER);
+    RegisterInfoParm("botclip", 1, 0, CONTENTS_BOTCLIP);
+    RegisterInfoParm("nobotclip", 0, 0, CONTENTS_NOBOTCLIP);
+    RegisterInfoParm("fog", 1, 0, CONTENTS_FOG);
+    RegisterInfoParm("sky", 0, SURF_SKY, 0);
+    RegisterInfoParm("lightfilter", 0, SURF_LIGHTFILTER, CONTENTS_TRANSLUCENT);
+    RegisterInfoParm("alphashadow", 0, SURF_ALPHASHADOW, CONTENTS_TRANSLUCENT);
+    RegisterInfoParm("hint", 0, SURF_HINT, 0);
+    RegisterInfoParm("slick", 0, SURF_SLICK, 0);
+    RegisterInfoParm("noimpact", 0, SURF_NOIMPACT, 0);
+    RegisterInfoParm("nomarks", 0, SURF_NOMARKS, 0);
+    RegisterInfoParm("ladder", 0, SURF_LADDER, 0);
+    RegisterInfoParm("nodamage", 0, SURF_NODAMAGE, 0);
+    RegisterInfoParm("metalsteps", 0, SURF_METALSTEPS, 0);
+    RegisterInfoParm("flesh", 0, SURF_FLESH, 0);
+    RegisterInfoParm("nosteps", 0, SURF_NOSTEPS, 0);
+    RegisterInfoParm("nodraw", 0, SURF_NODRAW, 0);
+    RegisterInfoParm("pointlight", 0, SURF_POINTLIGHT, 0);
+    RegisterInfoParm("nolightmap", 0, SURF_NOLIGHTMAP, 0);
+    RegisterInfoParm("nodlight", 0, SURF_NODLIGHT, 0);
+    RegisterInfoParm("dust", 0, SURF_DUST, 0);
+    RegisterInfoParm("skip", 0, SURF_SKIP, 0);
 
-    {"fog", 1, 0, CONTENTS_FOG},             // carves surfaces entering
-    {"sky", 0, SURF_SKY, 0},                 // emit light from an environment map
-    {"lightfilter", 0, SURF_LIGHTFILTER, CONTENTS_TRANSLUCENT}, // filter light going through it
-    {"alphashadow", 0, SURF_ALPHASHADOW, CONTENTS_TRANSLUCENT}, // test light on a per-pixel basis
-    {"hint", 0, SURF_HINT, 0},               // use as a primary splitter
-
-    // server attributes
-    {"slick", 0, SURF_SLICK, 0},
-    {"noimpact", 0, SURF_NOIMPACT, 0}, // don't make impact explosions or marks
-    {"nomarks", 0, SURF_NOMARKS,
-     0}, // don't make impact marks, but still explode
-    {"ladder", 0, SURF_LADDER, 0},
-    {"nodamage", 0, SURF_NODAMAGE, 0},
-    {"metalsteps", 0, SURF_METALSTEPS, 0},
-    {"flesh", 0, SURF_FLESH, 0},
-    {"nosteps", 0, SURF_NOSTEPS, 0},
-
-    // drawsurf attributes
-    {"nodraw", 0, SURF_NODRAW,
-     0},                                   // don't generate a drawsurface (or a lightmap)
-    {"pointlight", 0, SURF_POINTLIGHT, 0}, // sample lighting at vertexes
-    {"nolightmap", 0, SURF_NOLIGHTMAP, 0}, // don't generate a lightmap
-    {"nodlight", 0, SURF_NODLIGHT, 0},     // don't ever add dynamic lights
-    {"dust", 0, SURF_DUST, 0},             // leave dust trail when walking on this surface
-    {"skip", 0, SURF_SKIP, 0},             // completely ignore, allowing non-closed brushes
-    {"nowalljump", 0, SURF_NOWALLJUMP, 0}  // QFusion: disable wall jumping
-};
+    for (i = 0; i < game->numCustomSurfaceParms; i++)
+    {
+        RegisterInfoParm(game->customSurfaceParms[i].name,
+                         game->customSurfaceParms[i].clearSolid,
+                         game->customSurfaceParms[i].surfaceFlags,
+                         game->customSurfaceParms[i].contents);
+    }
+}
 
 /*
 ===============
@@ -1034,6 +1061,8 @@ void LoadShaderInfo(void)
     int start;
 
     _printf("Scanning for shaders (%s, numVFSPaths: %d)...\n", MAKEBSP_VERSION, numVFSPaths);
+
+    InitSurfaceParms();
 
     numLoadedShaderFiles = 0;
     numShaderInfo = 0;

@@ -48,5 +48,8 @@
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",
-  "haloShader": "halo"
+  "haloShader": "halo",
+  "customSurfaceParms": [
+    { "name": "nowalljump", "clearSolid": false, "surfaceFlags": 4194304, "contentFlags": 0 }
+  ]
 }

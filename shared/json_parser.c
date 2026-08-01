@@ -168,6 +168,61 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
         {
             game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "customSurfaceParms") && val->type == json_type_array)
+        {
+            struct json_array_s *arr = json_value_as_array(val);
+            if (arr)
+            {
+                struct json_array_element_s *arr_el = arr->start;
+                game->numCustomSurfaceParms = 0;
+                while (arr_el && game->numCustomSurfaceParms < MAX_CUSTOM_SURFACEPARMS)
+                {
+                    if (arr_el->value->type == json_type_object)
+                    {
+                        struct json_object_s *parmObj = json_value_as_object(arr_el->value);
+                        if (parmObj)
+                        {
+                            customSurfaceParm_t *cp = &game->customSurfaceParms[game->numCustomSurfaceParms];
+                            memset(cp, 0, sizeof(customSurfaceParm_t));
+
+                            struct json_object_element_s *pel = parmObj->start;
+                            while (pel)
+                            {
+                                const char *pkey = pel->name->string;
+                                struct json_value_s *pval = pel->value;
+
+                                if (!Q_stricmp(pkey, "name") && pval->type == json_type_string)
+                                {
+                                    strncpy(cp->name, json_value_as_string(pval)->string, sizeof(cp->name)-1);
+                                }
+                                else if (!Q_stricmp(pkey, "clearSolid"))
+                                {
+                                    if (pval->type == json_type_true) cp->clearSolid = 1;
+                                    else if (pval->type == json_type_number) cp->clearSolid = atoi(json_value_as_number(pval)->number);
+                                }
+                                else if (!Q_stricmp(pkey, "surfaceFlags"))
+                                {
+                                    if (pval->type == json_type_number)
+                                        cp->surfaceFlags = atoi(json_value_as_number(pval)->number);
+                                    else if (pval->type == json_type_string)
+                                        cp->surfaceFlags = strtol(json_value_as_string(pval)->string, NULL, 0);
+                                }
+                                else if (!Q_stricmp(pkey, "contentFlags") || !Q_stricmp(pkey, "contents"))
+                                {
+                                    if (pval->type == json_type_number)
+                                        cp->contents = atoi(json_value_as_number(pval)->number);
+                                    else if (pval->type == json_type_string)
+                                        cp->contents = strtol(json_value_as_string(pval)->string, NULL, 0);
+                                }
+                                pel = pel->next;
+                            }
+                            game->numCustomSurfaceParms++;
+                        }
+                    }
+                    arr_el = arr_el->next;
+                }
+            }
+        }
         else if (!Q_stricmp(key, "lightmapSize") && val->type == json_type_number)
         {
             game->lightmapSize = atoi(json_value_as_number(val)->number);
@@ -446,7 +501,7 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
 
 void JSON_ExportGame(const char *filename, game_t *game)
 {
-    char buffer[4096];
+    char buffer[16384];
     const char *shadingModelStr;
     switch (game->shadingModel)
     {
@@ -612,8 +667,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
-            "  \"haloShader\": \"%s\"\n"
-            "}\n",
+            "  \"haloShader\": \"%s\"",
             game->arg, game->rootDir, game->userDir ? game->userDir : "", game->gameDir, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, game->lightmapSize,
@@ -655,6 +709,28 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",
             game->haloShader ? game->haloShader : "");
+
+    if (game->numCustomSurfaceParms > 0)
+    {
+        strcat(buffer, ",\n  \"customSurfaceParms\": [\n");
+        for (int i = 0; i < game->numCustomSurfaceParms; i++)
+        {
+            char temp[256];
+            sprintf(temp, "    { \"name\": \"%s\", \"clearSolid\": %s, \"surfaceFlags\": %d, \"contentFlags\": %d }%s\n",
+                    game->customSurfaceParms[i].name,
+                    game->customSurfaceParms[i].clearSolid ? "true" : "false",
+                    game->customSurfaceParms[i].surfaceFlags,
+                    game->customSurfaceParms[i].contents,
+                    (i < game->numCustomSurfaceParms - 1) ? "," : "");
+            strcat(buffer, temp);
+        }
+        strcat(buffer, "  ]\n}\n");
+    }
+    else
+    {
+        strcat(buffer, "\n}\n");
+    }
+
     SaveFile(filename, buffer, strlen(buffer));
 }
 
