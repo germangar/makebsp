@@ -1,5 +1,5 @@
-# Generate kernels_embedded.h from .cl files in makebsp/kernels/
-$kernels = Get-ChildItem -Path makebsp/kernels -Filter *.cl
+# Generate kernels_embedded.h from .cl files in makebspdata/kernels/
+$kernels = Get-ChildItem -Path makebspdata/kernels -Filter *.cl
 $headerPath = "light/kernels_embedded.h"
 
 $headerContent = @"

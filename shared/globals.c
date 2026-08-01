@@ -166,9 +166,9 @@ Unified game profile initialization logic for both q3map and light tools.
 */
 game_t *InitGame(int argc, char **argv) {
     char gamesDir[1024];
-    sprintf(gamesDir, "%smakebsp", executablePath);
+    sprintf(gamesDir, "%smakebspdata", executablePath);
 
-    // 1. Export standard profiles if missing (ensures [exeDir]/makebsp/qfusion.json exists)
+    // 1. Export standard profiles if missing (ensures [exeDir]/makebspdata/qfusion.json exists)
     JSON_ExportStandardPackages(gamesDir);
 
     // 2. Initialize the local 'activeGame' struct by copying the default game_t into it.

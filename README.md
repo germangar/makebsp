@@ -117,7 +117,7 @@ Spotlights and directed light sources can now automatically generate volumetric 
 To achieve the best results and maintain organized projects, it is recommended to follow the configuration hierarchy of the toolchain:
 
 ### 1. Game Profile (Global Defaults)
-The JSON files in the `makebsp/` directory should define the **baseline standards** for your project. This includes engine-specific limits and the general "look" of the lighting that should apply to all maps in that game. 
+The JSON files in the `makebspdata/` directory should define the **baseline standards** for your project. This includes engine-specific limits and the general "look" of the lighting that should apply to all maps in that game. 
 
 ### 2. Worldspawn (Map-Specific Setup)
 The **Worldspawn entity** should be used to define map-specific lighting and surface treatments. Any key set in the Worldspawn (e.g., `samplesize`, `ambient`, `shading`, `radiosity`,  `deluxe`) will override the defaults in the game profile. This allows each map to have its own unique atmospheric character without changing the compiler's global configuration.
@@ -386,7 +386,7 @@ Makebsp is the primary tool for BSP compilation, visibility calculation, and uti
 **BSP Compilation (Default Mode)**
 Used to compile a `.map` file into a `.bsp` file.
 *New or relevant to makebsp:*
-- `-game <G>`: Load a specific game profile (e.g., quake3, qfusion) from `makebsp/<G>.json`.
+- `-game <G>`: Load a specific game profile (e.g., quake3, qfusion) from `makebspdata/<G>.json`.
 - `-samplesize <N>`: Sets the default lightmap sample size (e.g., 4, 8, 16). Lower values = higher resolution.
 - `-lightmapimagesize <N>`: Forces a specific lightmap atlas size (e.g., 1024).
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.

@@ -188,7 +188,7 @@ KERNELS_HEADER = light/kernels_embedded.h
 
 all: $(KERNELS_HEADER) $(Q3MAP_TARGET) $(LIGHT_TARGET)
 
-$(KERNELS_HEADER): makebsp/kernels/*.cl stringify_kernels.ps1
+$(KERNELS_HEADER): makebspdata/kernels/*.cl stringify_kernels.ps1
 	$(GENERATE_KERNELS)
 
 $(ML_LITE_LIB): $(ML_LITE_OBJ)
