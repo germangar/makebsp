@@ -23,6 +23,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "xatlas_c.h"
 #include <stdint.h>
 
+#ifdef DECIMATE_PLANAR_WITH_MESHLIB
+#include "../libs/MeshLib-Lite/MRMeshC/MRMeshC.h"
+#endif
+
 static int s_chamferBaseDrawSurfs = 0;
 
 qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon)
@@ -1688,6 +1692,8 @@ void MergeChamferStripsIntoParents(entity_t *e)
             outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, maxVerts, &parent->verts[k + 1]);
         }
 
+        parent->numParentIndexes = numOutIndexes;
+
         // Step 2: Triangulate each child chamfer strip and weld vertices
         for (j = s_chamferBaseDrawSurfs; j < numSurfsAtStart; j++)
         {
@@ -2843,6 +2849,168 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
     qprintf("%6i vertices removed (%i in Phase 1 / %i in Phase 2)\n",      totalVertsRemoved, totalP1Verts, totalP2Verts);
     qprintf("%6i triangles removed (%i in Phase 1 / %i in Phase 2)\n",     totalTrisRemoved, totalP1Tris, totalP2Tris);
 }
+
+#ifdef DECIMATE_PLANAR_WITH_MESHLIB
+/*
+==================
+DecimateSurfaceWithMeshLib
+
+Re-triangulates and simplifies planar sub-meshes using MeshLib's QEM, while locking boundary vertices.
+==================
+*/
+qboolean DecimateSurfaceWithMeshLib(mapDrawSurface_t *ds)
+{
+    // == GUARD ==
+    if (!ds->planarDerived || !ds->miscModel) return qfalse;
+    if (ds->numParentIndexes < 3) return qfalse;       // No parent face to decimate
+    if (ds->numIndexes < ds->numParentIndexes) return qfalse; // Sanity
+
+    int numParentTris = ds->numParentIndexes / 3;
+
+    // == STEP 1: COLLECT UNIQUE VERTICES in the parent face sub-mesh ==
+    int *globalToLocal = malloc(ds->numVerts * sizeof(int));
+    memset(globalToLocal, -1, ds->numVerts * sizeof(int));
+
+    int *localToGlobal = malloc(ds->numVerts * sizeof(int));
+
+    MRVector3f *mrVerts = malloc(ds->numVerts * sizeof(MRVector3f)); // upper bound
+    MRVector2f *mrUVs   = malloc(ds->numVerts * sizeof(MRVector2f)); // upper bound
+    int numLocalVerts = 0;
+
+    MRThreeVertIds *mrTris = malloc(numParentTris * sizeof(MRThreeVertIds));
+
+    for (int t = 0; t < numParentTris; t++) {
+        for (int c = 0; c < 3; c++) {
+            int gIdx = ds->indexes[t*3 + c];
+            if (globalToLocal[gIdx] == -1) {
+                globalToLocal[gIdx] = numLocalVerts;
+                localToGlobal[numLocalVerts] = gIdx;
+                mrVerts[numLocalVerts].x = ds->verts[gIdx].xyz[0];
+                mrVerts[numLocalVerts].y = ds->verts[gIdx].xyz[1];
+                mrVerts[numLocalVerts].z = ds->verts[gIdx].xyz[2];
+                mrUVs[numLocalVerts].x = ds->verts[gIdx].st[0];
+                mrUVs[numLocalVerts].y = ds->verts[gIdx].st[1];
+                numLocalVerts++;
+            }
+            mrTris[t][c].id = globalToLocal[gIdx];
+        }
+    }
+
+    // == STEP 2: BUILD MRMesh ==
+    MRMesh *mesh = mrMeshFromTriangles(mrVerts, numLocalVerts, mrTris, numParentTris);
+    free(mrTris);
+
+    if (!mesh) {
+        free(localToGlobal); free(globalToLocal); free(mrVerts); free(mrUVs);
+        return qfalse;
+    }
+
+    // == STEP 3: PREPARE ATTRIBUTES (UVs) ==
+    MRMeshAttributes attrs;
+    memset(&attrs, 0, sizeof(MRMeshAttributes));
+    attrs.uvCoords = mrUVs;
+    attrs.numUvs   = numLocalVerts;
+
+    // == STEP 4: CONFIGURE DECIMATION ==
+    MRDecimateSettings settings = mrDecimateSettingsNew();
+    settings.strategy              = MRDecimateStrategyMinimizeError;
+    settings.maxError              = 0.0f;      // Zero: only topological changes (no vertex moves)
+    settings.stabilizer            = 0.001f;    // Helps on perfectly flat planar meshes
+    settings.optimizeVertexPos     = false;     // Lock vertex positions absolutely
+    settings.touchBdVerts          = false;     // LOCK boundary verts (chamfer crease)
+    settings.touchNearBdEdges      = false;     // Also lock edges adjacent to boundary
+    settings.maxAngleChange        = 0.0f;      // Allow edge flips for Delaunay quality
+    settings.packMesh              = false;
+
+    // == STEP 5: DECIMATE ==
+    MRDecimateResult result = mrMeshDecimateWithAttributes(mesh, &attrs, &settings);
+
+    free(mrVerts); // MeshLib made its own copy
+
+    // == STEP 6: EXTRACT RESULTS ==
+    const MRVector3f *newPts = mrMeshPoints(mesh);
+    size_t newNumPts = mrMeshPointsNum(mesh);
+
+    MRTriangulation *tri = mrMeshGetTriangulation(mesh);
+
+    int newNumTris = 0;
+    for (size_t fi = 0; fi < tri->size; fi++) {
+        if (tri->data[fi][0].id >= 0) newNumTris++;
+    }
+
+    int numChamferIndexes = ds->numIndexes - ds->numParentIndexes;
+    int *oldChamferIndexes = malloc(numChamferIndexes * sizeof(int));
+    memcpy(oldChamferIndexes, &ds->indexes[ds->numParentIndexes], numChamferIndexes * sizeof(int));
+
+    int *chamferLocalToGlobal = malloc(ds->numVerts * sizeof(int));
+    int *chamferGlobalToNew = malloc(ds->numVerts * sizeof(int));
+    memset(chamferGlobalToNew, -1, ds->numVerts * sizeof(int));
+    int numChamferVerts = 0;
+
+    for (int i = 0; i < numChamferIndexes; i++) {
+        int gIdx = oldChamferIndexes[i];
+        if (chamferGlobalToNew[gIdx] == -1) {
+            chamferGlobalToNew[gIdx] = (int)newNumPts + numChamferVerts;
+            chamferLocalToGlobal[numChamferVerts] = gIdx;
+            numChamferVerts++;
+        }
+    }
+
+    int totalNewVerts = (int)newNumPts + numChamferVerts;
+    int totalNewIndexes = newNumTris * 3 + numChamferIndexes;
+
+    drawVert_t *newVerts = malloc(totalNewVerts * sizeof(drawVert_t));
+    int *newIndexes = malloc(totalNewIndexes * sizeof(int));
+
+    for (size_t v = 0; v < newNumPts; v++) {
+        newVerts[v] = ds->verts[localToGlobal[v]];
+        
+        newVerts[v].xyz[0] = newPts[v].x;
+        newVerts[v].xyz[1] = newPts[v].y;
+        newVerts[v].xyz[2] = newPts[v].z;
+        newVerts[v].st[0] = attrs.uvCoords[v].x;
+        newVerts[v].st[1] = attrs.uvCoords[v].y;
+    }
+
+    for (int v = 0; v < numChamferVerts; v++) {
+        newVerts[(int)newNumPts + v] = ds->verts[chamferLocalToGlobal[v]];
+    }
+
+    int idxOut = 0;
+    for (size_t fi = 0; fi < tri->size; fi++) {
+        if (tri->data[fi][0].id < 0) continue;
+        newIndexes[idxOut++] = tri->data[fi][0].id;
+        newIndexes[idxOut++] = tri->data[fi][1].id;
+        newIndexes[idxOut++] = tri->data[fi][2].id;
+    }
+
+    int newNumParentIndexes = idxOut;
+    for (int i = 0; i < numChamferIndexes; i++) {
+        int gIdx = oldChamferIndexes[i];
+        newIndexes[idxOut++] = chamferGlobalToNew[gIdx];
+    }
+
+    free(ds->verts);
+    free(ds->indexes);
+
+    ds->verts = newVerts;
+    ds->numVerts = totalNewVerts;
+    ds->indexes = newIndexes;
+    ds->numIndexes = totalNewIndexes;
+    ds->numParentIndexes = newNumParentIndexes;
+
+    free(localToGlobal);
+    free(globalToLocal);
+    free(oldChamferIndexes);
+    free(chamferLocalToGlobal);
+    free(chamferGlobalToNew);
+    free(attrs.uvCoords);
+    mrTriangulationFree(tri);
+    mrMeshFree(mesh);
+
+    return qtrue;
+}
+#endif
 
 /*
 ==================

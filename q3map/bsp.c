@@ -235,6 +235,19 @@ void ProcessWorldModel(void)
     {
         ChamferSurfaceEdges(e);
         MergeChamferStripsIntoParents(e);
+        
+#ifdef DECIMATE_PLANAR_WITH_MESHLIB
+        {
+            int numDecimated = 0;
+            for (int i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
+            {
+                if (DecimateSurfaceWithMeshLib(&mapDrawSurfs[i]))
+                    numDecimated++;
+            }
+            qprintf("%6i trisoups optimized with MeshLib\n", numDecimated);
+        }
+#endif
+        
         MergeParentedTrisoups(e);
     }
 
@@ -242,6 +255,7 @@ void ProcessWorldModel(void)
     {
         MergeAdjacentTrisoups(e);
         CleanupAllTrisoups(e);
+
         if (!nodecimateplanar)
         {
             DecimateAllTrisoups(e, qtrue);
@@ -637,6 +651,46 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         game->haloShader = copystring(val);
         _printf("Worldspawn override: haloShader = %s\n", game->haloShader);
     }
+}
+
+static void PrintMapGeometryStatistics(void)
+{
+    int numPlanar = 0;
+    int numPatches = 0;
+    int numTrisoups = 0;
+    int numTrisoupsPlanar = 0;
+    int numTrisoupTriangles = 0;
+
+    for (int i = 0; i < numMapDrawSurfs; i++)
+    {
+        mapDrawSurface_t *ds = &mapDrawSurfs[i];
+        
+        if (ds->patch)
+        {
+            numPatches++;
+        }
+        else if (ds->miscModel)
+        {
+            numTrisoups++;
+            if (ds->planarDerived)
+            {
+                numTrisoupsPlanar++;
+            }
+            numTrisoupTriangles += (ds->numIndexes / 3);
+        }
+        else
+        {
+            numPlanar++;
+        }
+    }
+
+    _printf("----- Map Geometry Statistics -----\n");
+    _printf("%6i MST_PLANAR surfaces\n", numPlanar);
+    _printf("%6i MST_PATCH surfaces\n", numPatches);
+    _printf("%6i MST_TRIANGLE_SOUP surfaces\n", numTrisoups);
+    _printf("%6i   ...derived from planar geometry\n", numTrisoupsPlanar);
+    _printf("%6i total trisoup triangles\n", numTrisoupTriangles);
+    _printf("-----------------------------------\n");
 }
 
 int main(int argc, char **argv)
@@ -1164,6 +1218,8 @@ int main(int argc, char **argv)
     }
 
     InjectSunEntity();
+    
+    PrintMapGeometryStatistics();
 
     EndBSPFile();
 

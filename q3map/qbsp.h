@@ -158,6 +158,7 @@ typedef struct drawsurf_s
 
     int numIndexes;
     int *indexes;
+    int numParentIndexes;
 
     // for faces only
     int planeNum;
@@ -232,6 +233,9 @@ void CleanupAllTrisoups(entity_t *e);
 void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar);
 void GenerateTrisoupUVs(entity_t *e);
 
+#ifdef DECIMATE_PLANAR_WITH_MESHLIB
+qboolean DecimateSurfaceWithMeshLib(mapDrawSurface_t *ds);
+#endif
 typedef struct drawSurfRef_s
 {
     struct drawSurfRef_s *nextRef;
