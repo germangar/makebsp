@@ -183,7 +183,7 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
         float uvArea = uvWidth * uvHeight;
         if (uvArea > 0.0001f)
         {
-            float minDimension = 192.0f;
+            float minDimension = 64.0f;
             float targetArea = minDimension * minDimension;
             float minScale = sqrt(targetArea / uvArea);
             if (scale < minScale)
