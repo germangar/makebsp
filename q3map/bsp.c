@@ -84,7 +84,9 @@ void ProcessWorldModel(void)
     PatchMapDrawSurfs(e);
 
     // loading pass for misc_models (bakes transformations)
-    LoadTriangleModels(&entities[0]);
+    int startInst, endInst;
+    LoadTriangleModels(&entities[0], &startInst, &endInst);
+    IntegrateTriangleModels(startInst, endInst, &entities[0]);
 
     // build an initial bsp tree using all of the sides
     // of all of the structural brushes
@@ -298,7 +300,9 @@ void ProcessSubModel(void)
     e = &entities[entity_num];
     e->firstDrawSurf = numMapDrawSurfs;
 
-    LoadTriangleModels(e);
+    int startInst, endInst;
+    LoadTriangleModels(e, &startInst, &endInst);
+    IntegrateTriangleModels(startInst, endInst, e);
 
     PatchMapDrawSurfs(e);
 

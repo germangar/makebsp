@@ -526,6 +526,27 @@ typedef enum
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256
+#define MAX_MISC_MODEL_MESHES 256
+
+typedef struct miscModelMesh_s
+{
+    float      *positions;   // flat xyz array: [x0,y0,z0, x1,y1,z1, ...] — world space
+    float      *normals;     // flat xyz array, world space
+    float      *st;          // flat uv  array: [u0,v0, u1,v1, ...] — texture UVs channel 0
+    byte       *colors;      // flat rgba array: [r0,g0,b0,a0, ...] — 255 default
+    int        *indices;     // triangle index array
+    int         numVerts;
+    int         numIndices;
+    vec3_t      mins, maxs;  // world-space AABB for AABB overlap test
+    qboolean    wasCut;      // set to qtrue by PerformMeshCSG if this mesh was modified
+    shaderInfo_t *si;        // shader for this sub-mesh
+    char        shaderName[MAX_QPATH];
+
+    // Entity keys needed by IntegrateTriangleModels
+    qboolean    flipWinding;
+    int         uvChannel;   // 0 or 1 — which Assimp channel had valid UVs (0 for cut meshes)
+    qboolean    hasOriginalUVs; // false if Assimp had no UVs, or if wasCut
+} miscModelMesh_t;
 
 typedef struct modelInstance_s
 {
@@ -542,6 +563,9 @@ typedef struct modelInstance_s
 
     int num_collision_meshes;
     struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes
+
+    int numMeshes;
+    miscModelMesh_t *meshes[MAX_MISC_MODEL_MESHES]; // intermediate load data
 } modelInstance_t;
 
 extern int c_triangleModels;
@@ -549,7 +573,8 @@ extern int c_triangleSurfaces;
 extern int c_triangleVertexes;
 extern int c_triangleIndexes;
 
-void LoadTriangleModels(entity_t *eparent);
+void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst);
+void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent);
 void AddTriangleModels(tree_t *tree);
 
 #define MAX_MODEL_INSTANCES 1024

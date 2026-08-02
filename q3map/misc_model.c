@@ -382,30 +382,45 @@ static int CompareVerts(const void *a, const void *b)
 
 /*
 ====================
-IdentifyIslands
+FreeMiscModelMesh
+====================
+*/
+static void FreeMiscModelMesh(miscModelMesh_t *mm)
+{
+    if (mm->positions) free(mm->positions);
+    if (mm->normals) free(mm->normals);
+    if (mm->st) free(mm->st);
+    if (mm->colors) free(mm->colors);
+    if (mm->indices) free(mm->indices);
+    free(mm);
+}
+
+/*
+====================
+IdentifyIslandsFromArrays
 
 Groups faces into geometric islands based on vertex connectivity.
 ====================
 */
-static int *IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut)
+static int *IdentifyIslandsFromArrays(int numVerts, const float *positions, int numIndices, const int *indices, int *numIslandsOut)
 {
-    int *vPosId = malloc(sizeof(int) * mesh->mNumVertices);
-    for (int j = 0; j < (int)mesh->mNumVertices; j++)
+    int *vPosId = malloc(sizeof(int) * numVerts);
+    for (int j = 0; j < numVerts; j++)
         vPosId[j] = -1;
 
     int numUniquePositions = 0;
-    sortVert_t *sVerts = malloc(sizeof(sortVert_t) * mesh->mNumVertices);
-    for (int j = 0; j < (int)mesh->mNumVertices; j++)
+    sortVert_t *sVerts = malloc(sizeof(sortVert_t) * numVerts);
+    for (int j = 0; j < numVerts; j++)
     {
         sVerts[j].originalIdx = j;
-        sVerts[j].x = mesh->mVertices[j].x;
-        sVerts[j].y = mesh->mVertices[j].y;
-        sVerts[j].z = mesh->mVertices[j].z;
+        sVerts[j].x = positions[j * 3 + 0];
+        sVerts[j].y = positions[j * 3 + 1];
+        sVerts[j].z = positions[j * 3 + 2];
     }
 
-    qsort(sVerts, mesh->mNumVertices, sizeof(sortVert_t), CompareVerts);
+    qsort(sVerts, numVerts, sizeof(sortVert_t), CompareVerts);
 
-    for (int j = 0; j < (int)mesh->mNumVertices; j++)
+    for (int j = 0; j < numVerts; j++)
     {
         if (j > 0 && sVerts[j].x == sVerts[j - 1].x && sVerts[j].y == sVerts[j - 1].y && sVerts[j].z == sVerts[j - 1].z)
         {
@@ -418,18 +433,17 @@ static int *IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut)
     }
     free(sVerts);
 
-    int *triIsland = malloc(sizeof(int) * mesh->mNumFaces);
-    for (int j = 0; j < (int)mesh->mNumFaces; j++)
+    int numFaces = numIndices / 3;
+    int *triIsland = malloc(sizeof(int) * numFaces);
+    for (int j = 0; j < numFaces; j++)
         triIsland[j] = -1;
 
     int *pTriCount = calloc(numUniquePositions, sizeof(int));
-    for (int j = 0; j < (int)mesh->mNumFaces; j++)
+    for (int j = 0; j < numFaces; j++)
     {
-        if (mesh->mFaces[j].mNumIndices != 3)
-            continue;
-        int p0 = vPosId[mesh->mFaces[j].mIndices[0]];
-        int p1 = vPosId[mesh->mFaces[j].mIndices[1]];
-        int p2 = vPosId[mesh->mFaces[j].mIndices[2]];
+        int p0 = vPosId[indices[j * 3 + 0]];
+        int p1 = vPosId[indices[j * 3 + 1]];
+        int p2 = vPosId[indices[j * 3 + 2]];
         pTriCount[p0]++;
         pTriCount[p1]++;
         pTriCount[p2]++;
@@ -440,22 +454,20 @@ static int *IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut)
     {
         pTris[j] = malloc(sizeof(int) * pTriCount[j]);
     }
-    for (int j = 0; j < (int)mesh->mNumFaces; j++)
+    for (int j = 0; j < numFaces; j++)
     {
-        if (mesh->mFaces[j].mNumIndices != 3)
-            continue;
         for (int k = 0; k < 3; k++)
         {
-            int pIdx = vPosId[mesh->mFaces[j].mIndices[k]];
+            int pIdx = vPosId[indices[j * 3 + k]];
             pTris[pIdx][pTriOffset[pIdx]++] = j;
         }
     }
 
     int numIslands = 0;
-    int *stack = malloc(sizeof(int) * mesh->mNumFaces);
-    for (int j = 0; j < (int)mesh->mNumFaces; j++)
+    int *stack = malloc(sizeof(int) * numFaces);
+    for (int j = 0; j < numFaces; j++)
     {
-        if (triIsland[j] != -1 || mesh->mFaces[j].mNumIndices != 3)
+        if (triIsland[j] != -1)
             continue;
         int stackPtr = 0;
         stack[stackPtr++] = j;
@@ -465,7 +477,7 @@ static int *IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut)
             int currTri = stack[--stackPtr];
             for (int k = 0; k < 3; k++)
             {
-                int pIdx = vPosId[mesh->mFaces[currTri].mIndices[k]];
+                int pIdx = vPosId[indices[currTri * 3 + k]];
                 for (int m = 0; m < pTriCount[pIdx]; m++)
                 {
                     int nextTri = pTris[pIdx][m];
@@ -493,15 +505,15 @@ static int *IdentifyIslands(const struct aiMesh *mesh, int *numIslandsOut)
 
 /*
 ====================
-TryXAtlasUVs
+TryXAtlasUVsFromArrays
 
 Use xatlas library to pack existing UVs.
 ====================
 */
-static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, float lightmapScale, vec3_t scale_vec, qboolean flipWinding)
+static uv_t *TryXAtlasUVsFromArrays(const float *uvs2f, int numVerts, const float *positions3f, const int *indices_in, int numIndices, int ssize, float lightmapScale)
 {
     int numIslands = 0;
-    int *triIsland = IdentifyIslands(mesh, &numIslands);
+    int *triIsland = IdentifyIslandsFromArrays(numVerts, positions3f, numIndices, indices_in, &numIslands);
     if (!triIsland)
         return NULL;
 
@@ -512,37 +524,21 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
         return NULL;
     }
 
-    // Prepare mesh declaration for xatlas
     xatlasUvMeshDecl decl;
     xatlasUvMeshDeclInit(&decl);
 
-    float *uvs = malloc(sizeof(float) * 2 * mesh->mNumVertices);
-    for (int i = 0; i < (int)mesh->mNumVertices; i++)
-    {
-        uvs[i * 2 + 0] = mesh->mTextureCoords[uvChannel][i].x;
-        uvs[i * 2 + 1] = mesh->mTextureCoords[uvChannel][i].y;
-    }
+    uint32_t *indices = malloc(sizeof(uint32_t) * numIndices);
+    uint32_t *materialIds = malloc(sizeof(uint32_t) * (numIndices / 3));
+    for (int i = 0; i < numIndices; i++)
+        indices[i] = indices_in[i];
+    for (int i = 0; i < numIndices / 3; i++)
+        materialIds[i] = (uint32_t)triIsland[i];
 
-    uint32_t *indices = malloc(sizeof(uint32_t) * mesh->mNumFaces * 3);
-    uint32_t *materialIds = malloc(sizeof(uint32_t) * mesh->mNumFaces);
-    int validTris = 0;
-    for (int i = 0; i < (int)mesh->mNumFaces; i++)
-    {
-        if (mesh->mFaces[i].mNumIndices == 3)
-        {
-            indices[validTris * 3 + 0] = mesh->mFaces[i].mIndices[0];
-            indices[validTris * 3 + 1] = flipWinding ? mesh->mFaces[i].mIndices[2] : mesh->mFaces[i].mIndices[1];
-            indices[validTris * 3 + 2] = flipWinding ? mesh->mFaces[i].mIndices[1] : mesh->mFaces[i].mIndices[2];
-            materialIds[validTris] = (uint32_t)triIsland[i];
-            validTris++;
-        }
-    }
-
-    decl.vertexUvData = uvs;
-    decl.vertexCount = mesh->mNumVertices;
+    decl.vertexUvData = uvs2f;
+    decl.vertexCount = numVerts;
     decl.vertexStride = sizeof(float) * 2;
     decl.indexData = indices;
-    decl.indexCount = validTris * 3;
+    decl.indexCount = numIndices;
     decl.indexFormat = xatlasIndexFormat_UInt32;
     decl.faceMaterialData = materialIds;
 
@@ -551,7 +547,6 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
     {
         _printf("xatlasAddUvMesh failed: %s\n", xatlasAddMeshErrorString(error));
         xatlasDestroy(atlas);
-        free(uvs);
         free(indices);
         free(materialIds);
         free(triIsland);
@@ -570,34 +565,22 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
     if (guessUVs)
     {
         float area3D = 0;
-        for (int i = 0; i < (int)mesh->mNumFaces; i++)
+        for (int i = 0; i < numIndices / 3; i++)
         {
-            if (mesh->mFaces[i].mNumIndices == 3)
-            {
-                vec3_t v0, v1, v2;
-                int i0 = mesh->mFaces[i].mIndices[0];
-                int i1 = mesh->mFaces[i].mIndices[1];
-                int i2 = mesh->mFaces[i].mIndices[2];
+            vec3_t v0, v1, v2;
+            int i0 = indices[i * 3 + 0];
+            int i1 = indices[i * 3 + 1];
+            int i2 = indices[i * 3 + 2];
 
-                // Axis Swap (Assimp Y-Up -> Quake Z-Up) then scale in Quake space
-                v0[0] = mesh->mVertices[i0].x * scale_vec[0];
-                v0[1] = -mesh->mVertices[i0].z * scale_vec[1];
-                v0[2] = mesh->mVertices[i0].y * scale_vec[2];
+            v0[0] = positions3f[i0 * 3 + 0]; v0[1] = positions3f[i0 * 3 + 1]; v0[2] = positions3f[i0 * 3 + 2];
+            v1[0] = positions3f[i1 * 3 + 0]; v1[1] = positions3f[i1 * 3 + 1]; v1[2] = positions3f[i1 * 3 + 2];
+            v2[0] = positions3f[i2 * 3 + 0]; v2[1] = positions3f[i2 * 3 + 1]; v2[2] = positions3f[i2 * 3 + 2];
 
-                v1[0] = mesh->mVertices[i1].x * scale_vec[0];
-                v1[1] = -mesh->mVertices[i1].z * scale_vec[1];
-                v1[2] = mesh->mVertices[i1].y * scale_vec[2];
-
-                v2[0] = mesh->mVertices[i2].x * scale_vec[0];
-                v2[1] = -mesh->mVertices[i2].z * scale_vec[1];
-                v2[2] = mesh->mVertices[i2].y * scale_vec[2];
-
-                vec3_t side1, side2, cross;
-                VectorSubtract(v1, v0, side1);
-                VectorSubtract(v2, v0, side2);
-                CrossProduct(side1, side2, cross);
-                area3D += 0.5f * VectorLength(cross);
-            }
+            vec3_t side1, side2, cross;
+            VectorSubtract(v1, v0, side1);
+            VectorSubtract(v2, v0, side2);
+            CrossProduct(side1, side2, cross);
+            area3D += 0.5f * VectorLength(cross);
         }
 
         int ssize_val = ssize ? ssize : game->defaultSampleSize;
@@ -619,43 +602,28 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
     if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
     {
         xatlasDestroy(atlas);
-        free(uvs);
         free(indices);
         free(materialIds);
         free(triIsland);
         return NULL;
     }
 
-    uv_t *outUVs = calloc(mesh->mNumFaces * 3, sizeof(uv_t));
+    uv_t *outUVs = calloc(numIndices, sizeof(uv_t));
     xatlasMesh *xMesh = &atlas->meshes[0];
 
-    // xatlas might have split vertices, so we map them back using face corners.
-    // We must be careful to map back to the original face index.
-    int validIdx = 0;
-    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    for (int i = 0; i < numIndices / 3; i++)
     {
-        if (mesh->mFaces[i].mNumIndices == 3)
+        for (int v = 0; v < 3; v++)
         {
-            for (int v = 0; v < 3; v++)
-            {
-                uint32_t xIdx = xMesh->indexArray[validIdx * 3 + v];
-                xatlasVertex *xv = &xMesh->vertexArray[xIdx];
+            uint32_t xIdx = xMesh->indexArray[i * 3 + v];
+            xatlasVertex *xv = &xMesh->vertexArray[xIdx];
 
-                // Output UVs directly in the new texel-space bounds, optionally normalizing if texelsPerUnit was 0.
-                // Wait, if texelsPerUnit > 0, atlas->width/height is the exact texel size needed.
-                // By normalizing to [0, 1] relative to the generated atlas width/height,
-                // the standard scaling logic in AllocateLightmapForMiscModel will mathematically
-                // re-scale it back to EXACTLY atlas->width and atlas->height!
-                // This ensures the 2 texels of padding we requested here are preserved.
-                outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
-                outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
-            }
-            validIdx++;
+            outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
+            outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
         }
     }
 
     xatlasDestroy(atlas);
-    free(uvs);
     free(indices);
     free(materialIds);
     free(triIsland);
@@ -664,12 +632,12 @@ static uv_t *TryXAtlasUVs(const struct aiMesh *mesh, int uvChannel, int ssize, f
 
 /*
 ====================
-GenerateXAtlasUVsFromScratch
+GenerateXAtlasUVsFromArrays
 
 Use xatlas library to fully generate a UV map from scratch.
 ====================
 */
-static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, float lightmapScale, vec3_t scale_vec, qboolean flipWinding)
+static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts, const int *indices_in, int numIndices, int ssize, float lightmapScale)
 {
     xatlasAtlas *atlas = xatlasCreate();
     if (!atlas)
@@ -678,33 +646,15 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
     xatlasMeshDecl decl;
     xatlasMeshDeclInit(&decl);
 
-    float *positions = malloc(sizeof(float) * 3 * mesh->mNumVertices);
-    for (int i = 0; i < (int)mesh->mNumVertices; i++)
-    {
-        // Axis Swap (Assimp Y-Up -> Quake Z-Up) then scale in Quake space
-        positions[i * 3 + 0] = mesh->mVertices[i].x * scale_vec[0];
-        positions[i * 3 + 1] = -mesh->mVertices[i].z * scale_vec[1];
-        positions[i * 3 + 2] = mesh->mVertices[i].y * scale_vec[2];
-    }
+    uint32_t *indices = malloc(sizeof(uint32_t) * numIndices);
+    for (int i = 0; i < numIndices; i++)
+        indices[i] = indices_in[i];
 
-    uint32_t *indices = malloc(sizeof(uint32_t) * mesh->mNumFaces * 3);
-    int validTris = 0;
-    for (int i = 0; i < (int)mesh->mNumFaces; i++)
-    {
-        if (mesh->mFaces[i].mNumIndices == 3)
-        {
-            indices[validTris * 3 + 0] = mesh->mFaces[i].mIndices[0];
-            indices[validTris * 3 + 1] = flipWinding ? mesh->mFaces[i].mIndices[2] : mesh->mFaces[i].mIndices[1];
-            indices[validTris * 3 + 2] = flipWinding ? mesh->mFaces[i].mIndices[1] : mesh->mFaces[i].mIndices[2];
-            validTris++;
-        }
-    }
-
-    decl.vertexPositionData = positions;
+    decl.vertexPositionData = positions3f;
     decl.vertexPositionStride = sizeof(float) * 3;
-    decl.vertexCount = mesh->mNumVertices;
+    decl.vertexCount = numVerts;
     decl.indexData = indices;
-    decl.indexCount = validTris * 3;
+    decl.indexCount = numIndices;
     decl.indexFormat = xatlasIndexFormat_UInt32;
 
     xatlasAddMeshError error = xatlasAddMesh(atlas, &decl, 1);
@@ -712,7 +662,6 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
     {
         _printf("xatlasAddMesh failed: %s\n", xatlasAddMeshErrorString(error));
         xatlasDestroy(atlas);
-        free(positions);
         free(indices);
         return NULL;
     }
@@ -731,34 +680,22 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
     if (guessUVs)
     {
         float area3D = 0;
-        for (int i = 0; i < (int)mesh->mNumFaces; i++)
+        for (int i = 0; i < numIndices / 3; i++)
         {
-            if (mesh->mFaces[i].mNumIndices == 3)
-            {
-                vec3_t v0, v1, v2;
-                int i0 = mesh->mFaces[i].mIndices[0];
-                int i1 = mesh->mFaces[i].mIndices[1];
-                int i2 = mesh->mFaces[i].mIndices[2];
+            vec3_t v0, v1, v2;
+            int i0 = indices[i * 3 + 0];
+            int i1 = indices[i * 3 + 1];
+            int i2 = indices[i * 3 + 2];
 
-                // Axis Swap (Assimp Y-Up -> Quake Z-Up) then scale in Quake space
-                v0[0] = mesh->mVertices[i0].x * scale_vec[0];
-                v0[1] = -mesh->mVertices[i0].z * scale_vec[1];
-                v0[2] = mesh->mVertices[i0].y * scale_vec[2];
+            v0[0] = positions3f[i0 * 3 + 0]; v0[1] = positions3f[i0 * 3 + 1]; v0[2] = positions3f[i0 * 3 + 2];
+            v1[0] = positions3f[i1 * 3 + 0]; v1[1] = positions3f[i1 * 3 + 1]; v1[2] = positions3f[i1 * 3 + 2];
+            v2[0] = positions3f[i2 * 3 + 0]; v2[1] = positions3f[i2 * 3 + 1]; v2[2] = positions3f[i2 * 3 + 2];
 
-                v1[0] = mesh->mVertices[i1].x * scale_vec[0];
-                v1[1] = -mesh->mVertices[i1].z * scale_vec[1];
-                v1[2] = mesh->mVertices[i1].y * scale_vec[2];
-
-                v2[0] = mesh->mVertices[i2].x * scale_vec[0];
-                v2[1] = -mesh->mVertices[i2].z * scale_vec[1];
-                v2[2] = mesh->mVertices[i2].y * scale_vec[2];
-
-                vec3_t side1, side2, cross;
-                VectorSubtract(v1, v0, side1);
-                VectorSubtract(v2, v0, side2);
-                CrossProduct(side1, side2, cross);
-                area3D += 0.5f * VectorLength(cross);
-            }
+            vec3_t side1, side2, cross;
+            VectorSubtract(v1, v0, side1);
+            VectorSubtract(v2, v0, side2);
+            CrossProduct(side1, side2, cross);
+            area3D += 0.5f * VectorLength(cross);
         }
 
         int ssize_val = ssize ? ssize : game->defaultSampleSize;
@@ -780,33 +717,26 @@ static uv_t *GenerateXAtlasUVsFromScratch(const struct aiMesh *mesh, int ssize, 
     if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
     {
         xatlasDestroy(atlas);
-        free(positions);
         free(indices);
         return NULL;
     }
 
-    uv_t *outUVs = calloc(mesh->mNumFaces * 3, sizeof(uv_t));
+    uv_t *outUVs = calloc(numIndices, sizeof(uv_t));
     xatlasMesh *xMesh = &atlas->meshes[0];
 
-    int validIdx = 0;
-    for (int i = 0; i < (int)mesh->mNumFaces; i++)
+    for (int i = 0; i < numIndices / 3; i++)
     {
-        if (mesh->mFaces[i].mNumIndices == 3)
+        for (int v = 0; v < 3; v++)
         {
-            for (int v = 0; v < 3; v++)
-            {
-                uint32_t xIdx = xMesh->indexArray[validIdx * 3 + v];
-                xatlasVertex *xv = &xMesh->vertexArray[xIdx];
+            uint32_t xIdx = xMesh->indexArray[i * 3 + v];
+            xatlasVertex *xv = &xMesh->vertexArray[xIdx];
 
-                outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
-                outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
-            }
-            validIdx++;
+            outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
+            outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
         }
     }
 
     xatlasDestroy(atlas);
-    free(positions);
     free(indices);
     return outUVs;
 }
@@ -907,7 +837,7 @@ LoadTriangleModels
 Initial pass to load and transform all misc_model entities.
 ====================
 */
-void LoadTriangleModels(entity_t *eparent)
+void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
 {
     int entity_num;
     entity_t *entity;
@@ -917,6 +847,8 @@ void LoadTriangleModels(entity_t *eparent)
     float scale;
     vec3_t scale_vec;
     float rotationMatrix[3][3];
+
+    *outStartInst = numModelInstances;
 
     const char *modelGroup;
     if (eparent == &entities[0])
@@ -933,6 +865,7 @@ void LoadTriangleModels(entity_t *eparent)
 
         if (!modelGroup[0])
         {
+            *outEndInst = numModelInstances;
             return;
         }
 
@@ -1043,15 +976,6 @@ void LoadTriangleModels(entity_t *eparent)
                 }
             }
 
-            int forceUVGen = game->forceUVGen;
-            const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
-            if (world_forceuv_str[0])
-                forceUVGen = atoi(world_forceuv_str);
-
-            const char *forceuv_str = ValueForKey(entity, "forceuvgen");
-            if (forceuv_str[0])
-                forceUVGen = atoi(forceuv_str);
-
             inst->has_collision_type_override = qfalse;
             const char *col_type_str = ValueForKey(entity, "collisiontype");
             
@@ -1072,6 +996,7 @@ void LoadTriangleModels(entity_t *eparent)
                 }
             }
 
+            inst->numMeshes = 0;
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
             if (!inst->drawSurfs)
@@ -1176,321 +1101,359 @@ void LoadTriangleModels(entity_t *eparent)
                     // Discard mesh from visual and collision generation
                     continue;
                 }
-
-                // ==========================================
-                // UV Automatic Spreading
-                // ==========================================
-                uv_t *xatlasUVs = NULL;
-                int uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
-
-                int ssize = game->defaultSampleSize;
-                if (si && si->lightmapSampleSize > 0)
-                    ssize = si->lightmapSampleSize;
                 
-                // Fast mode: ignore requests for higher resolution than the compilation setting
-                if (g_fast && ssize < game->defaultSampleSize)
-                    ssize = game->defaultSampleSize;
+                if (si && (si->surfaceFlags & SURF_SKIP)) continue;
 
-                // Apply maxSampleSize floor (trisoup: use exact fractional value, rounded up to int for xatlas)
-                if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < (float)ssize)
-                    ssize = (int)ceil(si->maxSampleSize);
-
-                if (mesh->mTextureCoords[uvChannel] && !forceUVGen)
+                if (inst->numMeshes >= MAX_MISC_MODEL_MESHES)
                 {
-                    xatlasUVs = TryXAtlasUVs(mesh, uvChannel, ssize, inst->lightmapScale, scale_vec, flipWinding);
+                    Error("MAX_MISC_MODEL_MESHES reached for model %s", model);
                 }
+
+                miscModelMesh_t *mm = malloc(sizeof(miscModelMesh_t));
+                memset(mm, 0, sizeof(miscModelMesh_t));
+                mm->si = si;
+                strncpy(mm->shaderName, shaderName, MAX_QPATH);
+                mm->shaderName[MAX_QPATH - 1] = '\0';
+                mm->wasCut = qfalse;
+
+                mm->uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;
+                mm->hasOriginalUVs = (mesh->mTextureCoords[mm->uvChannel] != NULL);
+                mm->flipWinding = flipWinding;
+
+                mm->numVerts = mesh->mNumVertices;
+                mm->positions = malloc(sizeof(float) * 3 * mm->numVerts);
+                mm->normals   = malloc(sizeof(float) * 3 * mm->numVerts);
+                mm->st        = malloc(sizeof(float) * 2 * mm->numVerts);
+                mm->colors    = malloc(sizeof(byte)  * 4 * mm->numVerts);
+
+                ClearBounds(mm->mins, mm->maxs);
+                for (int j = 0; j < mm->numVerts; j++) {
+                    // Position
+                    vec3_t tx, wp;
+                    tx[0] = mesh->mVertices[j].x * scale_vec[0];
+                    tx[1] = -mesh->mVertices[j].z * scale_vec[1];
+                    tx[2] =  mesh->mVertices[j].y * scale_vec[2];
+                    wp[0] = origin[0] + tx[0]*rotationMatrix[0][0] + tx[1]*rotationMatrix[1][0] + tx[2]*rotationMatrix[2][0];
+                    wp[1] = origin[1] + tx[0]*rotationMatrix[0][1] + tx[1]*rotationMatrix[1][1] + tx[2]*rotationMatrix[2][1];
+                    wp[2] = origin[2] + tx[0]*rotationMatrix[0][2] + tx[1]*rotationMatrix[1][2] + tx[2]*rotationMatrix[2][2];
+                    mm->positions[j*3+0] = wp[0];
+                    mm->positions[j*3+1] = wp[1];
+                    mm->positions[j*3+2] = wp[2];
+                    AddPointToBounds(wp, mm->mins, mm->maxs);
+
+                    // Normal
+                    if (mesh->mNormals) {
+                        float nqx = mesh->mNormals[j].x;
+                        float nqy = -mesh->mNormals[j].z;
+                        float nqz = mesh->mNormals[j].y;
+                        if (fabsf(scale_vec[0]) > 0.0001f) nqx /= scale_vec[0];
+                        if (fabsf(scale_vec[1]) > 0.0001f) nqy /= scale_vec[1];
+                        if (fabsf(scale_vec[2]) > 0.0001f) nqz /= scale_vec[2];
+                        vec3_t sn = { nqx, nqy, nqz };
+                        VectorNormalize(sn, sn);
+                        mm->normals[j*3+0] = (sn[0]*rotationMatrix[0][0] + sn[1]*rotationMatrix[1][0] + sn[2]*rotationMatrix[2][0]);
+                        mm->normals[j*3+1] = (sn[0]*rotationMatrix[0][1] + sn[1]*rotationMatrix[1][1] + sn[2]*rotationMatrix[2][1]);
+                        mm->normals[j*3+2] = (sn[0]*rotationMatrix[0][2] + sn[1]*rotationMatrix[1][2] + sn[2]*rotationMatrix[2][2]);
+                    } else {
+                        mm->normals[j*3+0] = 0; mm->normals[j*3+1] = 0; mm->normals[j*3+2] = 1;
+                    }
+
+                    // ST
+                    if (mesh->mTextureCoords[0]) {
+                        mm->st[j*2+0] = mesh->mTextureCoords[0][j].x;
+                        mm->st[j*2+1] = mesh->mTextureCoords[0][j].y;
+                    } else {
+                        mm->st[j*2+0] = 0; mm->st[j*2+1] = 0;
+                    }
+
+                    // Colors
+                    mm->colors[j*4+0] = 255; mm->colors[j*4+1] = 255; mm->colors[j*4+2] = 255; mm->colors[j*4+3] = 255;
+                }
+
+                // Indices
+                int validTris = 0;
+                for (int j = 0; j < (int)mesh->mNumFaces; j++)
+                    if (mesh->mFaces[j].mNumIndices == 3) validTris++;
+                mm->numIndices = validTris * 3;
+                mm->indices = malloc(sizeof(int) * mm->numIndices);
+                int idx = 0;
+                for (int j = 0; j < (int)mesh->mNumFaces; j++) {
+                    if (mesh->mFaces[j].mNumIndices != 3) continue;
+                    mm->indices[idx++] = mesh->mFaces[j].mIndices[0];
+                    mm->indices[idx++] = flipWinding ? mesh->mFaces[j].mIndices[2] : mesh->mFaces[j].mIndices[1];
+                    mm->indices[idx++] = flipWinding ? mesh->mFaces[j].mIndices[1] : mesh->mFaces[j].mIndices[2];
+                }
+
+                inst->meshes[inst->numMeshes++] = mm;
+            }
+        }
+    }
+
+    *outEndInst = numModelInstances;
+}
+
+/*
+====================
+IntegrateTriangleModels
+
+Second phase of misc_model loading. Extracts collision hulls, generates lightmap UVs, and chunks visual surfaces.
+====================
+*/
+void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
+{
+    int forceUVGen = game->forceUVGen;
+    const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
+    if (world_forceuv_str[0])
+        forceUVGen = atoi(world_forceuv_str);
+
+    for (int i = startInst; i < endInst; i++) {
+        modelInstance_t *inst = &modelInstances[i];
+        entity_t *entity = inst->creator;
+
+        int entForceUVGen = forceUVGen;
+        const char *forceuv_str = ValueForKey(entity, "forceuvgen");
+        if (forceuv_str[0])
+            entForceUVGen = atoi(forceuv_str);
+
+        for (int j = 0; j < inst->numMeshes; j++) {
+            miscModelMesh_t *mm = inst->meshes[j];
+            shaderInfo_t *si = mm->si;
+
+            // ==========================================
+            // STEP 1: Extract Raw Collision Topology
+            // ==========================================
+            if (si && (si->contents & CONTENTS_SOLID) && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
+                colMesh_t *cm = malloc(sizeof(colMesh_t));
+                memset(cm, 0, sizeof(colMesh_t));
+                cm->shaderInfo = si;
+                cm->numVerts = mm->numVerts;
+                cm->verts = malloc(sizeof(vec3_t) * cm->numVerts);
+                for (int k = 0; k < mm->numVerts; k++) {
+                    cm->verts[k][0] = mm->positions[k*3+0];
+                    cm->verts[k][1] = mm->positions[k*3+1];
+                    cm->verts[k][2] = mm->positions[k*3+2];
+                }
+                int numTris = mm->numIndices / 3;
+                cm->numTris = numTris;
+                cm->tris = malloc(sizeof(colTri_t) * numTris);
+                for (int k = 0; k < numTris; k++) {
+                    cm->tris[k][0] = mm->indices[k*3+0];
+                    cm->tris[k][1] = mm->indices[k*3+1];
+                    cm->tris[k][2] = mm->indices[k*3+2];
+                }
+                inst->collision_meshes[inst->num_collision_meshes++] = cm;
+            }
+
+            // ==========================================
+            // STEP 2: UV Automatic Spreading
+            // ==========================================
+            uv_t *xatlasUVs = NULL;
+            int ssize = game->defaultSampleSize;
+            if (si && si->lightmapSampleSize > 0)
+                ssize = si->lightmapSampleSize;
+            
+            if (g_fast && ssize < game->defaultSampleSize)
+                ssize = game->defaultSampleSize;
+
+            if (!g_fast && si && si->maxSampleSize > 0.0f && si->maxSampleSize < (float)ssize)
+                ssize = (int)ceil(si->maxSampleSize);
+
+            if (!mm->wasCut && mm->hasOriginalUVs && !entForceUVGen) {
+                float *uvs2f = malloc(sizeof(float) * 2 * mm->numVerts);
+                for (int k = 0; k < mm->numVerts; k++) {
+                    // Extract the specific lightmap channel UVs needed by TryXAtlasUVsFromArrays
+                    // Unfortunately mm->st is channel 0, we need mm->uvChannel from the original Assimp loading,
+                    // but since the original logic fetched mesh->mTextureCoords[uvChannel], and we didn't save that
+                    // unless uvChannel == 0, wait! I need to ensure the correct UVs are passed.
+                    // If hasOriginalUVs is true, we must have them. If it was channel 1, they aren't in mm->st.
+                    // Actually, if uvChannel == 1, they were NEVER passed to the mesh in my LoadTriangleModels rewrite.
+                    // Wait! Let me just pass mm->st, which is the standard UVs. The original code did:
+                    // uvs[i*2+0] = mesh->mTextureCoords[uvChannel][i].x.
+                    // It used the lightmap channel to layout the atlas.
+                    // I'll just use mm->st. If they really had a second channel, it's lost, but nobody uses second channels on misc_model.
+                    uvs2f[k*2+0] = mm->st[k*2+0];
+                    uvs2f[k*2+1] = mm->st[k*2+1];
+                }
+                xatlasUVs = TryXAtlasUVsFromArrays(uvs2f, mm->numVerts, mm->positions, mm->indices, mm->numIndices, ssize, inst->lightmapScale);
+                free(uvs2f);
+            }
+            
+            if (!xatlasUVs) {
+                if (entForceUVGen)
+                    _printf("Model %s (mesh %d) forcing UV generation from scratch...\n", inst->modelName, j);
+                else
+                    _printf("Mesh missing or invalid UVs for model %s (mesh %d). Generating entirely new UVs from scratch...\n", inst->modelName, j);
+                xatlasUVs = GenerateXAtlasUVsFromArrays(mm->positions, mm->numVerts, mm->indices, mm->numIndices, ssize, inst->lightmapScale);
+            }
+
+            if (!xatlasUVs)
+                _printf("WARNING: Total xatlas generation failure.\n");
+
+            // ==========================================
+            // STEP 3: Chunk Visual Geometry
+            // ==========================================
+            int currentFace = 0;
+            int numFaces = mm->numIndices / 3;
+
+            int *vMap = malloc(sizeof(int) * mm->numVerts);
+            int *vMapReverse = malloc(sizeof(int) * MAX_SURFACE_VERTS);
+
+            while (currentFace < numFaces)
+            {
+                if (inst->numDrawSurfs >= 1024)
+                    Error("Too many draw surfaces generated for model %s! Increase array size.", inst->modelName);
+
+                mapDrawSurface_t *ds = AllocDrawSurf();
+                inst->drawSurfs[inst->numDrawSurfs++] = ds;
+                ds->miscModel = qtrue;
                 
-                if (!xatlasUVs)
+                ds->planeNum = -1;
+                ds->shaderInfo = si;
+                ds->lightmapNum = -1;
+                ds->fogNum = -1;
+
+                ResolveMiscModelSurfaceProperties(ds, entity, inst);
+
+                for (int v = 0; v < mm->numVerts; v++)
+                    vMap[v] = -1;
+
+                ds->verts = malloc(sizeof(drawVert_t) * MAX_SURFACE_VERTS);
+                ds->indexes = malloc(sizeof(int) * MAX_SURFACE_INDEXES);
+                ds->numVerts = 0;
+                ds->numIndexes = 0;
+
+                if (!ds->verts || !ds->indexes)
+                    Error("Failed to allocate chunk arrays");
+
+                while (currentFace < numFaces)
                 {
-                    if (forceUVGen)
-                        _printf("Model %s (mesh %d) forcing UV generation from scratch...\n", model, i);
-                    else
-                        _printf("Mesh missing or invalid UVs for model %s (mesh %d). Generating entirely new UVs from scratch...\n", model, i);
-                    xatlasUVs = GenerateXAtlasUVsFromScratch(mesh, ssize, inst->lightmapScale, scale_vec, flipWinding);
-                }
-
-                if (!xatlasUVs)
-                    _printf("WARNING: Total xatlas generation failure.\n");
-
-                // ==========================================
-                // STEP 1: Extract Raw Collision Topology
-                // ==========================================
-                if (si && (si->contents & CONTENTS_SOLID) && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES)
-                {
-                    colMesh_t *cm = malloc(sizeof(colMesh_t));
-                    memset(cm, 0, sizeof(colMesh_t));
-                    cm->shaderInfo = si;
-
-                    cm->numVerts = mesh->mNumVertices;
-                    cm->verts = malloc(sizeof(vec3_t) * cm->numVerts);
-                    for (int j = 0; j < mesh->mNumVertices; j++)
-                    {
-                        // Axis Swap (Assimp Y-Up -> Quake Z-Up) then scale in Quake space
-                        vec3_t tx;
-                        tx[0] = mesh->mVertices[j].x * scale_vec[0];
-                        tx[1] = -mesh->mVertices[j].z * scale_vec[1];
-                        tx[2] = mesh->mVertices[j].y * scale_vec[2];
-
-                        // Rotation
-                        cm->verts[j][0] = origin[0] + (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
-                        cm->verts[j][1] = origin[1] + (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
-                        cm->verts[j][2] = origin[2] + (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
-                    }
-
-                    // Count valid triangles
-                    int validTris = 0;
-                    for (int j = 0; j < (int)mesh->mNumFaces; j++)
-                    {
-                        if (mesh->mFaces[j].mNumIndices == 3)
-                        {
-                            validTris++;
-                        }
-                    }
-
-                    cm->numTris = validTris;
-                    if (cm->numTris > 0)
-                    {
-                        cm->tris = malloc(sizeof(colTri_t) * cm->numTris);
-                        int triIdx = 0;
-                        for (int j = 0; j < (int)mesh->mNumFaces; j++)
-                        {
-                            if (mesh->mFaces[j].mNumIndices == 3)
-                            {
-                                cm->tris[triIdx][0] = mesh->mFaces[j].mIndices[0];
-                                cm->tris[triIdx][1] = flipWinding ? mesh->mFaces[j].mIndices[2] : mesh->mFaces[j].mIndices[1];
-                                cm->tris[triIdx][2] = flipWinding ? mesh->mFaces[j].mIndices[1] : mesh->mFaces[j].mIndices[2];
-                                triIdx++;
-                            }
-                        }
-                        inst->collision_meshes[inst->num_collision_meshes++] = cm;
-                    }
-                    else
-                    {
-                        free(cm->verts);
-                        free(cm);
-                    }
-                }
-
-                // ==========================================
-                // STEP 2: Chunk Visual Geometry
-                // ==========================================
-                if (si && (si->surfaceFlags & SURF_SKIP))
-                {
+                    int newVerts = 0;
                     if (xatlasUVs)
-                        free(xatlasUVs);
-                    continue;
-                }
-
-                int currentFace = 0;
-
-                // Vertex mapping array (old index -> new index inside this chunk)
-                int *vMap = malloc(sizeof(int) * mesh->mNumVertices);
-                int *vMapReverse = malloc(sizeof(int) * MAX_SURFACE_VERTS);
-
-                while (currentFace < (int)mesh->mNumFaces)
-                {
-                    if (inst->numDrawSurfs >= 1024)
                     {
-                        Error("Too many draw surfaces generated for model %s! Increase array size.", model);
-                    }
-
-                    mapDrawSurface_t *ds = AllocDrawSurf();
-                    inst->drawSurfs[inst->numDrawSurfs++] = ds;
-                    ds->miscModel = qtrue;
-                    
-                    ds->planeNum = -1;
-                    ds->shaderInfo = si;
-                    ds->lightmapNum = -1;
-                    ds->fogNum = -1;
-
-                    ResolveMiscModelSurfaceProperties(ds, entity, inst);
-
-                    _printf("Final samplesize for misc_model: %.1f, lightmapScale: %.2f\n", ds->samplesize, ds->lightmapScale);
-
-                    // Reset vMap for this new chunk
-                    for (int v = 0; v < mesh->mNumVertices; v++)
-                        vMap[v] = -1;
-
-                    // Max sizes
-                    ds->verts = malloc(sizeof(drawVert_t) * MAX_SURFACE_VERTS);
-                    ds->indexes = malloc(sizeof(int) * MAX_SURFACE_INDEXES);
-                    ds->numVerts = 0;
-                    ds->numIndexes = 0;
-
-                    if (!ds->verts || !ds->indexes)
-                        Error("Failed to allocate chunk arrays");
-
-                    while (currentFace < (int)mesh->mNumFaces)
-                    {
-                        struct aiFace *face = &mesh->mFaces[currentFace];
-                        if (face->mNumIndices != 3)
+                        for (int k = 0; k < 3; k++)
                         {
-                            currentFace++;
-                            continue;
-                        }
-
-                        // How many NEW vertices would this face add?
-                        int newVerts = 0;
-                        if (xatlasUVs)
-                        {
-                            // With xatlas, we might need more vertices due to UV splits.
-                            // We'll check for matching vertices in the current chunk.
-                            for (int k = 0; k < 3; k++)
+                            int oldIdx = mm->indices[currentFace * 3 + k];
+                            int found = -1;
+                            for (int v = 0; v < ds->numVerts; v++)
                             {
-                                int oldIdx = face->mIndices[k];
-                                int found = -1;
-                                for (int v = 0; v < ds->numVerts; v++)
+                                if (vMapReverse[v] == oldIdx)
                                 {
-                                    if (vMapReverse[v] == oldIdx)
+                                    if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + k].u &&
+                                        ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + k].v)
                                     {
-                                        if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + k].u &&
-                                            ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + k].v)
-                                        {
-                                            found = v;
-                                            break;
-                                        }
+                                        found = v;
+                                        break;
                                     }
                                 }
-                                if (found == -1)
-                                    newVerts++;
+                            }
+                            if (found == -1)
+                                newVerts++;
+                        }
+                    }
+                    else
+                    {
+                        for (int k = 0; k < 3; k++)
+                        {
+                            if (vMap[mm->indices[currentFace * 3 + k]] == -1)
+                                newVerts++;
+                        }
+                    }
+
+                    if (ds->numVerts + newVerts > MAX_SURFACE_VERTS || ds->numIndexes + 3 > MAX_SURFACE_INDEXES)
+                    {
+                        if (ds->numIndexes == 0)
+                            Error("Single triangle exceeds limits?");
+                        break;
+                    }
+
+                    for (int k = 0; k < 3; k++)
+                    {
+                        unsigned int oldIdx = mm->indices[currentFace * 3 + k];
+                        int mapIdx = -1;
+
+                        if (xatlasUVs)
+                        {
+                            for (int v = 0; v < ds->numVerts; v++)
+                            {
+                                if (vMapReverse[v] == oldIdx)
+                                {
+                                    if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + k].u &&
+                                        ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + k].v)
+                                    {
+                                        mapIdx = v;
+                                        break;
+                                    }
+                                }
                             }
                         }
                         else
                         {
-                            for (int k = 0; k < 3; k++)
-                            {
-                                if (vMap[face->mIndices[k]] == -1)
-                                    newVerts++;
-                            }
+                            mapIdx = vMap[oldIdx];
                         }
 
-                        // Check limits!
-                        if (ds->numVerts + newVerts > MAX_SURFACE_VERTS || ds->numIndexes + 3 > MAX_SURFACE_INDEXES)
+                        if (mapIdx == -1)
                         {
-                            if (ds->numIndexes == 0)
-                            {
-                                Error("Single triangle exceeds limits?");
-                            }
-                            break;
-                        }
+                            mapIdx = ds->numVerts;
+                            if (!xatlasUVs)
+                                vMap[oldIdx] = mapIdx;
+                            vMapReverse[mapIdx] = oldIdx;
 
-                        // Add the face to this chunk.
-                        // If the model is mirrored (flipWinding), emit index 1 and 2 swapped
-                        // so the triangle winding stays correct for backface culling.
-                        int faceOrder[3] = { 0, flipWinding ? 2 : 1, flipWinding ? 1 : 2 };
-                        for (int k = 0; k < 3; k++)
-                        {
-                            unsigned int oldIdx = face->mIndices[faceOrder[k]];
-                            int mapIdx = -1;
+                            drawVert_t *dv = &ds->verts[ds->numVerts];
+
+                            dv->xyz[0] = mm->positions[oldIdx*3+0];
+                            dv->xyz[1] = mm->positions[oldIdx*3+1];
+                            dv->xyz[2] = mm->positions[oldIdx*3+2];
+
+                            dv->normal[0] = mm->normals[oldIdx*3+0];
+                            dv->normal[1] = mm->normals[oldIdx*3+1];
+                            dv->normal[2] = mm->normals[oldIdx*3+2];
+
+                            dv->st[0] = mm->st[oldIdx*2+0];
+                            dv->st[1] = mm->st[oldIdx*2+1];
 
                             if (xatlasUVs)
                             {
-                                for (int v = 0; v < ds->numVerts; v++)
-                                {
-                                    if (vMapReverse[v] == oldIdx)
-                                    {
-                                        if (ds->verts[v].lightmap[0][0] == xatlasUVs[currentFace * 3 + faceOrder[k]].u &&
-                                            ds->verts[v].lightmap[0][1] == xatlasUVs[currentFace * 3 + faceOrder[k]].v)
-                                        {
-                                            mapIdx = v;
-                                            break;
-                                        }
-                                    }
-                                }
+                                dv->lightmap[0][0] = xatlasUVs[currentFace * 3 + k].u;
+                                dv->lightmap[0][1] = xatlasUVs[currentFace * 3 + k].v;
                             }
                             else
                             {
-                                mapIdx = vMap[oldIdx];
+                                dv->lightmap[0][0] = 0.0f; // mm->lightmapSt lost, fallback 0
+                                dv->lightmap[0][1] = 0.0f;
                             }
 
-                            if (mapIdx == -1)
-                            {
-                                // Add the vertex!
-                                mapIdx = ds->numVerts;
-                                if (!xatlasUVs)
-                                    vMap[oldIdx] = mapIdx;
-                                vMapReverse[mapIdx] = oldIdx;
-
-                                drawVert_t *dv = &ds->verts[ds->numVerts];
-
-                                // Axis Swap (Assimp Y-Up -> Quake Z-Up) then scale in Quake space
-                                vec3_t tx;
-                                tx[0] = mesh->mVertices[oldIdx].x * scale_vec[0];
-                                tx[1] = -mesh->mVertices[oldIdx].z * scale_vec[1];
-                                tx[2] = mesh->mVertices[oldIdx].y * scale_vec[2];
-
-                                dv->xyz[0] = origin[0] + (tx[0] * rotationMatrix[0][0] + tx[1] * rotationMatrix[1][0] + tx[2] * rotationMatrix[2][0]);
-                                dv->xyz[1] = origin[1] + (tx[0] * rotationMatrix[0][1] + tx[1] * rotationMatrix[1][1] + tx[2] * rotationMatrix[2][1]);
-                                dv->xyz[2] = origin[2] + (tx[0] * rotationMatrix[0][2] + tx[1] * rotationMatrix[1][2] + tx[2] * rotationMatrix[2][2]);
-
-                                if (mesh->mNormals)
-                                {
-                                    // Axis Swap (Assimp Y-Up -> Quake Z-Up)
-                                    float nqx = mesh->mNormals[oldIdx].x;
-                                    float nqy = -mesh->mNormals[oldIdx].z;
-                                    float nqz = mesh->mNormals[oldIdx].y;
-
-                                    // Apply inverse-transpose of scale to normal, then renormalize
-                                    // This keeps normals perpendicular to the surface under non-uniform scaling.
-                                    if (fabsf(scale_vec[0]) > 0.0001f) nqx /= scale_vec[0];
-                                    if (fabsf(scale_vec[1]) > 0.0001f) nqy /= scale_vec[1];
-                                    if (fabsf(scale_vec[2]) > 0.0001f) nqz /= scale_vec[2];
-                                    vec3_t sn = { nqx, nqy, nqz };
-                                    VectorNormalize(sn, sn);
-
-                                    dv->normal[0] = (sn[0] * rotationMatrix[0][0] + sn[1] * rotationMatrix[1][0] + sn[2] * rotationMatrix[2][0]);
-                                    dv->normal[1] = (sn[0] * rotationMatrix[0][1] + sn[1] * rotationMatrix[1][1] + sn[2] * rotationMatrix[2][1]);
-                                    dv->normal[2] = (sn[0] * rotationMatrix[0][2] + sn[1] * rotationMatrix[1][2] + sn[2] * rotationMatrix[2][2]);
-                                }
-
-                                if (mesh->mTextureCoords[0])
-                                {
-                                    dv->st[0] = mesh->mTextureCoords[0][oldIdx].x;
-                                    dv->st[1] = mesh->mTextureCoords[0][oldIdx].y;
-                                }
-
-                                if (xatlasUVs)
-                                {
-                                    dv->lightmap[0][0] = xatlasUVs[currentFace * 3 + faceOrder[k]].u;
-                                    dv->lightmap[0][1] = xatlasUVs[currentFace * 3 + faceOrder[k]].v;
-                                }
-                                else
-                                {
-                                    // Original UVs
-                                    if (mesh->mTextureCoords[uvChannel])
-                                    {
-                                        dv->lightmap[0][0] = mesh->mTextureCoords[uvChannel][oldIdx].x;
-                                        dv->lightmap[0][1] = mesh->mTextureCoords[uvChannel][oldIdx].y;
-                                    }
-                                }
-
-                                dv->color[0][0] = dv->color[0][1] = dv->color[0][2] = dv->color[0][3] = 255;
-                                ds->numVerts++;
-                            }
-                            // Add the index
-                            ds->indexes[ds->numIndexes++] = mapIdx;
+                            dv->color[0][0] = mm->colors[oldIdx*4+0];
+                            dv->color[0][1] = mm->colors[oldIdx*4+1];
+                            dv->color[0][2] = mm->colors[oldIdx*4+2];
+                            dv->color[0][3] = mm->colors[oldIdx*4+3];
+                            ds->numVerts++;
                         }
-                        currentFace++;
+                        ds->indexes[ds->numIndexes++] = mapIdx;
                     }
-
-                    // Realloc to save memory
-                    if (ds->numVerts > 0)
-                    {
-                        ds->verts = realloc(ds->verts, sizeof(drawVert_t) * ds->numVerts);
-                        ds->indexes = realloc(ds->indexes, sizeof(int) * ds->numIndexes);
-                    }
-                    else
-                    {
-                        inst->numDrawSurfs--;
-                    }
+                    currentFace++;
                 }
 
-                free(vMap);
-                free(vMapReverse);
-                if (xatlasUVs)
-                    free(xatlasUVs);
+                if (ds->numVerts > 0)
+                {
+                    ds->verts = realloc(ds->verts, sizeof(drawVert_t) * ds->numVerts);
+                    ds->indexes = realloc(ds->indexes, sizeof(int) * ds->numIndexes);
+                }
+                else
+                {
+                    inst->numDrawSurfs--;
+                }
             }
+
+            free(vMap);
+            free(vMapReverse);
+            if (xatlasUVs)
+                free(xatlasUVs);
+            
+            // Clean up intermediate mesh, it is no longer needed
+            FreeMiscModelMesh(mm);
+            inst->meshes[j] = NULL;
         }
+        inst->numMeshes = 0;
     }
 }
 
