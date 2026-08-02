@@ -278,6 +278,9 @@ int main(int argc, char **argv) {
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
+    
+    ambient_testradius = game->ambientTestRadius;
+    ambient_gatheradius = game->ambientGatherRadius;
 
     // Pre-scan CLI for VFS path construction
     const char *cliPakPaths[MAX_VFS_PATHS];
@@ -714,7 +717,7 @@ int main(int argc, char **argv) {
                 "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
                 "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
                 "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
-                "                         Worldspawn: ambient_sky <R G B>, ambient_ground <R G B>\n"
+                "                         Worldspawn: ambient_sky <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   saturation <F>   = set global light saturation multiplier (default: 1.0)\n"
                 "   saturationramp <mode> = saturation roll-off curve (off, filmic, power, midtone)\n"

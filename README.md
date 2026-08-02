@@ -224,9 +224,8 @@ List of additions and modifications made to shader parsing and features compared
 
 **Lighting / Global Ambiance**
 - **ambient**: Global uniform ambient light intensity. Default 0.
-- **color**: Sets the color for both ambient_sky and ambient_ground if not present. Default 1 1 1.
-- **ambient_sky**: The RGB color vector for the sky ambient light. Used for surfaces facing upwards.
-- **ambient_ground**: The RGB color vector for the ground ambient light. Used for surfaces facing downwards.
+- **color**: Sets the global ambient color. Default 1 1 1.
+- **ambient_sky**: The RGB color vector for the sky ambient light. Used for surfaces facing upwards, overriding the global color.
 - **shading**: Global light shading mode. Valid modes are: halflambert, lambert, quadratic, doublequadratic, unreal. Default lambert.
 - **attenuation**: Global default distance falloff model for lights. Valid modes are: standard, soft, linear, unreal, smoothstep.
 - **exposurefilter**: Global tonemapping exposure filter. Valid modes are: softknee, reinhard, filmic, linear (or off). Default reinhard.

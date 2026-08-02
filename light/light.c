@@ -1724,10 +1724,9 @@ void LightMain(void)
     // Fall back to ambientColor (flat) when not explicitly set.
     {
         const char *skyVal = ValueForKey(&entities[0], "ambient_sky");
-        const char *groundVal = ValueForKey(&entities[0], "ambient_ground");
 
         // If the mapper didn't provide an ambient scalar, default to 1.0 
-        // for the explicitly parsed sky/ground colors so they don't turn black.
+        // for the explicitly parsed sky color so it doesn't turn black.
         float explicitScale = ambientStr[0] ? (float)atof(ambientStr) : 1.0f;
 
         if (skyVal[0])
@@ -1740,15 +1739,9 @@ void LightMain(void)
             VectorCopy(ambientColor, skyColor);
         }
 
-        if (groundVal[0])
-        {
-            ParseColor(groundVal, groundColor);
-            VectorScale(groundColor, explicitScale, groundColor);
-        }
-        else
-        {
-            VectorCopy(ambientColor, groundColor);
-        }
+        // The ground color is always derived from the global ambient color
+        VectorCopy(ambientColor, groundColor);
+
 
 
         float skyLum    = skyColor[0]    * 0.299f + skyColor[1]    * 0.587f + skyColor[2]    * 0.114f;

@@ -61,6 +61,8 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
+        512.0f,     // ambientTestRadius
+        256.0f,     // ambientGatherRadius
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
@@ -120,6 +122,8 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
+        512.0f,     // ambientTestRadius
+        256.0f,     // ambientGatherRadius
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel

@@ -375,6 +375,14 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->rad_ao_max = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "ambientTestRadius") && val->type == json_type_number)
+        {
+            game->ambientTestRadius = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "ambientGatherRadius") && val->type == json_type_number)
+        {
+            game->ambientGatherRadius = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "deluxeMap"))
         {
             if (val->type == json_type_true)
@@ -687,8 +695,10 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"radiosityColorRatio\": %.2f, /* Percentage (0.0 to 1.0) of surface color transferred to the bounce light */\n"
             "  \"radiosityInterval\": %d, /* Radiosity grid sample size */\n"
             "  \"rad_ao_intensity\": %.2f, /* Intensity of ambient occlusion shadowing */\n"
-            "  \"rad_ao_min\": %.2f,\n"
-            "  \"rad_ao_max\": %.2f, /* Distance of ambient occlusion shadowing */\n"
+            "  \"rad_ao_min\": %.2f, /* Minimum distance for ambient occlusion shadowing */\n"
+            "  \"rad_ao_max\": %.2f, /* Maximum distance for ambient occlusion shadowing */\n"
+            "  \"ambientTestRadius\": %.2f, /* Radius at which a light probe tests for being occluded */\n"
+            "  \"ambientGatherRadius\": %.2f, /* Distance at which a lightmap pixel gathers light from probes */\n"
             "  \"shading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunShading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
@@ -729,6 +739,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->rad_ao_intensity,
             game->rad_ao_min,
             game->rad_ao_max,
+            game->ambientTestRadius,
+            game->ambientGatherRadius,
             shadingModelStr,
             sunShadingModelStr,
             attenuationModelStr,

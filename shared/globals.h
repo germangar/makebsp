@@ -104,6 +104,8 @@ typedef struct {
     float       rad_ao_intensity;
     float       rad_ao_min;
     float       rad_ao_max;
+    float       ambientTestRadius;
+    float       ambientGatherRadius;
 	shadingModel_t   shadingModel;
 	shadingModel_t   sunShadingModel;
 	attenuationModel_t attenuationModel;
