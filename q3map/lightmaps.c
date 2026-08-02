@@ -901,6 +901,223 @@ void AllocateLightmapForSurface(mapDrawSurface_t *ds)
     VectorCopy(plane->normal, ds->lightmapVecs[2]);
 }
 
+// =========================================================================================
+// ===== REPACK PASS (MAXRECTS) =====
+// =========================================================================================
+
+typedef struct {
+    mapDrawSurface_t *ds;
+    int area;
+} sortSurf_t;
+
+typedef struct {
+    int x, y, w, h;
+} lmRect_t;
+
+typedef struct {
+    lmRect_t *freeRects;
+    int numFreeRects;
+    int capFreeRects;
+} maxRectPage_t;
+
+static maxRectPage_t *lmPages = NULL;
+static int numLMPages = 0;
+
+static void InitMaxRectPage(maxRectPage_t *page) {
+    page->capFreeRects  = 64;
+    page->numFreeRects  = 1;
+    page->freeRects     = malloc(page->capFreeRects * sizeof(lmRect_t));
+    page->freeRects[0].x = 0;
+    page->freeRects[0].y = 0;
+    page->freeRects[0].w = LIGHTMAP_WIDTH;
+    page->freeRects[0].h = LIGHTMAP_HEIGHT;
+}
+
+static void FreeMaxRectPage(maxRectPage_t *page) {
+    if (page->freeRects) free(page->freeRects);
+    page->freeRects = NULL;
+    page->numFreeRects = page->capFreeRects = 0;
+}
+
+static void PushFreeRect(maxRectPage_t *page, int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    if (page->numFreeRects == page->capFreeRects) {
+        page->capFreeRects *= 2;
+        page->freeRects = realloc(page->freeRects, page->capFreeRects * sizeof(lmRect_t));
+    }
+    page->freeRects[page->numFreeRects].x = x;
+    page->freeRects[page->numFreeRects].y = y;
+    page->freeRects[page->numFreeRects].w = w;
+    page->freeRects[page->numFreeRects].h = h;
+    page->numFreeRects++;
+}
+
+static qboolean SplitFreeNode(maxRectPage_t *page, const lmRect_t *freeNode, const lmRect_t *used) {
+    if (used->x >= freeNode->x + freeNode->w || used->x + used->w <= freeNode->x ||
+        used->y >= freeNode->y + freeNode->h || used->y + used->h <= freeNode->y)
+        return qfalse;
+
+    if (used->x > freeNode->x)
+        PushFreeRect(page, freeNode->x, freeNode->y, used->x - freeNode->x, freeNode->h);
+    if (used->x + used->w < freeNode->x + freeNode->w)
+        PushFreeRect(page, used->x + used->w, freeNode->y, (freeNode->x + freeNode->w) - (used->x + used->w), freeNode->h);
+    if (used->y > freeNode->y)
+        PushFreeRect(page, freeNode->x, freeNode->y, freeNode->w, used->y - freeNode->y);
+    if (used->y + used->h < freeNode->y + freeNode->h)
+        PushFreeRect(page, freeNode->x, used->y + used->h, freeNode->w, (freeNode->y + freeNode->h) - (used->y + used->h));
+
+    return qtrue;
+}
+
+static void PruneFreeList(maxRectPage_t *page) {
+    int i, j;
+    for (i = page->numFreeRects - 1; i >= 0; i--) {
+        for (j = 0; j < page->numFreeRects; j++) {
+            if (i == j) continue;
+            if (page->freeRects[j].x <= page->freeRects[i].x && page->freeRects[j].y <= page->freeRects[i].y &&
+                page->freeRects[j].x + page->freeRects[j].w >= page->freeRects[i].x + page->freeRects[i].w &&
+                page->freeRects[j].y + page->freeRects[j].h >= page->freeRects[i].y + page->freeRects[i].h)
+            {
+                page->freeRects[i] = page->freeRects[--page->numFreeRects];
+                break;
+            }
+        }
+    }
+}
+
+static qboolean AllocMaxRectBlock(int w, int h, int *outX, int *outY, int *outLM) {
+    int bestArea = 999999999;
+    int bestPage = -1;
+    lmRect_t bestNode;
+    int p, i, origCount;
+    maxRectPage_t *page;
+
+    bestNode.x = bestNode.y = bestNode.w = bestNode.h = 0;
+
+    for (p = 0; p < numLMPages; p++) {
+        for (i = 0; i < lmPages[p].numFreeRects; i++) {
+            lmRect_t *f = &lmPages[p].freeRects[i];
+            if (f->w >= w && f->h >= h) {
+                int areaFit = (f->w * f->h) - (w * h);
+                if (areaFit < bestArea) {
+                    bestArea = areaFit;
+                    bestPage = p;
+                    bestNode.x = f->x;
+                    bestNode.y = f->y;
+                    bestNode.w = w;
+                    bestNode.h = h;
+                }
+            }
+        }
+    }
+
+    if (bestPage == -1) {
+        if (numLMPages >= MAX_LIGHTMAPS)
+            Error("RepackLightmaps: MAX_LIGHTMAPS exceeded during repack");
+
+        InitMaxRectPage(&lmPages[numLMPages]);
+        bestPage = numLMPages++;
+        bestNode.x = 0;
+        bestNode.y = 0;
+        bestNode.w = w;
+        bestNode.h = h;
+    }
+
+    page = &lmPages[bestPage];
+    origCount = page->numFreeRects;
+    for (i = origCount - 1; i >= 0; i--) {
+        lmRect_t old = page->freeRects[i];
+        if (SplitFreeNode(page, &old, &bestNode)) {
+            page->freeRects[i] = page->freeRects[--page->numFreeRects];
+        }
+    }
+    PruneFreeList(page);
+
+    *outX = bestNode.x;
+    *outY = bestNode.y;
+    *outLM = bestPage;
+    return qtrue;
+}
+
+static int CompareSortSurfAreaDesc(const void *a, const void *b) {
+    const sortSurf_t *sa = (const sortSurf_t *)a;
+    const sortSurf_t *sb = (const sortSurf_t *)b;
+    return sb->area - sa->area;
+}
+
+static void RepackLightmapsEntity(entity_t *e) {
+    int i, v, p;
+    int sortCount = 0;
+    sortSurf_t *sortArray;
+    int oldNumLightmaps = numLightmaps;
+
+    if (numMapDrawSurfs - e->firstDrawSurf <= 0)
+        return;
+
+    sortArray = malloc((numMapDrawSurfs - e->firstDrawSurf) * sizeof(sortSurf_t));
+
+    for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
+        mapDrawSurface_t *ds = &mapDrawSurfs[i];
+        if (ds->lightmapNum >= 0 && ds->lightmapWidth > 0 && ds->numVerts > 0) {
+            sortArray[sortCount].ds   = ds;
+            sortArray[sortCount].area = (ds->lightmapWidth + 2) * (ds->lightmapHeight + 2);
+            sortCount++;
+        }
+    }
+
+    if (sortCount == 0) {
+        free(sortArray);
+        return;
+    }
+
+    qsort(sortArray, sortCount, sizeof(sortSurf_t), CompareSortSurfAreaDesc);
+
+    // Do NOT free lightmapHeights here; Skyline needs it for the next entity's initial allocation
+    
+    if (!lmPages) {
+        lmPages = calloc(MAX_LIGHTMAPS, sizeof(maxRectPage_t));
+        numLMPages = 0;
+    }
+
+    for (i = 0; i < sortCount; i++) {
+        mapDrawSurface_t *ds = sortArray[i].ds;
+        int newX, newY, newLM;
+        float du, dv;
+        int new_lightmapX, new_lightmapY;
+
+        AllocMaxRectBlock(ds->lightmapWidth + 2, ds->lightmapHeight + 2, &newX, &newY, &newLM);
+
+        new_lightmapX = newX + 1;
+        new_lightmapY = newY + 1;
+
+        du = (float)(new_lightmapX - ds->lightmapX) / (float)LIGHTMAP_WIDTH;
+        dv = (float)(new_lightmapY - ds->lightmapY) / (float)LIGHTMAP_HEIGHT;
+
+        for (v = 0; v < ds->numVerts; v++) {
+            ds->verts[v].lightmap[0][0] += du;
+            ds->verts[v].lightmap[0][1] += dv;
+        }
+
+        ds->lightmapNum = newLM;
+        ds->lightmapX   = new_lightmapX;
+        ds->lightmapY   = new_lightmapY;
+    }
+
+    numLightmaps  = numLMPages;
+    numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
+    if (lightBytes) Q_Free(lightBytes);
+    lightBytes = Q_Alloc(numLightBytes);
+    if (!lightBytes && numLightBytes > 0)
+        Error("RepackLightmaps: failed to reallocate lightBytes");
+    if (lightBytes) memset(lightBytes, 0, numLightBytes);
+
+    free(sortArray);
+    // DO NOT free lmPages here; it persists across entities and is freed in FreeLightmaps
+
+    qprintf("--- Lightmap Repacking ---\n");
+    qprintf("Pages reduced: %d -> %d\n", oldNumLightmaps, numLightmaps);
+}
+
 /*
 ===================
 AllocateLightmaps
@@ -1008,22 +1225,10 @@ void AllocateLightmaps(entity_t *e)
             }
         }
     }
-
-    // Set numLightBytes so WriteBSPFile will export the lump
-    numLightBytes = numLightmaps * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3;
-
-    if (lightBytes) Q_Free(lightBytes);
-    lightBytes = Q_Alloc(numLightBytes);
-    if (!lightBytes && numLightBytes > 0)
-    {
-        Error("Failed to allocate %d bytes for lightBytes", numLightBytes);
-    }
-
     extern int totalLightmappedShaders;
     totalLightmappedShaders += numSortShaders;
 
-    // Clear the lightmap buffer
-    if (lightBytes) memset(lightBytes, 0, numLightBytes);
+    RepackLightmapsEntity(e);
 
     qprintf("%7i exact lightmap texels\n", c_exactLightmap);
     qprintf("%7i block lightmap texels\n", numLightBytes);
@@ -1031,9 +1236,19 @@ void AllocateLightmaps(entity_t *e)
 
 void FreeLightmaps(void)
 {
+    int p;
     if (lightmapHeights)
     {
         free(lightmapHeights);
         lightmapHeights = NULL;
+    }
+    
+    if (lmPages)
+    {
+        for (p = 0; p < numLMPages; p++) {
+            FreeMaxRectPage(&lmPages[p]);
+        }
+        free(lmPages);
+        lmPages = NULL;
     }
 }
