@@ -39,13 +39,7 @@ extern qboolean g_fast;
 #define MAX_SURFACE_VERTS (game->maxSurfaceVerts)
 #define MAX_SURFACE_INDEXES (game->maxSurfaceIndexes)
 
-#define MAX_MAP_DRAW_VERTS_LIMIT 0x100000
-#define MAX_MAP_DRAW_SURFS_LIMIT 0x40000
-#define MAX_MAP_NODES_LIMIT 0x100000
-#define MAX_MAP_LEAFS_LIMIT 0x100000
-#define MAX_MAP_PLANES_LIMIT 0x100000
-#define MAX_MAP_BRUSHES_LIMIT 0x100000
-#define MAX_MAP_DRAW_INDEXES_LIMIT 0x100000
+#define MAX_MAP_BRUSHES_LIMIT MAX_MAP_BRUSHES
 
 #define MAX_PATCH_SIZE 32
 
@@ -221,7 +215,7 @@ typedef struct surfaceChamferEdge_s {
     float width;
 } surfaceChamferEdge_t;
 
-extern surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
+extern surfaceNeighbor_t **surfaceNeighbors;
 extern qboolean chamfernosubdivide;
 
 void BuildSurfaceAdjacencyGraph(entity_t *e);
@@ -351,12 +345,12 @@ extern int entitySourceBrushes;
 
 // mapplanes[ num^1 ] will always be the mirror or mapplanes[ num ]
 // nummapplanes will always be even
-extern plane_t mapplanes[MAX_MAP_PLANES];
+extern plane_t *mapplanes;
 extern int nummapplanes;
 
 extern vec3_t map_mins, map_maxs;
 
-extern char mapIndexedShaders[MAX_MAP_BRUSHSIDES][MAX_QPATH];
+extern char (*mapIndexedShaders)[MAX_QPATH];
 extern int numMapIndexedShaders;
 
 extern entity_t *mapent;
@@ -601,9 +595,9 @@ const char *CategoryString(modelCategory_t cat);
 
 // surface.c
 
-extern mapDrawSurface_t mapDrawSurfs[MAX_MAP_DRAW_SURFS];
+extern mapDrawSurface_t *mapDrawSurfs;
 extern int numMapDrawSurfs;
-extern extraSurface_t drawExtraSurfaces[MAX_MAP_DRAW_SURFS_LIMIT];
+extern extraSurface_t *drawExtraSurfaces;
 
 mapDrawSurface_t *AllocDrawSurf(void);
 winding_t *WindingFromDrawSurf(mapDrawSurface_t *ds);

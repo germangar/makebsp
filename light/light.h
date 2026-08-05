@@ -351,7 +351,7 @@ extern qboolean ambient_enabled;         // true if sky/ground color is non-zero
 extern int numSkyBrushes;
 extern int *surfaceWorkOrder;
 extern int numLights;
-extern skyBrush_t skyBrushes[];
+extern skyBrush_t *skyBrushes;
 extern vec3_t gridMins, gridSize;
 extern int gridBounds[3], numGridPoints;
 
@@ -399,7 +399,7 @@ typedef struct
     float sampleSize;
 } localSurface_t;
 extern localSurface_t *localSurfaces;
-extern qboolean brushCastsShadow[MAX_MAP_BRUSHES];
+extern qboolean *brushCastsShadow;
 void BuildLocalSurfaces(void);
 
 typedef struct
@@ -416,7 +416,7 @@ typedef struct
 {
 	vec3_t start, end;
 	int numOpenLeafs;
-	int openLeafNumbers[MAX_MAP_LEAFS];
+
 	trace_t *trace;
 	int patchshadows;
 	qboolean forceFrontOnly;

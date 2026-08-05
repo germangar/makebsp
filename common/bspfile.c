@@ -79,46 +79,46 @@ int entdatasize;
 char dentdata[MAX_MAP_ENTSTRING];
 
 int numleafs;
-dleaf_t dleafs[MAX_MAP_LEAFS];
+dleaf_t *dleafs = NULL;
 
 int numplanes;
-dplane_t dplanes[MAX_MAP_PLANES];
+dplane_t *dplanes = NULL;
 
 int numnodes;
-dnode_t dnodes[MAX_MAP_NODES];
+dnode_t *dnodes = NULL;
 
 int numleafsurfaces;
-int dleafsurfaces[MAX_MAP_LEAFFACES];
+int *dleafsurfaces = NULL;
 
 int numleafbrushes;
-int dleafbrushes[MAX_MAP_LEAFBRUSHES];
+int *dleafbrushes = NULL;
 
 int numbrushes;
 dbrush_t dbrushes[MAX_MAP_BRUSHES];
 
 int numbrushsides;
-dbrushside_t dbrushsides[MAX_MAP_BRUSHSIDES];
+dbrushside_t *dbrushsides = NULL;
 
 int numLightBytes;
 byte *lightBytes = NULL;
 
 int numGridPoints;
-bspGridPoint_t gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];
+bspGridPoint_t *gridData = NULL;
 
 int numLightArray;
-unsigned short lightArray[MAX_MAP_LIGHTGRID / 2];
+unsigned short *lightArray = NULL;
 
 int numVisBytes;
 byte visBytes[MAX_MAP_VISIBILITY];
 
 int numDrawVerts;
-drawVert_t drawVerts[MAX_MAP_DRAW_VERTS];
+drawVert_t *drawVerts = NULL;
 
 int numDrawIndexes;
-int drawIndexes[MAX_MAP_DRAW_INDEXES];
+int *drawIndexes = NULL;
 
 int numDrawSurfaces;
-dsurface_t drawSurfaces[MAX_MAP_DRAW_SURFS];
+dsurface_t *drawSurfaces = NULL;
 
 int numFogs;
 dfog_t dfogs[MAX_MAP_FOGS];
@@ -218,32 +218,50 @@ void LoadBSPFile(const char *filename)
         header->lumps[i].filelen = LittleLong(header->lumps[i].filelen);
     }
 
+#define ALLOC_AND_COPY_LUMP(header, lump, dest, type, num) \
+    do { \
+        num = CopyLump(header, lump, NULL, sizeof(type)); \
+        if (num > 0) { \
+            dest = malloc(num * sizeof(type)); \
+            CopyLump(header, lump, dest, sizeof(type)); \
+        } else { \
+            dest = NULL; \
+        } \
+    } while(0)
+
     numShaders = CopyLump(header, LUMP_SHADERS, dshaders, sizeof(dshader_t));
     nummodels = CopyLump(header, LUMP_MODELS, dmodels, sizeof(dmodel_t));
-    numplanes = CopyLump(header, LUMP_PLANES, dplanes, sizeof(dplane_t));
-    numleafs = CopyLump(header, LUMP_LEAFS, dleafs, sizeof(dleaf_t));
-    numnodes = CopyLump(header, LUMP_NODES, dnodes, sizeof(dnode_t));
-    numleafsurfaces = CopyLump(header, LUMP_LEAFSURFACES, dleafsurfaces, sizeof(dleafsurfaces[0]));
-    numleafbrushes = CopyLump(header, LUMP_LEAFBRUSHES, dleafbrushes, sizeof(dleafbrushes[0]));
+    ALLOC_AND_COPY_LUMP(header, LUMP_PLANES, dplanes, dplane_t, numplanes);
+    ALLOC_AND_COPY_LUMP(header, LUMP_LEAFS, dleafs, dleaf_t, numleafs);
+    ALLOC_AND_COPY_LUMP(header, LUMP_NODES, dnodes, dnode_t, numnodes);
+    ALLOC_AND_COPY_LUMP(header, LUMP_LEAFSURFACES, dleafsurfaces, int, numleafsurfaces);
+    ALLOC_AND_COPY_LUMP(header, LUMP_LEAFBRUSHES, dleafbrushes, int, numleafbrushes);
     numbrushes = CopyLump(header, LUMP_BRUSHES, dbrushes, sizeof(dbrush_t));
 
     if (ident == FBSP_IDENT)
     {
-        numbrushsides = CopyLump(header, LUMP_BRUSHSIDES, dbrushsides, sizeof(dbrushside_t));
-
-        numDrawVerts = CopyLump(header, LUMP_DRAWVERTS, drawVerts, sizeof(drawVert_t));
-        numDrawSurfaces = CopyLump(header, LUMP_SURFACES, drawSurfaces, sizeof(dsurface_t));
-        numGridPoints = CopyLump(header, LUMP_LIGHTGRID, gridData, sizeof(bspGridPoint_t));
-        numLightArray = CopyLump(header, LUMP_LIGHTARRAY, lightArray, 2);
+        ALLOC_AND_COPY_LUMP(header, LUMP_BRUSHSIDES, dbrushsides, dbrushside_t, numbrushsides);
+        ALLOC_AND_COPY_LUMP(header, LUMP_DRAWVERTS, drawVerts, drawVert_t, numDrawVerts);
+        ALLOC_AND_COPY_LUMP(header, LUMP_SURFACES, drawSurfaces, dsurface_t, numDrawSurfaces);
+        ALLOC_AND_COPY_LUMP(header, LUMP_LIGHTGRID, gridData, bspGridPoint_t, numGridPoints);
+        
+        numLightArray = CopyLump(header, LUMP_LIGHTARRAY, NULL, 2);
+        if (numLightArray > 0) {
+            lightArray = malloc(numLightArray * 2);
+            CopyLump(header, LUMP_LIGHTARRAY, lightArray, 2);
+        } else {
+            lightArray = NULL;
+        }
     }
     else
     {
         ibspBrushSide_t *isides;
-        int numisides = CopyLump(header, LUMP_BRUSHSIDES, NULL, sizeof(ibspBrushSide_t));
-        isides = malloc(numisides * sizeof(ibspBrushSide_t));
+        numbrushsides = CopyLump(header, LUMP_BRUSHSIDES, NULL, sizeof(ibspBrushSide_t));
+        isides = malloc(numbrushsides * sizeof(ibspBrushSide_t));
         CopyLump(header, LUMP_BRUSHSIDES, isides, sizeof(ibspBrushSide_t));
-        numbrushsides = numisides;
-        for (i = 0; i < numisides; i++)
+        
+        dbrushsides = malloc(numbrushsides * sizeof(dbrushside_t));
+        for (i = 0; i < numbrushsides; i++)
         {
             dbrushsides[i].planeNum = isides[i].planeNum;
             dbrushsides[i].shaderNum = isides[i].shaderNum;
@@ -257,6 +275,8 @@ void LoadBSPFile(const char *filename)
         iv = malloc(numiv * sizeof(ibspDrawVert_t));
         CopyLump(header, LUMP_DRAWVERTS, iv, sizeof(ibspDrawVert_t));
         numDrawVerts = numiv;
+        
+        drawVerts = malloc(numDrawVerts * sizeof(drawVert_t));
         for (i = 0; i < numiv; i++)
         {
             memset(&drawVerts[i], 0, sizeof(drawVerts[i]));
@@ -288,6 +308,8 @@ void LoadBSPFile(const char *filename)
         is = malloc(numis * sizeof(ibspSurface_t));
         CopyLump(header, LUMP_SURFACES, is, sizeof(ibspSurface_t));
         numDrawSurfaces = numis;
+        
+        drawSurfaces = malloc(numDrawSurfaces * sizeof(dsurface_t));
         for (i = 0; i < numis; i++)
         {
             memset(&drawSurfaces[i], 0, sizeof(drawSurfaces[i]));
@@ -325,6 +347,8 @@ void LoadBSPFile(const char *filename)
         ig = malloc(numig * 8);
         CopyLump(header, LUMP_LIGHTGRID, ig, 8);
         numGridPoints = numig;
+        
+        gridData = malloc(numGridPoints * sizeof(bspGridPoint_t));
         for (i = 0; i < numig; i++)
         {
             memset(&gridData[i], 0, sizeof(gridData[i]));
@@ -342,7 +366,7 @@ void LoadBSPFile(const char *filename)
     }
 
     numFogs = CopyLump(header, LUMP_FOGS, dfogs, sizeof(dfog_t));
-    numDrawIndexes = CopyLump(header, LUMP_DRAWINDEXES, drawIndexes, sizeof(drawIndexes[0]));
+    ALLOC_AND_COPY_LUMP(header, LUMP_DRAWINDEXES, drawIndexes, int, numDrawIndexes);
 
     numVisBytes = CopyLump(header, LUMP_VISIBILITY, visBytes, 1);
     
@@ -413,6 +437,10 @@ void CompressGrid(void)
     numLightArray = numGridPoints; // Store original grid count
     palette = malloc(numGridPoints * sizeof(bspGridPoint_t));
 
+    if (lightArray) free(lightArray);
+    lightArray = malloc(numGridPoints * sizeof(unsigned short));
+    if (!lightArray) Error("CompressGrid: malloc failed for lightArray");
+
     for (i = 0; i < numGridPoints; i++)
     {
         for (j = 0; j < numPalette; j++)
@@ -452,6 +480,43 @@ void AddLump(FILE *bspfile, dheader_t *header, int lumpnum, const void *data, in
     lump->fileofs = LittleLong(ftell(bspfile));
     lump->filelen = LittleLong(len);
     SafeWrite(bspfile, data, (len + 3) & ~3);
+}
+
+/*
+=============
+BSP_AllocateForWrite
+
+Allocates the massive global BSP arrays to their maximum bucket size
+as defined by the current game profile. This is required for makebsp
+which builds the map from scratch.
+=============
+*/
+void BSP_AllocateForWrite(void)
+{
+    if (!game)
+        Error("BSP_AllocateForWrite: game profile not set");
+
+    dleafs = malloc(game->maxMapLeafs * sizeof(dleaf_t));
+    dplanes = malloc(game->maxMapPlanes * sizeof(dplane_t));
+    dnodes = malloc(game->maxMapNodes * sizeof(dnode_t));
+    dleafsurfaces = malloc(game->maxMapLeafSurfaces * sizeof(int));
+    dleafbrushes = malloc(game->maxMapLeafBrushes * sizeof(int));
+    dbrushsides = malloc(game->maxMapBrushSides * sizeof(dbrushside_t));
+    
+    // Lightgrid (uses MAX_MAP_LIGHTGRID natively, but we allocate based on standard 33MB / 2MB scale)
+    // Note: gridData limit is not in game_t right now, but we'll allocate it based on MAX_MAP_LIGHTGRID.
+    gridData = malloc(MAX_MAP_LIGHTGRID);
+    lightArray = malloc(MAX_MAP_LIGHTGRID);
+
+    drawVerts = malloc(game->maxMapDrawVerts * sizeof(drawVert_t));
+    drawIndexes = malloc(game->maxMapDrawIndexes * sizeof(int));
+    drawSurfaces = malloc(game->maxMapDrawSurfs * sizeof(dsurface_t));
+
+    if (!dleafs || !dplanes || !dnodes || !dleafsurfaces || !dleafbrushes || !dbrushsides || 
+        !gridData || !lightArray || !drawVerts || !drawIndexes || !drawSurfaces)
+    {
+        Error("BSP_AllocateForWrite: Failed to allocate massive global BSP arrays. Out of memory.");
+    }
 }
 
 /*

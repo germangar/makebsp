@@ -58,7 +58,7 @@ typedef struct edgeLine_s
 
 #define	MAX_TJ_FACES	1024
 
-surfaceNeighbor_t *surfaceNeighbors[MAX_MAP_DRAW_SURFS_LIMIT];
+surfaceNeighbor_t **surfaceNeighbors;
 
 typedef struct
 {
@@ -667,7 +667,7 @@ void BuildSurfaceAdjacencyGraph(entity_t *e)
     mapDrawSurface_t *dsA, *dsB;
 
     qprintf("----- BuildSurfaceAdjacencyGraph -----\n");
-    memset(surfaceNeighbors, 0, sizeof(surfaceNeighbors));
+    memset(surfaceNeighbors, 0, game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t *));
 
     for (i = e->firstDrawSurf; i < numMapDrawSurfs; i++)
     {
@@ -1276,10 +1276,10 @@ void ChamferSurfaceEdges(entity_t *e)
 {
     int i;
     int numBaseDrawSurfs;
-    drawVert_t *globalInsets[MAX_MAP_DRAW_SURFS_LIMIT];
+    drawVert_t **globalInsets = malloc(game->maxMapDrawSurfs * sizeof(drawVert_t*));
+    memset(globalInsets, 0, game->maxMapDrawSurfs * sizeof(drawVert_t*));
     
     qprintf("----- ChamferSurfaceEdges (V3: Normal Bending) -----\n");
-    memset(globalInsets, 0, sizeof(globalInsets));
     InsertCollinearVertices(e, -0.866f, 0.866f, -1);
     BuildSurfaceAdjacencyGraph(e);
     numBaseDrawSurfs = numMapDrawSurfs;
@@ -1493,6 +1493,8 @@ void ChamferSurfaceEdges(entity_t *e)
             free(globalInsets[i]);
         }
     }
+    
+    free(globalInsets);
 }
 
 
@@ -1786,7 +1788,7 @@ void MergeParentedTrisoups(entity_t *e)
         if (!dsA->planarDerived || !dsA->miscModel || dsA->numVerts <= 0)
             continue;
 
-        int component[MAX_MAP_DRAW_SURFS_LIMIT];
+        int *component = malloc(game->maxMapDrawSurfs * sizeof(int));
         int numComponent = 0;
         
         component[numComponent++] = i;
@@ -1831,7 +1833,7 @@ void MergeParentedTrisoups(entity_t *e)
                 }
             }
         }
-
+        
         if (numComponent > 1)
         {
             int maxVerts = 32768;
@@ -1875,6 +1877,8 @@ void MergeParentedTrisoups(entity_t *e)
 
             numMergedGroups++;
         }
+
+        free(component);
         
         dsA->isPlanar = qtrue;
     }

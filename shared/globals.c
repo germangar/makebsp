@@ -38,6 +38,15 @@ game_t gameTemplates[MAX_GAMES] = {
 		65535,      // maxLMSurfaceVerts
 		65535,      // maxSurfaceVerts
 		393210,     // maxSurfaceIndexes
+		0x100000,   // maxMapDrawVerts
+		0x100000,   // maxMapDrawIndexes
+		0x40000,    // maxMapDrawSurfs
+		0x100000,   // maxMapPlanes
+		0x100000,   // maxMapNodes
+		0x100000,   // maxMapLeafs
+		0x100000,   // maxMapBrushSides
+		0x100000,   // maxMapLeafSurfaces
+		0x100000,   // maxMapLeafBrushes
 		512,
 		qfalse,     // externalLightmaps: if true, lightmaps are stored as external .tga files instead of inside the BSP
 		qtrue,      // keepLights
@@ -100,6 +109,15 @@ game_t gameTemplates[MAX_GAMES] = {
 		64,
 		999,
 		6000,
+		0x100000,   // maxMapDrawVerts
+		0x100000,   // maxMapDrawIndexes
+		0x40000,    // maxMapDrawSurfs
+		0x100000,   // maxMapPlanes
+		0x100000,   // maxMapNodes
+		0x100000,   // maxMapLeafs
+		0x100000,   // maxMapBrushSides
+		0x100000,   // maxMapLeafSurfaces
+		0x100000,   // maxMapLeafBrushes
 		128,
 		qfalse,     // exportLightmaps
 		qfalse,     // keepLights
@@ -213,15 +231,8 @@ game_t *InitGame(int argc, char **argv) {
 
 void GetMapOutputDir(const char *source, char *out) {
     char baseName[256];
-    char tempSource[1024];
-
-    // Work on a copy and normalize it first
-    strncpy(tempSource, source, sizeof(tempSource) - 1);
-    tempSource[sizeof(tempSource) - 1] = '\0';
-    NormalizePath(tempSource);
-
     // Extract the map name regardless of extension or leading path
-    ExtractFileBase(tempSource, baseName);
+    ExtractFileBase(source, baseName);
     
     // User wants: writedir/maps/<mapname>/
     sprintf(out, "%smaps/%s/", writedir, baseName);

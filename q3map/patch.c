@@ -115,9 +115,9 @@ void ParsePatch(void)
     strcpy(texture, token);
 
     // save the shader name for retexturing
-    if (numMapIndexedShaders == MAX_MAP_BRUSHSIDES)
+    if (numMapIndexedShaders == game->maxMapBrushSides)
     {
-        Error("MAX_MAP_BRUSHSIDES");
+        Error("MAX_MAP_BRUSHSIDES (%d)", game->maxMapBrushSides);
     }
     strcpy(mapIndexedShaders[numMapIndexedShaders], texture);
     numMapIndexedShaders++;
@@ -226,9 +226,9 @@ void PatchMapDrawSurfs(entity_t *e)
     patchCount = 0;
     for (pm = e->patches; pm; pm = pm->next)
     {
-        if (patchCount == MAX_MAP_DRAW_SURFS)
+        if (patchCount == game->maxMapDrawSurfs)
         {
-            Error("MAX_MAP_DRAW_SURFS reached in PatchMapDrawSurfs");
+            Error("MAX_MAP_DRAW_SURFS (%d) reached in PatchMapDrawSurfs", game->maxMapDrawSurfs);
         }
         patchCount++;
     }

@@ -92,8 +92,8 @@ void EmitLeaf (node_t *node)
 	drawSurfRef_t		*dsr;
 
 	// emit a leaf
-	if (numleafs >= MAX_MAP_LEAFS_LIMIT)
-		Error ("MAX_MAP_LEAFS_LIMIT");
+	if (numleafs >= game->maxMapLeafs)
+		Error ("game->maxMapLeafs");
 
 	leaf_p = &dleafs[numleafs];
 	numleafs++;
@@ -112,8 +112,8 @@ void EmitLeaf (node_t *node)
 	//
 	leaf_p->firstLeafBrush = numleafbrushes;
 	for ( b = node->brushlist ; b ; b = b->next ) {
-		if ( numleafbrushes >= MAX_MAP_LEAFBRUSHES ) {
-			Error( "MAX_MAP_LEAFBRUSHES" );
+		if ( numleafbrushes >= game->maxMapLeafBrushes ) {
+			Error( "game->maxMapLeafBrushes limit reached" );
 		}
 		dleafbrushes[numleafbrushes] = b->original->outputNumber;
 		numleafbrushes++;
@@ -130,8 +130,8 @@ void EmitLeaf (node_t *node)
 	// add the drawSurfRef_t drawsurfs
 	leaf_p->firstLeafSurface = numleafsurfaces;
 	for ( dsr = node->drawSurfReferences ; dsr ; dsr = dsr->nextRef ) {
-		if ( numleafsurfaces >= MAX_MAP_LEAFFACES)
-			Error ("MAX_MAP_LEAFFACES");
+		if ( numleafsurfaces >= game->maxMapLeafSurfaces)
+			Error ("game->maxMapLeafSurfaces limit reached");
 		dleafsurfaces[numleafsurfaces] = dsr->outputNumber;
 		numleafsurfaces++;			
 	}
@@ -158,8 +158,8 @@ int EmitDrawNode_r (node_t *node)
 	}
 
 	// emit a node	
-	if (numnodes >= MAX_MAP_NODES_LIMIT)
-		Error ("MAX_MAP_NODES_LIMIT");
+	if (numnodes >= game->maxMapNodes)
+		Error ("game->maxMapNodes");
 	n = &dnodes[numnodes];
 	numnodes++;
 
@@ -461,8 +461,8 @@ void EmitBrushes ( bspbrush_t *brushes ) {
 			if ( b->sides[j].backSide ) {
 				continue;
 			}
-			if ( numbrushsides == MAX_MAP_BRUSHSIDES ) {
-				Error( "MAX_MAP_BRUSHSIDES ");
+			if ( numbrushsides == game->maxMapBrushSides ) {
+				Error( "game->maxMapBrushSides limit reached");
 			}
 			cp = &dbrushsides[numbrushsides];
 			b->sides[j].outputNum = numbrushsides;

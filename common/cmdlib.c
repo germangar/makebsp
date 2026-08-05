@@ -192,6 +192,7 @@ void qprintf(const char *format, ...)
     va_start(argptr, format);
     vprintf(format, argptr);
     va_end(argptr);
+    fflush(stdout);
 }
 
 #ifdef _WIN32

@@ -207,6 +207,42 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->maxSurfaceIndexes = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "maxMapDrawVerts") && val->type == json_type_number)
+        {
+            game->maxMapDrawVerts = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapDrawIndexes") && val->type == json_type_number)
+        {
+            game->maxMapDrawIndexes = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapDrawSurfs") && val->type == json_type_number)
+        {
+            game->maxMapDrawSurfs = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapPlanes") && val->type == json_type_number)
+        {
+            game->maxMapPlanes = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapNodes") && val->type == json_type_number)
+        {
+            game->maxMapNodes = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapLeafs") && val->type == json_type_number)
+        {
+            game->maxMapLeafs = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapBrushSides") && val->type == json_type_number)
+        {
+            game->maxMapBrushSides = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapLeafSurfaces") && val->type == json_type_number)
+        {
+            game->maxMapLeafSurfaces = atoi(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "maxMapLeafBrushes") && val->type == json_type_number)
+        {
+            game->maxMapLeafBrushes = atoi(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "customSurfaceParms") && val->type == json_type_array)
         {
             struct json_array_s *arr = json_value_as_array(val);

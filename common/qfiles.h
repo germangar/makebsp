@@ -62,20 +62,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define	MAX_MAP_AREAS		0x100	// MAX_MAP_AREA_BYTES in q_shared must match!
 #define	MAX_MAP_FOGS		0x100
-#define	MAX_MAP_PLANES		0x100000
-#define	MAX_MAP_NODES		0x100000
-#define	MAX_MAP_BRUSHSIDES	0x100000
-#define	MAX_MAP_LEAFS		0x100000
-#define	MAX_MAP_LEAFFACES	0x100000
-#define	MAX_MAP_LEAFBRUSHES 0x100000
 #define	MAX_MAP_PORTALS		0x100000
 #define	MAX_MAP_LIGHTING	0x8000000
 #define	MAX_MAP_LIGHTGRID	0x2000000 // Increased for FBSP
 #define	MAX_MAP_VISIBILITY	0x400000
-
-#define	MAX_MAP_DRAW_SURFS	0x40000
-#define	MAX_MAP_DRAW_VERTS	0x100000
-#define	MAX_MAP_DRAW_INDEXES	0x100000
 
 
 // key / value pair sizes in the entities lump

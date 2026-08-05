@@ -196,7 +196,7 @@ void ClusterMerge(int leafnum)
 {
     leaf_t *leaf;
     byte portalvector[MAX_PORTALS / 8];
-    byte uncompressed[MAX_MAP_LEAFS / 8];
+    byte *uncompressed = malloc(game->maxMapLeafs / 8);
     int i, j;
     int numvis, mergedleafnum;
     vportal_t *p;
@@ -243,6 +243,7 @@ void ClusterMerge(int leafnum)
 
     memcpy(visBytes + VIS_HEADER_SIZE + leafnum * leafbytes, uncompressed,
            leafbytes);
+    free(uncompressed);
 }
 
 /*
@@ -1001,7 +1002,7 @@ void CalcPHS(void)
     long *src;
     byte *scan;
     int count;
-    byte uncompressed[MAX_MAP_LEAFS / 8];
+    byte *uncompressed = malloc(game->maxMapLeafs / 8);
 
     _printf("Building PHS...\n");
 
@@ -1036,6 +1037,7 @@ void CalcPHS(void)
     }
 
     _printf("Average clusters hearable: %i\n", count / v_portalclusters);
+    free(uncompressed);
 }
 
 /*

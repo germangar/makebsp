@@ -1212,6 +1212,17 @@ int main(int argc, char **argv)
     //
     // start from scratch
     //
+    BSP_AllocateForWrite();
+    
+    mapDrawSurfs = malloc(game->maxMapDrawSurfs * sizeof(mapDrawSurface_t));
+    drawExtraSurfaces = malloc(game->maxMapDrawSurfs * sizeof(extraSurface_t));
+    surfaceNeighbors = malloc(game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
+    mapplanes = malloc(game->maxMapPlanes * sizeof(plane_t));
+    mapIndexedShaders = malloc(game->maxMapBrushSides * sizeof(char[MAX_QPATH]));
+    if (!mapDrawSurfs || !drawExtraSurfaces || !surfaceNeighbors || !mapplanes || !mapIndexedShaders)
+        Error("Failed to allocate dynamic global surfaces for makebsp. Out of memory.");
+    memset(surfaceNeighbors, 0, game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
+
     LoadShaderInfo();
 
     // load original file from temp spot in case it was renamed by the editor on

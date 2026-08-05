@@ -22,9 +22,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qbsp.h"
 
-mapDrawSurface_t mapDrawSurfs[MAX_MAP_DRAW_SURFS];
+mapDrawSurface_t *mapDrawSurfs;
 int numMapDrawSurfs;
-extraSurface_t drawExtraSurfaces[MAX_MAP_DRAW_SURFS_LIMIT];
+extraSurface_t *drawExtraSurfaces;
 
 /*
 =============================================================================
@@ -68,9 +68,9 @@ mapDrawSurface_t *AllocDrawSurf(void)
 {
     mapDrawSurface_t *ds;
 
-    if (numMapDrawSurfs >= MAX_MAP_DRAW_SURFS_LIMIT)
+    if (numMapDrawSurfs >= game->maxMapDrawSurfs)
     {
-        Error("MAX_MAP_DRAW_SURFS_LIMIT");
+        Error("MAX_MAP_DRAW_SURFS (%d)", game->maxMapDrawSurfs);
     }
 
     ds = &mapDrawSurfs[numMapDrawSurfs];
@@ -387,14 +387,16 @@ typedef struct
     int count;
 } sideRef_t;
 
-#define MAX_SIDE_REFS MAX_MAP_PLANES
-
-sideRef_t sideRefs[MAX_SIDE_REFS];
+sideRef_t *sideRefs;
 int numSideRefs;
 
 void AddSideRef(side_t *side)
 {
     int i;
+
+    if (!sideRefs) {
+        sideRefs = malloc(game->maxMapPlanes * sizeof(sideRef_t));
+    }
 
     for (i = 0; i < numSideRefs; i++)
     {
@@ -406,9 +408,9 @@ void AddSideRef(side_t *side)
         }
     }
 
-    if (numSideRefs == MAX_SIDE_REFS)
+    if (numSideRefs == game->maxMapPlanes)
     {
-        Error("MAX_SIDE_REFS");
+        Error("game->maxMapPlanes");
     }
 
     sideRefs[i].planenum = side->planenum;
@@ -1289,16 +1291,16 @@ static void SurfaceAsTriFan(dsurface_t *ds)
     drawVert_t *mid, *v;
 
     // create a new point in the center of the face
-    if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT)
+    if (numDrawVerts >= game->maxMapDrawVerts)
     {
         _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
         _printf("Surface Shader: %s\n", dshaders[ds->shaderNum].shader);
         _printf("Total vertices so far: %i\n", numDrawVerts);
         _printf("Current surface vertices: %i\n", ds->numVerts);
-        _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+        _printf("Limit for current game profile: %i\n", game->maxMapDrawVerts);
         _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
         _printf("-----------------------------\n");
-        Error("MAX_MAP_DRAW_VERTS_LIMIT");
+        Error("game->maxMapDrawVerts");
     }
     mid = &drawVerts[numDrawVerts];
     numDrawVerts++;
@@ -1338,9 +1340,9 @@ static void SurfaceAsTriFan(dsurface_t *ds)
     VectorCopy((drawVerts + ds->firstVert)->normal, mid->normal);
 
     // fill in indices in trifan order
-    if (numDrawIndexes + ds->numVerts * 3 > MAX_MAP_DRAW_INDEXES)
+    if (numDrawIndexes + ds->numVerts * 3 > game->maxMapDrawIndexes)
     {
-        Error("MAX_MAP_DRAWINDEXES");
+        Error("MAX_MAP_DRAW_INDEXES (%d)", game->maxMapDrawIndexes);
     }
     ds->firstIndex = numDrawIndexes;
     ds->numIndexes = ds->numVerts * 3;
@@ -1434,9 +1436,9 @@ static void SurfaceAsTristrip(dsurface_t *ds)
     // a normal tristrip
     c_stripSurfaces++;
 
-    if (numDrawIndexes + ni > MAX_MAP_DRAW_INDEXES)
+    if (numDrawIndexes + ni > game->maxMapDrawIndexes)
     {
-        Error("MAX_MAP_DRAW_INDEXES");
+        Error("MAX_MAP_DRAW_INDEXES (%d)", game->maxMapDrawIndexes);
     }
     ds->firstIndex = numDrawIndexes;
     ds->numIndexes = ni;
@@ -1456,9 +1458,9 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     dsurface_t *out;
     drawVert_t *outv;
 
-    if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT)
+    if (numDrawSurfaces >= game->maxMapDrawSurfs)
     {
-        Error("MAX_MAP_DRAW_SURFS_LIMIT");
+        Error("game->maxMapDrawSurfs");
     }
     out = &drawSurfaces[numDrawSurfaces];
     if (ds->side)
@@ -1517,16 +1519,16 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
 
     for (j = 0; j < ds->numVerts; j++)
     {
-        if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT)
+        if (numDrawVerts >= game->maxMapDrawVerts)
         {
             _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
             _printf("Surface: %s\n", ds->shaderInfo->shader);
             _printf("Total vertices so far: %i\n", numDrawVerts);
             _printf("Current surface vertices: %i\n", ds->numVerts);
-            _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+            _printf("Limit for current game profile: %i\n", game->maxMapDrawVerts);
             _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
             _printf("-----------------------------\n");
-            Error("MAX_MAP_DRAW_VERTS_LIMIT");
+            Error("game->maxMapDrawVerts");
         }
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
@@ -1555,9 +1557,9 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     dsurface_t *out;
     drawVert_t *outv;
 
-    if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT)
+    if (numDrawSurfaces >= game->maxMapDrawSurfs)
     {
-        Error("MAX_MAP_DRAW_SURFS_LIMIT");
+        Error("game->maxMapDrawSurfs");
     }
     out = &drawSurfaces[numDrawSurfaces];
 
@@ -1616,16 +1618,16 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
 
     for (j = 0; j < ds->numVerts; j++)
     {
-        if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT)
+        if (numDrawVerts >= game->maxMapDrawVerts)
         {
             _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
             _printf("Surface: %s\n", ds->shaderInfo->shader);
             _printf("Total vertices so far: %i\n", numDrawVerts);
             _printf("Current surface vertices: %i\n", ds->numVerts);
-            _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+            _printf("Limit for current game profile: %i\n", game->maxMapDrawVerts);
             _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
             _printf("-----------------------------\n");
-            Error("MAX_MAP_DRAW_VERTS_LIMIT");
+            Error("game->maxMapDrawVerts");
         }
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
@@ -1638,9 +1640,9 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
 
     for (j = 0; j < ds->numIndexes; j++)
     {
-        if (numDrawIndexes >= MAX_MAP_DRAW_INDEXES_LIMIT)
+        if (numDrawIndexes >= game->maxMapDrawIndexes)
         {
-            Error("MAX_MAP_DRAW_INDEXES_LIMIT");
+            Error("game->maxMapDrawIndexes");
         }
         drawIndexes[numDrawIndexes] = ds->indexes[j];
         numDrawIndexes++;
@@ -1656,9 +1658,9 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
 {
     dsurface_t *out;
 
-    if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT)
+    if (numDrawSurfaces >= game->maxMapDrawSurfs)
     {
-        Error("MAX_MAP_DRAW_SURFS_LIMIT");
+        Error("game->maxMapDrawSurfs");
     }
     out = &drawSurfaces[numDrawSurfaces];
 
@@ -1721,9 +1723,9 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     dsurface_t *out;
     drawVert_t *outv;
 
-    if (numDrawSurfaces >= MAX_MAP_DRAW_SURFS_LIMIT)
+    if (numDrawSurfaces >= game->maxMapDrawSurfs)
     {
-        Error("MAX_MAP_DRAW_SURFS_LIMIT");
+        Error("game->maxMapDrawSurfs");
     }
     out = &drawSurfaces[numDrawSurfaces];
 
@@ -1781,16 +1783,16 @@ void EmitModelSurf(mapDrawSurface_t *ds)
 
     for (j = 0; j < ds->numVerts; j++)
     {
-        if (numDrawVerts >= MAX_MAP_DRAW_VERTS_LIMIT)
+        if (numDrawVerts >= game->maxMapDrawVerts)
         {
             _printf("\n--- VERTEX LIMIT EXCEEDED ---\n");
             _printf("Surface: %s\n", ds->shaderInfo->shader);
             _printf("Total vertices so far: %i\n", numDrawVerts);
             _printf("Current surface vertices: %i\n", ds->numVerts);
-            _printf("Limit for current game profile: %i\n", MAX_MAP_DRAW_VERTS_LIMIT);
+            _printf("Limit for current game profile: %i\n", game->maxMapDrawVerts);
             _printf("Advice: High-poly maps require '-game qfusion' during compilation.\n");
             _printf("-----------------------------\n");
-            Error("MAX_MAP_DRAW_VERTS_LIMIT");
+            Error("game->maxMapDrawVerts");
         }
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
@@ -1802,9 +1804,9 @@ void EmitModelSurf(mapDrawSurface_t *ds)
 
     for (j = 0; j < ds->numIndexes; j++)
     {
-        if (numDrawIndexes >= MAX_MAP_DRAW_INDEXES_LIMIT)
+        if (numDrawIndexes >= game->maxMapDrawIndexes)
         {
-            Error("MAX_MAP_DRAW_INDEXES_LIMIT");
+            Error("game->maxMapDrawIndexes");
         }
         drawIndexes[numDrawIndexes] = ds->indexes[j];
         numDrawIndexes++;

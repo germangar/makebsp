@@ -33,13 +33,13 @@ int numMapPatches;
 #define PLANE_HASHES 1024
 plane_t *planehash[PLANE_HASHES];
 
-plane_t mapplanes[MAX_MAP_PLANES];
+plane_t *mapplanes;
 int nummapplanes;
 
 // as brushes and patches are read in, the shaders are stored out in order
 // here, so -onlytextures can just copy them out over the existing shaders
 // in the drawSurfaces
-char mapIndexedShaders[MAX_MAP_BRUSHSIDES][MAX_QPATH];
+char (*mapIndexedShaders)[MAX_QPATH];
 int numMapIndexedShaders;
 
 vec3_t map_mins, map_maxs;
@@ -125,8 +125,8 @@ int CreateNewFloatPlane(vec3_t normal, vec_t dist)
     }
 
     // create a new plane
-    if (nummapplanes + 2 > MAX_MAP_PLANES_LIMIT)
-        Error("MAX_MAP_PLANES_LIMIT");
+    if (nummapplanes + 2 > game->maxMapPlanes)
+        Error("MAX_MAP_PLANES");
 
     p = &mapplanes[nummapplanes];
     VectorCopy(normal, p->normal);
@@ -905,9 +905,9 @@ void ParseRawBrush(void)
         strcpy(name, token);
 
         // save the shader name for retexturing
-        if (numMapIndexedShaders == MAX_MAP_BRUSHSIDES)
+        if (numMapIndexedShaders == game->maxMapBrushSides)
         {
-            Error("MAX_MAP_BRUSHSIDES");
+            Error("MAX_MAP_BRUSHSIDES (%d)", game->maxMapBrushSides);
         }
         strcpy(mapIndexedShaders[numMapIndexedShaders], name);
         numMapIndexedShaders++;

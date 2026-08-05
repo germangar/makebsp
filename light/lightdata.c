@@ -382,10 +382,10 @@ static void UpConvertDrawVerts(void)
     int i, j, k;
     if (internalDrawVerts)
         Q_Free(internalDrawVerts);
-    internalDrawVerts = Q_Alloc(MAX_MAP_DRAW_VERTS * sizeof(drawVert32_t));
+    internalDrawVerts = Q_Alloc(game->maxMapDrawVerts * sizeof(drawVert32_t));
     if (!internalDrawVerts)
         Error("UpConvertDrawVerts: malloc failed");
-    memset(internalDrawVerts, 0, MAX_MAP_DRAW_VERTS * sizeof(drawVert32_t));
+    memset(internalDrawVerts, 0, game->maxMapDrawVerts * sizeof(drawVert32_t));
 
     for (i = 0; i < numDrawVerts; i++)
     {
@@ -640,6 +640,15 @@ static void DownConvertGrid(float scale, qboolean lightmapRange)
     int i, j;
     if (!gridData32)
         return;
+        
+    if (gridData)
+        free(gridData);
+        
+    gridData = malloc(numGridPoints * sizeof(bspGridPoint_t));
+    if (!gridData)
+        Error("DownConvertGrid: malloc for gridData failed");
+    memset(gridData, 0, numGridPoints * sizeof(bspGridPoint_t));
+
     for (i = 0; i < numGridPoints; i++)
     {
         for (j = 0; j < 4; j++)
@@ -888,10 +897,10 @@ void AllocateRadiosityFloats(void)
         Error("AllocateRadiosityFloats: malloc failed (accum). numLightBytes: %d", numLightBytes);
     memset(accumRadiosityFloats, 0, (numLightBytes / 3) * sizeof(vec3_t));
 
-    radiosityVertexFloats = Q_Alloc(MAX_MAP_DRAW_VERTS * sizeof(vec3_t));
+    radiosityVertexFloats = Q_Alloc(game->maxMapDrawVerts * sizeof(vec3_t));
     if (!radiosityVertexFloats)
         Error("AllocateRadiosityFloats: malloc failed (radiosityVertexFloats).");
-    memset(radiosityVertexFloats, 0, MAX_MAP_DRAW_VERTS * sizeof(vec3_t));
+    memset(radiosityVertexFloats, 0, game->maxMapDrawVerts * sizeof(vec3_t));
 
     if (numGridPoints > 0)
     {

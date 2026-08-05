@@ -103,7 +103,7 @@ float     ambient_gatheradius  = 256.0f;
 qboolean  ambient_enabled        = qfalse;
 
 localSurface_t *localSurfaces;
-qboolean brushCastsShadow[MAX_MAP_BRUSHES];
+qboolean *brushCastsShadow;
 
 // 7,9,11 normalized to avoid being nearly coplanar with common faces
 // vec3_t		sunDirection = { 0.441835, 0.56807, 0.694313 };
@@ -115,7 +115,7 @@ vec3_t sunLight = {0, 0, 0};
 qboolean hasSun = qfalse;
 
 int numSkyBrushes;
-skyBrush_t skyBrushes[MAX_MAP_BRUSHES];
+skyBrush_t *skyBrushes;
 
 /*
 =================================================================
@@ -986,6 +986,9 @@ void BuildLocalSurfaces(void)
     char mapName[1024];
     int numPatchesSubdivided = 0;
 
+    brushCastsShadow = malloc(numbrushes * sizeof(qboolean));
+    skyBrushes = malloc(numbrushes * sizeof(skyBrush_t));
+
     _printf("--- BuildLocalSurfaces ---\n");
 
     localSurfaces = calloc(numDrawSurfaces, sizeof(localSurface_t));
@@ -1194,7 +1197,7 @@ void BuildLocalSurfaces(void)
 
     // 4. Map Shadow Groups
     {
-        qboolean modelCastsShadow[MAX_MAP_MODELS];
+        qboolean *modelCastsShadow = malloc(nummodels * sizeof(qboolean));
         int m, b, s;
         entity_t *e;
         const char *modelKey, *csKey;
@@ -1838,8 +1841,6 @@ void LightMain(void)
 
         numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
         CheckGridData32();
-        if (numGridPoints * sizeof(bspGridPoint_t) >= MAX_MAP_LIGHTGRID)
-            Error("MAX_MAP_LIGHTGRID");
         qprintf("%5i gridPoints\n", numGridPoints);
 
         // Allocate per-grid-point MAO ambient array now that numGridPoints is known

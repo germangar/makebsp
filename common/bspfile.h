@@ -39,52 +39,53 @@ extern int entdatasize;
 extern char dentdata[MAX_MAP_ENTSTRING];
 
 extern int numleafs;
-extern dleaf_t dleafs[MAX_MAP_LEAFS];
+extern dleaf_t *dleafs;
 
 extern int numplanes;
-extern dplane_t dplanes[MAX_MAP_PLANES];
+extern dplane_t *dplanes;
 
 extern int numnodes;
-extern dnode_t dnodes[MAX_MAP_NODES];
+extern dnode_t *dnodes;
 
 extern int numleafsurfaces;
-extern int dleafsurfaces[MAX_MAP_LEAFFACES];
+extern int *dleafsurfaces;
 
 extern int numleafbrushes;
-extern int dleafbrushes[MAX_MAP_LEAFBRUSHES];
+extern int *dleafbrushes;
 
 extern int numbrushes;
 extern dbrush_t dbrushes[MAX_MAP_BRUSHES];
 
 extern int numbrushsides;
-extern dbrushside_t dbrushsides[MAX_MAP_BRUSHSIDES];
+extern dbrushside_t *dbrushsides;
 
 extern int numLightBytes;
 extern byte *lightBytes;
 
 extern int numGridPoints;
-extern bspGridPoint_t gridData[MAX_MAP_LIGHTGRID / sizeof(bspGridPoint_t)];
+extern bspGridPoint_t *gridData;
 
 extern int numLightArray;
-extern unsigned short lightArray[MAX_MAP_LIGHTGRID / 2];
+extern unsigned short *lightArray;
 
 extern int numVisBytes;
 extern byte visBytes[MAX_MAP_VISIBILITY];
 
 extern int numDrawVerts;
-extern drawVert_t drawVerts[MAX_MAP_DRAW_VERTS];
+extern drawVert_t *drawVerts;
 
 extern int numDrawIndexes;
-extern int drawIndexes[MAX_MAP_DRAW_INDEXES];
+extern int *drawIndexes;
 
 extern int numDrawSurfaces;
-extern dsurface_t drawSurfaces[MAX_MAP_DRAW_SURFS];
+extern dsurface_t *drawSurfaces;
 
 extern int numFogs;
 extern dfog_t dfogs[MAX_MAP_FOGS];
 
 void LoadBSPFile(const char *filename);
 void WriteBSPFile(const char *filename);
+void BSP_AllocateForWrite(void);
 void PrintBSPFileSizes(void);
 
 //===============

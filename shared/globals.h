@@ -80,6 +80,17 @@ typedef struct {
 	int         maxLMSurfaceVerts;
 	int         maxSurfaceVerts;
 	int         maxSurfaceIndexes;
+	
+	int         maxMapDrawVerts;
+	int         maxMapDrawIndexes;
+	int         maxMapDrawSurfs;
+	int         maxMapPlanes;
+	int         maxMapNodes;
+	int         maxMapLeafs;
+	int         maxMapBrushSides;
+	int         maxMapLeafSurfaces;
+	int         maxMapLeafBrushes;
+	
 	int         lightmapSize;
 	qboolean    externalLightmaps;
 	qboolean    keepLights;
