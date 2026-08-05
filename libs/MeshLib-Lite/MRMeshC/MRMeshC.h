@@ -2,6 +2,7 @@
 
 #include "MRMesh.h"
 #include "MRMeshBoolean.h"
+#include "MRMeshTrimWithPlane.h"
 #include "MRMeshDecimate.h"
 #include "MRMeshLoad.h"
 #include "MRMeshSave.h"
