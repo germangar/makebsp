@@ -19,33 +19,26 @@
 | 7 | `mrBooleanWithAttributes` signature: `(meshA, attrsA, meshB, attrsB, operation, params, outAttrs)`. The operator mesh (meshB) has no attributes, so `NULL` is correct for `attrsB`. ✅ Verified. |
 | 8 | `mrMeshPoints` returns `const MRVector3f*` indexed by `VertId`. `mrMeshPointsNum` returns `size_t`. Both confirmed in `MRMesh.h:28,34`. ✅ Verified. |
 | 9 | `mrMeshNormalFromVert` exists at `MRMesh.h:114`. Takes `(const MRMesh*, MRVertId)`. ✅ Verified. |
-| 10| **CRITICAL LINKER FAILURE**: `MeshLib-Lite` lacks the `MRMeshLogic` module which provides the actual C++ implementation of `MR::boolean`. The `MRMeshC` wrapper declares `mrBoolean` but linking fails with undefined references. | **Pivot approach**: Since `func_snip` brushes are purely convex (composed of planes), intersecting a mesh with a brush is mathematically identical to sequentially trimming the mesh with each plane of the brush. We will use `MR::trimWithPlane` instead of `mrBoolean`, exposing it via a tiny C wrapper in `csg_mesh.cpp` (renamed from `.c` to allow C++ calls). |
+| 10| **CRITICAL LINKER FAILURE**: `MeshLib-Lite` lacked the `MRMeshLogic` module which provides the actual C++ implementation of `MR::boolean`. | **RESOLVED**: We successfully ported `MRMeshBoolean.cpp` and `MRBooleanOperation.cpp` into `MeshLib-Lite` in Phase 1. `mrBooleanWithAttributes` is now fully functional in the C API. |
 
 ---
 
 ## Rollout: `func_snip` Integration
 
-### Step 1. Compile `csg_mesh.c` as C++
+### Step 1. Mesh CSG using `mrBooleanWithAttributes`
 
-To directly use `MR::trimWithPlane`, we must rename `csg_mesh.c` to `csg_mesh.cpp` and update the `Makefile` or just add `extern "C"` to its functions.
-To minimize `Makefile` changes, we will keep `csg_mesh.c` as C, and add a C-wrapper `MRMeshTrimWithPlane.cpp` in `libs/MeshLib-Lite/MRMeshC/` which automatically gets compiled by the existing Makefile wildcard rule.
+Since the Boolean operations are now fully integrated and compiled into `libmrmesh_lite.a`, we will directly use `mrBooleanWithAttributes` to perform the CSG difference (`MRBooleanOperationDifferenceAB` or `MRBooleanOperationDifferenceBA`) between the `misc_model` mesh and the `func_snip` brushes.
 
-Alternatively (and preferentially), we can implement `PerformMeshCSG` using a custom attributed winding structure `awinding_t` to perform pure C intersection clipping of `misc_model` triangles against the planes of `func_snip` brushes, eliminating the need for `MeshLib` C++ dependencies entirely.
-- Convert each mesh triangle into an `awinding_t` (which carries positions, normals, STs, and colors).
-- Sequentially clip against every plane of a brush using a custom `ClipAWindingEpsilon`. We keep the `SIDE_BACK` (inside) polygons.
-- Do this for every brush in a `func_snip`.
-- Triangulate the surviving convex polygons (windings) via a simple fan triangulation.
-- Rebuild the `miscModelMesh_t` from the triangulated result.
-- Flag the mesh with `wasCut = qtrue` to trigger `xatlas` UV regeneration in `IntegrateTriangleModels`.
+We do NOT need to fall back to the `awinding_t` pure C clipping or the iterative `trimWithPlane` hack for subtraction, because `mrBooleanWithAttributes` will robustly handle everything, including attribute interpolation (UVs, Colors, Normals).
 
 ### Step 2. `funcSnipOperator_t` struct definition
 
-We just need the planes of the `func_snip` brushes. We will store all brushes in `funcSnipOperator_t`.
+Since `mrBooleanWithAttributes` requires a `MRMesh*` as the operator (meshB), we will convert the planes of the `func_snip` brushes into actual `MRMesh` objects at parse time.
 
 ```c
 typedef struct {
-    int numPlanes;
-    plane_t planes[MAX_BUILD_SIDES];
+    MRMesh* mesh;
+    vec3_t mins, maxs;
 } snipBrush_t;
 
 typedef struct {
@@ -68,11 +61,10 @@ if (!strcmp("func_snip", classname))
         next = b->next;
 
         if (op.numBrushes < MAX_BUILD_SIDES) {
-            snipBrush_t *sb = &op.brushes[op.numBrushes++];
-            sb->numPlanes = b->numsides;
-            for (int i = 0; i < b->numsides; i++) {
-                sb->planes[i] = mapplanes[b->sides[i].planenum];
-            }
+            // 1. Call CreateBrushWindings(b) to generate the polygons for the brush
+            // 2. Convert the windings into vertices and triangle indices
+            // 3. Construct a MRMesh* using mrMeshFromTriangles()
+            // 4. Store the MRMesh* in op.brushes[op.numBrushes++]
             AddPointToBounds(b->mins, op.mins, op.maxs);
             AddPointToBounds(b->maxs, op.mins, op.maxs);
         }
@@ -84,7 +76,7 @@ if (!strcmp("func_snip", classname))
         StoreFuncSnipOperator(&op);
 
     // Free patches
-    // Suppress entity
+    FreeEpairs(&mapent->epairs); // Suppress entity from output
     continue;
 }
 ```
