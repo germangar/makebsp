@@ -273,6 +273,13 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
             else if (val->type == json_type_false)
                 game->externalLightmaps = qfalse;
         }
+        else if (!Q_stricmp(key, "keepLights"))
+        {
+            if (val->type == json_type_true)
+                game->keepLights = qtrue;
+            else if (val->type == json_type_false)
+                game->keepLights = qfalse;
+        }
         else if (!Q_stricmp(key, "cutoff") && val->type == json_type_number)
         {
             game->minLightAdd = (float)atof(json_value_as_number(val)->number);
@@ -683,6 +690,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"maxSurfaceIndexes\": %d,\n"
             "  \"lightmapSize\": %d,\n"
             "  \"externalLightmaps\": %s, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */\n"
+            "  \"keepLights\": %s, /* if true, light entities are not stripped from the BSP */\n"
             "  \"sampleSize\": %i,\n"
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
             "  \"hdr8BitScale\": %.2f,\n"
@@ -727,6 +735,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, game->lightmapSize,
             game->externalLightmaps ? "true" : "false",
+            game->keepLights ? "true" : "false",
             game->defaultSampleSize, hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",

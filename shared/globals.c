@@ -40,6 +40,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		393210,     // maxSurfaceIndexes
 		512,
 		qfalse,     // externalLightmaps: if true, lightmaps are stored as external .tga files instead of inside the BSP
+		qtrue,      // keepLights
 
 		4,          // defaultSampleSize
 		qtrue,      // chamferEdges
@@ -101,6 +102,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		6000,
 		128,
 		qfalse,     // exportLightmaps
+		qfalse,     // keepLights
 
 		8,          // defaultSampleSize
 		qtrue,      // chamferEdges
