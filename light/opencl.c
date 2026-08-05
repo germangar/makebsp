@@ -118,7 +118,7 @@ cl_program BuildOpenCLProgram(const char *filename, const char *options) {
 
     if (!src) {
         char fullPath[MAX_OS_PATH];
-        sprintf(fullPath, "%smakebsp/kernels/%s", executablePath, filename);
+        sprintf(fullPath, "%smakebspdata/kernels/%s", executablePath, filename);
         fileSize = LoadFile(fullPath, (void **)&src);
         if (fileSize <= 0) {
             _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
