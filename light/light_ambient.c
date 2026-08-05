@@ -371,17 +371,29 @@ void TraceAmbient(int num)
                 continue;
 
             int scale = upscale ? 2 : 1;
-            int k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
-
-            if (texelNormals[k_upscale][0] == 0.0f && texelNormals[k_upscale][1] == 0.0f && texelNormals[k_upscale][2] == 0.0f)
-                continue;
+            int base_k_upscale = (ds->lightmapNum[0] * LIGHTMAP_HEIGHT * scale + py * scale) * LIGHTMAP_WIDTH * scale + px * scale;
 
             vec3_t origin, normal;
-            for (int c = 0; c < 3; c++)
+            int found_valid = 0;
+
+            for (int sy = 0; sy < scale; sy++)
             {
-                origin[c] = texelOrigins[k_upscale][c];
-                normal[c] = texelNormals[k_upscale][c];
+                for (int sx = 0; sx < scale; sx++)
+                {
+                    int k_up = base_k_upscale + sy * (LIGHTMAP_WIDTH * scale) + sx;
+                    if (texelNormals[k_up][0] != 0.0f || texelNormals[k_up][1] != 0.0f || texelNormals[k_up][2] != 0.0f)
+                    {
+                        VectorCopy(texelOrigins[k_up], origin);
+                        VectorCopy(texelNormals[k_up], normal);
+                        found_valid = 1;
+                        break;
+                    }
+                }
+                if (found_valid) break;
             }
+
+            if (!found_valid)
+                continue;
 
             if (lightAlphaMask && lightAlphaMask[k] == 0)
             {

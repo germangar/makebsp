@@ -697,21 +697,6 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
             verts[j * ds->patchWidth + i].lightmap[0][1] = t / (float)LIGHTMAP_HEIGHT;
         }
     }
-
-    /* Step 5: Precision nudge pass — shift UVs slightly outward at boundaries
-       to prevent floating-point inaccuracies from landing samples outside the block. */
-    for (i = 0; i < ds->patchWidth * ds->patchHeight; i++)
-    {
-        float *uv = verts[i].lightmap[0];
-        if (uv[0] <= (float)x / LIGHTMAP_WIDTH + 0.50001f / LIGHTMAP_WIDTH)
-            uv[0] -= UV_PRECISION_NUDGE;
-        if (uv[0] >= (float)(x + w) / LIGHTMAP_WIDTH - 0.50001f / LIGHTMAP_WIDTH)
-            uv[0] += UV_PRECISION_NUDGE;
-        if (uv[1] <= (float)y / LIGHTMAP_HEIGHT + 0.50001f / LIGHTMAP_HEIGHT)
-            uv[1] -= UV_PRECISION_NUDGE;
-        if (uv[1] >= (float)(y + h) / LIGHTMAP_HEIGHT - 0.50001f / LIGHTMAP_HEIGHT)
-            uv[1] += UV_PRECISION_NUDGE;
-    }
 }
 
 /*
