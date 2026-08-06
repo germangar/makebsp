@@ -1,0 +1,58 @@
+{
+  "game": "xonotic",
+  "template": "",
+  "rootDir": ".",
+  "userDir": ".xonotic",
+  "gameDir": "data",
+  "bspIdent": "IBSP",
+  "bspVersion": 46,
+  "lumpCount": 17,
+  "maxLMSurfaceVerts": 1048575,
+  "maxSurfaceVerts": 1048575,
+  "maxSurfaceIndexes": 1048575,
+  "lightmapSize": 1024,
+  "externalLightmaps": true, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */
+  "keepLights": true, /* if true, light entities are not stripped from the BSP */
+  "sampleSize": 4,
+  "defaultGridSize": [32.00, 32.00, 64.00],
+  "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
+  "hdr8BitScale": 1.00,
+  "lightmapsRGB": true,
+  "lightgridRGB": false,
+  "lightgridAmbientBias": 2.2,
+  "texturesRGB": true,
+  "colorsRGB": true,
+  "radiosityPasses": 4, /* Number of times the light bounces */
+  "radiosityIntensity": 1.00,
+  "radiosityColorRatio": 0.75, /* Percentage (0.0 to 1.0) of surface color transferred to the bounce light */
+  "radiosityInterval": 4, /* Radiosity grid sample size */
+  "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
+  "rad_ao_min": 0.00, /* Minimum distance for ambient occlusion shadowing */
+  "rad_ao_max": 32.00, /* Maximum distance for ambient occlusion shadowing */
+  "ambientTestRadius": 512.00, /* Radius at which a light probe tests for being occluded */
+  "ambientGatherRadius": 256.00, /* Distance at which a lightmap pixel gathers light from probes */
+  "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
+  "attenuation": "standard",  /* [ standard, soft, linear ] */
+  "cutoff": 0.100000, /* Minimum remaining light energy to apply the contribution to a surface */
+  "fadeout": 0.000000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */
+  "backSplashSpot": 0.100000, /* Default entity spotlight backsplash fraction (0.0 to 1.0) */
+  "backSplashSurface": 0.000000, /* Default surface light backsplash fraction (0.0 to 1.0) */
+  "deluxeMap": true,
+  "deluxeMinAngle": 15.00,
+  "antialiasingPasses": 0, /*Number of post-process AA passes */
+  "superSampleRadius": 0.00,
+  "smoothPasses": 4, /* passes of blurring lightmaps */
+  "smoothRadius": 0.35, /* fractional values accepted. Minimum 0.1 */
+  "exposurefilter": "filmic", /* [ off, softknee, reinhard, filmic ] */
+  "saturation": 1.00, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
+  "saturationRamp": "off", /* [ off, filmic, power, midtone ] */
+  "chamferEdges": true,
+  "chamferConvexWidth": 1.25,
+  "chamferConcaveWidth": 0.00,
+  "decalExtrusion": 0.00,
+  "enforceSampleSize": true,
+  "forceUVGen": true,
+  "flareShader": "",
+  "haloShader": ""
+}
