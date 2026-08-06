@@ -52,6 +52,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		qtrue,      // keepLights
 
 		4,          // defaultSampleSize
+		{ 32, 32, 64 }, // defaultGridSize
 		qtrue,      // chamferEdges
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth
@@ -123,6 +124,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // keepLights
 
 		8,          // defaultSampleSize
+		{ 64, 64, 128 }, // defaultGridSize
 		qtrue,      // chamferEdges
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth

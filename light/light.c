@@ -1815,6 +1815,8 @@ void LightMain(void)
         int i;
         vec3_t maxs;
 
+        VectorCopy(game->defaultGridSize, gridSize);
+
         const char *value = ValueForKey(&entities[0], "gridsize");
         if (strlen(value))
         {
@@ -1823,23 +1825,38 @@ void LightMain(void)
                     gridSize[2]);
         }
 
-        if (g_fast)
+        if (gridSize[0] <= 0.0f || gridSize[1] <= 0.0f || gridSize[2] <= 0.0f)
         {
-            gridSize[0] *= 2.0f;
-            gridSize[1] *= 2.0f;
-            if (gridSize[0] < 128.0f) gridSize[0] = 128.0f;
-            if (gridSize[1] < 128.0f) gridSize[1] = 128.0f;
-            _printf("Fast mode enabled: scaled horizontal grid size to {%1.1f, %1.1f, %1.1f}\n", gridSize[0], gridSize[1], gridSize[2]);
+            numGridPoints = 0;
+            _printf("Grid size 0 detected: Disabling lightgrid generation.\n");
         }
-
-        for (i = 0; i < 3; i++)
+        else
         {
-            gridMins[i] = gridSize[i] * ceil(dmodels[0].mins[i] / gridSize[i]);
-            maxs[i] = gridSize[i] * floor(dmodels[0].maxs[i] / gridSize[i]);
-            gridBounds[i] = (maxs[i] - gridMins[i]) / gridSize[i] + 1;
-        }
+            if (g_fast)
+            {
+                gridSize[0] *= 2.0f;
+                gridSize[1] *= 2.0f;
+                if (gridSize[0] < 128.0f) gridSize[0] = 128.0f;
+                if (gridSize[1] < 128.0f) gridSize[1] = 128.0f;
+                _printf("Fast mode enabled: scaled horizontal grid size to {%1.1f, %1.1f, %1.1f}\n", gridSize[0], gridSize[1], gridSize[2]);
+            }
 
-        numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
+            // Force gridsize into worldspawn so the engine uses the exact same size bounds
+            {
+                char gridsizeStr[32];
+                sprintf(gridsizeStr, "%.0f %.0f %.0f", gridSize[0], gridSize[1], gridSize[2]);
+                SetKeyValue(&entities[0], "gridsize", gridsizeStr);
+            }
+
+            for (i = 0; i < 3; i++)
+            {
+                gridMins[i] = gridSize[i] * ceil(dmodels[0].mins[i] / gridSize[i]);
+                maxs[i] = gridSize[i] * floor(dmodels[0].maxs[i] / gridSize[i]);
+                gridBounds[i] = (maxs[i] - gridMins[i]) / gridSize[i] + 1;
+            }
+
+            numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
+        }
         CheckGridData32();
         qprintf("%5i gridPoints\n", numGridPoints);
 

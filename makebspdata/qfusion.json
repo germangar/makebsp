@@ -12,7 +12,9 @@
   "maxSurfaceIndexes": 393210,
   "lightmapSize": 512,
   "externalLightmaps": false, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */
+  "keepLights": true, /* if true, light entities are not stripped from the BSP */
   "sampleSize": 4,
+  "defaultGridSize": [32.00, 32.00, 64.00],
   "hdr": "rgb8", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 3.00,
   "lightmapsRGB": true,

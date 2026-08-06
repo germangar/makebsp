@@ -2405,6 +2405,11 @@ void TraceGrid(int num)
         }
     }
 
+    float maxAddSize = 0.0f;
+    float totalAddSize = 0.0f;
+    vec3_t dominantDir = {0.0f, 0.0f, 0.0f};
+    vec3_t averageDir = {0.0f, 0.0f, 0.0f};
+
     VectorSet(summedDir, 0.0f, 0.0f, -0.000001f);
     numCon = 0;
     if (!nodirect)
@@ -2416,7 +2421,13 @@ void TraceGrid(int num)
                 vec3_t tempColor;
                 VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
                 float addSize = VectorLength(tempColor);
-                VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
+                totalAddSize += addSize;
+                VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
+                if (addSize > maxAddSize)
+                {
+                    maxAddSize = addSize;
+                    VectorCopy(contributions[numCon].dir, dominantDir);
+                }
                 numCon++;
                 if (numCon >= MAX_CONTRIBUTIONS)
                     break;
@@ -2429,8 +2440,25 @@ void TraceGrid(int num)
             vec3_t tempColor;
             VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
             float addSize = VectorLength(tempColor);
-            VectorMA(summedDir, addSize, contributions[numCon].dir, summedDir);
+            totalAddSize += addSize;
+            VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
+            if (addSize > maxAddSize)
+            {
+                maxAddSize = addSize;
+                VectorCopy(contributions[numCon].dir, dominantDir);
+            }
             numCon++;
+        }
+    }
+
+    if (totalAddSize > 0.00001f)
+    {
+        float confidence = maxAddSize / totalAddSize;
+        VectorNormalize(averageDir, averageDir);
+        
+        for (i = 0; i < 3; i++)
+        {
+            summedDir[i] = averageDir[i] * (1.0f - confidence) + dominantDir[i] * confidence;
         }
     }
 

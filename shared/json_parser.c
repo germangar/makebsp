@@ -346,6 +346,19 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->defaultSampleSize = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "defaultGridSize") && val->type == json_type_array)
+        {
+            struct json_array_s *arr = json_value_as_array(val);
+            if (arr && arr->length == 3)
+            {
+                struct json_array_element_s *el = arr->start;
+                game->defaultGridSize[0] = (float)atof(json_value_as_number(el->value)->number);
+                el = el->next;
+                game->defaultGridSize[1] = (float)atof(json_value_as_number(el->value)->number);
+                el = el->next;
+                game->defaultGridSize[2] = (float)atof(json_value_as_number(el->value)->number);
+            }
+        }
         else if (!Q_stricmp(key, "hdr") && val->type == json_type_string)
         {
             const char *h = json_value_as_string(val)->string;
@@ -728,6 +741,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"externalLightmaps\": %s, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */\n"
             "  \"keepLights\": %s, /* if true, light entities are not stripped from the BSP */\n"
             "  \"sampleSize\": %i,\n"
+            "  \"defaultGridSize\": [%.2f, %.2f, %.2f],\n"
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
             "  \"hdr8BitScale\": %.2f,\n"
             "  \"lightmapsRGB\": %s,\n"
@@ -772,7 +786,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->maxSurfaceIndexes, game->lightmapSize,
             game->externalLightmaps ? "true" : "false",
             game->keepLights ? "true" : "false",
-            game->defaultSampleSize, hdrStr, game->hdr8BitScale,
+            game->defaultSampleSize, game->defaultGridSize[0], game->defaultGridSize[1], game->defaultGridSize[2], hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",
             game->texturesRGB ? "true" : "false",

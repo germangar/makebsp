@@ -97,6 +97,7 @@ typedef struct {
 
 	// Lighting flags
 	int         defaultSampleSize;
+	vec3_t      defaultGridSize;
 	qboolean    chamferEdges;
 	float       chamferConvexWidth;
 	float       chamferConcaveWidth;
