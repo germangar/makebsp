@@ -677,4 +677,7 @@ extern qboolean noautocaulk;
 void FilterDuplicateBrushes(void);
 void AutoCaulkBrushes(void);
 
+// convert_ktx.c
+void ConvertKTX(const char *path);
+
 #endif

@@ -755,6 +755,19 @@ int main(int argc, char **argv)
             Broadcast_Shutdown();
             return 0;
         }
+
+        if (!Q_stricmp(argv[i], "-convertKTX"))
+        {
+            if (i + 1 < argc)
+            {
+                ConvertKTX(argv[i + 1]);
+                return 0;
+            }
+            else
+            {
+                Error("-convertKTX requires a file path argument");
+            }
+        }
         if (!strcmp(argv[i], "-exportmodels")) {
             ExportModels(argc - (i + 1), argv + (i + 1));
             Broadcast_Shutdown();
