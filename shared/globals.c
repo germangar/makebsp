@@ -13,6 +13,7 @@ char name[1024];
 int numGames = 2;
 float shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
+float lightgridAmbientBias = 1.0f;
 
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
@@ -63,6 +64,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
 		qfalse,     // lightgridRGB
+		2.2f,       // lightgridAmbientBias
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
 		4,          // radiosityPasses
@@ -135,6 +137,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
 		qfalse,     // lightgridRGB
+		1.0f,       // lightgridAmbientBias
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
 		4,          // radiosityPasses

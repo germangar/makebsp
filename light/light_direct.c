@@ -2528,6 +2528,29 @@ void LightWorld(void)
         _printf("%i x %i x %i = %i grid\n", gridBounds[0], gridBounds[1],
                 gridBounds[2], numGridPoints);
         _printf("%5.0f seconds elapsed in TraceGrid\n", end - start);
+
+        if (lightgridAmbientBias != 1.0f)
+        {
+            _printf("Applying lightgrid ambient bias (gamma %f)...\n", lightgridAmbientBias);
+            for (i = 0; i < numGridPoints; i++)
+            {
+                float length = VectorLength(gridData32[i].ambient[0]);
+                if (length > 0.001f && length < 255.0f)
+                {
+                    float new_length = pow(length / 255.0f, 1.0f / lightgridAmbientBias) * 255.0f;
+                    float scale = new_length / length;
+                    VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
+                }
+                
+                float dir_length = VectorLength(gridData32[i].directed[0]);
+                if (dir_length > 0.001f && dir_length < 255.0f)
+                {
+                    float new_dir_length = pow(dir_length / 255.0f, 1.0f / lightgridAmbientBias) * 255.0f;
+                    float dir_scale = new_dir_length / dir_length;
+                    VectorScale(gridData32[i].directed[0], dir_scale, gridData32[i].directed[0]);
+                }
+            }
+        }
     }
 
     _printf("--- TraceLights ---\n");

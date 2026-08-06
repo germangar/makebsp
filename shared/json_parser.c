@@ -389,6 +389,10 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
             else if (val->type == json_type_false)
                 game->lightgridRGB = qfalse;
         }
+        else if (!Q_stricmp(key, "lightgridAmbientBias") && val->type == json_type_number)
+        {
+            game->lightgridAmbientBias = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "texturesRGB"))
         {
             if (val->type == json_type_true)
@@ -746,6 +750,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"hdr8BitScale\": %.2f,\n"
             "  \"lightmapsRGB\": %s,\n"
             "  \"lightgridRGB\": %s,\n"
+            "  \"lightgridAmbientBias\": %.2f,\n"
             "  \"texturesRGB\": %s,\n"
             "  \"colorsRGB\": %s,\n"
             "  \"radiosityPasses\": %d, /* Number of times the light bounces */\n"
@@ -789,6 +794,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->defaultSampleSize, game->defaultGridSize[0], game->defaultGridSize[1], game->defaultGridSize[2], hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",
+            game->lightgridAmbientBias,
             game->texturesRGB ? "true" : "false",
             game->colorsRGB ? "true" : "false",
             game->radiosityPasses,

@@ -261,6 +261,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (ambient_gatheradius < 32.0f) ambient_gatheradius = 32.0f;
     }
 
+    val = ValueForKey(ent, "_gridambientbias");
+    if (!val[0]) val = ValueForKey(ent, "gridambientbias");
+    if (val[0] && !HasArg("-gridambientbias", argc, argv)) {
+        lightgridAmbientBias = (float)atof(val);
+    }
+
 }
 
 int main(int argc, char **argv) {
@@ -278,6 +284,7 @@ int main(int argc, char **argv) {
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
+    lightgridAmbientBias = game->lightgridAmbientBias;
     
     ambient_testradius = game->ambientTestRadius;
     ambient_gatheradius = game->ambientGatherRadius;
@@ -395,6 +402,10 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-nogrid")) {
             nogridlighting = qtrue;
             _printf("no grid lighting = true\n");
+        } else if (!strcmp(argv[i], "-gridambientbias")) {
+            lightgridAmbientBias = atof(argv[i + 1]);
+            _printf("grid ambient bias = %f\n", lightgridAmbientBias);
+            i++;
         } else if (!strcmp(argv[i], "-border")) {
             lightmapBorder = qtrue;
             _printf("Adding debug border to lightmaps\n");

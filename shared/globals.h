@@ -108,6 +108,7 @@ typedef struct {
     float       hdr8BitScale;
 	qboolean	lightmapsRGB;
 	qboolean	lightgridRGB;
+	float       lightgridAmbientBias;
 	qboolean	texturesRGB;
 	qboolean	colorsRGB;
 	int         radiosityPasses;
@@ -146,6 +147,7 @@ typedef struct {
 
 extern float shadingModelSoftBias;
 extern float sunSoftBias;
+extern float lightgridAmbientBias;
 extern vec3_t blockSize;
 extern qboolean g_lowmem;
 extern qboolean g_debugExportLightmaps;
