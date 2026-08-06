@@ -10,7 +10,7 @@
   "maxLMSurfaceVerts": 1048575,
   "maxSurfaceVerts": 1048575,
   "maxSurfaceIndexes": 1048575,
-  "lightmapSize": 1024,
+  "lightmapSize": 2048,
   "externalLightmaps": true, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */
   "keepLights": true, /* if true, light entities are not stripped from the BSP */
   "sampleSize": 4,
