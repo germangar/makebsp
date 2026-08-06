@@ -96,6 +96,7 @@ vec3_t ambientColor;
 vec3_t    skyColor;
 vec3_t    groundColor;
 float    *maoAmbient        = NULL;
+float    *maoDir            = NULL;
 int       ambient_grid_samples   = 48;
 int       ambient_samples = 32;
 float     ambient_testradius         = 512.0f;
@@ -1864,8 +1865,9 @@ void LightMain(void)
         if (ambient_enabled)
         {
             maoAmbient = calloc(numGridPoints * 3, sizeof(float));
-            if (!maoAmbient)
-                Error("Failed to allocate maoAmbient (%i grid points)", numGridPoints);
+            maoDir = calloc(numGridPoints * 3, sizeof(float));
+            if (!maoAmbient || !maoDir)
+                Error("Failed to allocate MAO arrays (%i grid points)", numGridPoints);
         }
     }
 
@@ -1921,5 +1923,10 @@ void LightMain(void)
     {
         free(maoAmbient);
         maoAmbient = NULL;
+    }
+    if (maoDir)
+    {
+        free(maoDir);
+        maoDir = NULL;
     }
 }

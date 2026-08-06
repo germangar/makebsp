@@ -70,6 +70,10 @@ void ComputeMAOPoint(int num)
     float groundAccum[3] = {0, 0, 0};
     float skyWeight = 0.0f, groundWeight = 0.0f;
     int samples;
+    
+    vec3_t dirAccum = {0, 0, 0};
+    float skyLum = skyColor[0] * 0.299f + skyColor[1] * 0.587f + skyColor[2] * 0.114f;
+    float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
 
     if (!maoAmbient)
         return;
@@ -128,6 +132,7 @@ void ComputeMAOPoint(int num)
             skyAccum[0] += w * skyColor[0];
             skyAccum[1] += w * skyColor[1];
             skyAccum[2] += w * skyColor[2];
+            VectorMA(dirAccum, w * skyLum, dir, dirAccum);
         }
     }
 
@@ -159,6 +164,7 @@ void ComputeMAOPoint(int num)
             groundAccum[0] += w * groundColor[0];
             groundAccum[1] += w * groundColor[1];
             groundAccum[2] += w * groundColor[2];
+            VectorMA(dirAccum, w * groundLum, dir, dirAccum);
         }
     }
 
@@ -178,6 +184,24 @@ void ComputeMAOPoint(int num)
     maoAmbient[num * 3 + 0] = skyAccum[0] * skyScale + groundAccum[0] * groundScale;
     maoAmbient[num * 3 + 1] = skyAccum[1] * skyScale + groundAccum[1] * groundScale;
     maoAmbient[num * 3 + 2] = skyAccum[2] * skyScale + groundAccum[2] * groundScale;
+
+    if (maoDir)
+    {
+        float dirLen = VectorLength(dirAccum);
+        if (dirLen > 0.0001f)
+        {
+            float invLen = 1.0f / dirLen;
+            maoDir[num * 3 + 0] = dirAccum[0] * invLen;
+            maoDir[num * 3 + 1] = dirAccum[1] * invLen;
+            maoDir[num * 3 + 2] = dirAccum[2] * invLen;
+        }
+        else
+        {
+            maoDir[num * 3 + 0] = 0.0f;
+            maoDir[num * 3 + 1] = 0.0f;
+            maoDir[num * 3 + 2] = 1.0f;
+        }
+    }
 }
 
 /*
@@ -197,8 +221,9 @@ void RunMAOPass(void)
     if (!maoAmbient)
     {
         maoAmbient = Q_Alloc(numGridPoints * 3 * sizeof(float));
-        if (!maoAmbient)
-            Error("Failed to allocate MAO ambient array");
+        maoDir = Q_Alloc(numGridPoints * 3 * sizeof(float));
+        if (!maoAmbient || !maoDir)
+            Error("Failed to allocate MAO arrays");
     }
 
     RunThreadsOnIndividual(numGridPoints, qtrue, ComputeMAOPoint);

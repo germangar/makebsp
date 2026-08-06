@@ -2484,7 +2484,7 @@ void TraceGrid(int num)
         VectorAdd(color, gridData32[num].ambient[0], gridData32[num].ambient[0]);
         VectorAdd(directedColor, gridData32[num].directed[0], gridData32[num].directed[0]);
         VectorNormalize(summedDir, summedDir);
-        NormalToLatLong(summedDir, gridData32[num].latLong);
+        
         gridData32[num].styles[0] = 0;
         gridData32[num].styles[1] = 0xff;
         gridData32[num].styles[2] = 0xff;
@@ -2492,10 +2492,44 @@ void TraceGrid(int num)
 
         if (maoAmbient)
         {
-            gridData32[num].ambient[0][0] += maoAmbient[num * 3 + 0];
-            gridData32[num].ambient[0][1] += maoAmbient[num * 3 + 1];
-            gridData32[num].ambient[0][2] += maoAmbient[num * 3 + 2];
+            float dirRatio = 0.45f;
+            float ambRatio = 0.75f;
+            vec3_t moveDir;
+            vec3_t moveAmb;
+            
+            VectorScale(&maoAmbient[num * 3], dirRatio, moveDir);
+            VectorScale(&maoAmbient[num * 3], ambRatio, moveAmb);
+            
+            gridData32[num].ambient[0][0] += moveAmb[0];
+            gridData32[num].ambient[0][1] += moveAmb[1];
+            gridData32[num].ambient[0][2] += moveAmb[2];
+            
+            gridData32[num].directed[0][0] += moveDir[0];
+            gridData32[num].directed[0][1] += moveDir[1];
+            gridData32[num].directed[0][2] += moveDir[2];
+
+            if (maoDir)
+            {
+                float moveMagnitude = VectorLength(moveDir);
+                float totalWeight = totalAddSize + moveMagnitude;
+                
+                if (totalWeight > 0.0001f)
+                {
+                    vec3_t blendedDir;
+                    blendedDir[0] = (summedDir[0] * totalAddSize + maoDir[num * 3 + 0] * moveMagnitude) / totalWeight;
+                    blendedDir[1] = (summedDir[1] * totalAddSize + maoDir[num * 3 + 1] * moveMagnitude) / totalWeight;
+                    blendedDir[2] = (summedDir[2] * totalAddSize + maoDir[num * 3 + 2] * moveMagnitude) / totalWeight;
+                    
+                    if (VectorNormalize(blendedDir, summedDir) == 0.0f)
+                    {
+                        // Fallback if vectors perfectly cancel each other out
+                        VectorCopy(&maoDir[num * 3], summedDir);
+                    }
+                }
+            }
         }
+        
+        NormalToLatLong(summedDir, gridData32[num].latLong);
     }
     free(tw);
 }
@@ -2531,21 +2565,23 @@ void LightWorld(void)
 
         if (lightgridAmbientBias != 1.0f)
         {
-            _printf("Applying lightgrid ambient bias (gamma %f)...\n", lightgridAmbientBias);
+            float maxIntensity = 255.0f * game->hdr8BitScale;
+            _printf("Applying lightgrid ambient bias (gamma %f, maxIntensity %f)...\n", lightgridAmbientBias, maxIntensity);
+            
             for (i = 0; i < numGridPoints; i++)
             {
                 float length = VectorLength(gridData32[i].ambient[0]);
-                if (length > 0.001f && length < 255.0f)
+                if (length > 0.001f && length < maxIntensity)
                 {
-                    float new_length = pow(length / 255.0f, 1.0f / lightgridAmbientBias) * 255.0f;
+                    float new_length = pow(length / maxIntensity, 1.0f / lightgridAmbientBias) * maxIntensity;
                     float scale = new_length / length;
                     VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
                 }
                 
                 float dir_length = VectorLength(gridData32[i].directed[0]);
-                if (dir_length > 0.001f && dir_length < 255.0f)
+                if (dir_length > 0.001f && dir_length < maxIntensity)
                 {
-                    float new_dir_length = pow(dir_length / 255.0f, 1.0f / lightgridAmbientBias) * 255.0f;
+                    float new_dir_length = pow(dir_length / maxIntensity, 1.0f / lightgridAmbientBias) * maxIntensity;
                     float dir_scale = new_dir_length / dir_length;
                     VectorScale(gridData32[i].directed[0], dir_scale, gridData32[i].directed[0]);
                 }
