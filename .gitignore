@@ -49,6 +49,7 @@ libMRMeshC.dll
 !libs/coacd/build/libcoacd.a
 !libs/opencl/lib/libOpenCL.a
 *.dll
+!libs/embree/prebuilt/windows/bin/*.dll
 libMRMesh.dll
 light.exe
 makelight.exe
