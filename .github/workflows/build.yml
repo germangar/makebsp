@@ -24,6 +24,7 @@ jobs:
         run: |
           make clean
           make RELEASE=1
+          cp libs/embree/prebuilt/windows/bin/*.dll .
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -51,6 +52,7 @@ jobs:
         run: |
           make clean
           make RELEASE=1
+          cp libs/embree/prebuilt/linux/lib/*.so* .
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -59,7 +61,7 @@ jobs:
           path: |
             makebsp.elf
             makelight.elf
-            libs/embree/prebuilt/linux/lib/libembree4.so*
-            libs/embree/prebuilt/linux/lib/libtbb*.so*
+            libembree4.so*
+            libtbb*.so*
             makebspdata/warfork.json
             makebspdata/xonotic.json
