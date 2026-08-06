@@ -42,6 +42,7 @@ endif
 
 ifeq ($(RELEASE), 1)
     CFLAGS += -DRELEASE_BUILD
+    BASE_LDFLAGS += -s
 endif
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
 Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -lz
