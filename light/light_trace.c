@@ -248,6 +248,9 @@ AlphaFilter
 Embree intersection filter for handling ignoreSurface and alpha shadows
 =============
 */
+extern qboolean patchshadows;
+
+
 void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
 {
     if (args->valid[0] != -1)
@@ -464,7 +467,7 @@ void InitTrace(void)
     InitTracingGeometry();
 }
 
-qboolean BoxInOpaqueDetail(vec3_t start, float margin);
+int BoxInOpaqueDetail(vec3_t start, float margin);
 
 /*
 ===================
@@ -561,7 +564,32 @@ qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly)
     }
 
     // Check detail brushes volumetrically
-    return BoxInOpaqueDetail(origin, margin);
+    int detailContents = BoxInOpaqueDetail(origin, margin);
+
+    if (detailContents == CONTENTS_SOLID)
+        return qtrue;
+
+    if (detailContents == CONTENTS_TRISOUP)
+    {
+        vec3_t dirs[3] = { {0, 0, 1}, {1, 0, 0}, {0, 1, 0} };
+        int i;
+        qboolean is_solid = qtrue;
+        for (i = 0; i < 3; i++)
+        {
+            if (!PointInTrisoup(origin, dirs[i]))
+            {
+                is_solid = qfalse;
+                break;
+            }
+        }
+        
+        if (is_solid)
+        {
+            return qtrue;
+        }
+    }
+
+    return qfalse;
 }
 
 /*
@@ -664,10 +692,11 @@ int PointInLeafNum(vec3_t start)
 BoxInOpaqueDetail
 ===================
 */
-qboolean BoxInOpaqueDetail(vec3_t start, float margin)
+int BoxInOpaqueDetail(vec3_t start, float margin)
 {
     int leafNum = PointInLeafNum(start);
     int i, j;
+    qboolean hitTrisoup = qfalse;
     
     // Check all brushes in this leaf
     for (i = 0; i < dleafs[leafNum].numLeafBrushes; i++)
@@ -684,12 +713,14 @@ qboolean BoxInOpaqueDetail(vec3_t start, float margin)
         if (b->numSides == 0)
             continue;
             
+        qboolean isTrisoupBrush = (ds->contentFlags & CONTENTS_TRISOUP) ? qtrue : qfalse;
+
         // Ignore brushes that don't block light (translucent, liquids, clips, fog, sky)
         // Note: We deliberately do NOT ignore SURF_NODRAW (caulk), because caulk is solid and blocks light.
-        if ((ds->contentFlags & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
+        if (!isTrisoupBrush && ((ds->contentFlags & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER |
                                  CONTENTS_TRANSLUCENT | CONTENTS_FOG |
                                  CONTENTS_PLAYERCLIP | CONTENTS_MONSTERCLIP | CONTENTS_BOTCLIP)) ||
-            (ds->surfaceFlags & SURF_SKY))
+            (ds->surfaceFlags & SURF_SKY)))
         {
             continue;
         }
@@ -712,11 +743,19 @@ qboolean BoxInOpaqueDetail(vec3_t start, float margin)
         
         if (inBrush)
         {
-            return qtrue; // Inside an opaque detail (or structural) brush
+            if (isTrisoupBrush) {
+                hitTrisoup = qtrue;
+            } else {
+                return CONTENTS_SOLID; // Hard detail solid takes absolute precedence
+            }
         }
     }
     
-    return qfalse;
+    if (hitTrisoup) {
+        return CONTENTS_TRISOUP;
+    }
+    
+    return 0;
 }
 
 /*
@@ -806,22 +845,28 @@ qboolean PointInSolid(vec3_t start)
     if (PointInBrush(start))
         return qtrue;
 
-    vec3_t dirs[3] = {
-        {0, 0, 1},
-        {1, 0, 0},
-        {0, 1, 0}
-    };
-    
-    int i;
-    for (i = 0; i < 3; i++)
+    int detailContents = BoxInOpaqueDetail(start, 0.0f);
+    if (detailContents == CONTENTS_TRISOUP)
     {
-        if (!PointInTrisoup(start, dirs[i]))
+        vec3_t dirs[3] = { {0, 0, 1}, {1, 0, 0}, {0, 1, 0} };
+        int i;
+        qboolean is_solid = qtrue;
+        for (i = 0; i < 3; i++)
         {
-            return qfalse;
+            if (!PointInTrisoup(start, dirs[i]))
+            {
+                is_solid = qfalse;
+                break;
+            }
+        }
+
+        if (is_solid)
+        {
+            return qtrue;
         }
     }
 
-    return qtrue;
+    return qfalse;
 }
 
 /*

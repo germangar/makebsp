@@ -288,6 +288,13 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
                                         cp->contents = atoi(json_value_as_number(pval)->number);
                                     else if (pval->type == json_type_string)
                                         cp->contents = strtol(json_value_as_string(pval)->string, NULL, 0);
+
+                                    // Compiler protection: strip CONTENTS_TRISOUP to avoid overriding compiler logic
+                                    if (cp->contents & 0x4000)
+                                    {
+                                        _printf("WARNING: Custom surfaceParm '%s' tries to set CONTENTS_TRISOUP (0x4000). Stripping it.\n", cp->name);
+                                        cp->contents &= ~0x4000;
+                                    }
                                 }
                                 pel = pel->next;
                             }

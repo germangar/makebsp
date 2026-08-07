@@ -823,13 +823,11 @@ int main(int argc, char **argv) {
     ClearCacheDirectory();
 
     end = I_FloatTime();
-    {
-        int totalSeconds = (int)(end - start);
-        int hours = totalSeconds / 3600;
-        int minutes = (totalSeconds % 3600) / 60;
-        int seconds = totalSeconds % 60;
-        _printf("Total time elapsed: %02d:%02d:%02d\n", hours, minutes, seconds);
-    }
+    int totalSeconds = (int)(end - start);
+    int hours = totalSeconds / 3600;
+    int minutes = (totalSeconds % 3600) / 60;
+    int seconds = totalSeconds % 60;
+    _printf("Total time elapsed: %02d:%02d:%02d\n", hours, minutes, seconds);
 
     ShutdownOpenCL();
     Broadcast_Shutdown();
