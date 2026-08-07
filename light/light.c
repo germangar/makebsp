@@ -90,7 +90,7 @@ int gridBounds[3];
 // surface size?
 int defaultLightSubdivide = 999; // vary by surface size?
 
-vec3_t ambientColor;
+vec3_t ambientColor = {1.0f, 1.0f, 1.0f};
 
 // Macro Ambient Occlusion (MAO) — hemisphere sky/ground ambient
 vec3_t    skyColor;
@@ -1721,8 +1721,6 @@ void LightMain(void)
     const char *color = ValueForKey(&entities[0], "color");
     if (color[0]) {
         ParseColor(color, ambientColor);
-    } else {
-        VectorSet(ambientColor, 1.0f, 1.0f, 1.0f);
     }
     
     // Always apply the 76% scale heuristic for ambient light
@@ -1730,7 +1728,6 @@ void LightMain(void)
 
     const char *ambientStr = ValueForKey(&entities[0], "ambient");
     f = ambientStr[0] ? (float)atof(ambientStr) : 0.0f;
-    VectorScale(ambientColor, f, ambientColor);
 
     // Parse hemisphere sky/ground ambient colors.
     // Fall back to ambientColor (flat) when not explicitly set.
@@ -1749,10 +1746,12 @@ void LightMain(void)
         else
         {
             VectorCopy(ambientColor, skyColor);
+            VectorScale(skyColor, f, skyColor);
         }
 
         // The ground color is always derived from the global ambient color
         VectorCopy(ambientColor, groundColor);
+        VectorScale(groundColor, f, groundColor);
 
 
 

@@ -2587,6 +2587,60 @@ void LightWorld(void)
                 }
             }
         }
+
+        if (lightgridMinLight > 0.0f)
+        {
+            _printf("Applying lightgrid min light (intensity %f)...\n", lightgridMinLight);
+
+            vec3_t minLightHue;
+            VectorCopy(ambientColor, minLightHue);
+
+            float hueLum = minLightHue[0] * 0.299f + minLightHue[1] * 0.587f + minLightHue[2] * 0.114f;
+            if (hueLum > 0.001f) {
+                VectorScale(minLightHue, 1.0f / hueLum, minLightHue);
+            } else {
+                VectorSet(minLightHue, 1.0f, 1.0f, 1.0f);
+            }
+            
+            for (i = 0; i < numGridPoints; i++) 
+            {
+                float lumAmb = gridData32[i].ambient[0][0] * 0.299f + gridData32[i].ambient[0][1] * 0.587f + gridData32[i].ambient[0][2] * 0.114f;
+                float lumDir = gridData32[i].directed[0][0] * 0.299f + gridData32[i].directed[0][1] * 0.587f + gridData32[i].directed[0][2] * 0.114f;
+                float currentIntensity = lumAmb + lumDir;
+                
+                if (currentIntensity < lightgridMinLight) 
+                {
+                    float missing = lightgridMinLight - currentIntensity;
+                    
+                    if (lumDir > 0.001f) 
+                    {
+                        // 1. Scale existing directed light to add 40% of the missing luminance
+                        float dirScale = (lumDir + missing * 0.4f) / lumDir;
+                        VectorScale(gridData32[i].directed[0], dirScale, gridData32[i].directed[0]);
+
+                        // 2. Add 70% of missing luminance to ambient
+                        gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.7f);
+                        gridData32[i].ambient[0][1] += minLightHue[1] * (missing * 0.7f);
+                        gridData32[i].ambient[0][2] += minLightHue[2] * (missing * 0.7f);
+                    }
+                    else 
+                    {
+                        // 1. Create a new directed light pointing DOWN (0, 0, -1) with 30% missing luminance
+                        vec3_t dirDown = {0.0f, 0.0f, -1.0f};
+                        NormalToLatLong(dirDown, gridData32[i].latLong);
+                        
+                        gridData32[i].directed[0][0] = minLightHue[0] * (missing * 0.3f);
+                        gridData32[i].directed[0][1] = minLightHue[1] * (missing * 0.3f);
+                        gridData32[i].directed[0][2] = minLightHue[2] * (missing * 0.3f);
+
+                        // 2. Add 75% of missing luminance to ambient
+                        gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.75f);
+                        gridData32[i].ambient[0][1] += minLightHue[1] * (missing * 0.75f);
+                        gridData32[i].ambient[0][2] += minLightHue[2] * (missing * 0.75f);
+                    }
+                }
+            }
+        }
     }
 
     _printf("--- TraceLights ---\n");
