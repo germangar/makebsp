@@ -769,6 +769,11 @@ qboolean PointInTrisoup(vec3_t origin, vec3_t normal)
         dsurface_t *ds = &drawSurfaces[rayhit.hit.geomID];
         if (ds->surfaceType == MST_TRIANGLE_SOUP)
         {
+            if (localSurfaces && localSurfaces[rayhit.hit.geomID].surfaceIsPlanar)
+            {
+                return qfalse;
+            }
+
             shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
             if (si)
             {
@@ -801,8 +806,22 @@ qboolean PointInSolid(vec3_t start)
     if (PointInBrush(start))
         return qtrue;
 
-    vec3_t up = {0, 0, 1};
-    return PointInTrisoup(start, up);
+    vec3_t dirs[3] = {
+        {0, 0, 1},
+        {1, 0, 0},
+        {0, 1, 0}
+    };
+    
+    int i;
+    for (i = 0; i < 3; i++)
+    {
+        if (!PointInTrisoup(start, dirs[i]))
+        {
+            return qfalse;
+        }
+    }
+
+    return qtrue;
 }
 
 /*
