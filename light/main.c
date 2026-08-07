@@ -273,6 +273,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         lightgridMinLight = (float)atof(val);
     }
 
+    val = ValueForKey(ent, "_gridmaxlight");
+    if (!val[0]) val = ValueForKey(ent, "gridmaxlight");
+    if (val[0] && !HasArg("-gridmaxlight", argc, argv)) {
+        lightgridMaxLight = (float)atof(val);
+    }
+
 }
 
 int main(int argc, char **argv) {
@@ -292,6 +298,7 @@ int main(int argc, char **argv) {
     game = InitGame(argc, argv);
     lightgridAmbientBias = game->lightgridAmbientBias;
     lightgridMinLight = game->lightgridMinLight;
+    lightgridMaxLight = game->lightgridMaxLight;
     
     ambient_testradius = game->ambientTestRadius;
     ambient_gatheradius = game->ambientGatherRadius;
@@ -416,6 +423,10 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-gridminlight")) {
             lightgridMinLight = atof(argv[i + 1]);
             _printf("grid minlight = %f\n", lightgridMinLight);
+            i++;
+        } else if (!strcmp(argv[i], "-gridmaxlight")) {
+            lightgridMaxLight = atof(argv[i + 1]);
+            _printf("grid maxlight = %f\n", lightgridMaxLight);
             i++;
         } else if (!strcmp(argv[i], "-border")) {
             lightmapBorder = qtrue;

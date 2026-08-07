@@ -20,6 +20,8 @@
   "lightmapsRGB": false,
   "lightgridRGB": false,
   "lightgridAmbientBias": 1.00,
+  "lightgridMinLight": 0.00,
+  "lightgridMaxLight": 0.00,
   "texturesRGB": false,
   "colorsRGB": false,
   "radiosityPasses": 4, /* Number of times the light bounces */

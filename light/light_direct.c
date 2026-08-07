@@ -2614,9 +2614,10 @@ void LightWorld(void)
                     
                     if (lumDir > 0.001f) 
                     {
-                        // 1. Scale existing directed light to add 40% of the missing luminance
-                        float dirScale = (lumDir + missing * 0.4f) / lumDir;
-                        VectorScale(gridData32[i].directed[0], dirScale, gridData32[i].directed[0]);
+                        // 1. Add 40% of the missing luminance to the existing directed light using the ambient base hue
+                        gridData32[i].directed[0][0] += minLightHue[0] * (missing * 0.4f);
+                        gridData32[i].directed[0][1] += minLightHue[1] * (missing * 0.4f);
+                        gridData32[i].directed[0][2] += minLightHue[2] * (missing * 0.4f);
 
                         // 2. Add 70% of missing luminance to ambient
                         gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.7f);
@@ -2637,6 +2638,42 @@ void LightWorld(void)
                         gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.75f);
                         gridData32[i].ambient[0][1] += minLightHue[1] * (missing * 0.75f);
                         gridData32[i].ambient[0][2] += minLightHue[2] * (missing * 0.75f);
+                    }
+                }
+            }
+        }
+
+        if (lightgridMaxLight > 0.0f)
+        {
+            _printf("Applying lightgrid max light (intensity %f)...\n", lightgridMaxLight);
+            
+            for (i = 0; i < numGridPoints; i++) 
+            {
+                float lumAmb = gridData32[i].ambient[0][0] * 0.299f + gridData32[i].ambient[0][1] * 0.587f + gridData32[i].ambient[0][2] * 0.114f;
+                float lumDir = gridData32[i].directed[0][0] * 0.299f + gridData32[i].directed[0][1] * 0.587f + gridData32[i].directed[0][2] * 0.114f;
+                float currentIntensity = lumAmb + lumDir;
+                
+                if (currentIntensity > lightgridMaxLight)
+                {
+                    float excess = currentIntensity - lightgridMaxLight;
+                    
+                    if (lumDir >= excess) 
+                    {
+                        // Directional light can absorb the whole excess
+                        float dirScale = (lumDir - excess) / lumDir;
+                        VectorScale(gridData32[i].directed[0], dirScale, gridData32[i].directed[0]);
+                    }
+                    else 
+                    {
+                        // Directional light is wiped out; ambient takes the rest
+                        VectorSet(gridData32[i].directed[0], 0.0f, 0.0f, 0.0f);
+                        float remainingExcess = excess - lumDir;
+                        
+                        if (lumAmb > 0.001f) {
+                            float ambScale = (lumAmb - remainingExcess) / lumAmb;
+                            if (ambScale < 0.0f) ambScale = 0.0f; // clamp to 0
+                            VectorScale(gridData32[i].ambient[0], ambScale, gridData32[i].ambient[0]);
+                        }
                     }
                 }
             }
