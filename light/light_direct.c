@@ -2529,7 +2529,7 @@ void TraceGrid(int num)
             }
         }
         
-        NormalToLatLong(summedDir, gridData32[num].latLong);
+        VectorCopy(summedDir, gridData32[num].dir);
     }
     free(tw);
 }
@@ -2628,7 +2628,7 @@ void LightWorld(void)
                     {
                         // 1. Create a new directed light pointing DOWN (0, 0, -1) with 30% missing luminance
                         vec3_t dirDown = {0.0f, 0.0f, -1.0f};
-                        NormalToLatLong(dirDown, gridData32[i].latLong);
+                        VectorCopy(dirDown, gridData32[i].dir);
                         
                         gridData32[i].directed[0][0] = minLightHue[0] * (missing * 0.3f);
                         gridData32[i].directed[0][1] = minLightHue[1] * (missing * 0.3f);

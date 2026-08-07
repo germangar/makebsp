@@ -664,8 +664,7 @@ static void DownConvertGrid(float scale, qboolean lightmapRange)
                 InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], game->lightgridRGB);
             }
         }
-        gridData[i].latLong[0] = gridData32[i].latLong[0];
-        gridData[i].latLong[1] = gridData32[i].latLong[1];
+        NormalToLatLong(gridData32[i].dir, gridData[i].latLong);
         for (j = 0; j < 4; j++)
         {
             gridData[i].styles[j] = gridData32[i].styles[j];

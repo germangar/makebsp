@@ -22,10 +22,10 @@ typedef struct {
 
 // High-precision grid point for internal lighting
 typedef struct {
-	float		ambient[4][3];
-	float		directed[4][3];
-	byte		styles[4];
-	byte		latLong[2];
+    vec3_t      ambient[4];
+    vec3_t      directed[4];
+    vec3_t      dir;
+    byte        styles[4];
 } bspGridPoint32_t;
 
 // High-precision mesh for internal lighting
