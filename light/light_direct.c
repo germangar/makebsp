@@ -2337,6 +2337,8 @@ void TraceLights(int num)
 
 
 
+float lightgridMaxDisplayIntensity = 0.0f;
+
 void TraceGrid(int num)
 {
     int x, y, z;
@@ -2471,13 +2473,35 @@ void TraceGrid(int num)
         float d;
         vec3_t tempColor;
         VectorScale(contributions[i].irradiance, contributions[i].angle, tempColor);
+        
+        if (lightgridDirectBias != 1.0f)
+        {
+            float length = VectorLength(tempColor);
+            if (length > 0.001f && length < lightgridMaxDisplayIntensity)
+            {
+                float new_length = pow(length / lightgridMaxDisplayIntensity, 1.0f / lightgridDirectBias) * lightgridMaxDisplayIntensity;
+                float scale = new_length / length;
+                VectorScale(tempColor, scale, tempColor);
+            }
+        }
+        
         d = CalculateShadingModel(DotProduct(contributions[i].dir, summedDir));
         VectorMA(directedColor, d, tempColor, directedColor);
-        d = 0.25 * (1.0 - d);
-        VectorMA(color, d, tempColor, color);
+        
+        vec3_t ambContrib;
+        VectorScale(tempColor, 0.25f, ambContrib);
+        
+        float clampLuma = lightgridMaxDisplayIntensity * 0.10f;
+        float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
+        
+        if (luma > clampLuma)
+        {
+            float scale = clampLuma / luma;
+            VectorScale(ambContrib, scale, ambContrib);
+        }
+        
+        VectorAdd(color, ambContrib, color);
     }
-
-    VectorMA(color, 0.25, directedColor, color);
 
     if (gridData32)
     {
@@ -2534,6 +2558,69 @@ void TraceGrid(int num)
     free(tw);
 }
 
+static void GatherGridNeighbors(int x, int y, int z, vec3_t origin, vec3_t outAmb, vec3_t outDir, vec3_t outDirVec)
+{
+    int nx, ny, nz;
+    int ni;
+    int count = 0;
+    trace_t trace;
+    traceWork_t tw;
+    
+    memset(&tw, 0, sizeof(tw));
+    tw.ignoreSurface = -1;
+    tw.forceFrontOnly = qfalse;
+
+    outAmb[0] = outAmb[1] = outAmb[2] = 0;
+    outDir[0] = outDir[1] = outDir[2] = 0;
+    VectorClear(outDirVec);
+
+    for (nz = z - 1; nz <= z + 1; nz++)
+    {
+        if (nz < 0 || nz >= gridBounds[2]) continue;
+        for (ny = y - 1; ny <= y + 1; ny++)
+        {
+            if (ny < 0 || ny >= gridBounds[1]) continue;
+            for (nx = x - 1; nx <= x + 1; nx++)
+            {
+                if (nx < 0 || nx >= gridBounds[0]) continue;
+                
+                ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
+                
+                if (nx != x || ny != y || nz != z)
+                {
+                    vec3_t n_origin;
+                    n_origin[0] = gridMins[0] + nx * gridSize[0];
+                    n_origin[1] = gridMins[1] + ny * gridSize[1];
+                    n_origin[2] = gridMins[2] + nz * gridSize[2];
+                    
+                    TraceLine(origin, n_origin, &trace, qtrue, &tw);
+                    if (trace.hitFraction < 0.999f)
+                        continue; // blocked by solid
+                }
+
+                outAmb[0] += gridData32[ni].ambient[0][0];
+                outAmb[1] += gridData32[ni].ambient[0][1];
+                outAmb[2] += gridData32[ni].ambient[0][2];
+                outDir[0] += gridData32[ni].directed[0][0];
+                outDir[1] += gridData32[ni].directed[0][1];
+                outDir[2] += gridData32[ni].directed[0][2];
+                outDirVec[0] += gridData32[ni].dir[0];
+                outDirVec[1] += gridData32[ni].dir[1];
+                outDirVec[2] += gridData32[ni].dir[2];
+                count++;
+            }
+        }
+    }
+
+    if (count > 0)
+    {
+        float inv = 1.0f / count;
+        outAmb[0] *= inv; outAmb[1] *= inv; outAmb[2] *= inv;
+        outDir[0] *= inv; outDir[1] *= inv; outDir[2] *= inv;
+        VectorNormalize(outDirVec, outDirVec);
+    }
+}
+
 
 
 void LightWorld(void)
@@ -2556,6 +2643,13 @@ void LightWorld(void)
         }
 
         _printf("--- TraceGrid ---\n");
+        
+        {
+            const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
+            float customIntensity = existingIntensity[0] ? atof(existingIntensity) : 0.0f;
+            lightgridMaxDisplayIntensity = 255.0f * (customIntensity > 1.0f ? customIntensity : game->hdr8BitScale);
+        }
+
         start = I_FloatTime();
         RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);
         end = I_FloatTime();
@@ -2577,29 +2671,21 @@ void LightWorld(void)
                     float scale = new_length / length;
                     VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
                 }
-                
-                float dir_length = VectorLength(gridData32[i].directed[0]);
-                if (dir_length > 0.001f && dir_length < maxIntensity)
-                {
-                    float new_dir_length = pow(dir_length / maxIntensity, 1.0f / lightgridAmbientBias) * maxIntensity;
-                    float dir_scale = new_dir_length / dir_length;
-                    VectorScale(gridData32[i].directed[0], dir_scale, gridData32[i].directed[0]);
-                }
             }
         }
 
         if (lightgridMinLight > 0.0f)
         {
-            _printf("Applying lightgrid min light (intensity %f)...\n", lightgridMinLight);
+            float targetMinLight = (lightgridMinLight / 100.0f) * lightgridMaxDisplayIntensity;
+            _printf("Applying lightgrid min light (target %f)...\n", targetMinLight);
 
-            vec3_t minLightHue;
-            VectorCopy(ambientColor, minLightHue);
-
-            float hueLum = minLightHue[0] * 0.299f + minLightHue[1] * 0.587f + minLightHue[2] * 0.114f;
-            if (hueLum > 0.001f) {
-                VectorScale(minLightHue, 1.0f / hueLum, minLightHue);
+            vec3_t local_ambient_hue;
+            VectorCopy(ambientColor, local_ambient_hue);
+            float localHueLum = local_ambient_hue[0] * 0.299f + local_ambient_hue[1] * 0.587f + local_ambient_hue[2] * 0.114f;
+            if (localHueLum > 0.001f) {
+                VectorScale(local_ambient_hue, 1.0f / localHueLum, local_ambient_hue);
             } else {
-                VectorSet(minLightHue, 1.0f, 1.0f, 1.0f);
+                VectorSet(local_ambient_hue, 1.0f, 1.0f, 1.0f);
             }
             
             for (i = 0; i < numGridPoints; i++) 
@@ -2608,73 +2694,90 @@ void LightWorld(void)
                 float lumDir = gridData32[i].directed[0][0] * 0.299f + gridData32[i].directed[0][1] * 0.587f + gridData32[i].directed[0][2] * 0.114f;
                 float currentIntensity = lumAmb + lumDir;
                 
-                if (currentIntensity < lightgridMinLight) 
+                if (currentIntensity < targetMinLight) 
                 {
-                    float missing = lightgridMinLight - currentIntensity;
+                    float missing = targetMinLight - currentIntensity;
                     
-                    if (lumDir > 0.001f) 
-                    {
-                        // 1. Add 40% of the missing luminance to the existing directed light using the ambient base hue
-                        gridData32[i].directed[0][0] += minLightHue[0] * (missing * 0.4f);
-                        gridData32[i].directed[0][1] += minLightHue[1] * (missing * 0.4f);
-                        gridData32[i].directed[0][2] += minLightHue[2] * (missing * 0.4f);
+                    int z = i / (gridBounds[0] * gridBounds[1]);
+                    int mod = i - z * (gridBounds[0] * gridBounds[1]);
+                    int y = mod / gridBounds[0];
+                    int x = mod - y * gridBounds[0];
 
-                        // 2. Add 70% of missing luminance to ambient
-                        gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.7f);
-                        gridData32[i].ambient[0][1] += minLightHue[1] * (missing * 0.7f);
-                        gridData32[i].ambient[0][2] += minLightHue[2] * (missing * 0.7f);
-                    }
-                    else 
-                    {
-                        // 1. Create a new directed light pointing DOWN (0, 0, -1) with 30% missing luminance
-                        vec3_t dirDown = {0.0f, 0.0f, -1.0f};
-                        VectorCopy(dirDown, gridData32[i].dir);
-                        
-                        gridData32[i].directed[0][0] = minLightHue[0] * (missing * 0.3f);
-                        gridData32[i].directed[0][1] = minLightHue[1] * (missing * 0.3f);
-                        gridData32[i].directed[0][2] = minLightHue[2] * (missing * 0.3f);
+                    vec3_t origin;
+                    origin[0] = gridMins[0] + x * gridSize[0];
+                    origin[1] = gridMins[1] + y * gridSize[1];
+                    origin[2] = gridMins[2] + z * gridSize[2];
 
-                        // 2. Add 75% of missing luminance to ambient
-                        gridData32[i].ambient[0][0] += minLightHue[0] * (missing * 0.75f);
-                        gridData32[i].ambient[0][1] += minLightHue[1] * (missing * 0.75f);
-                        gridData32[i].ambient[0][2] += minLightHue[2] * (missing * 0.75f);
+                    vec3_t avgAmb, avgDir, avgDirVec;
+                    GatherGridNeighbors(x, y, z, origin, avgAmb, avgDir, avgDirVec);
+
+                    float n_lumAmb = avgAmb[0] * 0.299f + avgAmb[1] * 0.587f + avgAmb[2] * 0.114f;
+                    float n_lumDir = avgDir[0] * 0.299f + avgDir[1] * 0.587f + avgDir[2] * 0.114f;
+                    float L_total = n_lumDir + n_lumAmb;
+
+                    float R_dir = (L_total > 0.001f) ? (n_lumDir / L_total) : 0.0f;
+                    float R_amb = (L_total > 0.001f) ? (n_lumAmb / L_total) : 1.0f;
+
+                    vec3_t neighbor_dir_hue;
+                    VectorCopy(avgDir, neighbor_dir_hue);
+                    if (n_lumDir > 0.001f) {
+                        VectorScale(neighbor_dir_hue, 1.0f / n_lumDir, neighbor_dir_hue);
+                    } else {
+                        VectorCopy(local_ambient_hue, neighbor_dir_hue);
                     }
+
+                    float final_ambient_amount = missing * R_amb;
+                    float real_directed_amount = missing * R_dir;
+                    float mao_directed_amount  = 0.0f;
+
+                    gridData32[i].ambient[0][0] += local_ambient_hue[0] * final_ambient_amount;
+                    gridData32[i].ambient[0][1] += local_ambient_hue[1] * final_ambient_amount;
+                    gridData32[i].ambient[0][2] += local_ambient_hue[2] * final_ambient_amount;
+
+                    vec3_t combined_dir_color;
+                    combined_dir_color[0] = (neighbor_dir_hue[0] * real_directed_amount) + (local_ambient_hue[0] * mao_directed_amount);
+                    combined_dir_color[1] = (neighbor_dir_hue[1] * real_directed_amount) + (local_ambient_hue[1] * mao_directed_amount);
+                    combined_dir_color[2] = (neighbor_dir_hue[2] * real_directed_amount) + (local_ambient_hue[2] * mao_directed_amount);
+
+                    gridData32[i].directed[0][0] += combined_dir_color[0];
+                    gridData32[i].directed[0][1] += combined_dir_color[1];
+                    gridData32[i].directed[0][2] += combined_dir_color[2];
+
+                    vec3_t m_dir;
+                    if (maoDir) {
+                        m_dir[0] = maoDir[i * 3 + 0];
+                        m_dir[1] = maoDir[i * 3 + 1];
+                        m_dir[2] = maoDir[i * 3 + 2];
+                        if (VectorLength(m_dir) < 0.001f) VectorSet(m_dir, 0.0f, 0.0f, -1.0f);
+                    } else {
+                        VectorSet(m_dir, 0.0f, 0.0f, -1.0f);
+                    }
+
+                    vec3_t combined_dir;
+                    VectorScale(avgDirVec, real_directed_amount, combined_dir);
+                    VectorMA(combined_dir, mao_directed_amount, m_dir, combined_dir);
+                    if (VectorNormalize(combined_dir, combined_dir) == 0.0f) {
+                        VectorCopy(m_dir, combined_dir);
+                    }
+
+                    VectorCopy(combined_dir, gridData32[i].dir);
                 }
             }
         }
 
-        if (lightgridMaxLight > 0.0f)
+        if (lightgridMaxAmbient > 0.0f)
         {
-            _printf("Applying lightgrid max light (intensity %f)...\n", lightgridMaxLight);
+            float maxAmbientAllowed = (lightgridMaxAmbient / 100.0f) * lightgridMaxDisplayIntensity;
+            _printf("Applying lightgrid max ambient (max allowed %f)...\n", maxAmbientAllowed);
             
             for (i = 0; i < numGridPoints; i++) 
             {
                 float lumAmb = gridData32[i].ambient[0][0] * 0.299f + gridData32[i].ambient[0][1] * 0.587f + gridData32[i].ambient[0][2] * 0.114f;
-                float lumDir = gridData32[i].directed[0][0] * 0.299f + gridData32[i].directed[0][1] * 0.587f + gridData32[i].directed[0][2] * 0.114f;
-                float currentIntensity = lumAmb + lumDir;
                 
-                if (currentIntensity > lightgridMaxLight)
+                if (lumAmb > maxAmbientAllowed)
                 {
-                    float excess = currentIntensity - lightgridMaxLight;
-                    
-                    if (lumDir >= excess) 
-                    {
-                        // Directional light can absorb the whole excess
-                        float dirScale = (lumDir - excess) / lumDir;
-                        VectorScale(gridData32[i].directed[0], dirScale, gridData32[i].directed[0]);
-                    }
-                    else 
-                    {
-                        // Directional light is wiped out; ambient takes the rest
-                        VectorSet(gridData32[i].directed[0], 0.0f, 0.0f, 0.0f);
-                        float remainingExcess = excess - lumDir;
-                        
-                        if (lumAmb > 0.001f) {
-                            float ambScale = (lumAmb - remainingExcess) / lumAmb;
-                            if (ambScale < 0.0f) ambScale = 0.0f; // clamp to 0
-                            VectorScale(gridData32[i].ambient[0], ambScale, gridData32[i].ambient[0]);
-                        }
-                    }
+                    float scale = maxAmbientAllowed / lumAmb;
+                    VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
                 }
             }
         }

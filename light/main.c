@@ -261,22 +261,24 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (ambient_gatheradius < 32.0f) ambient_gatheradius = 32.0f;
     }
 
-    val = ValueForKey(ent, "_gridambientbias");
-    if (!val[0]) val = ValueForKey(ent, "gridambientbias");
-    if (val[0] && !HasArg("-gridambientbias", argc, argv)) {
+    val = ValueForKey(ent, "grid_ambientbias");
+    if (val[0] && !HasArg("-grid_ambientbias", argc, argv)) {
         lightgridAmbientBias = (float)atof(val);
     }
+    
+    val = ValueForKey(ent, "grid_directbias");
+    if (val[0] && !HasArg("-grid_directbias", argc, argv)) {
+        lightgridDirectBias = (float)atof(val);
+    }
 
-    val = ValueForKey(ent, "_gridminlight");
-    if (!val[0]) val = ValueForKey(ent, "gridminlight");
-    if (val[0] && !HasArg("-gridminlight", argc, argv)) {
+    val = ValueForKey(ent, "grid_minlight");
+    if (val[0] && !HasArg("-grid_minlight", argc, argv)) {
         lightgridMinLight = (float)atof(val);
     }
 
-    val = ValueForKey(ent, "_gridmaxlight");
-    if (!val[0]) val = ValueForKey(ent, "gridmaxlight");
-    if (val[0] && !HasArg("-gridmaxlight", argc, argv)) {
-        lightgridMaxLight = (float)atof(val);
+    val = ValueForKey(ent, "grid_maxambient");
+    if (val[0] && !HasArg("-grid_maxambient", argc, argv)) {
+        lightgridMaxAmbient = (float)atof(val);
     }
 
 }
@@ -297,8 +299,9 @@ int main(int argc, char **argv) {
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
     lightgridAmbientBias = game->lightgridAmbientBias;
+    lightgridDirectBias = game->lightgridDirectBias;
     lightgridMinLight = game->lightgridMinLight;
-    lightgridMaxLight = game->lightgridMaxLight;
+    lightgridMaxAmbient = game->lightgridMaxAmbient;
     
     ambient_testradius = game->ambientTestRadius;
     ambient_gatheradius = game->ambientGatherRadius;
@@ -416,17 +419,21 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-nogrid")) {
             nogridlighting = qtrue;
             _printf("no grid lighting = true\n");
-        } else if (!strcmp(argv[i], "-gridambientbias")) {
+        } else if (!strcmp(argv[i], "-grid_ambientbias")) {
             lightgridAmbientBias = atof(argv[i + 1]);
-            _printf("grid ambient bias = %f\n", lightgridAmbientBias);
+            _printf("grid_ambientbias = %f\n", lightgridAmbientBias);
             i++;
-        } else if (!strcmp(argv[i], "-gridminlight")) {
+        } else if (!strcmp(argv[i], "-grid_directbias")) {
+            lightgridDirectBias = atof(argv[i + 1]);
+            _printf("grid_directbias = %f\n", lightgridDirectBias);
+            i++;
+        } else if (!strcmp(argv[i], "-grid_minlight")) {
             lightgridMinLight = atof(argv[i + 1]);
-            _printf("grid minlight = %f\n", lightgridMinLight);
+            _printf("grid_minlight = %f\n", lightgridMinLight);
             i++;
-        } else if (!strcmp(argv[i], "-gridmaxlight")) {
-            lightgridMaxLight = atof(argv[i + 1]);
-            _printf("grid maxlight = %f\n", lightgridMaxLight);
+        } else if (!strcmp(argv[i], "-grid_maxambient")) {
+            lightgridMaxAmbient = atof(argv[i + 1]);
+            _printf("grid_maxambient = %f\n", lightgridMaxAmbient);
             i++;
         } else if (!strcmp(argv[i], "-border")) {
             lightmapBorder = qtrue;

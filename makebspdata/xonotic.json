@@ -19,7 +19,8 @@
   "hdr8BitScale": 1.00,
   "lightmapsRGB": true,
   "lightgridRGB": false,
-  "lightgridAmbientBias": 2.2,
+  "lightgridAmbientBias": 2.20,
+  "lightgridDirectBias": 2.20,
   "texturesRGB": true,
   "colorsRGB": true,
   "radiosityPasses": 4, /* Number of times the light bounces */

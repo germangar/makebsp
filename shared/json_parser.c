@@ -400,13 +400,17 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lightgridAmbientBias = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "lightgridDirectBias") && val->type == json_type_number)
+        {
+            game->lightgridDirectBias = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "lightgridMinLight") && val->type == json_type_number)
         {
             game->lightgridMinLight = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "lightgridMaxLight") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lightgridMaxAmbient") && val->type == json_type_number)
         {
-            game->lightgridMaxLight = (float)atof(json_value_as_number(val)->number);
+            game->lightgridMaxAmbient = (float)atof(json_value_as_number(val)->number);
         }
         else if (!Q_stricmp(key, "texturesRGB"))
         {
@@ -766,8 +770,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"lightmapsRGB\": %s,\n"
             "  \"lightgridRGB\": %s,\n"
             "  \"lightgridAmbientBias\": %.2f,\n"
+            "  \"lightgridDirectBias\": %.2f,\n"
             "  \"lightgridMinLight\": %.2f,\n"
-            "  \"lightgridMaxLight\": %.2f,\n"
+            "  \"lightgridMaxAmbient\": %.2f,\n"
             "  \"texturesRGB\": %s,\n"
             "  \"colorsRGB\": %s,\n"
             "  \"radiosityPasses\": %d, /* Number of times the light bounces */\n"
@@ -812,8 +817,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lightmapsRGB ? "true" : "false",
             game->lightgridRGB ? "true" : "false",
             game->lightgridAmbientBias,
+            game->lightgridDirectBias,
             game->lightgridMinLight,
-            game->lightgridMaxLight,
+            game->lightgridMaxAmbient,
             game->texturesRGB ? "true" : "false",
             game->colorsRGB ? "true" : "false",
             game->radiosityPasses,
