@@ -21,7 +21,9 @@
   "lightgridRGB": false,
   "lightgridAmbientBias": 2.20,
   "lightgridDirectBias": 2.20,
-  "lightgridMinLight": 6.53,
+  "lightgridSmoothAmbient": 128.00, /* Radius in world units for smoothing the ambient component of the light grid */
+  "lightgridSmoothAmbientPasses": 4,
+  "lightgridMinAmbient": 0.00,
   "lightgridMaxAmbient": 0.00,
   "texturesRGB": true,
   "colorsRGB": true,

@@ -15,7 +15,9 @@ float shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 float lightgridAmbientBias = 1.0f;
 float lightgridDirectBias = 1.0f;
-float lightgridMinLight = 0.0f;
+float lightgridSmoothAmbient = 0.0f;
+int lightgridSmoothAmbientPasses = 1;
+float lightgridMinAmbient = 0.0f;
 float lightgridMaxAmbient = 0.0f;
 
 vec3_t blockSize = {1024, 1024, 1024};
@@ -69,7 +71,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		2.2f,       // lightgridAmbientBias
 		2.2f,       // lightgridDirectBias
-		0.0f,       // lightgridMinLight
+		128.0f,     // lightgridSmoothAmbient
+		4,          // lightgridSmoothAmbientPasses
+		0.0f,       // lightgridMinAmbient
 		0.0f,       // lightgridMaxAmbient
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
@@ -145,7 +149,9 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // lightgridRGB
 		2.2f,       // lightgridAmbientBias
 		2.2f,       // lightgridDirectBias
-		0.0f,       // lightgridMinLight
+		128.0f,     // lightgridSmoothAmbient
+		1,          // lightgridSmoothAmbientPasses
+		0.0f,       // lightgridMinAmbient
 		0.0f,       // lightgridMaxAmbient
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB

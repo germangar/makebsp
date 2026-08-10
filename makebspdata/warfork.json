@@ -3,7 +3,6 @@
   "template": "qfusion", /* qfusion is not really needed here because it's the default values but I type it to serve as example of template usage */
   "gameDir": "basewf",
   "lightmapSize": 1024,
-  "lightgridMinLight": 13.07,
   "ambientTestRadius": 400.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 1000.00, /* Distance at which a lightmap pixel gathers light from probes */
   "shading": "halflambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */

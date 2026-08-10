@@ -53,7 +53,13 @@ typedef enum {
 
 
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
-typedef enum { SATRAMP_OFF, SATRAMP_FILMIC, SATRAMP_POWER, SATRAMP_HALF_POWER, SATRAMP_MIDTONE } satRamp_t;
+typedef enum {
+	SATRAMP_OFF = 0,
+	SATRAMP_FILMIC,
+	SATRAMP_POWER,
+	SATRAMP_HALF_POWER,
+	SATRAMP_MIDTONE
+} satRamp_t;
 
 extern char source[1024];
 extern char name[1024];
@@ -110,7 +116,9 @@ typedef struct {
 	qboolean	lightgridRGB;
 	float       lightgridAmbientBias;
 	float       lightgridDirectBias;
-	float       lightgridMinLight;
+	float       lightgridSmoothAmbient;
+	int         lightgridSmoothAmbientPasses;
+	float       lightgridMinAmbient;
 	float       lightgridMaxAmbient;
 	qboolean	texturesRGB;
 	qboolean	colorsRGB;
@@ -152,7 +160,9 @@ extern float shadingModelSoftBias;
 extern float sunSoftBias;
 extern float lightgridAmbientBias;
 extern float lightgridDirectBias;
-extern float lightgridMinLight;
+extern float lightgridSmoothAmbient;
+extern int lightgridSmoothAmbientPasses;
+extern float lightgridMinAmbient;
 extern float lightgridMaxAmbient;
 extern vec3_t blockSize;
 extern qboolean g_lowmem;

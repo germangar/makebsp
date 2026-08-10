@@ -1115,6 +1115,196 @@ static inline void ApplySaturationToVector(float *rgb, float sat, satRamp_t ramp
     }
 }
 
+
+/* ===== Lightgrid Post-Processing ======================================== */
+
+static void ApplyGridAmbientBias(void) {
+    if (lightgridAmbientBias == 1.0f) return;
+    float maxIntensity = 255.0f * game->hdr8BitScale;
+    _printf("  Applying lightgrid ambient bias (gamma %f, maxIntensity %f)...\n", lightgridAmbientBias, maxIntensity);
+    
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        float length = VectorLength(gridData32[i].ambient[0]);
+        if (length > 0.001f && length < maxIntensity) {
+            float new_length = pow(length / maxIntensity, 1.0f / lightgridAmbientBias) * maxIntensity;
+            float scale = new_length / length;
+            VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
+        }
+    }
+}
+
+static void SmoothGridAmbient(void) {
+    if (lightgridSmoothAmbient <= 0.0f || lightgridSmoothAmbientPasses <= 0) return;
+    
+    float effectiveRadius = lightgridSmoothAmbient;
+    float maxDim = max(gridSize[0], gridSize[1]);
+    if (effectiveRadius < maxDim) effectiveRadius = maxDim;
+    
+    _printf("  Smoothing lightgrid ambient (radius %f, passes %d)...\n", effectiveRadius, lightgridSmoothAmbientPasses);
+    
+    vec3_t *smoothed = Q_Alloc(numGridPoints * sizeof(vec3_t));
+    
+    int rx = (int)ceil(effectiveRadius / gridSize[0]);
+    int ry = (int)ceil(effectiveRadius / gridSize[1]);
+    int rz = (int)ceil(effectiveRadius / gridSize[2]);
+    if (lightgridSmoothAmbient < gridSize[2]) rz = 0; // horizontal only
+    
+    for (int p = 0; p < lightgridSmoothAmbientPasses; p++) {
+        #pragma omp parallel for schedule(dynamic, 1)
+        for (int i = 0; i < numGridPoints; i++) {
+            int z = i / (gridBounds[0] * gridBounds[1]);
+            int mod = i - z * (gridBounds[0] * gridBounds[1]);
+            int y = mod / gridBounds[0];
+            int x = mod - y * gridBounds[0];
+            
+            vec3_t origin;
+            origin[0] = gridMins[0] + x * gridSize[0];
+            origin[1] = gridMins[1] + y * gridSize[1];
+            origin[2] = gridMins[2] + z * gridSize[2];
+            
+            if (PointInSolid(origin)) {
+                // skip solid
+                VectorCopy(gridData32[i].ambient[0], smoothed[i]);
+                continue;
+            }
+            
+            traceWork_t tw;
+            memset(&tw, 0, sizeof(tw));
+            tw.ignoreSurface = -1;
+            tw.forceFrontOnly = qfalse;
+            
+            vec3_t accumAmb = {0,0,0};
+            float totalWeight = 0.0f;
+            
+            for (int dz = -rz; dz <= rz; dz++) {
+                int nz = z + dz;
+                if (nz < 0 || nz >= gridBounds[2]) continue;
+                for (int dy = -ry; dy <= ry; dy++) {
+                    int ny = y + dy;
+                    if (ny < 0 || ny >= gridBounds[1]) continue;
+                    for (int dx = -rx; dx <= rx; dx++) {
+                        int nx = x + dx;
+                        if (nx < 0 || nx >= gridBounds[0]) continue;
+                        
+                        int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
+                        
+                        vec3_t n_origin;
+                        n_origin[0] = gridMins[0] + nx * gridSize[0];
+                        n_origin[1] = gridMins[1] + ny * gridSize[1];
+                        n_origin[2] = gridMins[2] + nz * gridSize[2];
+                        
+                        vec3_t diff;
+                        VectorSubtract(origin, n_origin, diff);
+                        float dist = VectorLength(diff);
+                        if (dist > effectiveRadius) continue;
+                        
+                        if (PointInSolid(n_origin)) continue;
+                        
+                        qboolean visible = qfalse;
+                        if (i == ni) {
+                            visible = qtrue;
+                        } else {
+                            // 5 traces to center + 4 faces
+                            vec3_t offsets[5] = {
+                                {0, 0, 0},
+                                {gridSize[0] * 0.45f, 0, 0},
+                                {-gridSize[0] * 0.45f, 0, 0},
+                                {0, gridSize[1] * 0.45f, 0},
+                                {0, -gridSize[1] * 0.45f, 0}
+                            };
+                            for (int t = 0; t < 5; t++) {
+                                vec3_t target;
+                                VectorAdd(n_origin, offsets[t], target);
+                                trace_t trace;
+                                TraceLine(origin, target, &trace, qfalse, &tw);
+                                if (trace.hitFraction > 0.999f) {
+                                    visible = qtrue;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (visible) {
+                            float w = 1.0f - (dist / effectiveRadius);
+                            if (w < 0.0f) w = 0.0f;
+                            VectorMA(accumAmb, w, gridData32[ni].ambient[0], accumAmb);
+                            totalWeight += w;
+                        }
+                    }
+                }
+            }
+            
+            if (totalWeight > 0.001f) {
+                VectorScale(accumAmb, 1.0f / totalWeight, smoothed[i]);
+            } else {
+                VectorCopy(gridData32[i].ambient[0], smoothed[i]);
+            }
+        }
+        
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < numGridPoints; i++) {
+            VectorCopy(smoothed[i], gridData32[i].ambient[0]);
+        }
+    }
+    
+    Q_Free(smoothed);
+}
+
+static void ApplyGridMinAmbient(void) {
+    if (lightgridMinAmbient <= 0.0f) return;
+    float targetMinAmbient = (lightgridMinAmbient / 100.0f) * lightgridMaxDisplayIntensity;
+    _printf("  Applying lightgrid min ambient (target %f)...\n", targetMinAmbient);
+
+    vec3_t local_ambient_hue;
+    VectorCopy(ambientColor, local_ambient_hue);
+    float localHueLum = local_ambient_hue[0] * 0.299f + local_ambient_hue[1] * 0.587f + local_ambient_hue[2] * 0.114f;
+    if (localHueLum > 0.001f) {
+        VectorScale(local_ambient_hue, 1.0f / localHueLum, local_ambient_hue);
+    } else {
+        VectorSet(local_ambient_hue, 1.0f, 1.0f, 1.0f);
+    }
+    
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        float lumAmb = gridData32[i].ambient[0][0] * 0.299f + gridData32[i].ambient[0][1] * 0.587f + gridData32[i].ambient[0][2] * 0.114f;
+        if (lumAmb < targetMinAmbient) {
+            float missing = targetMinAmbient - lumAmb;
+            vec3_t grid_hue;
+            if (lumAmb > 0.001f) {
+                VectorScale(gridData32[i].ambient[0], 1.0f / lumAmb, grid_hue);
+            } else {
+                VectorCopy(local_ambient_hue, grid_hue);
+            }
+            vec3_t mix_hue;
+            mix_hue[0] = 0.50f * grid_hue[0] + 0.25f * local_ambient_hue[0] + 0.25f * 1.0f;
+            mix_hue[1] = 0.50f * grid_hue[1] + 0.25f * local_ambient_hue[1] + 0.25f * 1.0f;
+            mix_hue[2] = 0.50f * grid_hue[2] + 0.25f * local_ambient_hue[2] + 0.25f * 1.0f;
+            
+            gridData32[i].ambient[0][0] += mix_hue[0] * missing;
+            gridData32[i].ambient[0][1] += mix_hue[1] * missing;
+            gridData32[i].ambient[0][2] += mix_hue[2] * missing;
+        }
+    }
+}
+
+static void ApplyGridMaxAmbient(void) {
+    if (lightgridMaxAmbient <= 0.0f) return;
+    float maxAmbientAllowed = (lightgridMaxAmbient / 100.0f) * lightgridMaxDisplayIntensity;
+    _printf("  Applying lightgrid max ambient (max allowed %f)...\n", maxAmbientAllowed);
+    
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        float lumAmb = gridData32[i].ambient[0][0] * 0.299f + gridData32[i].ambient[0][1] * 0.587f + gridData32[i].ambient[0][2] * 0.114f;
+        if (lumAmb > maxAmbientAllowed) {
+            float scale = maxAmbientAllowed / lumAmb;
+            VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
+        }
+    }
+}
+
+/* ======================================================================== */
+
 void PostProcessLightmaps(void) {
     ScanLightmapIntensity();
     lightmapAA=game->antialiasingPasses; lightmapSmoothRadius=game->defaultSmoothRadius; lightmapSmoothPasses=game->defaultSmoothPasses;
@@ -1186,6 +1376,14 @@ void PostProcessLightmaps(void) {
             }
         }
         Q_Free(tF); _printf("Done\n");
+    }
+
+
+    if (gridData32) {
+        ApplyGridAmbientBias();
+        SmoothGridAmbient();
+        ApplyGridMinAmbient();
+        ApplyGridMaxAmbient();
     }
 
     if (game->saturation != 1.0f) {

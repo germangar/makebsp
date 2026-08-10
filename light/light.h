@@ -481,6 +481,7 @@ extern qboolean patchshadows;
 
 int CompareSurfaces(const void *a, const void *b);
 extern long long numTotalLuxels;
+extern float lightgridMaxDisplayIntensity;
 void LightWorld(void);
 void RunMAOPass(void);
 void LightAmbient(void);

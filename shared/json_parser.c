@@ -400,13 +400,21 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lightgridAmbientBias = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "lightgridSmoothAmbient") && val->type == json_type_number)
+        {
+            game->lightgridSmoothAmbient = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridSmoothAmbientPasses") && val->type == json_type_number)
+        {
+            game->lightgridSmoothAmbientPasses = atoi(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "lightgridDirectBias") && val->type == json_type_number)
         {
             game->lightgridDirectBias = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "lightgridMinLight") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lightgridMinAmbient") && val->type == json_type_number)
         {
-            game->lightgridMinLight = (float)atof(json_value_as_number(val)->number);
+            game->lightgridMinAmbient = (float)atof(json_value_as_number(val)->number);
         }
         else if (!Q_stricmp(key, "lightgridMaxAmbient") && val->type == json_type_number)
         {
@@ -771,7 +779,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"lightgridRGB\": %s,\n"
             "  \"lightgridAmbientBias\": %.2f,\n"
             "  \"lightgridDirectBias\": %.2f,\n"
-            "  \"lightgridMinLight\": %.2f,\n"
+            "  \"lightgridSmoothAmbient\": %.2f, /* Radius in world units for smoothing the ambient component of the light grid */\n"
+            "  \"lightgridSmoothAmbientPasses\": %d,\n"
+            "  \"lightgridMinAmbient\": %.2f,\n"
             "  \"lightgridMaxAmbient\": %.2f,\n"
             "  \"texturesRGB\": %s,\n"
             "  \"colorsRGB\": %s,\n"
@@ -818,7 +828,9 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lightgridRGB ? "true" : "false",
             game->lightgridAmbientBias,
             game->lightgridDirectBias,
-            game->lightgridMinLight,
+            game->lightgridSmoothAmbient,
+            game->lightgridSmoothAmbientPasses,
+            game->lightgridMinAmbient,
             game->lightgridMaxAmbient,
             game->texturesRGB ? "true" : "false",
             game->colorsRGB ? "true" : "false",

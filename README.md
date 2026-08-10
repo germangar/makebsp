@@ -238,6 +238,12 @@ List of additions and modifications made to shader parsing and features compared
 - **haloshader**: Global default shader to use for light halos. Set to "none" or "0" to disable them.
 - **ambient_testradius**: Radius in world units to test for solid in macro-ambient occlusion (default: 512).
 - **ambient_gatheradius**: Gather radius of light probes for spherical interpolation (default: 256).
+- **grid_ambientbias**: Non-linear gamma bias applied to the ambient component of the light grid. Default 2.2 (for most profiles).
+- **grid_directbias**: Non-linear gamma bias applied per-light to the directional component of the light grid. Default 2.2.
+- **grid_smoothambient**: Radius in world units for smoothing the ambient component of the light grid. Set to 0 to disable.
+- **grid_smoothambient_passes**: Number of iterative smoothing passes to apply to the ambient light grid. Default 1.
+- **grid_minambient**: Minimum hard light floor applied to the ambient light grid (in 8-bit scale). Set to 0 to disable.
+- **grid_maxambient**: Hard clamp applied to the maximum ambient light the grid can accumulate, preserving color luminance. Set to 0 to disable.
 - **_lightingIntensity**: [qfusion engine key] Custom fixed normalization scale for 8-bit LDR lightmap output.Defaults to 3.0
 
 **Lightmaps & Rendering Passes**
@@ -522,3 +528,11 @@ These switches change the primary mode of the executable.
 - `-ambientonly`: Only perform the macro-ambient pass. 
 - `-novertex`: Disable vertex lighting generation.
 - `-nogrid`: Disable volumetric light grid generation.
+
+**Light Grid (Volumetric Lighting)**
+- `-grid_ambientbias <F>`: Non-linear gamma bias applied to the ambient component of the light grid.
+- `-grid_directbias <F>`: Non-linear gamma bias applied per-light to the directional component of the light grid.
+- `-grid_smoothambient <F>`: Radius in world units for smoothing the ambient component of the light grid.
+- `-grid_smoothambient_passes <N>`: Number of iterative smoothing passes to apply to the ambient light grid.
+- `-grid_minambient <F>`: Minimum hard light floor applied to the ambient light grid.
+- `-grid_maxambient <F>`: Hard clamp applied to the maximum ambient light the grid can accumulate.
