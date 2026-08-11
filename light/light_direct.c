@@ -1080,6 +1080,16 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
         out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
         out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
+        
+        float maxAdd = out->irradiance[0];
+        if (out->irradiance[1] > maxAdd) maxAdd = out->irradiance[1];
+        if (out->irradiance[2] > maxAdd) maxAdd = out->irradiance[2];
+        
+        if (maxAdd <= light->min_light_add)
+        {
+            return qfalse;
+        }
+        
         out->angle = outAngle;
         out->isGlow = outIsGlow;
         return qtrue;
