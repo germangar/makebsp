@@ -1324,8 +1324,8 @@ void ChamferSurfaceEdges(entity_t *e)
             if (target_width < MIN_CHAMFER_WIDTH) continue;
 
             float edge_width = target_width;
-            if (min_edge < 4.0f * target_width) {
-                edge_width = min_edge / 4.0f;
+            if (min_edge < 3.0f * target_width) {
+                edge_width = min_edge / 3.0f;
             }
             if (edge_width < MIN_CHAMFER_WIDTH) continue;
 
@@ -1403,7 +1403,7 @@ void ChamferSurfaceEdges(entity_t *e)
             float ccw = dsA->chamferConcaveWidth >= 0.0f ? dsA->chamferConcaveWidth : game->chamferConcaveWidth;
             float target_width = (nb->isConcave && ccw >= 0.0f) ? ccw : cw;
             if (target_width < MIN_CHAMFER_WIDTH) continue;
-            if (min_edge < 4.0f * target_width && (min_edge / 4.0f) < MIN_CHAMFER_WIDTH) continue;
+            if (min_edge < 3.0f * target_width && (min_edge / 3.0f) < MIN_CHAMFER_WIDTH) continue;
 
             int j = nb->neighborSurfaceNum;
             mapDrawSurface_t *dsB = &mapDrawSurfs[j];
