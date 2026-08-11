@@ -2644,11 +2644,7 @@ void LightWorld(void)
 
         _printf("--- TraceGrid ---\n");
         
-        {
-            const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
-            float customIntensity = existingIntensity[0] ? atof(existingIntensity) : 0.0f;
-            lightgridMaxDisplayIntensity = 255.0f * (customIntensity > 1.0f ? customIntensity : game->hdr8BitScale);
-        }
+            lightgridMaxDisplayIntensity = 255.0f * game->hdr8BitScale;
 
         start = I_FloatTime();
         RunThreadsOnIndividual(numGridPoints, qtrue, TraceGrid);

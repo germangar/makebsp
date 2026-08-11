@@ -664,6 +664,13 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     entity_t *ent = &entities[0];
     const char *val;
 
+    val = ValueForKey(ent, "_lightingIntensity");
+    if (val[0]) {
+        game->hdr8BitScale = (float)atof(val);
+        if (game->hdr8BitScale <= 0.0f) game->hdr8BitScale = 1.0f; // basic sanity check
+        _printf("Worldspawn override: _lightingIntensity = %f\n", game->hdr8BitScale);
+    }
+
     val = ValueForKey(ent, "samplesize");
     if (val[0] && !HasArg("-samplesize", argc, argv)) {
         game->defaultSampleSize = atoi(val);
@@ -1270,6 +1277,8 @@ int main(int argc, char **argv)
         SetKeyValue(&entities[0], "__texelsize", buf);
         sprintf(buf, "%d", game->lightmapSize);
         SetKeyValue(&entities[0], "_lightmapImageSize", buf);
+        sprintf(buf, "%.2f", game->hdr8BitScale);
+        SetKeyValue(&entities[0], "_lightingIntensity", buf);
     }
 
     InjectSunEntity();

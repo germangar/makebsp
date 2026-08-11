@@ -76,6 +76,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         game->externalLightmaps = qtrue;
     }
 
+    val = ValueForKey(ent, "_lightingIntensity");
+    if (val[0]) {
+        game->hdr8BitScale = (float)atof(val);
+        if (game->hdr8BitScale <= 0.0f) game->hdr8BitScale = 1.0f;
+    }
+
     // map keys
     val = ValueForKey(ent, "cutoff");
     if (val[0] && !HasArg("-cutoff", argc, argv)) {

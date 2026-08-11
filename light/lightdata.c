@@ -757,25 +757,12 @@ void DownConvertLightingData(void)
 
     if (game->hdr == HDR_8BIT)
     {
-        const char *existingIntensity = ValueForKey(&entities[0], "_lightingIntensity");
-        float customIntensity = existingIntensity[0] ? atof(existingIntensity) : 0.0f;
+        maxLightIntensity = 255.0f * game->hdr8BitScale;
+        scale = 255.0f / maxLightIntensity;
+        float engineIntensity = maxLightIntensity / 255.0f;
 
-        if (customIntensity > 1.0f)
-        {
-            // Respect custom intensity: Scale pixels by 1/Intensity to match engine boost
-            _printf("Custom _lightingIntensity detected (%f), using as fixed scale.\n", customIntensity);
-            scale = customIntensity;
-        }
-        else
-        {
-            // No custom intensity: Apply fixed normalization from game profile
-            maxLightIntensity = 255.0f * game->hdr8BitScale;
-            scale = 255.0f / maxLightIntensity;
-            float engineIntensity = maxLightIntensity / 255.0f;
-
-            _printf("LightingIntensity Fixed Normalization: Scale %f (_lightingIntensity %f)\n", scale, engineIntensity);
-            SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
-        }
+        _printf("LightingIntensity Fixed Normalization: Scale %f (_lightingIntensity %f)\n", scale, engineIntensity);
+        SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
     }
 
     if (!lightBytes)
