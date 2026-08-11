@@ -225,6 +225,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     si->averageColor[0] = 127;
     si->averageColor[1] = 127;
     si->averageColor[2] = 127;
+    si->averageAlpha = 1.0f;
     si->width = 64;
     si->height = 64;
     si->pixels = malloc(si->width * si->height * 4);
@@ -260,6 +261,7 @@ loadTga:
         color[3] += si->pixels[i * 4 + 3];
     }
     VectorScale(color, 1.0 / count, si->averageColor);
+    si->averageAlpha = (float)color[3] / (count * 255.0f);
     if (!si->colorOverride)
     {
         for (i = 0; i < 3; i++)

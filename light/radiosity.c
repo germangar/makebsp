@@ -1068,6 +1068,7 @@ static void RadiosityIntegrateGridThread(int num) {
     traceWork_t tw;
     memset(&tw, 0, sizeof(tw));
     tw.ignoreSurface = -1;
+    tw.isLightgrid = qtrue;
     tw.patchshadows = patchshadows;
 
     for (int i = 0; i < numSamples; i++) {

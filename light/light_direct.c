@@ -2358,6 +2358,7 @@ void TraceGrid(int num)
         Error("Failed to allocate traceWork_t");
     memset(tw, 0, sizeof(traceWork_t));
     tw->ignoreSurface = -1;
+    tw->isLightgrid = qtrue;
 
     mod = num;
     z = mod / (gridBounds[0] * gridBounds[1]);

@@ -300,6 +300,31 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
 
         if (si->surfaceFlags & (SURF_ALPHASHADOW | SURF_LIGHTFILTER))
         {
+            if (tw && tw->isLightgrid)
+            {
+                if (si->surfaceFlags & SURF_ALPHASHADOW)
+                {
+                    if (tw->trace)
+                    {
+                        float trans = 1.0f - si->averageAlpha;
+                        tw->trace->filter[0] *= trans;
+                        tw->trace->filter[1] *= trans;
+                        tw->trace->filter[2] *= trans;
+                    }
+                }
+                else if (si->surfaceFlags & SURF_LIGHTFILTER)
+                {
+                    if (tw->trace)
+                    {
+                        tw->trace->filter[0] *= (si->averageColor[0] / 255.0f);
+                        tw->trace->filter[1] *= (si->averageColor[1] / 255.0f);
+                        tw->trace->filter[2] *= (si->averageColor[2] / 255.0f);
+                    }
+                }
+                args->valid[0] = 0; // ignore the hit, continue
+                return;
+            }
+
             float u = hit->u;
             float v = hit->v;
             float s, t;

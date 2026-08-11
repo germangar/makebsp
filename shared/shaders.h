@@ -81,6 +81,7 @@ typedef struct shaderInfo_s
                                    // above exist
     vec3_t color;                  // colorNormalized
     vec3_t averageColor;
+    float averageAlpha;
     qboolean colorOverride;        // true if color was manually specified in shader
     vec3_t vertexColor;
     qboolean overrideVertexColor;

@@ -1172,6 +1172,7 @@ static void SmoothGridAmbient(void) {
             traceWork_t tw;
             memset(&tw, 0, sizeof(tw));
             tw.ignoreSurface = -1;
+            tw.isLightgrid = qtrue;
             tw.forceFrontOnly = qfalse;
             
             vec3_t accumAmb = {0,0,0};

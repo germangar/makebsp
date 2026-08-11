@@ -421,6 +421,7 @@ typedef struct
 	trace_t *trace;
 	int patchshadows;
 	qboolean forceFrontOnly;
+	qboolean isLightgrid;
 	int ignoreSurface;
 } traceWork_t;
 
