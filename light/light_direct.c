@@ -696,6 +696,7 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     out->irradiance[2] = trace.filter[2] * sunLight[2];
     out->isGlow = qfalse;
     out->ambientClampScale = 1.0f;
+    out->noambient = qfalse;
 
     return qtrue;
 }
@@ -1096,6 +1097,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         int fCount = light->familyCount;
         if (fCount <= 0) fCount = 1;
         out->ambientClampScale = 1.0f / (float)fCount;
+        out->noambient = light->noambient;
         return qtrue;
     }
 
@@ -1208,6 +1210,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     int fCount = light->familyCount;
     if (fCount <= 0) fCount = 1;
     out->ambientClampScale = 1.0f / (float)fCount;
+    out->noambient = light->noambient;
 
     return qtrue;
 }
@@ -2507,19 +2510,22 @@ void TraceGrid(int num)
         d = CalculateShadingModel(DotProduct(contributions[i].dir, summedDir));
         VectorMA(directedColor, d, tempColor, directedColor);
         
-        vec3_t ambContrib;
-        VectorScale(tempColor, 0.25f, ambContrib);
-        
-        float clampLuma = lightgridMaxDisplayIntensity * 0.10f * contributions[i].ambientClampScale;
-        float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
-        
-        if (luma > clampLuma)
+        if (!contributions[i].noambient)
         {
-            float scale = clampLuma / luma;
-            VectorScale(ambContrib, scale, ambContrib);
+            vec3_t ambContrib;
+            VectorScale(tempColor, 0.25f, ambContrib);
+            
+            float clampLuma = lightgridMaxDisplayIntensity * 0.10f * contributions[i].ambientClampScale;
+            float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
+            
+            if (luma > clampLuma)
+            {
+                float scale = clampLuma / luma;
+                VectorScale(ambContrib, scale, ambContrib);
+            }
+            
+            VectorAdd(color, ambContrib, color);
         }
-        
-        VectorAdd(color, ambContrib, color);
     }
 
     if (gridData32)

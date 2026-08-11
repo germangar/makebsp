@@ -245,6 +245,7 @@ typedef struct light_s
 
 	qboolean twosided; // fog lights both sides
 	qboolean noDeluxeInfluence;
+	qboolean noambient; // disables light contribution to grid ambient component
 
 	winding_t *w;
 	float area;		  // pre-calculated winding area (for seam fix)

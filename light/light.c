@@ -771,6 +771,10 @@ void CreateEntityLights(void)
         if (nodeluxeStr[0] && atoi(nodeluxeStr))
             dl->noDeluxeInfluence = qtrue;
 
+        const char *noambientStr = ValueForKey(e, "noambient");
+        if (noambientStr[0] && atoi(noambientStr))
+            dl->noambient = qtrue;
+
         dl->type = emit_point;
 
         // spotlights
