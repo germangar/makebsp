@@ -241,6 +241,7 @@ typedef struct light_s
 	float min_light_add; // specific cutoff energy limit for this light
 	float fadeout; // percentage of reach to fade (0.0 to 1.0)
 	float prestep; // singularity offset (distance)
+	int familyCount; // Number of subdivided lights in this light's family
 
 	qboolean twosided; // fog lights both sides
 	qboolean noDeluxeInfluence;

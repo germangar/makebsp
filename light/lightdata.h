@@ -8,6 +8,7 @@ typedef struct {
   vec3_t dir;
   vec3_t irradiance;
   float angle;
+  float ambientClampScale;
   qboolean isGlow;
 } contribution_t;
 

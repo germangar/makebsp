@@ -397,6 +397,8 @@ void CreateSurfaceLights(void)
             continue;
         }
 
+        light_t *startList = lights;
+
         // possibly create for both sides of the polygon
         int maxSide = ls->twoSided;
         // Liquids are volumetric and emit omnidirectionally from a single plane
@@ -530,6 +532,17 @@ void CreateSurfaceLights(void)
                     }
                     SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
                 }
+            }
+        }
+
+        int familyCount = 0;
+        light_t *l;
+        for (l = lights; l && l != startList; l = l->next) {
+            familyCount++;
+        }
+        if (familyCount > 0) {
+            for (l = lights; l && l != startList; l = l->next) {
+                l->familyCount = familyCount;
             }
         }
     }
