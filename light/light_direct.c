@@ -2360,6 +2360,9 @@ void TraceLights(int num)
 
 float lightgridMaxDisplayIntensity = 0.0f;
 
+#define LIGHTGRID_AMBIENT_TRANSFER_FRACTION 0.25f
+#define LIGHTGRID_AMBIENT_MAX_LUMA 0.10f
+
 void TraceGrid(int num)
 {
     int x, y, z;
@@ -2513,9 +2516,9 @@ void TraceGrid(int num)
         if (!contributions[i].noambient)
         {
             vec3_t ambContrib;
-            VectorScale(tempColor, 0.25f, ambContrib);
+            VectorScale(tempColor, LIGHTGRID_AMBIENT_TRANSFER_FRACTION, ambContrib);
             
-            float clampLuma = lightgridMaxDisplayIntensity * 0.10f * contributions[i].ambientClampScale;
+            float clampLuma = lightgridMaxDisplayIntensity * LIGHTGRID_AMBIENT_MAX_LUMA * contributions[i].ambientClampScale;
             float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
             
             if (luma > clampLuma)
