@@ -1138,8 +1138,8 @@ static void SmoothGridAmbient(void) {
     if (lightgridSmoothAmbient <= 0.0f || lightgridSmoothAmbientPasses <= 0) return;
     
     float effectiveRadius = lightgridSmoothAmbient;
-    float maxDim = max(gridSize[0], gridSize[1]);
-    if (effectiveRadius < maxDim) effectiveRadius = maxDim;
+    float minDim = gridSize[0] * 2.0f;
+    if (effectiveRadius < minDim) effectiveRadius = minDim;
     
     _printf("  Smoothing lightgrid ambient (radius %f, passes %d)...\n", effectiveRadius, lightgridSmoothAmbientPasses);
     
@@ -1250,6 +1250,161 @@ static void SmoothGridAmbient(void) {
     }
     
     Q_Free(smoothed);
+}
+
+static void SmoothGridDirect(void) {
+    if (lightgridSmoothDirect <= 0.0f || lightgridSmoothDirectPasses <= 0) return;
+    
+    float effectiveRadius = lightgridSmoothDirect;
+    float minDim = gridSize[0] * 2.0f;
+    if (effectiveRadius < minDim) effectiveRadius = minDim;
+    
+    float disc_thickness = effectiveRadius * 0.33f;
+    if (disc_thickness < gridSize[0] * 0.6f) disc_thickness = gridSize[0] * 0.6f;
+    if (disc_thickness > gridSize[2]) disc_thickness = gridSize[2];
+    
+    _printf("  Smoothing lightgrid direct (disc radius %f, thickness %f, passes %d)...\n", effectiveRadius, disc_thickness, lightgridSmoothDirectPasses);
+    
+    vec3_t *smoothedDirColor = Q_Alloc(numGridPoints * sizeof(vec3_t));
+    vec3_t *smoothedDirVector = Q_Alloc(numGridPoints * sizeof(vec3_t));
+    
+    int rx = (int)ceil(effectiveRadius / gridSize[0]);
+    int ry = (int)ceil(effectiveRadius / gridSize[1]);
+    int rz = (int)ceil(effectiveRadius / gridSize[2]);
+    if (rz < 1) rz = 1;
+    
+    for (int p = 0; p < lightgridSmoothDirectPasses; p++) {
+        #pragma omp parallel for schedule(dynamic, 1)
+        for (int i = 0; i < numGridPoints; i++) {
+            int z = i / (gridBounds[0] * gridBounds[1]);
+            int mod = i - z * (gridBounds[0] * gridBounds[1]);
+            int y = mod / gridBounds[0];
+            int x = mod - y * gridBounds[0];
+            
+            vec3_t origin;
+            origin[0] = gridMins[0] + x * gridSize[0];
+            origin[1] = gridMins[1] + y * gridSize[1];
+            origin[2] = gridMins[2] + z * gridSize[2];
+            
+            if (PointInSolid(origin)) {
+                // skip solid
+                VectorCopy(gridData32[i].directed[0], smoothedDirColor[i]);
+                VectorCopy(gridData32[i].dir, smoothedDirVector[i]);
+                continue;
+            }
+            
+            traceWork_t tw;
+            memset(&tw, 0, sizeof(tw));
+            tw.ignoreSurface = -1;
+            tw.isLightgrid = qtrue;
+            tw.forceFrontOnly = qfalse;
+            
+            vec3_t accumDirColor = {0,0,0};
+            vec3_t accumDirVector = {0,0,0};
+            float totalWeight = 0.0f;
+            float totalDirWeight = 0.0f;
+            
+            for (int dz = -rz; dz <= rz; dz++) {
+                int nz = z + dz;
+                if (nz < 0 || nz >= gridBounds[2]) continue;
+                for (int dy = -ry; dy <= ry; dy++) {
+                    int ny = y + dy;
+                    if (ny < 0 || ny >= gridBounds[1]) continue;
+                    for (int dx = -rx; dx <= rx; dx++) {
+                        int nx = x + dx;
+                        if (nx < 0 || nx >= gridBounds[0]) continue;
+                        
+                        int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
+                        
+                        float lum = gridData32[ni].directed[0][0] * 0.299f + gridData32[ni].directed[0][1] * 0.587f + gridData32[ni].directed[0][2] * 0.114f;
+                        if (lum < 0.001f) continue;
+                        
+                        vec3_t n_origin;
+                        n_origin[0] = gridMins[0] + nx * gridSize[0];
+                        n_origin[1] = gridMins[1] + ny * gridSize[1];
+                        n_origin[2] = gridMins[2] + nz * gridSize[2];
+                        
+                        vec3_t diff;
+                        VectorSubtract(origin, n_origin, diff);
+                        
+                        vec3_t n_dir;
+                        VectorCopy(gridData32[ni].dir, n_dir);
+                        VectorNormalize(n_dir, n_dir);
+                        
+                        float depth = DotProduct(diff, n_dir);
+                        if (fabs(depth) > disc_thickness) continue;
+                        
+                        vec3_t lateral_vec;
+                        VectorMA(diff, -depth, n_dir, lateral_vec);
+                        float lateral_dist = VectorLength(lateral_vec);
+                        
+                        if (lateral_dist > effectiveRadius) continue;
+                        
+                        if (PointInSolid(n_origin)) continue;
+                        
+                        qboolean visible = qfalse;
+                        if (i == ni) {
+                            visible = qtrue;
+                        } else {
+                            // 5 traces to center + 4 faces
+                            vec3_t offsets[5] = {
+                                {0, 0, 0},
+                                {gridSize[0] * 0.45f, 0, 0},
+                                {-gridSize[0] * 0.45f, 0, 0},
+                                {0, gridSize[1] * 0.45f, 0},
+                                {0, -gridSize[1] * 0.45f, 0}
+                            };
+                            for (int t = 0; t < 5; t++) {
+                                vec3_t target;
+                                VectorAdd(n_origin, offsets[t], target);
+                                trace_t trace;
+                                TraceLine(origin, target, &trace, qfalse, &tw);
+                                if (trace.hitFraction > 0.999f) {
+                                    visible = qtrue;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (visible) {
+                            float w_lateral = 1.0f - (lateral_dist / effectiveRadius);
+                            float w_depth = 1.0f - (fabs(depth) / disc_thickness);
+                            float w = w_lateral * w_depth;
+                            if (w < 0.0f) w = 0.0f;
+                            
+                            VectorMA(accumDirColor, w, gridData32[ni].directed[0], accumDirColor);
+                            totalWeight += w;
+                            
+                            float dirW = w * lum;
+                            VectorMA(accumDirVector, dirW, gridData32[ni].dir, accumDirVector);
+                            totalDirWeight += dirW;
+                        }
+                    }
+                }
+            }
+            
+            if (totalWeight > 0.001f) {
+                VectorScale(accumDirColor, 1.0f / totalWeight, smoothedDirColor[i]);
+            } else {
+                VectorCopy(gridData32[i].directed[0], smoothedDirColor[i]);
+            }
+            
+            if (totalDirWeight > 0.001f) {
+                VectorNormalize(accumDirVector, smoothedDirVector[i]);
+            } else {
+                VectorCopy(gridData32[i].dir, smoothedDirVector[i]);
+            }
+        }
+        
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < numGridPoints; i++) {
+            VectorCopy(smoothedDirColor[i], gridData32[i].directed[0]);
+            VectorCopy(smoothedDirVector[i], gridData32[i].dir);
+        }
+    }
+    
+    Q_Free(smoothedDirColor);
+    Q_Free(smoothedDirVector);
 }
 
 static void ApplyGridMinAmbient(void) {
@@ -1383,6 +1538,7 @@ void PostProcessLightmaps(void) {
     if (gridData32) {
         ApplyGridAmbientBias();
         SmoothGridAmbient();
+        SmoothGridDirect();
         ApplyGridMinAmbient();
         ApplyGridMaxAmbient();
     }

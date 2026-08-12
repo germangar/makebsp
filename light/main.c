@@ -285,6 +285,15 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     if (val[0] && !HasArg("-grid_smoothambient_passes", argc, argv)) {
         lightgridSmoothAmbientPasses = atoi(val);
     }
+    
+    val = ValueForKey(ent, "grid_smoothdirect");
+    if (val[0] && !HasArg("-grid_smoothdirect", argc, argv)) {
+        lightgridSmoothDirect = (float)atof(val);
+    }
+    val = ValueForKey(ent, "grid_smoothdirect_passes");
+    if (val[0] && !HasArg("-grid_smoothdirect_passes", argc, argv)) {
+        lightgridSmoothDirectPasses = atoi(val);
+    }
 
     val = ValueForKey(ent, "grid_minambient");
     if (val[0] && !HasArg("-grid_minambient", argc, argv)) {
@@ -317,6 +326,8 @@ int main(int argc, char **argv) {
     lightgridDirectBias = game->lightgridDirectBias;
     lightgridSmoothAmbient = game->lightgridSmoothAmbient;
     lightgridSmoothAmbientPasses = game->lightgridSmoothAmbientPasses;
+    lightgridSmoothDirect = game->lightgridSmoothDirect;
+    lightgridSmoothDirectPasses = game->lightgridSmoothDirectPasses;
     lightgridMinAmbient = game->lightgridMinAmbient;
     lightgridMaxAmbient = game->lightgridMaxAmbient;
     
@@ -452,9 +463,17 @@ int main(int argc, char **argv) {
             lightgridSmoothAmbient = atof(argv[i + 1]);
             _printf("grid_smoothambient = %f\n", lightgridSmoothAmbient);
             i++;
-        } else if (!strcmp(argv[i], "-grid_smoothambient_passes")) {
+        } else if (!Q_stricmp(argv[i], "-grid_smoothambient_passes")) {
             lightgridSmoothAmbientPasses = atoi(argv[i + 1]);
             _printf("grid_smoothambient_passes = %d\n", lightgridSmoothAmbientPasses);
+            i++;
+        } else if (!Q_stricmp(argv[i], "-grid_smoothdirect")) {
+            lightgridSmoothDirect = atof(argv[i + 1]);
+            _printf("grid_smoothdirect = %f\n", lightgridSmoothDirect);
+            i++;
+        } else if (!Q_stricmp(argv[i], "-grid_smoothdirect_passes")) {
+            lightgridSmoothDirectPasses = atoi(argv[i + 1]);
+            _printf("grid_smoothdirect_passes = %d\n", lightgridSmoothDirectPasses);
             i++;
         } else if (!strcmp(argv[i], "-grid_maxambient")) {
             lightgridMaxAmbient = atof(argv[i + 1]);

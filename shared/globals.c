@@ -17,6 +17,8 @@ float lightgridAmbientBias = 1.0f;
 float lightgridDirectBias = 1.0f;
 float lightgridSmoothAmbient = 0.0f;
 int lightgridSmoothAmbientPasses = 1;
+float lightgridSmoothDirect = 0.0f;
+int lightgridSmoothDirectPasses = 1;
 float lightgridMinAmbient = 0.0f;
 float lightgridMaxAmbient = 0.0f;
 
@@ -73,6 +75,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		2.2f,       // lightgridDirectBias
 		128.0f,     // lightgridSmoothAmbient
 		4,          // lightgridSmoothAmbientPasses
+		0.0f,       // lightgridSmoothDirect
+		1,          // lightgridSmoothDirectPasses
 		0.0f,       // lightgridMinAmbient
 		0.0f,       // lightgridMaxAmbient
 		qtrue,      // texturesRGB
@@ -148,9 +152,11 @@ game_t gameTemplates[MAX_GAMES] = {
 		qfalse,     // lightmapsRGB
 		qfalse,     // lightgridRGB
 		2.2f,       // lightgridAmbientBias
-		2.2f,       // lightgridDirectBias
+		1.0f,       // lightgridDirectBias
 		128.0f,     // lightgridSmoothAmbient
 		1,          // lightgridSmoothAmbientPasses
+		0.0f,       // lightgridSmoothDirect
+		1,          // lightgridSmoothDirectPasses
 		0.0f,       // lightgridMinAmbient
 		0.0f,       // lightgridMaxAmbient
 		qfalse,     // texturesRGB

@@ -119,6 +119,8 @@ typedef struct {
 	float       lightgridDirectBias;
 	float       lightgridSmoothAmbient;
 	int         lightgridSmoothAmbientPasses;
+	float       lightgridSmoothDirect;
+	int         lightgridSmoothDirectPasses;
 	float       lightgridMinAmbient;
 	float       lightgridMaxAmbient;
 	qboolean	texturesRGB;
@@ -163,6 +165,8 @@ extern float lightgridAmbientBias;
 extern float lightgridDirectBias;
 extern float lightgridSmoothAmbient;
 extern int lightgridSmoothAmbientPasses;
+extern float lightgridSmoothDirect;
+extern int lightgridSmoothDirectPasses;
 extern float lightgridMinAmbient;
 extern float lightgridMaxAmbient;
 extern vec3_t blockSize;

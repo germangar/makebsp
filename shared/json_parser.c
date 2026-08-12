@@ -408,6 +408,14 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lightgridSmoothAmbientPasses = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "lightgridSmoothDirect") && val->type == json_type_number)
+        {
+            game->lightgridSmoothDirect = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridSmoothDirectPasses") && val->type == json_type_number)
+        {
+            game->lightgridSmoothDirectPasses = atoi(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "lightgridDirectBias") && val->type == json_type_number)
         {
             game->lightgridDirectBias = (float)atof(json_value_as_number(val)->number);
