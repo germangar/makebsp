@@ -89,6 +89,8 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->enforceSampleSize = game->enforceSampleSize;
     ds->noDeluxeInfluence = -1;
     ds->noDeluxeInfluenceBacksplash = -1;
+    ds->noambient = -1;
+    ds->castShadows = -1;
     ds->parentSurfaceNum = -1;
     ds->chamferConvexWidth = -1.0f;
     ds->chamferConcaveWidth = -1.0f;
@@ -159,6 +161,10 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
         const char *bsNodeluxeStr = ValueForEpair(epairs, "backsplash_nodeluxe");
         if (bsNodeluxeStr[0])
             ds->noDeluxeInfluenceBacksplash = atoi(bsNodeluxeStr);
+
+        const char *noambientStr = ValueForEpair(epairs, "noambient");
+        if (noambientStr[0])
+            ds->noambient = atoi(noambientStr);
 
         const char *attStr = ValueForEpair(epairs, "attenuation");
         if (attStr[0])
@@ -1484,6 +1490,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1579,6 +1586,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1680,6 +1688,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1745,6 +1754,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
 

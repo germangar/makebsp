@@ -95,6 +95,7 @@ typedef struct shaderInfo_s
     float surfaceLightGlow; // backface glow fraction (default depends on contents)
     qboolean noDeluxeInfluence;
     qboolean noDeluxeInfluenceBacksplash;
+    qboolean noambient;
     float deluxeMinAngle;
 } shaderInfo_t;
 

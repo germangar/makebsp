@@ -258,6 +258,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
     dl->si = ls;
     dl->noDeluxeInfluence = ls->noDeluxeInfluence;
+    dl->noambient = ls->noambient;
 
     if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER))
     {
@@ -1114,7 +1115,7 @@ void BuildLocalSurfaces(void)
             if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
                 shaderOverride = qtrue;
             }
-            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1) {
+            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1 || extra[i].noambient != -1) {
                 shaderOverride = qtrue;
             }
 
@@ -1150,6 +1151,9 @@ void BuildLocalSurfaces(void)
                 }
                 if (extra[i].noDeluxeInfluenceBacksplash != -1) {
                     localSurfaces[i].si_override->noDeluxeInfluenceBacksplash = extra[i].noDeluxeInfluenceBacksplash ? qtrue : qfalse;
+                }
+                if (extra[i].noambient != -1) {
+                    localSurfaces[i].si_override->noambient = extra[i].noambient ? qtrue : qfalse;
                 }
             }
         }

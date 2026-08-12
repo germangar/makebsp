@@ -346,6 +346,7 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->forceSunLight = qfalse;
     si->noDeluxeInfluence = qfalse;
     si->noDeluxeInfluenceBacksplash = qfalse;
+    si->noambient = qfalse;
     si->deluxeMinAngle = -1.0f;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
@@ -680,6 +681,13 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             if (!Q_stricmp(token, "q3map_surfacelight_nodeluxe"))
             {
                 si->noDeluxeInfluence = qtrue;
+                continue;
+            }
+
+            // q3map_surfacelight_noambient
+            if (!Q_stricmp(token, "q3map_surfacelight_noambient"))
+            {
+                si->noambient = qtrue;
                 continue;
             }
 

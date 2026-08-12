@@ -31,6 +31,7 @@ typedef struct {
     attenuationModel_t attenuationModel;
     int noDeluxeInfluence;
     int noDeluxeInfluenceBacksplash;
+    int noambient;
     int castShadows;
     qboolean isPlanar;
     float sampleSize;
