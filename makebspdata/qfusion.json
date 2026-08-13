@@ -10,19 +10,30 @@
   "maxLMSurfaceVerts": 65535,
   "maxSurfaceVerts": 65535,
   "maxSurfaceIndexes": 393210,
+  "maxMapDrawVerts": 1048576,
+  "maxMapDrawIndexes": 1048576,
+  "maxMapDrawSurfs": 262144,
+  "maxMapPlanes": 1048576,
+  "maxMapNodes": 1048576,
+  "maxMapLeafs": 1048576,
+  "maxMapBrushSides": 1048576,
+  "maxMapLeafSurfaces": 1048576,
+  "maxMapLeafBrushes": 1048576,
   "lightmapSize": 512,
   "externalLightmaps": false, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */
   "keepLights": true, /* if true, light entities are not stripped from the BSP */
   "sampleSize": 4,
-  "defaultGridSize": [32.00, 32.00, 64.00],
+  "defaultGridSize": [64.00, 64.00, 64.00],
   "hdr": "rgb8", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 3.00,
   "lightmapsRGB": true,
   "lightgridRGB": false,
-  "lightgridAmbientBias": 2.20,
-  "lightgridDirectBias": 2.20,
-  "lightgridSmoothAmbient": 128.00, /* Radius in world units for smoothing the ambient component of the light grid */
+  "lightgridAmbientBias": 1.50,
+  "lightgridDirectBias": 1.50,
+  "lightgridSmoothAmbient": 256.00, /* Radius in world units for smoothing the ambient component of the light grid */
   "lightgridSmoothAmbientPasses": 4,
+  "lightgridSmoothDirect": 128.00, /* Radius in world units for smoothing the direct component of the light grid */
+  "lightgridSmoothDirectPasses": 3,
   "lightgridMinAmbient": 0.00,
   "lightgridMaxAmbient": 0.00,
   "texturesRGB": true,

@@ -13,8 +13,8 @@ char name[1024];
 int numGames = 2;
 float shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
-float lightgridAmbientBias = 1.0f;
-float lightgridDirectBias = 1.0f;
+float lightgridAmbientBias = 1.5f;
+float lightgridDirectBias = 1.5f;
 float lightgridSmoothAmbient = 0.0f;
 int lightgridSmoothAmbientPasses = 1;
 float lightgridSmoothDirect = 0.0f;
@@ -71,12 +71,12 @@ game_t gameTemplates[MAX_GAMES] = {
 		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
 		qfalse,     // lightgridRGB
-		2.2f,       // lightgridAmbientBias
-		2.2f,       // lightgridDirectBias
-		128.0f,     // lightgridSmoothAmbient
+		1.5f,       // lightgridAmbientBias
+		1.5f,       // lightgridDirectBias
+		256.0f,     // lightgridSmoothAmbient
 		4,          // lightgridSmoothAmbientPasses
-		0.0f,       // lightgridSmoothDirect
-		1,          // lightgridSmoothDirectPasses
+		128.0f,     // lightgridSmoothDirect
+		3,          // lightgridSmoothDirectPasses
 		0.0f,       // lightgridMinAmbient
 		0.0f,       // lightgridMaxAmbient
 		qtrue,      // texturesRGB
@@ -151,8 +151,8 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
 		qfalse,     // lightgridRGB
-		2.2f,       // lightgridAmbientBias
-		1.0f,       // lightgridDirectBias
+		1.5f,       // lightgridAmbientBias
+		1.5f,       // lightgridDirectBias
 		128.0f,     // lightgridSmoothAmbient
 		1,          // lightgridSmoothAmbientPasses
 		0.0f,       // lightgridSmoothDirect

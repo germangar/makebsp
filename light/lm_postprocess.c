@@ -1117,19 +1117,76 @@ static inline void ApplySaturationToVector(float *rgb, float sat, satRamp_t ramp
 
 
 /* ===== Lightgrid Post-Processing ======================================== */
+#define USE_GOLDILOCKS 0
 
 static void ApplyGridAmbientBias(void) {
-    if (lightgridAmbientBias == 1.0f) return;
+    if (lightgridAmbientBias <= 0.0001f || (lightgridAmbientBias >= 0.9999f && lightgridAmbientBias <= 1.0001f)) return;
+    
     float maxIntensity = 255.0f * game->hdr8BitScale;
-    _printf("  Applying lightgrid ambient bias (gamma %f, maxIntensity %f)...\n", lightgridAmbientBias, maxIntensity);
+    float bias = lightgridAmbientBias;
+    qboolean useCurve = qfalse;
+    
+    if (bias > 1.0f) {
+        bias *= 5.0f;
+        useCurve = qtrue;
+    }
+    
+    _printf("  Applying lightgrid ambient bias (multiplier %f, maxIntensity %f, curve %s)...\n", bias, maxIntensity, useCurve ? "on" : "off");
     
     #pragma omp parallel for schedule(static)
     for (int i = 0; i < numGridPoints; i++) {
         float length = VectorLength(gridData32[i].ambient[0]);
-        if (length > 0.001f && length < maxIntensity) {
-            float new_length = pow(length / maxIntensity, 1.0f / lightgridAmbientBias) * maxIntensity;
+        if (length > 0.001f) {
+            float scaled_length = length * bias;
+            float new_length = scaled_length;
+            
+            if (useCurve) {
+#if USE_GOLDILOCKS
+                float ratio = scaled_length / maxIntensity;
+                new_length = maxIntensity * (ratio / sqrtf(1.0f + ratio * ratio));
+#else
+                new_length = maxIntensity * (1.0f - expf(-scaled_length / maxIntensity));
+#endif
+            }
+            
             float scale = new_length / length;
             VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
+        }
+    }
+}
+
+static void ApplyGridDirectBias(void) {
+    if (lightgridDirectBias <= 0.0001f || (lightgridDirectBias >= 0.9999f && lightgridDirectBias <= 1.0001f)) return;
+    
+    float maxIntensity = 255.0f * game->hdr8BitScale;
+    float bias = lightgridDirectBias;
+    qboolean useCurve = qfalse;
+    
+    if (bias > 1.0f) {
+        bias *= 5.0f;
+        useCurve = qtrue;
+    }
+    
+    _printf("  Applying lightgrid direct bias (multiplier %f, maxIntensity %f, curve %s)...\n", bias, maxIntensity, useCurve ? "on" : "off");
+    
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        float length = VectorLength(gridData32[i].directed[0]);
+        if (length > 0.001f) {
+            float scaled_length = length * bias;
+            float new_length = scaled_length;
+            
+            if (useCurve) {
+#if USE_GOLDILOCKS
+                float ratio = scaled_length / maxIntensity;
+                new_length = maxIntensity * (ratio / sqrtf(1.0f + ratio * ratio));
+#else
+                new_length = maxIntensity * (1.0f - expf(-scaled_length / maxIntensity));
+#endif
+            }
+            
+            float scale = new_length / length;
+            VectorScale(gridData32[i].directed[0], scale, gridData32[i].directed[0]);
         }
     }
 }
@@ -1537,6 +1594,7 @@ void PostProcessLightmaps(void) {
 
     if (gridData32) {
         ApplyGridAmbientBias();
+        ApplyGridDirectBias();
         ApplyGridMinAmbient();
         SmoothGridAmbient();
         SmoothGridDirect();

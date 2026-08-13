@@ -2360,7 +2360,7 @@ void TraceLights(int num)
 
 float lightgridMaxDisplayIntensity = 0.0f;
 
-#define LIGHTGRID_AMBIENT_TRANSFER_FRACTION 0.25f
+#define LIGHTGRID_AMBIENT_TRANSFER_FRACTION 0.20f
 #define LIGHTGRID_AMBIENT_MAX_LUMA 0.10f
 
 void TraceGrid(int num)
@@ -2499,17 +2499,6 @@ void TraceGrid(int num)
         vec3_t tempColor;
         VectorScale(contributions[i].irradiance, contributions[i].angle, tempColor);
         
-        if (lightgridDirectBias != 1.0f)
-        {
-            float length = VectorLength(tempColor);
-            if (length > 0.001f && length < lightgridMaxDisplayIntensity)
-            {
-                float new_length = pow(length / lightgridMaxDisplayIntensity, 1.0f / lightgridDirectBias) * lightgridMaxDisplayIntensity;
-                float scale = new_length / length;
-                VectorScale(tempColor, scale, tempColor);
-            }
-        }
-        
         d = CalculateShadingModel(DotProduct(contributions[i].dir, summedDir));
         VectorMA(directedColor, d, tempColor, directedColor);
         
@@ -2544,8 +2533,8 @@ void TraceGrid(int num)
 
         if (maoAmbient)
         {
-            float dirRatio = 0.45f;
-            float ambRatio = 0.75f;
+            float dirRatio = 0.35f;
+            float ambRatio = 0.80f;
             vec3_t moveDir;
             vec3_t moveAmb;
             
