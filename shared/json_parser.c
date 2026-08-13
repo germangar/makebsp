@@ -776,6 +776,15 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"maxLMSurfaceVerts\": %d,\n"
             "  \"maxSurfaceVerts\": %d,\n"
             "  \"maxSurfaceIndexes\": %d,\n"
+            "  \"maxMapDrawVerts\": %d,\n"
+            "  \"maxMapDrawIndexes\": %d,\n"
+            "  \"maxMapDrawSurfs\": %d,\n"
+            "  \"maxMapPlanes\": %d,\n"
+            "  \"maxMapNodes\": %d,\n"
+            "  \"maxMapLeafs\": %d,\n"
+            "  \"maxMapBrushSides\": %d,\n"
+            "  \"maxMapLeafSurfaces\": %d,\n"
+            "  \"maxMapLeafBrushes\": %d,\n"
             "  \"lightmapSize\": %d,\n"
             "  \"externalLightmaps\": %s, /* if true, lightmaps are stored as external .tga files instead of inside the BSP */\n"
             "  \"keepLights\": %s, /* if true, light entities are not stripped from the BSP */\n"
@@ -789,6 +798,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"lightgridDirectBias\": %.2f,\n"
             "  \"lightgridSmoothAmbient\": %.2f, /* Radius in world units for smoothing the ambient component of the light grid */\n"
             "  \"lightgridSmoothAmbientPasses\": %d,\n"
+            "  \"lightgridSmoothDirect\": %.2f, /* Radius in world units for smoothing the direct component of the light grid */\n"
+            "  \"lightgridSmoothDirectPasses\": %d,\n"
             "  \"lightgridMinAmbient\": %.2f,\n"
             "  \"lightgridMaxAmbient\": %.2f,\n"
             "  \"texturesRGB\": %s,\n"
@@ -828,7 +839,11 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"haloShader\": \"%s\"",
             game->arg, game->rootDir, game->userDir ? game->userDir : "", game->gameDir, game->bspIdent, game->bspVersion,
             game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
-            game->maxSurfaceIndexes, game->lightmapSize,
+            game->maxSurfaceIndexes, 
+            game->maxMapDrawVerts, game->maxMapDrawIndexes, game->maxMapDrawSurfs,
+            game->maxMapPlanes, game->maxMapNodes, game->maxMapLeafs,
+            game->maxMapBrushSides, game->maxMapLeafSurfaces, game->maxMapLeafBrushes,
+            game->lightmapSize,
             game->externalLightmaps ? "true" : "false",
             game->keepLights ? "true" : "false",
             game->defaultSampleSize, game->defaultGridSize[0], game->defaultGridSize[1], game->defaultGridSize[2], hdrStr, game->hdr8BitScale,
@@ -838,6 +853,8 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lightgridDirectBias,
             game->lightgridSmoothAmbient,
             game->lightgridSmoothAmbientPasses,
+            game->lightgridSmoothDirect,
+            game->lightgridSmoothDirectPasses,
             game->lightgridMinAmbient,
             game->lightgridMaxAmbient,
             game->texturesRGB ? "true" : "false",
