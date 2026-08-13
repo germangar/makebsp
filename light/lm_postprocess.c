@@ -1537,9 +1537,9 @@ void PostProcessLightmaps(void) {
 
     if (gridData32) {
         ApplyGridAmbientBias();
+        ApplyGridMinAmbient();
         SmoothGridAmbient();
         SmoothGridDirect();
-        ApplyGridMinAmbient();
         ApplyGridMaxAmbient();
     }
 
