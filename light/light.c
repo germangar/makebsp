@@ -258,7 +258,8 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
     dl->si = ls;
     dl->noDeluxeInfluence = ls->noDeluxeInfluence;
-    dl->noambient = ls->noambient;
+    dl->gridAmbientScale = ls->gridAmbientScale;
+    dl->gridDirectScale = ls->gridDirectScale;
 
     if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER))
     {
@@ -662,6 +663,8 @@ void CreateEntityLights(void)
         memset(dl, 0, sizeof(*dl));
         dl->next = lights;
         lights = dl;
+        dl->gridAmbientScale = 1.0f;
+        dl->gridDirectScale = 1.0f;
         dl->coneSoftness = 1.0f;
 
         dl->attenuationModel = game->attenuationModel;
@@ -772,9 +775,13 @@ void CreateEntityLights(void)
         if (nodeluxeStr[0] && atoi(nodeluxeStr))
             dl->noDeluxeInfluence = qtrue;
 
-        const char *noambientStr = ValueForKey(e, "noambient");
-        if (noambientStr[0] && atoi(noambientStr))
-            dl->noambient = qtrue;
+        const char *gridAmbientScaleStr = ValueForKey(e, "grid_ambientscale");
+        if (gridAmbientScaleStr[0])
+            dl->gridAmbientScale = atof(gridAmbientScaleStr);
+
+        const char *gridDirectScaleStr = ValueForKey(e, "grid_directscale");
+        if (gridDirectScaleStr[0])
+            dl->gridDirectScale = atof(gridDirectScaleStr);
 
         dl->type = emit_point;
 
@@ -1115,7 +1122,7 @@ void BuildLocalSurfaces(void)
             if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
                 shaderOverride = qtrue;
             }
-            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1 || extra[i].noambient != -1) {
+            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1 || extra[i].gridAmbientScale >= 0.0f || extra[i].gridDirectScale >= 0.0f) {
                 shaderOverride = qtrue;
             }
 
@@ -1152,8 +1159,11 @@ void BuildLocalSurfaces(void)
                 if (extra[i].noDeluxeInfluenceBacksplash != -1) {
                     localSurfaces[i].si_override->noDeluxeInfluenceBacksplash = extra[i].noDeluxeInfluenceBacksplash ? qtrue : qfalse;
                 }
-                if (extra[i].noambient != -1) {
-                    localSurfaces[i].si_override->noambient = extra[i].noambient ? qtrue : qfalse;
+                if (extra[i].gridAmbientScale >= 0.0f) {
+                    localSurfaces[i].si_override->gridAmbientScale = extra[i].gridAmbientScale;
+                }
+                if (extra[i].gridDirectScale >= 0.0f) {
+                    localSurfaces[i].si_override->gridDirectScale = extra[i].gridDirectScale;
                 }
             }
         }

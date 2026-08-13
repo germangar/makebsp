@@ -10,7 +10,8 @@ typedef struct {
   float angle;
   float ambientClampScale;
   qboolean isGlow;
-  qboolean noambient;
+  float gridAmbientScale;
+  float gridDirectScale;
 } contribution_t;
 
 // High-precision vertex for internal lighting

@@ -346,7 +346,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->forceSunLight = qfalse;
     si->noDeluxeInfluence = qfalse;
     si->noDeluxeInfluenceBacksplash = qfalse;
-    si->noambient = qfalse;
+    si->gridAmbientScale = 1.0f;
+    si->gridDirectScale = 1.0f;
     si->deluxeMinAngle = -1.0f;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
@@ -684,10 +685,19 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                 continue;
             }
 
-            // q3map_surfacelight_noambient
-            if (!Q_stricmp(token, "q3map_surfacelight_noambient"))
+            // q3map_surfacelight_grid_ambientscale
+            if (!Q_stricmp(token, "q3map_surfacelight_grid_ambientscale"))
             {
-                si->noambient = qtrue;
+                GetToken(qfalse);
+                si->gridAmbientScale = atof(token);
+                continue;
+            }
+            
+            // q3map_surfacelight_grid_directscale
+            if (!Q_stricmp(token, "q3map_surfacelight_grid_directscale"))
+            {
+                GetToken(qfalse);
+                si->gridDirectScale = atof(token);
                 continue;
             }
 

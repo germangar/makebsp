@@ -696,7 +696,8 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     out->irradiance[2] = trace.filter[2] * sunLight[2];
     out->isGlow = qfalse;
     out->ambientClampScale = 1.0f;
-    out->noambient = qfalse;
+    out->gridAmbientScale = 1.0f;
+    out->gridDirectScale = 1.0f;
 
     return qtrue;
 }
@@ -1097,7 +1098,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         int fCount = light->familyCount;
         if (fCount <= 0) fCount = 1;
         out->ambientClampScale = 1.0f / (float)fCount;
-        out->noambient = light->noambient;
+        out->gridAmbientScale = light->gridAmbientScale;
+        out->gridDirectScale = light->gridDirectScale;
         return qtrue;
     }
 
@@ -1210,7 +1212,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     int fCount = light->familyCount;
     if (fCount <= 0) fCount = 1;
     out->ambientClampScale = 1.0f / (float)fCount;
-    out->noambient = light->noambient;
+    out->gridAmbientScale = light->gridAmbientScale;
+    out->gridDirectScale = light->gridDirectScale;
 
     return qtrue;
 }
@@ -2500,12 +2503,15 @@ void TraceGrid(int num)
         VectorScale(contributions[i].irradiance, contributions[i].angle, tempColor);
         
         d = CalculateShadingModel(DotProduct(contributions[i].dir, summedDir));
-        VectorMA(directedColor, d, tempColor, directedColor);
-        
-        if (!contributions[i].noambient)
+
+        vec3_t scaledDirect;
+        VectorScale(tempColor, contributions[i].gridDirectScale, scaledDirect);
+        VectorMA(directedColor, d, scaledDirect, directedColor);
+
+        if (contributions[i].gridAmbientScale > 0.0001f)
         {
             vec3_t ambContrib;
-            VectorScale(tempColor, LIGHTGRID_AMBIENT_TRANSFER_FRACTION, ambContrib);
+            VectorScale(tempColor, LIGHTGRID_AMBIENT_TRANSFER_FRACTION * contributions[i].gridAmbientScale, ambContrib);
             
             float clampLuma = lightgridMaxDisplayIntensity * LIGHTGRID_AMBIENT_MAX_LUMA * contributions[i].ambientClampScale;
             float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;

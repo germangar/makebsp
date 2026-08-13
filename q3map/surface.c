@@ -89,7 +89,8 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->enforceSampleSize = game->enforceSampleSize;
     ds->noDeluxeInfluence = -1;
     ds->noDeluxeInfluenceBacksplash = -1;
-    ds->noambient = -1;
+    ds->gridAmbientScale = -1.0f;
+    ds->gridDirectScale = -1.0f;
     ds->castShadows = -1;
     ds->parentSurfaceNum = -1;
     ds->chamferConvexWidth = -1.0f;
@@ -162,9 +163,13 @@ static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
         if (bsNodeluxeStr[0])
             ds->noDeluxeInfluenceBacksplash = atoi(bsNodeluxeStr);
 
-        const char *noambientStr = ValueForEpair(epairs, "noambient");
-        if (noambientStr[0])
-            ds->noambient = atoi(noambientStr);
+        const char *gridAmbientScaleStr = ValueForEpair(epairs, "grid_ambientscale");
+        if (gridAmbientScaleStr[0])
+            ds->gridAmbientScale = atof(gridAmbientScaleStr);
+
+        const char *gridDirectScaleStr = ValueForEpair(epairs, "grid_directscale");
+        if (gridDirectScaleStr[0])
+            ds->gridDirectScale = atof(gridDirectScaleStr);
 
         const char *attStr = ValueForEpair(epairs, "attenuation");
         if (attStr[0])
@@ -1490,7 +1495,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
-    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
+    drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
+    drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1586,7 +1592,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
-    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
+    drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
+    drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1688,7 +1695,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
-    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
+    drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
+    drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
@@ -1754,7 +1762,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].attenuationModel = ds->attenuationModel;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluence = ds->noDeluxeInfluence;
     drawExtraSurfaces[numDrawSurfaces].noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
-    drawExtraSurfaces[numDrawSurfaces].noambient = ds->noambient;
+    drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
+    drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
 
