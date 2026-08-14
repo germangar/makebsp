@@ -4,7 +4,10 @@
 #include "mathlib.h"
 #include "qfiles.h"
 
+struct light_s;
+
 typedef struct {
+  const struct light_s *light;
   vec3_t dir;
   vec3_t irradiance;
   float angle;

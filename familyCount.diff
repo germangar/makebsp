@@ -1,0 +1,38 @@
+diff --git a/light/light_direct.c b/light/light_direct.c
+index 65d91d24..22e39774 100644
+--- a/light/light_direct.c
++++ b/light/light_direct.c
+@@ -697,6 +697,7 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
+     out->isGlow = qfalse;
+     out->ambientClampScale = 1.0f;
+     out->noambient = qfalse;
++    out->familyCount = 1;
+ 
+     return qtrue;
+ }
+@@ -1098,6 +1099,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
+         if (fCount <= 0) fCount = 1;
+         out->ambientClampScale = 1.0f / (float)fCount;
+         out->noambient = light->noambient;
++        out->familyCount = fCount;
+         return qtrue;
+     }
+ 
+@@ -1211,6 +1213,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
+     if (fCount <= 0) fCount = 1;
+     out->ambientClampScale = 1.0f / (float)fCount;
+     out->noambient = light->noambient;
++    out->familyCount = fCount;
+ 
+     return qtrue;
+ }
+diff --git a/light/lightdata.h b/light/lightdata.h
+index 78073f21..c1e55e78 100644
+--- a/light/lightdata.h
++++ b/light/lightdata.h
+@@ -11,6 +11,7 @@ typedef struct {
+   float ambientClampScale;
+   qboolean isGlow;
+   qboolean noambient;
++  int familyCount;
+ } contribution_t;

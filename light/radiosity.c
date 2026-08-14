@@ -586,6 +586,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         if (!RadVisCheck(dst, em->center)) continue;
                         
                         contribution_t cont;
+                        cont.light = NULL;
                         VectorCopy(rayDir, cont.dir);
                         if (game->deluxeMap) {
                             float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
@@ -663,6 +664,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         if (!RadVisCheck(dst, em->center)) continue;
 
                         contribution_t cont;
+                        cont.light = NULL;
                         VectorCopy(rayDir, cont.dir);
                         if (game->deluxeMap) {
                             float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
@@ -755,6 +757,7 @@ static void RadiosityIntegrateVertexSurface(int surfIdx) {
                 if (!RadVisCheck(dst, em->center)) continue;
                 
                 contribution_t cont;
+                cont.light = NULL;
                 VectorCopy(rayDir, cont.dir);
                 VectorScale(em->color, formFactorBase, cont.irradiance);
                 cont.angle = cosDst;

@@ -691,6 +691,7 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     }
 
     VectorCopy(sunDirection, out->dir);
+    out->light = NULL;
     out->irradiance[0] = trace.filter[0] * sunLight[0];
     out->irradiance[1] = trace.filter[1] * sunLight[1];
     out->irradiance[2] = trace.filter[2] * sunLight[2];
@@ -1095,6 +1096,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         
         out->angle = outAngle;
         out->isGlow = outIsGlow;
+        out->light = light;
         int fCount = light->familyCount;
         if (fCount <= 0) fCount = 1;
         out->ambientClampScale = 1.0f / (float)fCount;
@@ -1208,6 +1210,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     out->irradiance[0] = add * light->color[0] * trace.filter[0];
     out->irradiance[1] = add * light->color[1] * trace.filter[1];
     out->irradiance[2] = add * light->color[2] * trace.filter[2];
+    out->light = light;
 
     int fCount = light->familyCount;
     if (fCount <= 0) fCount = 1;
