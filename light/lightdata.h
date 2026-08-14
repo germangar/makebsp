@@ -15,6 +15,7 @@ typedef struct {
   qboolean isGlow;
   float gridAmbientScale;
   float gridDirectScale;
+  int familyCount;
 } contribution_t;
 
 // High-precision vertex for internal lighting

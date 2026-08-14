@@ -699,6 +699,7 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     out->ambientClampScale = 1.0f;
     out->gridAmbientScale = 1.0f;
     out->gridDirectScale = 1.0f;
+    out->familyCount = 1;
 
     return qtrue;
 }
@@ -1102,6 +1103,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         out->ambientClampScale = 1.0f / (float)fCount;
         out->gridAmbientScale = light->gridAmbientScale;
         out->gridDirectScale = light->gridDirectScale;
+        out->familyCount = fCount;
         return qtrue;
     }
 
@@ -1217,6 +1219,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     out->ambientClampScale = 1.0f / (float)fCount;
     out->gridAmbientScale = light->gridAmbientScale;
     out->gridDirectScale = light->gridDirectScale;
+    out->familyCount = fCount;
 
     return qtrue;
 }

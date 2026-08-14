@@ -596,6 +596,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         }
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
+                        cont.familyCount = 1;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
                 }
@@ -674,6 +675,7 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         }
                         cont.angle = cosDst;
                         cont.isGlow = qfalse;
+                        cont.familyCount = 1;
                         AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
                 }
@@ -762,6 +764,7 @@ static void RadiosityIntegrateVertexSurface(int surfIdx) {
                 VectorScale(em->color, formFactorBase, cont.irradiance);
                 cont.angle = cosDst;
                 cont.isGlow = qfalse;
+                cont.familyCount = 1;
                 
                 AccumulateContribution(accum, NULL, NULL, &cont, dstNormal, 0.0f);
             }
