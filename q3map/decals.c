@@ -533,7 +533,7 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
             side_t *s = &b->sides[i];
             if (!s->winding || s->bevel) continue;
             if (WindingArea(s->winding) < 0.1f) continue;
-            if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+            if (s->shaderInfo && (s->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKIP))) continue;
             validFaces++;
             validSide = s;
         }
@@ -739,7 +739,7 @@ void ParseDecalProjectors(void)
                     {
                         side_t *s = &b->sides[j];
                         if (!s->winding || s->bevel) continue;
-                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKIP))) continue;
                         validFaces++;
                         validSide = s;
                     }
@@ -931,7 +931,7 @@ void ParseDecalProjectors(void)
                 side_t *s = &b->sides[j];
                 if (!s->winding || s->bevel) continue;
                 if (WindingArea(s->winding) < 0.1f) continue;
-                if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                if (s->shaderInfo && (s->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKIP))) continue;
                 validFaces++;
                 validSide = s;
             }
@@ -949,7 +949,7 @@ void ParseDecalProjectors(void)
                         side_t *s = &b->sides[j];
                         if (!s->winding || s->bevel) continue;
                         if (WindingArea(s->winding) < 0.1f) continue;
-                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & SURF_NODRAW)) continue;
+                        if (s->shaderInfo && (s->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKIP))) continue;
                         _printf("  - Shader: %s (Area: %.2f)\n", s->shaderInfo ? s->shaderInfo->shader : "UNKNOWN", WindingArea(s->winding));
                     }
                 }

@@ -440,7 +440,7 @@ void AutoCaulkBrushes(void)
                             continue;
 
                         // --- Case 3: Face A entirely inside Brush B ---
-                        if (!(sideA->surfaceFlags & SURF_NODRAW) && CanCaulkSideA(entA, entB))
+                        if (!(sideA->surfaceFlags & (SURF_NODRAW | SURF_SKIP)) && CanCaulkSideA(entA, entB))
                         {
                             if (WindingInsideBrush(sideA, brushB))
                             {
@@ -457,7 +457,7 @@ void AutoCaulkBrushes(void)
 
                             if (sideB->bevel) continue;
                             if (!sideB->winding) continue;
-                            if ((sideA->surfaceFlags & SURF_NODRAW) && (sideB->surfaceFlags & SURF_NODRAW)) continue;
+                            if (((sideA->surfaceFlags & (SURF_NODRAW | SURF_SKIP)) && (sideB->surfaceFlags & (SURF_NODRAW | SURF_SKIP)))) continue;
 
                             // Skip non-solid, fog, and liquid faces
                             if (!(sideB->contents & CONTENTS_SOLID)) continue;
@@ -468,7 +468,7 @@ void AutoCaulkBrushes(void)
                             if (sideB->shaderInfo && (sideB->shaderInfo->contents & CONTENTS_TRANSLUCENT)) continue;
 
                             // --- Case 3: Face B entirely inside Brush A ---
-                            if (!(sideB->surfaceFlags & SURF_NODRAW) && CanCaulkSideA(entB, entA))
+                            if (!(sideB->surfaceFlags & (SURF_NODRAW | SURF_SKIP)) && CanCaulkSideA(entB, entA))
                             {
                                 if (WindingInsideBrush(sideB, brushA))
                                 {
@@ -500,14 +500,14 @@ void AutoCaulkBrushes(void)
                                 continue;
 
                             // --- Entity compatibility & apply caulk ---
-                            if (aInB && CanCaulkSideA(entA, entB) && !(sideA->surfaceFlags & SURF_NODRAW))
+                            if (aInB && CanCaulkSideA(entA, entB) && !(sideA->surfaceFlags & (SURF_NODRAW | SURF_SKIP)))
                             {
                                 sideA->shaderInfo   = caulkShader;
                                 sideA->surfaceFlags = caulkShader->surfaceFlags;
                                 sideA->contents     = caulkShader->contents;
                                 caulkedFaces++;
                             }
-                            if (bInA && CanCaulkSideA(entB, entA) && !(sideB->surfaceFlags & SURF_NODRAW))
+                            if (bInA && CanCaulkSideA(entB, entA) && !(sideB->surfaceFlags & (SURF_NODRAW | SURF_SKIP)))
                             {
                                 sideB->shaderInfo   = caulkShader;
                                 sideB->surfaceFlags = caulkShader->surfaceFlags;

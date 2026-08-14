@@ -1281,8 +1281,8 @@ void ProcessFuncLight(entity_t *ent)
             if (!side->shaderInfo)
                 continue;
 
-            // Visibility filter: skip nodraw and sky surfaces
-            if (side->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY))
+            // Visibility filter: skip nodraw, sky, and skip surfaces
+            if (side->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_SKIP))
                 continue;
 
             // Calculate center of the face
