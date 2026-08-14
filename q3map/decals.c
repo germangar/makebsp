@@ -1859,7 +1859,8 @@ void MakeEntityDecals(entity_t *e)
                 }
             }
         }
-        
+        float shadeAngle = FloatForKey(decalEnt, "shadeangle");
+
         if (decalTrisoup.numIndexes >= 3 && firstProjectorIndex != -1)
         {
             mapDrawSurface_t *templateDs = &mapDrawSurfs[0];
@@ -1867,6 +1868,11 @@ void MakeEntityDecals(entity_t *e)
                 templateDs = &mapDrawSurfs[e->firstDrawSurf];
             
             WeldDecalMesh(&decalTrisoup, 0.01f);
+            if (shadeAngle > 0.0f)
+            {
+                SmoothIndexedMeshNormalsByShadeAngle(&decalTrisoup.verts, &decalTrisoup.numVerts, &decalTrisoup.maxVerts,
+                                                     decalTrisoup.indexes, decalTrisoup.numIndexes, shadeAngle);
+            }
             EmitDecalMeshAsMiscModel(&decalTrisoup, &decalProjectors[firstProjectorIndex], templateDs);
         }
         
@@ -1879,6 +1885,11 @@ void MakeEntityDecals(entity_t *e)
             WeldDecalMesh(&decalPatch, 0.01f);
             ExtrudeDecalMesh(&decalPatch);
             DecimateDecalMesh(&decalPatch);
+            if (shadeAngle > 0.0f)
+            {
+                SmoothIndexedMeshNormalsByShadeAngle(&decalPatch.verts, &decalPatch.numVerts, &decalPatch.maxVerts,
+                                                     decalPatch.indexes, decalPatch.numIndexes, shadeAngle);
+            }
             EmitDecalMeshAsMiscModel(&decalPatch, &decalProjectors[firstProjectorIndex], templateDs);
         }
         

@@ -51,6 +51,13 @@ mesh_t *RemoveLinearMeshColumnsRows( mesh_t *in );
 void MakeMeshNormals( mesh_t in );
 void PutMeshOnCurve( mesh_t in );
 
+#define MAX_SHARED_FACES 64
+
+void SmoothIndexedMeshNormalsByShadeAngle(
+    drawVert_t **verts, int *numVerts, int *maxVerts,
+    int *indexes, int numIndexes,
+    float shadeAngle
+);
 
 void MakeNormalVectors (vec3_t forward, vec3_t right, vec3_t up);
 #endif

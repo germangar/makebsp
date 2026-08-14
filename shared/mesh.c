@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include <stdlib.h>
+#include <string.h>
 #include "../common/cmdlib.h"
 #include "../common/mathlib.h"
 #include "../common/bspfile.h"
@@ -798,4 +799,127 @@ qboolean IsMeshPlanar(mesh_t *mesh) {
     }
 
     return (maxDist <= 0.1f);
+}
+
+/*
+==================
+SmoothIndexedMeshNormalsByShadeAngle
+Averages the vertex normals for an indexed triangle mesh using a shade angle threshold.
+If adjacent triangles exceed the angle threshold, the vertex is duplicated to preserve sharp creases.
+==================
+*/
+void SmoothIndexedMeshNormalsByShadeAngle(drawVert_t **verts, int *numVerts, int *maxVerts,
+                                          int *indexes, int numIndexes,
+                                          float shadeAngle)
+{
+    float thresholdDot = (float)cos(shadeAngle * Q_PI / 180.0);
+    int numFaces = numIndexes / 3;
+    vec3_t *faceNormals;
+    int originalNumVerts, v, i;
+
+    if (numFaces <= 0) return;
+
+    faceNormals = malloc(numFaces * sizeof(vec3_t));
+
+    // 1. Compute flat face normals for every triangle
+    for (i = 0; i < numFaces; i++) {
+        int i0 = indexes[i*3+0], i1 = indexes[i*3+1], i2 = indexes[i*3+2];
+        vec3_t d1, d2;
+        VectorSubtract((*verts)[i1].xyz, (*verts)[i0].xyz, d1);
+        VectorSubtract((*verts)[i2].xyz, (*verts)[i0].xyz, d2);
+        CrossProduct(d2, d1, faceNormals[i]);
+        VectorNormalize(faceNormals[i], faceNormals[i]);
+    }
+
+    originalNumVerts = *numVerts;
+
+    // 2. Process each original welded vertex
+    for (v = 0; v < originalNumVerts; v++) {
+        int sharedFaces[MAX_SHARED_FACES];
+        int sharedCount = 0;
+        qboolean adjacent[MAX_SHARED_FACES][MAX_SHARED_FACES];
+        qboolean grouped[MAX_SHARED_FACES];
+        int a, b, root;
+        int numGroups = 0;
+
+        // Find all faces sharing vertex 'v' (by index value)
+        for (i = 0; i < numFaces && sharedCount < MAX_SHARED_FACES; i++) {
+            if (indexes[i*3+0] == v || indexes[i*3+1] == v || indexes[i*3+2] == v)
+                sharedFaces[sharedCount++] = i;
+        }
+        if (sharedCount == 0) continue;
+
+        memset(adjacent, 0, sizeof(adjacent));
+        memset(grouped, 0, sizeof(grouped));
+
+        // Build adjacency matrix: two faces are adjacent if their angle <= shadeAngle
+        for (a = 0; a < sharedCount; a++) {
+            for (b = 0; b < sharedCount; b++) {
+                if (DotProduct(faceNormals[sharedFaces[a]], faceNormals[sharedFaces[b]]) >= thresholdDot) {
+                    adjacent[a][b] = qtrue;
+                }
+            }
+        }
+
+        // Find connected components (smoothing groups) using BFS
+        for (root = 0; root < sharedCount; root++) {
+            qboolean visited[MAX_SHARED_FACES];
+            int queue[MAX_SHARED_FACES], qhead = 0, qtail = 0;
+            vec3_t blendedNormal;
+            int targetVertIndex;
+
+            if (grouped[root]) continue;
+
+            memset(visited, 0, sizeof(visited));
+            queue[qtail++] = root;
+            visited[root] = qtrue;
+
+            while (qhead < qtail) {
+                int curr = queue[qhead++];
+                for (a = 0; a < sharedCount; a++) {
+                    if (adjacent[curr][a] && !visited[a]) {
+                        visited[a] = qtrue;
+                        queue[qtail++] = a;
+                    }
+                }
+            }
+
+            // Average face normals of this connected component
+            VectorClear(blendedNormal);
+            for (a = 0; a < sharedCount; a++) {
+                if (visited[a]) {
+                    VectorAdd(blendedNormal, faceNormals[sharedFaces[a]], blendedNormal);
+                    grouped[a] = qtrue;
+                }
+            }
+            VectorNormalize(blendedNormal, blendedNormal);
+
+            // First group: assign normal to the original vertex
+            // Subsequent groups (sharp crease): duplicate the vertex,
+            // then redirect this group's index references to the new copy
+            targetVertIndex = v;
+            if (numGroups > 0) {
+                if (*numVerts >= *maxVerts) {
+                    *maxVerts *= 2;
+                    *verts = realloc(*verts, *maxVerts * sizeof(drawVert_t));
+                }
+                targetVertIndex = *numVerts;
+                (*verts)[targetVertIndex] = (*verts)[v]; // copy all vertex data (UV, color, etc.)
+                (*numVerts)++;
+
+                // Remap indices for faces in this group to the new vertex
+                for (a = 0; a < sharedCount; a++) {
+                    if (visited[a]) {
+                        int fi = sharedFaces[a] * 3;
+                        if (indexes[fi+0] == v) indexes[fi+0] = targetVertIndex;
+                        if (indexes[fi+1] == v) indexes[fi+1] = targetVertIndex;
+                        if (indexes[fi+2] == v) indexes[fi+2] = targetVertIndex;
+                    }
+                }
+            }
+            VectorCopy(blendedNormal, (*verts)[targetVertIndex].normal);
+            numGroups++;
+        }
+    }
+    free(faceNormals);
 }
