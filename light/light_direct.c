@@ -2371,6 +2371,7 @@ float lightgridMaxDisplayIntensity = 0.0f;
 
 #define LIGHTGRID_AMBIENT_TRANSFER_FRACTION 0.20f
 #define LIGHTGRID_AMBIENT_MAX_LUMA 0.10f
+#define LIGHTGRID_MAO_GATHER_FRACTION 0.40f
 
 void TraceGrid(int num)
 {
@@ -2571,8 +2572,31 @@ void TraceGrid(int num)
             vec3_t moveDir;
             vec3_t moveAmb;
             
-            VectorScale(&maoAmbient[num * 3], dirRatio, moveDir);
-            VectorScale(&maoAmbient[num * 3], ambRatio, moveAmb);
+            VectorCopy(&maoAmbient[num * 3], moveAmb);
+            VectorClear(moveDir);
+
+            // Optimization: only attempt gather if this cell itself is lit (not solid/black).
+            float selfLum = moveAmb[0] * 0.299f + moveAmb[1] * 0.587f + moveAmb[2] * 0.114f;
+            
+            extern float ambient_gatheradius;
+            if (ambient_gatheradius > 0.001f && selfLum > 0.0001f)
+            {
+                vec3_t envAmb;
+                if (GatherGridAmbientBleed(origin, envAmb, tw))
+                {
+                    // Blend local and gathered using our macro
+                    float gatherMix = LIGHTGRID_MAO_GATHER_FRACTION;
+                    float localMix = 1.0f - gatherMix;
+                    
+                    moveAmb[0] = moveAmb[0] * localMix + envAmb[0] * gatherMix;
+                    moveAmb[1] = moveAmb[1] * localMix + envAmb[1] * gatherMix;
+                    moveAmb[2] = moveAmb[2] * localMix + envAmb[2] * gatherMix;
+                }
+            }
+
+            VectorCopy(moveAmb, moveDir);
+            VectorScale(moveAmb, ambRatio, moveAmb);
+            VectorScale(moveDir, dirRatio, moveDir);
             
             gridData32[num].ambient[0][0] += moveAmb[0];
             gridData32[num].ambient[0][1] += moveAmb[1];

@@ -436,6 +436,7 @@ qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
+qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);
 qboolean PatchSamplePoint(mesh_t *mesh, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);

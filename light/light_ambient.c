@@ -322,6 +322,86 @@ static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambCol
 
 /*
 ================
+GatherGridAmbientBleed
+
+Gathers environmental MAO bleed for grid cells.
+Occluded neighbors are skipped entirely (do not darken the result).
+================
+*/
+qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
+{
+    float gatherRadius = ambient_gatheradius;
+    float gatherRadiusSq = gatherRadius * gatherRadius;
+
+    int ix_min = (int)((origin[0] - gatherRadius - gridMins[0]) / gridSize[0]);
+    int ix_max = (int)((origin[0] + gatherRadius - gridMins[0]) / gridSize[0]);
+    int iy_min = (int)((origin[1] - gatherRadius - gridMins[1]) / gridSize[1]);
+    int iy_max = (int)((origin[1] + gatherRadius - gridMins[1]) / gridSize[1]);
+    int iz_min = (int)((origin[2] - gatherRadius - gridMins[2]) / gridSize[2]);
+    int iz_max = (int)((origin[2] + gatherRadius - gridMins[2]) / gridSize[2]);
+
+    // clamp to bounds
+    if (ix_min < 0) ix_min = 0; 
+    if (ix_max > gridBounds[0] - 1) ix_max = gridBounds[0] - 1;
+    if (iy_min < 0) iy_min = 0; 
+    if (iy_max > gridBounds[1] - 1) iy_max = gridBounds[1] - 1;
+    if (iz_min < 0) iz_min = 0; 
+    if (iz_max > gridBounds[2] - 1) iz_max = gridBounds[2] - 1;
+
+    VectorClear(envColor);
+    float totalWeight = 0.0f;
+    
+    for (int gz = iz_min; gz <= iz_max; gz++) {
+        for (int gy = iy_min; gy <= iy_max; gy++) {
+            for (int gx = ix_min; gx <= ix_max; gx++) {
+                int gidx = (gz * gridBounds[1] + gy) * gridBounds[0] + gx;
+                float *gCol = &maoAmbient[gidx * 3];
+                
+                // OPTIMIZATION 1: Cheapest check. Skip black/solid neighbor voxels immediately.
+                float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
+                if (lum <= 0.0001f) continue;
+
+                vec3_t gPos;
+                gPos[0] = gridMins[0] + gx * gridSize[0];
+                gPos[1] = gridMins[1] + gy * gridSize[1];
+                gPos[2] = gridMins[2] + gz * gridSize[2];
+
+                vec3_t dir;
+                VectorSubtract(gPos, origin, dir);
+                float distSq = DotProduct(dir, dir);
+                
+                // OPTIMIZATION 2: Sphere cull.
+                if (distSq > gatherRadiusSq) continue;
+                
+                // OPTIMIZATION 3: Skip self.
+                if (distSq < 1.0f) continue;
+
+                float w = 1.0f - (distSq / gatherRadiusSq);
+
+                // OPTIMIZATION 4: Trace (most expensive).
+                trace_t trace;
+                TraceLine(origin, gPos, &trace, qfalse, tw);
+                if (trace.passSolid) continue; // Skip blocked; do NOT add to totalWeight.
+                
+                envColor[0] += gCol[0] * w;
+                envColor[1] += gCol[1] * w;
+                envColor[2] += gCol[2] * w;
+                totalWeight += w;
+            }
+        }
+    }
+
+    if (totalWeight > 0.0001f) {
+        envColor[0] /= totalWeight;
+        envColor[1] /= totalWeight;
+        envColor[2] /= totalWeight;
+        return qtrue;
+    }
+    return qfalse;
+}
+
+/*
+================
 TraceAmbient
 ================
 */
