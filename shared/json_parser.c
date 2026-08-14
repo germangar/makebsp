@@ -931,9 +931,6 @@ void JSON_ExportStandardPackages(const char *directory)
     }
 
     sprintf(path, "%s/qfusion.json", directory);
-    if (!FileExists(path))
-    {
-        JSON_ExportGame(path, &gameTemplates[0]);
-        _printf("Exporting default 'qfusion.json'...\n");
-    }
+    JSON_ExportGame(path, &gameTemplates[0]);
+    _printf("Exporting default 'qfusion.json'...\n");
 }

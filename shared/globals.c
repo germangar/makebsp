@@ -230,7 +230,7 @@ game_t *InitGame(int argc, char **argv) {
     memcpy(&activeGame, &gameTemplates[0], sizeof(game_t));
 
     // 3. Pre-scan CLI for -game switch
-    const char *gameName = "qfusion";
+    const char *gameName = NULL;
     for (int j = 1; j < argc; j++) {
         if (!strcmp(argv[j], "-game") && j + 1 < argc) {
             gameName = argv[j + 1];
@@ -238,12 +238,16 @@ game_t *InitGame(int argc, char **argv) {
         }
     }
 
-    // 4. Load the specific game JSON to override defaults in the local struct
-    char gameJsonPath[1024];
-    sprintf(gameJsonPath, "%s/%s.json", gamesDir, gameName);
-    if (FileExists(gameJsonPath)) {
-        _printf("Loading game profile: %s\n", gameJsonPath);
-        JSON_LoadGame(gameJsonPath, &activeGame);
+    // 4. Load the specific game JSON to override defaults in the local struct (if requested)
+    if (gameName != NULL) {
+        char gameJsonPath[1024];
+        sprintf(gameJsonPath, "%s/%s.json", gamesDir, gameName);
+        if (FileExists(gameJsonPath)) {
+            _printf("Loading game profile: %s\n", gameJsonPath);
+            JSON_LoadGame(gameJsonPath, &activeGame);
+        } else {
+            _printf("WARNING: Game profile '%s' not found at '%s'. Using defaults.\n", gameName, gameJsonPath);
+        }
     }
 
     // 5. Point the global game to our local struct
