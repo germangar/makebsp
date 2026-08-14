@@ -2516,8 +2516,29 @@ void TraceGrid(int num)
 
         if (contributions[i].gridAmbientScale > 0.0001f)
         {
+            float distanceScale = 1.0f;
+            if (contributions[i].light != NULL && contributions[i].light->reach > 0.001f)
+            {
+                vec3_t delta;
+                VectorSubtract(contributions[i].light->origin, origin, delta);
+                float dist = VectorLength(delta);
+
+                // Distance ratio clamped to 1.0 (defensive guard against edge precision)
+                float t = dist / contributions[i].light->reach;
+                if (t > 1.0f)
+                {
+                    t = 1.0f;
+                }
+
+                // Goldilocks curve (sigmoid knee at 0.5)
+                float knee = 0.5f;
+                float r = t / knee;
+                distanceScale = 1.0f / sqrtf(1.0f + r * r);
+            }
+
             vec3_t ambContrib;
-            VectorScale(tempColor, LIGHTGRID_AMBIENT_TRANSFER_FRACTION * contributions[i].gridAmbientScale, ambContrib);
+            float finalAmbientFraction = LIGHTGRID_AMBIENT_TRANSFER_FRACTION * contributions[i].gridAmbientScale * distanceScale;
+            VectorScale(tempColor, finalAmbientFraction, ambContrib);
             
             float clampLuma = lightgridMaxDisplayIntensity * LIGHTGRID_AMBIENT_MAX_LUMA * contributions[i].ambientClampScale;
             float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
