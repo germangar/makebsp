@@ -357,7 +357,7 @@ qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
                 int gidx = (gz * gridBounds[1] + gy) * gridBounds[0] + gx;
                 float *gCol = &maoAmbient[gidx * 3];
                 
-                // OPTIMIZATION 1: Cheapest check. Skip black/solid neighbor voxels immediately.
+                // cull 1: Cheapest check. Skip black/solid neighbor voxels immediately.
                 float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
                 if (lum <= 0.0001f) continue;
 
@@ -370,15 +370,15 @@ qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
                 VectorSubtract(gPos, origin, dir);
                 float distSq = DotProduct(dir, dir);
                 
-                // OPTIMIZATION 2: Sphere cull.
+                // cull 2: Sphere cull.
                 if (distSq > gatherRadiusSq) continue;
                 
-                // OPTIMIZATION 3: Skip self.
+                // cull 3: Skip self.
                 if (distSq < 1.0f) continue;
 
                 float w = 1.0f - (distSq / gatherRadiusSq);
 
-                // OPTIMIZATION 4: Trace (most expensive).
+                // cull 4: Trace (most expensive).
                 trace_t trace;
                 TraceLine(origin, gPos, &trace, qfalse, tw);
                 if (trace.passSolid) continue; // Skip blocked; do NOT add to totalWeight.

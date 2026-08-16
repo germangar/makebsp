@@ -169,6 +169,9 @@ typedef struct drawsurf_s
     qboolean miscModel;
     qboolean planarDerived; // true for atomic trisoups merged from planar surfaces (e.g. chamfers)
     qboolean isPlanar;      // true if this trisoup was derived from flat coplanar surface(s)
+    qboolean patchDerived;  // true if tessellated from a Bezier patch (has indexed triangles, no side/mapBrush)
+
+    int entityNum; // -1 = worldspawn; set for patches derived from named entities
 
     qboolean flareSurface;
     float samplesize;

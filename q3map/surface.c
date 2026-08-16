@@ -95,6 +95,7 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->parentSurfaceNum = -1;
     ds->chamferConvexWidth = -1.0f;
     ds->chamferConcaveWidth = -1.0f;
+    ds->entityNum = -1;
 
     return ds;
 }

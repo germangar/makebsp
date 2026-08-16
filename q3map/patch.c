@@ -331,6 +331,7 @@ void PatchMapDrawSurfs(entity_t *e)
         scan->grouped = qtrue;
         ds = DrawSurfaceForMesh(&scan->mesh);
         ds->shaderInfo = scan->shaderInfo;
+        ds->entityNum = scan->entitynum;
         
         memset(ds->decalgroup, 0, sizeof(ds->decalgroup));
         strncpy(ds->decalgroup, ValueForEpair(scan->epairs, "decalgroup"), sizeof(ds->decalgroup) - 1);
