@@ -234,7 +234,6 @@ game_t *InitGame(int argc, char **argv) {
     for (int j = 1; j < argc; j++) {
         if (!strcmp(argv[j], "-game") && j + 1 < argc) {
             gameName = argv[j + 1];
-            break;
         }
     }
 

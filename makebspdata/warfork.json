@@ -5,6 +5,10 @@
   "lightmapSize": 1024,
   "ambientTestRadius": 400.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 1000.00, /* Distance at which a lightmap pixel gathers light from probes */
+  "lightgridSmoothAmbient": 256.00, /* Radius in world units for smoothing the ambient component of the light grid */
+  "lightgridSmoothAmbientPasses": 4,
+  "lightgridSmoothDirect": 128.00, /* Radius in world units for smoothing the direct component of the light grid */
+  "lightgridSmoothDirectPasses": 3,
   "shading": "halflambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "saturation": 1.25, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
