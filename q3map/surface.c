@@ -113,7 +113,7 @@ DrawSurfaceForSide
 ResolveSurfaceExtraProperties
 =================
 */
-static void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
+void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
 {
     // Resolve smoothing radius
     float globalSmooth = game->defaultSmoothRadius;

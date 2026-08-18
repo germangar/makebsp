@@ -102,6 +102,19 @@ static void PromotePatchesToTrisoups(entity_t *e)
         newDs->castShadows       = ds->castShadows;
         newDs->gridAmbientScale  = ds->gridAmbientScale;
         newDs->gridDirectScale   = ds->gridDirectScale;
+        newDs->lightValue        = ds->lightValue;
+        VectorCopy(ds->lightColor, newDs->lightColor);
+        newDs->backsplashFraction = ds->backsplashFraction;
+        newDs->lightSubdivide    = ds->lightSubdivide;
+        newDs->noDeluxeInfluence = ds->noDeluxeInfluence;
+        newDs->noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+        newDs->overrideVertexColor = ds->overrideVertexColor;
+        VectorCopy(ds->vertexColor, newDs->vertexColor);
+        newDs->isHalo            = ds->isHalo;
+        newDs->cutoff            = ds->cutoff;
+        newDs->fadeout           = ds->fadeout;
+        newDs->hasAttenuationOverride = ds->hasAttenuationOverride;
+        newDs->attenuationModel  = ds->attenuationModel;
         strncpy(newDs->decalgroup, ds->decalgroup, sizeof(newDs->decalgroup) - 1);
 
         // 5. Copy tessellated vertex data

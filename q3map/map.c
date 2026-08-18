@@ -1243,9 +1243,8 @@ void SpawnLightEntity(vec3_t origin, vec3_t normal, qboolean isPoint, entity_t *
 
     // If no color is set, determine default behavior based on source entity
     const char *color = ValueForKey(sourceEnt, "color");
-    const char *_color = ValueForKey(sourceEnt, "_color");
 
-    if (!color[0] && !_color[0]) {
+    if (!color[0]) {
         if (!strcmp(ValueForKey(sourceEnt, "classname"), "func_light")) {
             if (shaderName && shaderName[0]) {
                 SetKeyValue(le, "lightimage", shaderName);

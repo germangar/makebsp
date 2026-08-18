@@ -753,47 +753,7 @@ static void ResolveMiscModelSurfaceProperties(mapDrawSurface_t *ds, entity_t *en
 {
     strncpy(ds->decalgroup, ValueForKey(entity, "decalgroup"), sizeof(ds->decalgroup) - 1);
 
-    const char *ssStr = ValueForKey(entity, "supersample");
-    if (ssStr[0]) {
-        float ssVal = atof(ssStr);
-        ds->superSampleRadius = (ssVal < 0.0f) ? 0.0f : ssVal;
-    } else {
-        ds->superSampleRadius = -1.0f;
-    }
-
-    const char *radStr = ValueForKey(entity, "smooth");
-    if (radStr[0]) {
-        ds->smoothingRadius = atof(radStr);
-    } else {
-        ds->smoothingRadius = -1.0f;
-    }
-    
-    // NOTE: This uses a global fallback to entities[0] because misc_model drawsurfaces 
-    // are not backed by brushes and do not natively inherit worldspawn epairs.
-    float globalSmooth = game->defaultSmoothRadius;
-    const char *wsSmooth = ValueForKey(&entities[0], "smooth");
-    if (wsSmooth[0])
-        globalSmooth = atof(wsSmooth);
-        
-    if (ds->smoothingRadius < 0.0f && ds->shaderInfo && ds->shaderInfo->minSmoothRadius >= 0.0f && ds->shaderInfo->minSmoothRadius > globalSmooth)
-        ds->smoothingRadius = ds->shaderInfo->minSmoothRadius;
-
-    const char *vcolStr = ValueForKey(entity, "vertexcolor");
-    if (vcolStr[0]) {
-        ds->overrideVertexColor = 1;
-        ParseColor(vcolStr, ds->vertexColor);
-    } else {
-        ds->overrideVertexColor = 0;
-    }
-
-    const char *upscaleStr = ValueForKey(entity, "upscale");
-    if (upscaleStr[0]) ds->upscale = atoi(upscaleStr);
-    else ds->upscale = 0;
-
-    const char *csStr = ValueForKey(entity, "castshadows");
-    if (!csStr[0]) csStr = ValueForKey(entity, "cs"); // alias
-    if (csStr[0]) ds->castShadows = atoi(csStr);
-    else ds->castShadows = -1;
+    ResolveSurfaceExtraProperties(ds, entity->epairs);
 
     // Resolve sample size hierarchy
     // NOTE: samplesize clamping here intentionally differs from surface.c. 

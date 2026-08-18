@@ -605,6 +605,7 @@ extern int numMapDrawSurfs;
 extern extraSurface_t *drawExtraSurfaces;
 
 mapDrawSurface_t *AllocDrawSurf(void);
+void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs);
 winding_t *WindingFromDrawSurf(mapDrawSurface_t *ds);
 void MergeSides(entity_t *e, tree_t *tree);
 void SubdivideDrawSurfs(entity_t *e, tree_t *tree);

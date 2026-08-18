@@ -372,44 +372,9 @@ void PatchMapDrawSurfs(entity_t *e)
                 ds->samplesize = (float)minPow2;
         }
 
-        float globalSmooth = game->defaultSmoothRadius;
-        const char *wsSmooth = ValueForKey(&entities[0], "smooth");
-        if (wsSmooth[0])
-            globalSmooth = atof(wsSmooth);
 
-        if (scan->shaderInfo && scan->shaderInfo->minSmoothRadius >= 0.0f && scan->shaderInfo->minSmoothRadius > globalSmooth)
-        {
-            ds->smoothingRadius = scan->shaderInfo->minSmoothRadius;
-        }
 
-        const char *rad_str = ValueForEpair(scan->epairs, "smooth");
-        if (rad_str[0])
-        {
-            ds->smoothingRadius = atof(rad_str);
-        }
-
-        const char *vcolStr = ValueForEpair(scan->epairs, "vertexcolor");
-        if (vcolStr[0])
-        {
-            ds->overrideVertexColor = 1;
-            ParseColor(vcolStr, ds->vertexColor);
-        }
-
-        // upscale override
-        const char *upscaleStr = ValueForEpair(scan->epairs, "upscale");
-        if (upscaleStr[0])
-            ds->upscale = atoi(upscaleStr);
-
-        // supersample override
-        const char *ssStr = ValueForEpair(scan->epairs, "supersample");
-        if (ssStr[0])
-        {
-            float ssVal = atof(ssStr);
-            if (ssVal < 0.0f)
-                ds->superSampleRadius = 0.0f;
-            else
-                ds->superSampleRadius = ssVal;
-        }
+        ResolveSurfaceExtraProperties(ds, scan->epairs);
     }
 
     qprintf("%5i patches\n", patchCount);
