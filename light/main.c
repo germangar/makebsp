@@ -747,9 +747,6 @@ int main(int argc, char **argv) {
     }
 
     if (i != argc - 1) {
-        if (i < argc) {
-            _printf("Error: Unrecognized switch or extra argument '%s'\n", argv[i]);
-        }
         _printf("usage: light [-<switch> [-<switch> ...]] <mapname>\n"
                 "\n"
                 "Switches:\n"
@@ -757,57 +754,63 @@ int main(int argc, char **argv) {
                 "   opencl <0|1>   = enable (1, default) or disable (0) GPU acceleration\n"
                 "   threads <X>    = set number of threads to X\n"
                 "   area <V>       = set the area light scale to V\n"
-                "   -nodirect      = skip direct lighting passes\n"
-               "   -noambient     = skip ambient lighting passes\n"
+                "   -nodirect      = skip direct lighting passes\n");
+        _printf("   -noambient     = skip ambient lighting passes\n"
                 "   upscale        = enable 2x lightmap upscaling for anti-aliasing\n"
                 "   shading <type>  = set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal)\n"
                 "   shading_softbias <F> = override the default soft bias for the shading model\n"
                 "   sunshading <type> = override the sun shading model\n"
                 "   sunshading_softbias <F> = override the sun soft bias\n"
-                "   -lowmem        = use memory-mapped files for massive radiosity passes\n"
-                "   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
+                "   -lowmem        = use memory-mapped files for massive radiosity passes\n");
+        _printf("   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
                 "   -magentatrisoups = Color TRISOUP lightmaps flat magenta (for export debugging)\n"
                 "   -cyanpatches    = Color PATCH lightmaps flat cyan (for export debugging)\n"
                 "   -greenplanar    = Color PLANAR lightmaps flat green (for export debugging)\n"
                 "   deluxe <0|1>    = enable (1) or disable (0) deluxemapping\n"
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
-                "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n"
-                "   deluxe_radiosity_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during radiosity pass\n"
+                "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n");
+        _printf("   deluxe_radiosity_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during radiosity pass\n"
                 "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
                 "    -deluxemode <0-2>   Output deluxe lighting to direction lightmaps. 0=none, 1=average, 2=bumpmap.\n"
                 "    -directonly         Skip radiosity and ambient passes.\n"
-                "    -radiosityonly      Skip ambient and clear direct lighting before merging radiosity.\n"
-                "    -ambientonly        Skip direct and radiosity passes.\n"
+                "    -radiosityonly      Skip ambient and clear direct lighting before merging radiosity.\n");
+        _printf("    -ambientonly        Skip direct and radiosity passes.\n"
                 "   smoothpasses <passes> = number of post-process smoothing passes to run\n"
                 "   smoothradius <R> = set radius for blurring (world) and jitter (super-sampling)\n"
                 "   antialiasing <passes> = number of anti-aliasing post-process passes to run\n"
                 "   supersample <mode> = trace-time super-sampling mode:\n"
                 "                     0 = OFF\n"
                 "                     1 = super-sampling EVERYTHING\n"
-                "                     2 = super-sampling models only\n"
-                "   rad_passes <N>   = set the number of radiosity passes (high-fidelity bounce)\n"
+                "                     2 = super-sampling models only\n");
+        _printf("   rad_passes <N>   = set the number of radiosity passes (high-fidelity bounce)\n"
                 "   rad_ao_min <F>   = set inner distance limit for radiosity plateau\n"
                 "   rad_ao_max <F>   = set transition range width for radiosity gradient (starts at min)\n"
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   rad_interval <I>  = set sparse grid interval (1=Every luxel, default 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
-                "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n"
-                "   radiosity <F>       = set final bounce energy multiplier\n"
+                "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n");
+        _printf("   radiosity <F>       = set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
                 "   ambient_grid_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
                 "   ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"
                 "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
                 "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
-                "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n"
-                "                         Worldspawn: ambient_sky <R G B>\n"
+                "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n");
+        _printf("                         Worldspawn: ambient_sky <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   saturation <F>   = set global light saturation multiplier (default: 1.0)\n"
                 "   saturationramp <mode> = saturation roll-off curve (off, filmic, power, midtone)\n"
                 "   lightmaprange    = normalize intensities to the peak light found\n"
                 "   fast             = enable optimized (rasterized) voxelization and CSR filters\n");
-        exit(0);
+
+        if (i < argc) {
+            Error("Unrecognized switch or extra argument '%s'", argv[i]);
+        }
+        else {
+            Error("No map specified");
+        }
     }
 
     

@@ -1127,50 +1127,54 @@ int main(int argc, char **argv)
 
     if (i != argc - 1)
     {
-        if (i < argc)
-        {
-            _printf("Error: Unrecognized switch or extra argument '%s'\n", argv[i]);
-        }
         _printf("usage: q3map [-<switch> [-<switch> ...]] <mapname>\n"
                 "\n"
                 "Switches:\n"
                 "   v              = verbose output\n"
                 "   draw           = enable draw flag\n"
                 "   nowater        = don't process water surfaces\n"
-                "   nodetail       = ignore detail brushes\n"
-                "   fulldetail     = treat all brushes as structural\n"
+                "   nodetail       = ignore detail brushes\n");
+        _printf("   fulldetail     = treat all brushes as structural\n"
                 "   onlyents       = only update entities in an existing BSP\n"
                 "   micro <V>      = set the micro volume threshold to V\n"
                 "   nofog          = don't process fog volumes\n"
                 "   nosubdivide    = don't subdivide large surfaces\n"
                 "   leaktest       = abort on first leak found\n"
-                "   verboseentities = verbose entity processing output\n"
-                "   nomerge        = don't merge brush faces\n"
+                "   verboseentities = verbose entity processing output\n");
+        _printf("   nomerge        = don't merge brush faces\n"
                 "   notjunc        = skip T-junction narrowing and fixing\n"
                 "   noautocaulk    = disable early face auto-caulking\n"
                 "   chamferedges   = enable edge chamfering for smooth corner lighting\n"
                 "   nochamferedges = explicitly disable edge chamfering\n"
                 "   chamfernosubdivide = disable T-junction surface splitting before chamfering\n"
-                "   chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n"
-                "   chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
+                "   chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n");
+        _printf("   chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
                 "   mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
                 "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
-                "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n"
-                "   visonly        = run visibility calculation only (requires .prt file)\n"
+                "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n");
+        _printf("   visonly        = run visibility calculation only (requires .prt file)\n"
                 "   novis          = skip inline visibility calculation\n"
                 "   tmpout         = write output files to /tmp\n"
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
-                "   fast           = fast compile (ignores q3map_maxsamplesize and disables chamfering)\n"
-                "   saveprt        = do not delete the .prt file after processing\n"
+                "   fast           = fast compile (ignores q3map_maxsamplesize and disables chamfering)\n");
+        _printf("   saveprt        = do not delete the .prt file after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
-
+                "\n"
                 "   enforceSampleSize <0|1> = strictly follow shader/global sample size\n");
-        exit(0);
+
+        if (i < argc)
+        {
+            Error("Unrecognized switch or extra argument '%s'", argv[i]);
+        }
+        else
+        {
+            Error("No map specified");
+        }
     }
 
     _printf("Active game: %s (BSP format: %s)\n", game->arg, game->bspIdent);
