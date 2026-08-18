@@ -90,6 +90,7 @@ typedef struct shaderInfo_s
     byte *pixels;
 
     vec3_t sunLight;
+    float sunLightIntensity;
     vec3_t sunDirection;
 
     float surfaceLightGlow; // backface glow fraction (default depends on contents)

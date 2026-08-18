@@ -888,7 +888,7 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                 if (!TokenAvailable()) continue;
                 GetToken(qfalse);
                 a = atof(token);
-                VectorScale(si->sunLight, a, si->sunLight);
+                si->sunLightIntensity = a;
 
                 if (!TokenAvailable()) continue;
                 GetToken(qfalse);

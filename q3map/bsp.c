@@ -593,9 +593,11 @@ void InjectSunEntity(void)
             SetKeyValue(e, "sun_dir", buf);
 
             // Store the color and intensity
-            sprintf(buf, "%f %f %f", si->sunLight[0], si->sunLight[1],
-                    si->sunLight[2]);
+            sprintf(buf, "%f %f %f", si->sunLight[0], si->sunLight[1], si->sunLight[2]);
             SetKeyValue(e, "color", buf);
+
+            sprintf(buf, "%f", si->sunLightIntensity);
+            SetKeyValue(e, "light", buf);
 
             // We only ever support ONE global sun direction in our engine
             break;

@@ -619,11 +619,25 @@ void CreateEntityLights(void)
             }
             else
             {
-                // Fallback to high-precision dir from injector or default
+                // Fallback to high-precision dir from injector, then angles, then default
                 const char *sunDirKey = ValueForKey(e, "sun_dir");
+                const char *anglesStr = ValueForKey(e, "angles");
+
                 if (sunDirKey && sunDirKey[0])
                 {
                     GetVectorForKey(e, "sun_dir", sunDirection);
+                }
+                else if (anglesStr && anglesStr[0])
+                {
+                    vec3_t angles;
+                    GetVectorForKey(e, "angles", angles);
+                    float pitch = angles[0] * (Q_PI / 180.0f);
+                    float yaw   = angles[1] * (Q_PI / 180.0f);
+                    
+                    // Note: sunDirection points TOWARDS the sun (upwards)
+                    sunDirection[0] = cos(pitch) * cos(yaw);
+                    sunDirection[1] = cos(pitch) * sin(yaw);
+                    sunDirection[2] = -sin(pitch);
                 }
                 else
                 {
@@ -1830,6 +1844,7 @@ void LightMain(void)
         _printf("   %i lightmap samples\n", numSamples);
     }
 
+
     // Generate the base geometric mask
     GenerateLightmapAlphaMask();
 
@@ -1905,6 +1920,12 @@ void LightMain(void)
     _printf("--- CreateLights ---\n");
     CreateEntityLights();
     CreateSurfaceLights();
+    
+    _printf("--- Sun Status ---\n");
+    _printf("hasSun: %s\n", hasSun ? "true" : "false");
+    _printf("numSkyBrushes: %i\n", numSkyBrushes);
+    _printf("sunLight: {%f, %f, %f}\n", sunLight[0], sunLight[1], sunLight[2]);
+    _printf("sunDirection: {%f, %f, %f}\n", sunDirection[0], sunDirection[1], sunDirection[2]);
 
     // count total lights
     numLights = 0;
