@@ -99,6 +99,18 @@ static void ParseWorldspawnKeys(int argc, char **argv)
             game->fadeout = 1.0f;
     }
 
+    val = ValueForKey(ent, "areascale");
+    if (val[0] && !HasArg("-area", argc, argv)) {
+        areaScale *= atof(val);
+        _printf("Worldspawn area light scaling at %f\n", areaScale);
+    }
+
+    val = ValueForKey(ent, "directscale");
+    if (val[0] && !HasArg("-directscale", argc, argv)) {
+        directScale *= atof(val);
+        _printf("Worldspawn direct light scaling at %f\n", directScale);
+    }
+
     val = ValueForKey(ent, "backsplashspot");
     if (val[0] && !HasArg("-backsplashspot", argc, argv)) {
         game->backSplashSpot = (float)atof(val);
@@ -317,6 +329,7 @@ int main(int argc, char **argv) {
 
     verbose = qfalse;
     areaScale = 0.25;
+    directScale = 1.0f;
 
     openclEnabled = qtrue;
 
@@ -431,6 +444,10 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-area")) {
             areaScale *= atof(argv[i + 1]);
             _printf("area light scaling at %f\n", areaScale);
+            i++;
+        } else if (!strcmp(argv[i], "-directscale")) {
+            directScale *= atof(argv[i + 1]);
+            _printf("direct light scaling at %f\n", directScale);
             i++;
         } else if (!strcmp(argv[i], "-nodirect")) {
             nodirect = qtrue;

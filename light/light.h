@@ -467,6 +467,7 @@ typedef struct
 } lightmap_t;
 
 extern float areaScale;
+extern float directScale;
 extern qboolean nodirect;
 extern qboolean noambient;
 extern qboolean deluxeSort;

@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define POINTSCALE 7500.0f
 #define POINTSCALE_SOFT 10.0f
 #define POINTSCALE_SMOOTHSTEP 50.0f
-
+#define POINTSCALE_AREA 1.0f
 float   ambient_color_scale = 1.0f;
 
 qboolean nodirect;
@@ -49,6 +49,7 @@ long long numTotalLuxels = 0;
 
 // for run time tweaking of all area sources in the level
 float areaScale = 0.25;
+float directScale = 1.0f;
 
 int CompareSurfaces(const void *a, const void *b)
 {
@@ -72,7 +73,7 @@ int CompareSurfaces(const void *a, const void *b)
     return 0;
 }
 
-float formFactorValueScale = 3;
+
 
 float linearScale = 1.0 / 8000;
 
@@ -253,7 +254,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         volumetricScale = 0.25f;
     }
 
-    VectorScale(ls->color, value * formFactorValueScale * areaScale * volumetricScale,
+    VectorScale(ls->color, value * POINTSCALE_AREA * areaScale * volumetricScale,
                 dl->emitColor);
 
     dl->si = ls;
@@ -668,6 +669,7 @@ void CreateEntityLights(void)
                 VectorSet(sunLight, intensity, intensity, intensity);
             }
 
+            VectorScale(sunLight, directScale, sunLight);
             hasSun = qtrue;
             continue;
         }
@@ -755,6 +757,8 @@ void CreateEntityLights(void)
         {
             intensity = intensity * POINTSCALE;
         }
+        
+        intensity = intensity * directScale;
         dl->photons = intensity;
 
         dl->coneSoftness = FloatForKey(e, "softness");
