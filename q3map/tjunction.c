@@ -1909,29 +1909,85 @@ static float ComputeSurfaceArea3D(const mapDrawSurface_t *ds)
 
 /*
 ==================
-SurfacesShareEdge
+PointOnSegment
+
+Returns true if point pt is orthogonally within epsilon of line segment a->b
+and the projection point lies strictly between a and b.
 ==================
 */
-static qboolean SurfacesShareEdge(const mapDrawSurface_t *dsA, const mapDrawSurface_t *dsB, float epsilon)
+static qboolean PointOnSegment(const vec3_t pt, const vec3_t a, const vec3_t b, float epsilon)
 {
-    int sharedVerts = 0;
-    float epsSq = epsilon * epsilon;
+    vec3_t ab, apt;
+    VectorSubtract(b, a, ab);
+    VectorSubtract(pt, a, apt);
+    
+    float lenSq = DotProduct(ab, ab);
+    if (lenSq < 0.0001f)
+        return qfalse; // degenerate edge
+        
+    float t = DotProduct(apt, ab) / lenSq;
+    
+    // Calculate 3D margin equivalent to epsilon
+    float tMargin = epsilon / sqrt(lenSq);
+    
+    // Check if projection falls on the segment (allowing epsilon margin)
+    if (t < -tMargin || t > 1.0f + tMargin)
+        return qfalse;
+        
+    // Calculate orthogonal distance
+    vec3_t proj, diff;
+    VectorMA(a, t, ab, proj);
+    VectorSubtract(pt, proj, diff);
+    
+    return DotProduct(diff, diff) <= (epsilon * epsilon);
+}
 
+/*
+==================
+SurfacesTouchLoosely
+
+Checks if dsA and dsB physically touch (even via T-junctions) by checking if 
+vertices of one lie exactly on the edges of the other. 
+Requires at least 2 contact points to confirm a shared boundary.
+==================
+*/
+static qboolean SurfacesTouchLoosely(const mapDrawSurface_t *dsA, const mapDrawSurface_t *dsB, float epsilon)
+{
+    int contacts = 0;
+
+    // 1. Check A's vertices against B's edges
     for (int i = 0; i < dsA->numVerts; i++)
     {
-        for (int j = 0; j < dsB->numVerts; j++)
+        for (int j = 0; j < dsB->numIndexes; j += 3)
         {
-            vec3_t diff;
-            VectorSubtract(dsA->verts[i].xyz, dsB->verts[j].xyz, diff);
-            if (DotProduct(diff, diff) <= epsSq)
+            // Check all 3 edges of the triangle
+            if (PointOnSegment(dsA->verts[i].xyz, dsB->verts[dsB->indexes[j]].xyz, dsB->verts[dsB->indexes[j+1]].xyz, epsilon) ||
+                PointOnSegment(dsA->verts[i].xyz, dsB->verts[dsB->indexes[j+1]].xyz, dsB->verts[dsB->indexes[j+2]].xyz, epsilon) ||
+                PointOnSegment(dsA->verts[i].xyz, dsB->verts[dsB->indexes[j+2]].xyz, dsB->verts[dsB->indexes[j]].xyz, epsilon))
             {
-                sharedVerts++;
-                if (sharedVerts >= 2)
-                    return qtrue;
-                break;
+                contacts++;
+                if (contacts >= 2) return qtrue;
+                break; // move to next vertex of A
             }
         }
     }
+
+    // 2. Check B's vertices against A's edges
+    for (int i = 0; i < dsB->numVerts; i++)
+    {
+        for (int j = 0; j < dsA->numIndexes; j += 3)
+        {
+            if (PointOnSegment(dsB->verts[i].xyz, dsA->verts[dsA->indexes[j]].xyz, dsA->verts[dsA->indexes[j+1]].xyz, epsilon) ||
+                PointOnSegment(dsB->verts[i].xyz, dsA->verts[dsA->indexes[j+1]].xyz, dsA->verts[dsA->indexes[j+2]].xyz, epsilon) ||
+                PointOnSegment(dsB->verts[i].xyz, dsA->verts[dsA->indexes[j+2]].xyz, dsA->verts[dsA->indexes[j]].xyz, epsilon))
+            {
+                contacts++;
+                if (contacts >= 2) return qtrue;
+                break; // move to next vertex of B
+            }
+        }
+    }
+
     return qfalse;
 }
 
@@ -1989,16 +2045,20 @@ void MergeAdjacentTrisoups(entity_t *e)
                 if (!dsB->miscModel || dsB->numVerts <= 0 || dsB->numIndexes <= 0)
                     continue;
 
-                if (currDs->shaderInfo != dsB->shaderInfo)
-                    continue;
                 if (currDs->fogNum != dsB->fogNum)
                     continue;
-                if (fabs(currDs->samplesize - dsB->samplesize) > 0.001f)
+                
+                float sampleSizeA = currDs->samplesize > 0.0f ? currDs->samplesize : (float)game->defaultSampleSize;
+                float sampleSizeB = dsB->samplesize > 0.0f ? dsB->samplesize : (float)game->defaultSampleSize;
+                if (fabs(sampleSizeA - sampleSizeB) > 0.001f)
                     continue;
-                if (fabs(currDs->lightmapScale - dsB->lightmapScale) > 0.001f)
+                
+                float scaleA = currDs->lightmapScale > 0.0f ? currDs->lightmapScale : 1.0f;
+                float scaleB = dsB->lightmapScale > 0.0f ? dsB->lightmapScale : 1.0f;
+                if (fabs(scaleA - scaleB) > 0.001f)
                     continue;
 
-                if (!SurfacesShareEdge(currDs, dsB, 0.01f))
+                if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
                     continue;
 
                 float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
