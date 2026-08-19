@@ -66,40 +66,53 @@ The final stage of the lighting tool (`light/lm_postprocess.c`) applies image-sp
 - **Mathematical Parity**: To unify the "feel" between surface types, Trisoup smoothing uses true 3D Gaussian weights and a radius "cheat factor" (1.25x) to compensate for the volume difference between spherical (3D) and square (2D) kernels.
 - **Multi-threaded Performance**: The per-surface spatial hashes are lock-free and allocated on-the-fly, allowing for perfect parallel scaling and minimal memory usage.
 
-## 10. Cross-Tool Metadata (Sidecar Pipeline)
-Because the standard BSP format (dsurface_t) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata between the compiler (makebsp.exe) and the lighting tool (makelight.exe).
+## 10. Lightgrid Post-Processing (Dynamic Entities)
+To ensure dynamic entities (players, items) receive high-quality, artifact-free lighting that matches the static world, the 3D Lightgrid undergoes its own dedicated post-processing pipeline in `light/lm_postprocess.c`:
+- **Volumetric Smoothing**: The ambient and direct components of the grid can be independently smoothed using a multi-pass 3D blur (controlled by `grid_smoothambient` and `grid_smoothdirect`). This propagates lighting into adjacent empty space, eliminating harsh transitions when a dynamic entity crosses cell boundaries or moves behind thin occluders.
+- **Non-Linear Bias Curves**: Mappers can globally boost the grid's ambient or direct intensity (e.g., `grid_ambientbias > 1.0`). To prevent these aggressive boosts from blowing out well-lit areas into pure white, the system automatically applies a non-linear exponential decay curve (clamped to the engine's `hdr8BitScale` maximum) when boosting. This acts as an HDR tonemapper specifically for the grid, raising the floor of dark shadows without destroying the ceiling of bright highlights.
 
-- **Mechanism**: makebsp serializes per-surface overrides into a lightweight binary array (extraSurface_t) at maps/[mapname]/cache/[mapname].srf, which is then re-loaded by light during surface initialization.
-- **Precedence**: Sidecar data acts as a selective override for global game_t defaults.
+## 11. Cross-Tool Metadata (Sidecar Pipeline)
+Because the standard BSP format (`dsurface_t`) is binary-frozen and cannot be easily extended, the toolchain uses a **Binary Sidecar Pipeline** to transfer per-surface metadata (like `lightmapscale`, `smooth`, or `light`) from entity `epair_t` key-values in the compiler (`makebsp`) directly to `localSurface_t` structures in the lighting tool (`makelight`).
 
-## 11. Unified Distance Attenuation
+The lifecycle of this transmission chain is as follows:
+1. **Entity Injection**: During map parsing (`ParseEntity`), arbitrary `epair_t` key-values are attached to the source brushes, patches, and `misc_models` belonging to that entity (e.g., `func_group`, `func_trisoup`).
+2. **DrawSurface Resolution**: As source geometry is converted into structural `mapDrawSurface_t` buffers, `ResolveSurfaceExtraProperties()` is called to parse these raw `epair_t` strings into strongly-typed float/int fields directly on the draw surface. This allows the parent entities to be safely destroyed and the geometry dropped into `worldspawn` without losing the metadata.
+3. **Sidecar Serialization**: At the very end of `makebsp` (`writebsp.c`), alongside the primary `.bsp` file, an array of `extraSurface_t` structs (mapping 1:1 with the final BSP `drawSurfaces` array) is serialized to disk at `maps/[mapname]/cache/[mapname].srf`.
+4. **Lighting Tool Deserialization**: When `makelight` boots, `LoadSurfaceExtras()` loads this `.srf` file into memory. Later, during `BuildLocalSurfaces()`, the tool merges the standard BSP `dsurface_t` data with the `extraSurface_t` sidecar data to construct the final, fully-featured `localSurface_t` used for all high-precision lighting calculations.
+
+## 12. Unified Distance Attenuation
 The lighting math utilizes a centralized `CalculateAttenuation` pipeline designed to prevent hotspots while maintaining aggressive culling:
 - **Singularity Offsets**: The system utilizes a `prestep` (alias `rampoffset`) parameter to shift the inverse-square curve, ensuring $1 / d^2$ never explodes to infinity near the source. This is now mapper-configurable per-light entity, defaulting to `16.0`.
 - **Decoupled Soft Fades**: The visual fade of a light is decoupled from its broad-phase culling. `MIN_LIGHT_ADD` acts as the strict, high-performance geometry cutoff. However, a soft fade is applied *before* this cutoff, allowing the light energy to smoothly slope toward zero visually, without bloating the broad-phase culling bounding spheres.
 - **Early-Out Optimizations**: Spotlights perform expensive vector operations. The distance attenuation is explicitly calculated *first*; if distance alone culls the texel, the system bypasses the spotlight math entirely.
 
-## 12. Entity Parsing & Nomenclature
+## 13. Entity Parsing & Nomenclature
 The toolchain features a highly modernized entity parsing system for mappers:
 - **Agnostic Keys**: Entity keys are entirely case-insensitive and completely ignore the legacy Quake `_` prefix (e.g., `_color` and `Color` are treated identically).
 - **Nomenclature Shift**: The term `falloff` has been explicitly replaced with `shading` in the codebase and CLI to clarify that it refers to angle/surface shading, distinguishing it from distance-based "attenuation".
 - **Dynamic Overrides**: `misc_model` and `func_*` entities support powerful per-entity overrides, such as `upscale`, `smooth`, `collisiontype` (for tweaking convex hull/trisoup generation), and `haloshader` for overriding automatically generated light halos.
 
-## 13. Bezier Patch Mesh Lighting Pipeline
+## 14. Bezier Patch Mesh Lighting Pipeline
 The toolchain implements a mathematically exact `q3map2`-style 2-pass tessellation and sampling architecture for curved Bezier patches to eliminate lighting seams and artifacts without relying on heuristic normal smoothing:
 - **Two-Pass Surface Generation**: Curved patch normals are calculated via a double pass of `PutMeshOnCurve` (one constrained, one unconstrained wrapping) and blended using spherical interpolation to perfectly resolve boundary normals directly during BSP generation.
 - **Accurate UV Measurement**: `AllocateLightmapForPatch` scales texture boundaries by summing the `maxLength` of individual edge segments instead of bounding dimensions.
 - **Planar Patch Isolation**: Because `q3map2` mathematical corrections disrupt pixel-perfect atlas grid-snapping on perfectly flat geometry, the system globally forks logic based on `IsMeshPlanar()`. Planar patches fallback to legacy geometry subdivision (`SubdivideMeshQuads`) and purely linear UV distribution, guaranteeing zero-tolerance alignment with surrounding BSP structural brushes.
 
-## 14. Robust Lightmap Sample Point Nudging (Centroid Nudge)
+## 15. Robust Lightmap Sample Point Nudging (Centroid Nudge)
 To completely prevent light leaking at boundaries and corners (such as sunlight bypassing thick walls), the lighting pipeline employs a dynamic "Centroid Nudge" for all sample points prior to ray tracing:
 - **Surface Centroids**: The geometric centroid of every surface (or subdivided polygon) is calculated during the sampling phase.
 - **Inward Bias**: Instead of strictly nudging the sample point out along the normal vector, which can push corner texels into the void outside the map, the origin is first nudged *inward* toward the 3D surface centroid.
 - **Distance Limiting**: The centroid nudge distance is clamped to half the distance between the texel and the centroid (to prevent overshooting the center on small faces). After the centroid nudge, the standard `SAMPLE_NUDGE` is applied along the normal.
 - **Out-of-Bounds Texels**: This eliminates the need for strict bounding box culling. Lightmap texels whose centers fall slightly outside the strict 2D geometry bounds are safely extrapolated and automatically pulled inside the volume by the centroid nudge, inherently solving the "black sawtooth" bilinear filtering artifact without discarding samples.
 
-## 15. Automatic Edge Chamfering & Geometry Meshification
+## 16. Automatic Edge Chamfering & Geometry Meshification
 To combat the "razor sharp" look of early BSP geometry and produce natural lighting highlights on corners, the toolchain includes an automatic edge chamfering pass (`ChamferSurfaceEdges`).
 - **Normal Bending (No Geometric Shrinkage)**: To prevent holes between structural boundaries, chamfering is implemented via Normal Bending. The flat parent face is inset, and a tiny subdivision strip bridges the gap to the original sharp corner. Vertex normals on the corner are dynamically blended (`ComputeVertexBlendedNormal`) across the strip.
 - **Unified Width Hierarchy**: Chamfer size is decoupled into `chamferConvexWidth` and `chamferConcaveWidth`. This is driven by a deep resolution hierarchy: Game default -> Shader Override -> Entity Override, giving mappers precise control over every corner.
 - **Original Edge Heuristics**: To prevent false chamfering on internal BSP splits or where detail stairs intersect walls, `IsOriginalBrushEdge` verifies that an edge mathematically corresponds to the boundaries of the source convex brush.
-- **Trisoup Meshification**: As a secondary optimization, fragmented planar brush surfaces left over from T-junction splits and chamfering are automatically promoted and merged (`MergeAdjacentTrisoups`) into unified triangle soups (`MST_TRIANGLE_SOUP`). This significantly reduces draw calls and ensures seamless lightmap UV generation via `xatlas`. Planar surface metadata (`isPlanar`) is serialized through the Sidecar Pipeline so the lighting tool (`makelight`) can still apply perfectly flat lighting math to these grouped models.
+
+## 17. Func_Trisoup & Global Megamesh Welding
+To break free from the strict brush/patch divide of classic BSP engines, the toolchain introduces advanced geometry fusion driven by `func_trisoup` and a global welding pass.
+- **Func_Trisoup**: A pseudo-entity designed for patches. Unlike standard worldspawn patches (which remain parametric and rigidly tied to legacy grid rendering), patches inside a `func_trisoup` are prematurely tessellated into `MST_TRIANGLE_SOUP` geometry. This forces them into the modern `xatlas` lightmapping pipeline, granting them unique UVs and allowing them to physically fuse with surrounding brushed architecture.
+- **Early Epair Binding**: To maximize architectural freedom and avoid dragging temporary entities (`func_trisoup`, `func_group`) through the pipeline longer than necessary, the toolchain aggressively parses and binds `epair_t` properties (like `lightmapscale` and `samplesize`) directly to the underlying `mapDrawSurface_t` geometry *during* early entity parsing. This immediately decouples the geometry from its parent entity, allowing the entities to be safely destroyed and the geometry to be freely dropped into the global `worldspawn` array with all metadata intact.
+- **Global Loose Edge Welding**: `MergeAdjacentTrisoups` operates as a blind, global pass across all `MST_TRIANGLE_SOUP` geometry (chamfered brush faces, `func_trisoup` patches, detail brushes). Using a resilient point-to-segment math checker (`SurfacesTouchLoosely`), it detects intersecting boundaries (even unaligned T-junctions) and aggressively merges them into single megameshes, strictly gated only by common shader properties and global lightmap size budgets.

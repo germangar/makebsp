@@ -2045,6 +2045,8 @@ void MergeAdjacentTrisoups(entity_t *e)
                 if (!dsB->miscModel || dsB->numVerts <= 0 || dsB->numIndexes <= 0)
                     continue;
 
+                if (currDs->shaderInfo != dsB->shaderInfo)
+                    continue;
                 if (currDs->fogNum != dsB->fogNum)
                     continue;
                 
