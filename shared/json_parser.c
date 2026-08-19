@@ -577,6 +577,10 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
             else
                 game->saturationRamp = SATRAMP_OFF;
         }
+        else if (!Q_stricmp(key, "defaultTrisoupSubdivisions") && val->type == json_type_number)
+        {
+            game->defaultTrisoupSubdivisions = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "enforceSampleSize"))
         {
             if (val->type == json_type_true)
@@ -833,6 +837,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"chamferConvexWidth\": %.2f,\n"
             "  \"chamferConcaveWidth\": %.2f,\n"
             "  \"decalExtrusion\": %.2f,\n"
+            "  \"defaultTrisoupSubdivisions\": %.2f,\n"
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
@@ -889,6 +894,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->chamferConvexWidth,
             game->chamferConcaveWidth,
             game->decalExtrusion,
+            game->defaultTrisoupSubdivisions,
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",

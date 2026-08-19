@@ -31,10 +31,13 @@ static void PromotePatchesToTrisoups(entity_t *e)
 {
     int entNum = e - entities;
 
-    // Read 'subdivide' key with fallback aliases and a default of 8.0
+    // Read 'subdivide' key with fallback aliases, then worldspawn, then game profile
     float subdivide = FloatForKey(e, "subdivide");
     if (subdivide <= 0.0f) subdivide = FloatForKey(e, "subdivisions");
-    if (subdivide <= 0.0f) subdivide = 8.0f;
+    if (subdivide <= 0.0f) subdivide = FloatForKey(&entities[0], "trisoup_subdivide");
+    if (subdivide <= 0.0f) subdivide = FloatForKey(&entities[0], "trisoup_subdivisions");
+    if (subdivide <= 0.0f) subdivide = game->defaultTrisoupSubdivisions;
+    if (subdivide <= 0.0f) subdivide = 6.0f; // Failsafe
 
     // Only scan surfaces that existed before this function was called.
     int origCount = numMapDrawSurfs;

@@ -65,6 +65,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth
 		0.0f,       // decalExtrusion
+		6.0f,       // defaultTrisoupSubdivisions
         qtrue,      // enforceSampleSize
         qtrue,      // forceUVGen
         HDR_8BIT,   // hdr
@@ -145,6 +146,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.25f,      // chamferConvexWidth
 		0.0f,       // chamferConcaveWidth
 		0.0f,       // decalExtrusion
+		6.0f,       // defaultTrisoupSubdivisions
         qtrue,       // enforceSampleSize
         qtrue,       // forceUVGen
         HDR_OFF,    // hdr

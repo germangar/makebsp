@@ -110,6 +110,7 @@ typedef struct {
 	float       chamferConvexWidth;
 	float       chamferConcaveWidth;
 	float       decalExtrusion;
+	float       defaultTrisoupSubdivisions;
     qboolean    enforceSampleSize;
     qboolean    forceUVGen;
     hdrFormat_t hdr;

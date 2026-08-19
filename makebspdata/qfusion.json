@@ -67,6 +67,7 @@
   "chamferConvexWidth": 1.25,
   "chamferConcaveWidth": 0.00,
   "decalExtrusion": 0.00,
+  "defaultTrisoupSubdivisions": 6.00,
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",
