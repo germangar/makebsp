@@ -59,9 +59,28 @@ static void PromotePatchesToTrisoups(entity_t *e)
         srcMesh.height = ds->patchHeight;
         srcMesh.verts  = ds->verts;
 
-        // 2. Exact 3-stage Bezier tessellation (mirrors SubdividePatchForLighting)
+        // 2. Exact 3-stage Bezier tessellation with 2-pass normal generation (mirrors DrawSurfaceForMesh)
         mesh_t *subMesh = SubdivideMesh(srcMesh, subdivide, 999.0f);
+
+        // Pass 1: compute normals on the raw subdivided grid (exact at non-degenerate edges)
+        MakeMeshNormals(*subMesh);
+
+        // Snap vertices to curve
         PutMeshOnCurve(*subMesh);
+
+        // Pass 2: recompute normals on the curve-fitted mesh (handles degenerate/collapsed edges)
+        mesh_t *tempForNormals = CopyMesh(subMesh);
+        MakeMeshNormals(*tempForNormals);
+
+        // Blend: only override pass 1 normals if pass 2 diverges by more than ~41 degrees
+        int numMeshVerts = subMesh->width * subMesh->height;
+        for (int n = 0; n < numMeshVerts; n++) {
+            if (DotProduct(tempForNormals->verts[n].normal, subMesh->verts[n].normal) < 0.75f) {
+                VectorCopy(tempForNormals->verts[n].normal, subMesh->verts[n].normal);
+            }
+        }
+        FreeMesh(tempForNormals);
+
         mesh_t *tess = RemoveLinearMeshColumnsRows(subMesh);
         FreeMesh(subMesh);
 
