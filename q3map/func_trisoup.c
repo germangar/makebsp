@@ -149,10 +149,24 @@ static void PromotePatchesToTrisoups(entity_t *e)
                 // can properly calculate the areaUV and assign a proportional lightmap.
                 newDs->verts[y * W + x].lightmap[0][0] = (float)x;
                 newDs->verts[y * W + x].lightmap[0][1] = (float)y;
+                // Initialize RGB to white so we don't multiply lighting by black
+                newDs->verts[y * W + x].color[0][0] = 255;
+                newDs->verts[y * W + x].color[0][1] = 255;
+                newDs->verts[y * W + x].color[0][2] = 255;
                 // Use vertex color alpha channel as the smoothing boundary sentinel instead
                 newDs->verts[y * W + x].color[0][3] = isBoundary ? 0 : 255;
             }
         }
+
+        // Diagnostic: Print the normal of the first vertex to verify it's not zero
+        if (H >= 1 && W >= 1) {
+            vec3_t *midNormal = &newDs->verts[0].normal;
+            vec3_t *midXyz = &newDs->verts[0].xyz;
+            _printf("    [DEBUG] Patch Vert 0 XYZ(%f, %f, %f) Normal: %f, %f, %f\n", 
+                (*midXyz)[0], (*midXyz)[1], (*midXyz)[2],
+                (*midNormal)[0], (*midNormal)[1], (*midNormal)[2]);
+        }
+
 
         // 7. Generate triangle indices with the exact Clockwise grid winding 
         // that the Q3 engine uses in tr_curve.c for MST_PATCH tristrips.
@@ -166,7 +180,6 @@ static void PromotePatchesToTrisoups(entity_t *e)
                 int v2 = (y + 1) * W + (x + 1);
                 int v3 = (y + 1) * W + x;
                 
-                // Match engine's (i+1, j) then (i, j) tristrip winding pattern
                 // Tri 1
                 newDs->indexes[idx++] = v0;
                 newDs->indexes[idx++] = v3;

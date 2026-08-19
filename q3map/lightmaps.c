@@ -168,6 +168,10 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
     // Target density: 1/ssize^2 luxels per square unit.
     scale = sqrt((area3D / (ssize * ssize)) / areaUV);
 
+    if (ds->patchDerived) {
+        _printf("    [DEBUG] Patch area3D: %f, areaUV: %f -> scale: %f\n", area3D, areaUV, scale);
+    }
+
     // Safeguard against extreme scaling
     if (scale < 0.01)
         scale = 0.01;
@@ -194,7 +198,8 @@ void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
     }
 
     // Final quality knob adjustment
-    scale *= ds->lightmapScale;
+    if (ds->lightmapScale > 0.0f)
+        scale *= ds->lightmapScale;
 
     // Extra boost to ensure small triangles capture at least one texel center
     if (guessUVs)
