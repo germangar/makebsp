@@ -142,9 +142,7 @@ ML_LITE_CORE_SRC = \
 	libs/MeshLib-Lite/MRMesh/MRExpandShrink.cpp \
 	libs/MeshLib-Lite/MRMesh/MRPointsInBall.cpp \
 	libs/MeshLib-Lite/MRMesh/MRMeshIntersect.cpp \
-	libs/MeshLib-Lite/MRMesh/MRMeshTrimWithPlane.cpp \
-	libs/MeshLib-Lite/MRMesh/MRBooleanOperation.cpp \
-	libs/MeshLib-Lite/MRMesh/MRMeshBoolean.cpp
+	libs/MeshLib-Lite/MRMesh/MRMeshTrimWithPlane.cpp
 
 ML_C_SRC = $(wildcard libs/MeshLib-Lite/MRMeshC/*.cpp)
 

@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "qbsp.h"
 #include "map_export.h"
+#include "csg_mesh.h"
 
 int entitySourceBrushes; // to track editor brush numbers
 
@@ -1485,6 +1486,69 @@ void ProcessMapEntities(void)
         {
             SetTerrainTextures();
             MoveBrushesToWorld(mapent);
+            FreeEpairs(mapent->epairs);
+            mapent->epairs = NULL;
+            continue;
+        }
+
+        // 2d. func_trim: iterative plane-trim CSG against misc_model geometry.
+        //     Only drawable sides are used as cutting planes.
+        //     Entity is suppressed from BSP output.
+        if (!Q_stricmp("func_trim", classname))
+        {
+            funcTrimOperator_t op;
+            memset(&op, 0, sizeof(op));
+            ClearBounds(op.mins, op.maxs);
+
+            const char *target = ValueForKey(mapent, "target");
+            if (target && target[0]) {
+                strncpy(op.target, target, sizeof(op.target) - 1);
+                op.target[sizeof(op.target) - 1] = '\0';
+            }
+
+            bspbrush_t *b, *next;
+            for (b = mapent->brushes; b; b = next)
+            {
+                next = b->next;
+
+                for (int s = 0; s < b->numsides; s++)
+                {
+                    side_t *side = &b->sides[s];
+                    if (!side->shaderInfo)
+                        continue;
+                    if (side->shaderInfo->surfaceFlags & (SURF_NODRAW | SURF_SKIP))
+                        continue;
+                    if (op.numPlanes >= MAX_TRIM_PLANES)
+                    {
+                        _printf("WARNING: func_trim: MAX_TRIM_PLANES (%d) exceeded.\n", MAX_TRIM_PLANES);
+                        break;
+                    }
+
+                    // Invert plane: mrTrimMeshWithPlane keeps the POSITIVE side.
+                    // Brush plane normal points outward. Invert so the positive side
+                    // is BEHIND the drawable face (the side the mapper wants to keep).
+                    plane_t *p = &mapplanes[side->planenum];
+                    op.planes[op.numPlanes].normal[0] = -p->normal[0];
+                    op.planes[op.numPlanes].normal[1] = -p->normal[1];
+                    op.planes[op.numPlanes].normal[2] = -p->normal[2];
+                    op.planes[op.numPlanes].dist      = -p->dist;
+                    op.numPlanes++;
+                }
+
+                AddPointToBounds(b->mins, op.mins, op.maxs);
+                AddPointToBounds(b->maxs, op.mins, op.maxs);
+                FreeBrush(b);
+            }
+            mapent->brushes = NULL;
+
+            if (op.numPlanes > 0)
+            {
+                _printf("func_trim: registered operator with %d plane(s).\n", op.numPlanes);
+                StoreFuncTrimOperator(&op);
+            }
+            else
+                _printf("WARNING: func_trim entity had no drawable planes, ignoring.\n");
+
             FreeEpairs(mapent->epairs);
             mapent->epairs = NULL;
             continue;

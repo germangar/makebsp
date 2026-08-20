@@ -86,6 +86,7 @@ void ProcessWorldModel(void)
     // loading pass for misc_models (bakes transformations)
     int startInst, endInst;
     LoadTriangleModels(&entities[0], &startInst, &endInst);
+    PerformMeshCSG(startInst, endInst);
     IntegrateTriangleModels(startInst, endInst, &entities[0]);
 
     // build an initial bsp tree using all of the sides
@@ -302,6 +303,7 @@ void ProcessSubModel(void)
 
     int startInst, endInst;
     LoadTriangleModels(e, &startInst, &endInst);
+    PerformMeshCSG(startInst, endInst);
     IntegrateTriangleModels(startInst, endInst, e);
 
     PatchMapDrawSurfs(e);
@@ -1305,6 +1307,7 @@ int main(int argc, char **argv)
     }
 
     FreeLightmaps();
+    FreeFuncTrimOperators();
 
     Broadcast_Shutdown();
 

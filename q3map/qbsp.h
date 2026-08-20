@@ -573,6 +573,8 @@ extern int c_triangleVertexes;
 extern int c_triangleIndexes;
 
 void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst);
+void PerformMeshCSG(int startInst, int endInst);
+void FreeFuncTrimOperators(void);
 void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent);
 void AddTriangleModels(tree_t *tree);
 
