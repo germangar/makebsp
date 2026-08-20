@@ -595,6 +595,13 @@ void TraceAmbient(int num)
                 lightFloats[k * 3 + 1] += ambColor[1];
                 lightFloats[k * 3 + 2] += ambColor[2];
             }
+
+            if ((j & 31) == 0)
+            {
+                ThreadLock();
+                Broadcast_KeepAlive();
+                ThreadUnlock();
+            }
         }
     }
     free(tw);
