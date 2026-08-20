@@ -97,6 +97,7 @@ Mappers can now tint and recolor materials directly within the map editor withou
 Post-process lightmap filtering has been rebuilt for maximum quality and seamlessness across geometry charts.
 - **Stitch Filtering:** The toolchain automatically identifies adjacent surfaces sharing world-space edges (partners) and performs cross-surface bilinear sampling to eliminate visible seams.
 - **Volumetric Filtering:** Specialized world-space filtering for complex "triangle soup" (models) ensures smooth lighting gradients even on meshes with disconnected UV islands.
+- **Kitbashing (Smooth Groups):** Mappers can group disjoint or intersecting `misc_model` entities using the `smoothgroup` key, blending their volumetric lightmaps as if they were a single continuous mesh.
 - **Per-Surface Customization:** Mappers can override the global smoothing settings on a per-entity basis using the `smooth` key, allowing for sharper shadows on some objects and softer, more diffuse lighting on others.
 - **GPU Acceleration:** All filtering and anti-aliasing passes are fully GPU-accelerated via OpenCL, allowing for high-quality multi-pass smoothing without significant compile-time penalties.
 
@@ -277,6 +278,7 @@ List of additions and modifications made to shader parsing and features compared
 
 **User keys**
 - **smooth**: lightmap smooth filter radius to use on this model.
+- **smoothgroup**: Groups disjoint or intersecting models together. Models sharing the same `smoothgroup` name will share their volumetric lightmap smoothing passes, eliminating lighting seams between kitbashed pieces.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this model instance.
 - **upscale**: Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the model's lightmaps.
@@ -324,6 +326,7 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 
 **Brushes**
 - **smooth**: Lightmap smooth filter radius to use on this entity's surfaces.
+- **smoothgroup**: Shares volumetric lightmap smoothing passes with other entities using the same group name.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
 - **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the entity's lightmaps.

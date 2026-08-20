@@ -201,6 +201,7 @@ typedef struct drawsurf_s
     int parentSurfaceNum;  // -1 = none, otherwise index of parent surface (e.g. chamfer strips)
     float chamferConvexWidth;
     float chamferConcaveWidth;
+    char smoothgroup[32];
 } mapDrawSurface_t;
 
 #define MAX_CHAMFER_VERTS 256

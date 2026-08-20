@@ -230,6 +230,11 @@ void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
     const char *chamferCStr = ValueForEpair(epairs, "chamfer_concavewidth");
     if (chamferCStr[0])
         ds->chamferConcaveWidth = atof(chamferCStr);
+
+    // Resolve smoothgroup
+    const char *smoothGroupStr = ValueForEpair(epairs, "smoothgroup");
+    if (smoothGroupStr[0])
+        strncpy(ds->smoothgroup, smoothGroupStr, sizeof(ds->smoothgroup) - 1);
 }
 
 /*
@@ -1501,6 +1506,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
+    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
 
     numDrawSurfaces++;
 
@@ -1598,6 +1604,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
+    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
 
     numDrawSurfaces++;
 
@@ -1701,6 +1708,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
+    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
 
     numDrawSurfaces++;
 
@@ -1767,6 +1775,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
+    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
 
     numDrawSurfaces++;
 

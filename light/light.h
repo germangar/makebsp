@@ -401,6 +401,7 @@ typedef struct
     int upscale;
     qboolean castShadows;
     float sampleSize;
+    char smoothgroup[32];
 } localSurface_t;
 extern localSurface_t *localSurfaces;
 extern qboolean *brushCastsShadow;

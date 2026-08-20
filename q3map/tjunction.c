@@ -2049,6 +2049,12 @@ void MergeAdjacentTrisoups(entity_t *e)
                     continue;
                 if (currDs->fogNum != dsB->fogNum)
                     continue;
+
+                if (currDs->smoothgroup[0] || dsB->smoothgroup[0])
+                {
+                    if (Q_stricmp(currDs->smoothgroup, dsB->smoothgroup) != 0)
+                        continue;
+                }
                 
                 float sampleSizeA = currDs->samplesize > 0.0f ? currDs->samplesize : (float)game->defaultSampleSize;
                 float sampleSizeB = dsB->samplesize > 0.0f ? dsB->samplesize : (float)game->defaultSampleSize;

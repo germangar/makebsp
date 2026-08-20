@@ -27,6 +27,12 @@ static int lightmapSmoothPasses;
 #define FILTER_UPSCALE 1
 #define TRISOUP_SMOOTH_CHEAT(A) ((A) + (useOpenCL ? 1.0f : 1.5f))
 
+typedef struct {
+    int *surfIndices;
+    int numSurfaces;
+    float maxRadius;
+} trisoupGroup_t;
+
 typedef struct { vec3_t pos; vec3_t normal; qboolean valid; } pixelCache_t;
 
 typedef struct {
@@ -651,18 +657,81 @@ static void FilterPlanarSurfaceHighFidelityCPU(int sIdx, float radius, const flo
     if (b2nrm) Q_Free(b2nrm);
 }
 
-static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFloats, int aaPasses, int smoothPasses, cl_kernel dK, cl_kernel fK) {
-    dsurface_t *ds = &drawSurfaces[surfIdx];
-    if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) return;
+static float GetGroupTexelSize(const int *surfList, int numSurfs) {
+    float tW = 0, tUV = 0;
+    for (int s = 0; s < numSurfs; s++) {
+        dsurface_t *ds = &drawSurfaces[surfList[s]];
+        if (ds->numIndexes == 0) continue;
+        for (int j = 0; j < ds->numIndexes; j += 3) {
+            for (int k = 0; k < 3; k++) {
+                drawVert_t *v0 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + k]];
+                drawVert_t *v1 = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + ((k + 1) % 3)]];
+                vec3_t dW; VectorSubtract(v0->xyz, v1->xyz, dW);
+                float wD = VectorLength(dW);
+                float dU = (v0->lightmap[0][0] - v1->lightmap[0][0]) * LIGHTMAP_WIDTH;
+                float dV = (v0->lightmap[0][1] - v1->lightmap[0][1]) * LIGHTMAP_HEIGHT;
+                float uvD = sqrtf(dU * dU + dV * dV);
+                if (uvD > 0.001f) {
+                    tW += wD;
+                    tUV += uvD;
+                }
+            }
+        }
+    }
+    return (tUV > 0.001f) ? clamp(tW / tUV, 0.1f, 256.0f) : (float)game->defaultSampleSize;
+}
+
+static voxelPoint_t *LoadGroupVoxelPoints(const int *surfList, int numSurfs, int *outTotalPoints, int **outPointSurf) {
+    int total = 0;
+    for (int i = 0; i < numSurfs; i++) {
+        int count = 0;
+        voxelPoint_t *pts = VoxelCache_Load(surfList[i], &count);
+        if (pts) {
+            total += count;
+            Q_Free(pts);
+        }
+    }
+    if (total == 0) {
+        *outTotalPoints = 0;
+        *outPointSurf = NULL;
+        return NULL;
+    }
+
+    voxelPoint_t *allPoints = Q_Alloc(total * sizeof(voxelPoint_t));
+    int *pointSurf = Q_Alloc(total * sizeof(int));
+    int offset = 0;
+
+    for (int i = 0; i < numSurfs; i++) {
+        int count = 0;
+        voxelPoint_t *pts = VoxelCache_Load(surfList[i], &count);
+        if (pts && count > 0) {
+            memcpy(&allPoints[offset], pts, count * sizeof(voxelPoint_t));
+            for (int k = 0; k < count; k++) {
+                pointSurf[offset + k] = surfList[i];
+            }
+            offset += count;
+            Q_Free(pts);
+        }
+    }
+
+    *outTotalPoints = total;
+    *outPointSurf = pointSurf;
+    return allPoints;
+}
+
+static void ProcessTrisoupVolumetricGPU(const int *surfList, int numSurfs, float radius, float *tempFloats, int aaPasses, int smoothPasses, cl_kernel dK, cl_kernel fK) {
+    if (numSurfs <= 0) return;
     if (aaPasses <= 0 && smoothPasses <= 0) return;
-    float tS = GetSurfaceTexelSize(ds), eR = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius, sR = eR * tS;
+    float tS = GetGroupTexelSize(surfList, numSurfs), eR = (smoothPasses > 0) ? TRISOUP_SMOOTH_CHEAT(radius) : radius, sR = eR * tS;
     if (sR < 0.1f) return;
     float vS = sR, mDSq = sR*sR, sig = sR/3.0f, tS2 = 2*sig*sig;
     if (sig < 0.1f) sig = 0.1f;
     int nP = 0;
-    voxelPoint_t *cP = VoxelCache_Load(surfIdx, &nP);
+    int *pointSurf = NULL;
+    voxelPoint_t *cP = LoadGroupVoxelPoints(surfList, numSurfs, &nP, &pointSurf);
     if (!cP || nP == 0) {
         if (cP) Q_Free(cP);
+        if (pointSurf) Q_Free(pointSurf);
         return;
     }
     int N = nP, nS = (aaPasses > 0) ? 8 : 1;
@@ -686,6 +755,7 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
         Q_Free(jN);
         Q_Free(jV);
         Q_Free(cP);
+        if (pointSurf) Q_Free(pointSurf);
         if(tD) Q_Free(tD);
         if(tNr) Q_Free(tNr);
         return; 
@@ -695,6 +765,8 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     for (int i=0; i<N; i++) {
         int p = cP[i].pixelIndex;
         vL[i]=p;
+        int s = pointSurf[i];
+        dsurface_t *ds = &drawSurfaces[s];
         int lL=p%(LIGHTMAP_WIDTH*LIGHTMAP_HEIGHT);
         tX[i]=lL%LIGHTMAP_WIDTH-ds->lightmapOffset[0][0];
         tY[i]=lL/LIGHTMAP_WIDTH-ds->lightmapOffset[0][1];
@@ -711,6 +783,8 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     if (aaPasses > 0) {
         #pragma omp parallel for schedule(dynamic, 64)
         for (int i=0; i<N; i++) {
+            int s = pointSurf[i];
+            dsurface_t *ds = &drawSurfaces[s];
             for (int k=1; k<nS; k++) {
                 float st[2] = { (float)ds->lightmapOffset[0][0]+tX[i]+0.5f+ssPattern8[k][0]*radius, (float)ds->lightmapOffset[0][1]+tY[i]+0.5f+ssPattern8[k][1]*radius };
                 if (TriSoupSamplePoint(ds, st, &jP[(i*nS+k)*3], &jN[(i*nS+k)*3], NULL)) jV[i*nS+k]=1;
@@ -726,6 +800,7 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     if (!bC||!bS||!sT||!wP) { 
         if(bC) free(bC); 
         Q_Free(bS); Q_Free(sT); Q_Free(wP); Q_Free(tP); Q_Free(tN); Q_Free(tC); Q_Free(vL); Q_Free(tX); Q_Free(tY); Q_Free(jP); Q_Free(jN); Q_Free(jV); Q_Free(cP); 
+        if (pointSurf) Q_Free(pointSurf);
         if(tD) Q_Free(tD);
         if(tNr) Q_Free(tNr);
         return; 
@@ -868,20 +943,23 @@ static void ProcessTrisoupVolumetricGPU(int surfIdx, float radius, float *tempFl
     Q_Free(sT);
     Q_Free(wP);
     Q_Free(cP);
+    if (pointSurf) Q_Free(pointSurf);
     if(tD) Q_Free(tD);
     if(tNr) Q_Free(tNr);
 }
-static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, int aaP, int smP) {
-    dsurface_t *ds=&drawSurfaces[surfIdx];
-    if(ds->lightmapNum[0]<0||ds->surfaceType!=MST_TRIANGLE_SOUP) return;
-    float tS=GetSurfaceTexelSize(ds), eR=(smP>0)?TRISOUP_SMOOTH_CHEAT(radius):radius, sR=eR*tS;
+
+static void ProcessTrisoupVolumetricCPU(const int *surfList, int numSurfs, float radius, float *tF, int aaP, int smP) {
+    if (numSurfs <= 0) return;
+    float tS=GetGroupTexelSize(surfList, numSurfs), eR=(smP>0)?TRISOUP_SMOOTH_CHEAT(radius):radius, sR=eR*tS;
     if(sR<0.1f) return;
     float vS=sR, mDSq=sR*sR, sig=sR/3.0f, tS2=2*sig*sig;
     if(sig<0.1f) sig=0.1f;
     int nP=0;
-    voxelPoint_t *cP=VoxelCache_Load(surfIdx,&nP);
+    int *pointSurf = NULL;
+    voxelPoint_t *cP=LoadGroupVoxelPoints(surfList, numSurfs, &nP, &pointSurf);
     if(!cP||nP==0){
         if(cP) Q_Free(cP);
+        if(pointSurf) Q_Free(pointSurf);
         return;
     }
     vec3_t gMin={99999,99999,99999}, gMax={-99999,-99999,-99999};
@@ -963,6 +1041,8 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
         }
         for(int i=0;i<nP;i++) {
             int p=cP[i].pixelIndex;
+            int s=pointSurf[i];
+            dsurface_t *ds=&drawSurfaces[s];
             const int nS=isAA?8:1;
             vec3_t fC={0,0,0}, fD={0,0,0}, fN={0,0,0};
             float fW=0, fDW=0;
@@ -1051,6 +1131,7 @@ static void ProcessTrisoupVolumetricCPU(int surfIdx, float radius, float *tF, in
     Q_Free(pool);
     Q_Free(fG);
     Q_Free(cP);
+    Q_Free(pointSurf);
 }
 
 
@@ -1557,18 +1638,57 @@ void PostProcessLightmaps(void) {
         size_t bytes = (size_t)numLightBytes * 4;
         float *tF=Q_Alloc(bytes);
         memcpy(tF,lightFloats,bytes); int prg=0;
+
+        // Build groups of triangle soup surfaces
+        byte *visited = calloc(numDrawSurfaces, 1);
+        int numGroups = 0;
+        trisoupGroup_t *groups = Q_Alloc(numDrawSurfaces * sizeof(trisoupGroup_t));
+
+        for (int s = 0; s < numDrawSurfaces; s++) {
+            if (visited[s]) continue;
+            dsurface_t *ds = &drawSurfaces[s];
+            if (ds->lightmapNum[0] < 0 || ds->surfaceType != MST_TRIANGLE_SOUP) continue;
+            float r = localSurfaces[s].smoothingRadius;
+            if (r <= 0.0f) continue;
+
+            visited[s] = 1;
+            int *members = Q_Alloc(numDrawSurfaces * sizeof(int));
+            int numMembers = 0;
+            members[numMembers++] = s;
+            float maxR = r;
+
+            if (localSurfaces[s].smoothgroup[0]) {
+                for (int j = s + 1; j < numDrawSurfaces; j++) {
+                    if (visited[j]) continue;
+                    dsurface_t *dsJ = &drawSurfaces[j];
+                    if (dsJ->lightmapNum[0] < 0 || dsJ->surfaceType != MST_TRIANGLE_SOUP) continue;
+                    if (localSurfaces[j].smoothingRadius <= 0.0f) continue;
+
+                    if (localSurfaces[j].smoothgroup[0] && !Q_stricmp(localSurfaces[s].smoothgroup, localSurfaces[j].smoothgroup)) {
+                        visited[j] = 1;
+                        members[numMembers++] = j;
+                        if (localSurfaces[j].smoothingRadius > maxR)
+                            maxR = localSurfaces[j].smoothingRadius;
+                    }
+                }
+            }
+
+            groups[numGroups].surfIndices = members;
+            groups[numGroups].numSurfaces = numMembers;
+            groups[numGroups].maxRadius = maxR;
+            numGroups++;
+        }
+        free(visited);
+
         if(useOpenCL) {
             cl_int err; cl_program prog=BuildOpenCLProgram("trisoup_filter.cl", "");
             if (prog) {
                 cl_kernel dK=clCreateKernel(prog,"trisoup_density",&err);
                 cl_kernel fK=clCreateKernel(prog,"trisoup_filter",&err);
                 if (dK && fK) {
-                    for(int s=0;s<numDrawSurfaces;s++){
-                        float r = localSurfaces[s].smoothingRadius;
-                        if (r > 0.0f) {
-                            ProcessTrisoupVolumetricGPU(s,r,tF,lightmapAA,lightmapSmoothPasses, dK, fK);
-                        }
-                        int c=++prg; if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                    for(int g=0; g<numGroups; g++){
+                        ProcessTrisoupVolumetricGPU(groups[g].surfIndices, groups[g].numSurfaces, groups[g].maxRadius, tF, lightmapAA, lightmapSmoothPasses, dK, fK);
+                        int c=++prg; if(numGroups>=10 && (c*10/numGroups > (c-1)*10/numGroups)) { ThreadLock(); _printf("."); ThreadUnlock(); }
                     }
                 }
                 if (fK) clReleaseKernel(fK);
@@ -1577,17 +1697,19 @@ void PostProcessLightmaps(void) {
             }
         } else {
             #pragma omp parallel for schedule(dynamic,1)
-            for(int s=0;s<numDrawSurfaces;s++){
-                float r = localSurfaces[s].smoothingRadius;
-                if (r > 0.0f) {
-                    ProcessTrisoupVolumetricCPU(s,r,tF,lightmapAA,lightmapSmoothPasses);
-                }
+            for(int g=0; g<numGroups; g++){
+                ProcessTrisoupVolumetricCPU(groups[g].surfIndices, groups[g].numSurfaces, groups[g].maxRadius, tF, lightmapAA, lightmapSmoothPasses);
                 int c;
                 #pragma omp atomic capture
                 c=++prg;
-                if(numDrawSurfaces>=10 && (c*10/numDrawSurfaces > (c-1)*10/numDrawSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
+                if(numGroups>=10 && (c*10/numGroups > (c-1)*10/numGroups)) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
         }
+
+        for (int g = 0; g < numGroups; g++) {
+            Q_Free(groups[g].surfIndices);
+        }
+        Q_Free(groups);
         Q_Free(tF); _printf("Done\n");
     }
 
