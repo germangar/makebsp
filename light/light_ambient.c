@@ -1,5 +1,5 @@
 #include "light.h"
-
+#include "connect.h"
 /*
 ================
 StratifiedCosineDir
