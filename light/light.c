@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define POINTSCALE 7500.0f
 #define POINTSCALE_SOFT 10.0f
 #define POINTSCALE_SMOOTHSTEP 50.0f
-#define POINTSCALE_AREA 1.0f
+#define POINTSCALE_AREA 1.5f
 float   ambient_color_scale = 1.0f;
 
 qboolean nodirect;

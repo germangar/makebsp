@@ -80,6 +80,11 @@ The lifecycle of this transmission chain is as follows:
 3. **Sidecar Serialization**: At the very end of `makebsp` (`writebsp.c`), alongside the primary `.bsp` file, an array of `extraSurface_t` structs (mapping 1:1 with the final BSP `drawSurfaces` array) is serialized to disk at `maps/[mapname]/cache/[mapname].srf`.
 4. **Lighting Tool Deserialization**: When `makelight` boots, `LoadSurfaceExtras()` loads this `.srf` file into memory. Later, during `BuildLocalSurfaces()`, the tool merges the standard BSP `dsurface_t` data with the `extraSurface_t` sidecar data to construct the final, fully-featured `localSurface_t` used for all high-precision lighting calculations.
 
+### The `func_light` (type surface) Exception
+A prime example of this sidecar architecture is how `func_light` with `type surface` is processed compared to point/spot lights:
+- **Point/Spot**: The compiler keeps the entity slot alive, calls `ProcessFuncLight` to parse the faces, and generates standard `light` entities (point sources nudged off the surface).
+- **Surface**: The compiler completely skips `ProcessFuncLight` and actually deletes the entity keys (`FreeEpairs`) during `ParseMapEntity`. It appears to be a stub, but it relies entirely on the Sidecar Pipeline. Because `CopyEpairs` already deep-copied the `light` value directly onto the `bspbrush_t` earlier, the entity can safely vaporize itself. The property rides the brush through the sidecar pipeline directly into `makelight`, where a dynamic `si_override` is generated to transform the face into a true radiosity emitter.
+
 ## 12. Unified Distance Attenuation
 The lighting math utilizes a centralized `CalculateAttenuation` pipeline designed to prevent hotspots while maintaining aggressive culling:
 - **Singularity Offsets**: The system utilizes a `prestep` (alias `rampoffset`) parameter to shift the inverse-square curve, ensuring $1 / d^2$ never explodes to infinity near the source. This is now mapper-configurable per-light entity, defaulting to `16.0`.
