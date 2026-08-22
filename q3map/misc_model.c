@@ -1179,6 +1179,9 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
             miscModelMesh_t *mm = inst->meshes[j];
             shaderInfo_t *si = mm->si;
 
+            if (!mm || mm->numVerts <= 0 || mm->numIndices <= 0)
+                continue;
+
             // ==========================================
             // STEP 1: Extract Raw Collision Topology
             // ==========================================

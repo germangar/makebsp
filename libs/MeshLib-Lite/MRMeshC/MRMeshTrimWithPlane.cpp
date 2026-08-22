@@ -42,6 +42,8 @@ void mrTrimMiscModelMesh(
 
     if (numVerts == 0 || numIndices == 0) return;
 
+    try {
+
     std::vector<MR::Vector3f> pts(numVerts);
     for (int i = 0; i < numVerts; ++i) {
         pts[i] = MR::Vector3f(inPositions[i*3], inPositions[i*3+1], inPositions[i*3+2]);
@@ -181,6 +183,19 @@ void mrTrimMiscModelMesh(
             triIdx++;
         }
     }
+    }
+    catch (const std::exception& e) {
+        // C++ exception from MeshLib. Log it and return completely trimmed mesh
+        printf("WARNING: MeshLib exception in mrTrimMiscModelMesh: %s\n", e.what());
+        *outNumVerts = 0;
+        *outNumIndices = 0;
+    }
+    catch (...) {
+        printf("WARNING: Unknown C++ exception in mrTrimMiscModelMesh\n");
+        *outNumVerts = 0;
+        *outNumIndices = 0;
+    }
 }
 
 MR_EXTERN_C_END
+#include <exception>
