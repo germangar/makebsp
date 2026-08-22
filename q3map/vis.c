@@ -1190,6 +1190,9 @@ int VisMain(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-v"))
         {
+            if (Broadcast_IsConnected()) {
+                Error("-v is not accepted from Netradiant connections due to connection interruptions.");
+            }
             _printf("verbose = true\n");
             verbose = qtrue;
         }

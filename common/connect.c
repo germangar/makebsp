@@ -16,6 +16,10 @@
 
 static int broadcastSocket = -1;
 
+int Broadcast_IsConnected(void) {
+    return broadcastSocket >= 0;
+}
+
 void Broadcast_Setup(const char *dest) {
     char address[256];
     char *colon;

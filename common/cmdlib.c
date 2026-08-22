@@ -182,6 +182,7 @@ void Error(const char *error, ...)
 
 // only printf if in verbose mode
 qboolean verbose = qfalse;
+
 void qprintf(const char *format, ...)
 {
     va_list argptr;
