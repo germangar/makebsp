@@ -31,6 +31,7 @@ jobs:
           cp libs/embree/prebuilt/windows/bin/*.dll .
 
       - name: Upload binaries
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: makebsp-windows-${{ env.DATE }}
@@ -63,6 +64,7 @@ jobs:
           cp libs/embree/prebuilt/linux/lib/*.so* .
 
       - name: Upload binaries
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: makebsp-linux-${{ env.DATE }}
