@@ -95,28 +95,27 @@ void mrTrimMiscModelMesh(
             MR::VertId v2 = mesh.topology.dest( eNew );
             MR::VertId vNew = mesh.topology.org( eNew );
 
-            if (vNew.get() >= normals.size()) {
-                normals.resize( vNew.get() + 1000 );
-            }
-            if (vNew.get() >= uvs.size()) {
-                uvs.resize( vNew.get() + 1000 );
-            }
-            if (vNew.get() >= colors.size()) {
-                colors.resize( vNew.get() + 1000 );
-            }
+            size_t maxReq = std::max({ (size_t)v1.get(), (size_t)v2.get(), (size_t)vNew.get() }) + 1024;
+            if (maxReq > normals.size()) normals.resize(maxReq);
+            if (maxReq > uvs.size()) uvs.resize(maxReq);
+            if (maxReq > colors.size()) colors.resize(maxReq);
 
             if (inNormals) {
-                MR::Vector3f n = normals[v1.get()] * w + normals[v2.get()] * (1.0f - w);
+                MR::Vector3f n1 = (v1.get() < (int)normals.size()) ? normals[v1.get()] : MR::Vector3f(0,0,1);
+                MR::Vector3f n2 = (v2.get() < (int)normals.size()) ? normals[v2.get()] : MR::Vector3f(0,0,1);
+                MR::Vector3f n = n1 * w + n2 * (1.0f - w);
                 float len = n.length();
                 if (len > 1e-6f) n /= len;
                 normals[vNew.get()] = n;
             }
             if (inUVs) {
-                uvs[vNew.get()] = uvs[v1.get()] * w + uvs[v2.get()] * (1.0f - w);
+                MR::Vector2f uv1 = (v1.get() < (int)uvs.size()) ? uvs[v1.get()] : MR::Vector2f(0,0);
+                MR::Vector2f uv2 = (v2.get() < (int)uvs.size()) ? uvs[v2.get()] : MR::Vector2f(0,0);
+                uvs[vNew.get()] = uv1 * w + uv2 * (1.0f - w);
             }
             if (inColors) {
-                const auto& c1 = colors[v1.get()];
-                const auto& c2 = colors[v2.get()];
+                Rgba c1 = (v1.get() < (int)colors.size()) ? colors[v1.get()] : Rgba{255,255,255,255};
+                Rgba c2 = (v2.get() < (int)colors.size()) ? colors[v2.get()] : Rgba{255,255,255,255};
                 colors[vNew.get()].r = (unsigned char)(c1.r * w + c2.r * (1.0f - w));
                 colors[vNew.get()].g = (unsigned char)(c1.g * w + c2.g * (1.0f - w));
                 colors[vNew.get()].b = (unsigned char)(c1.b * w + c2.b * (1.0f - w));
@@ -149,32 +148,35 @@ void mrTrimMiscModelMesh(
 
     for (int i = 0; i < outVmap.size(); ++i) {
         MR::VertId newId = outVmap[MR::VertId(i)];
-        if (newId.valid()) {
+        if (newId.valid() && newId.get() < newNumVerts) {
             (*outPositions)[newId.get() * 3 + 0] = mesh.points[newId].x;
             (*outPositions)[newId.get() * 3 + 1] = mesh.points[newId].y;
             (*outPositions)[newId.get() * 3 + 2] = mesh.points[newId].z;
 
             if (inNormals) {
-                (*outNormals)[newId.get() * 3 + 0] = normals[i].x;
-                (*outNormals)[newId.get() * 3 + 1] = normals[i].y;
-                (*outNormals)[newId.get() * 3 + 2] = normals[i].z;
+                MR::Vector3f n = (i < (int)normals.size()) ? normals[i] : MR::Vector3f(0,0,1);
+                (*outNormals)[newId.get() * 3 + 0] = n.x;
+                (*outNormals)[newId.get() * 3 + 1] = n.y;
+                (*outNormals)[newId.get() * 3 + 2] = n.z;
             }
             if (inUVs) {
-                (*outUVs)[newId.get() * 2 + 0] = uvs[i].x;
-                (*outUVs)[newId.get() * 2 + 1] = uvs[i].y;
+                MR::Vector2f uv = (i < (int)uvs.size()) ? uvs[i] : MR::Vector2f(0,0);
+                (*outUVs)[newId.get() * 2 + 0] = uv.x;
+                (*outUVs)[newId.get() * 2 + 1] = uv.y;
             }
             if (inColors) {
-                (*outColors)[newId.get() * 4 + 0] = colors[i].r;
-                (*outColors)[newId.get() * 4 + 1] = colors[i].g;
-                (*outColors)[newId.get() * 4 + 2] = colors[i].b;
-                (*outColors)[newId.get() * 4 + 3] = colors[i].a;
+                Rgba c = (i < (int)colors.size()) ? colors[i] : Rgba{255,255,255,255};
+                (*outColors)[newId.get() * 4 + 0] = c.r;
+                (*outColors)[newId.get() * 4 + 1] = c.g;
+                (*outColors)[newId.get() * 4 + 2] = c.b;
+                (*outColors)[newId.get() * 4 + 3] = c.a;
             }
         }
     }
 
     int triIdx = 0;
     auto triArr = mesh.topology.getTriangulation();
-    for (size_t fi = 0; fi < triArr.size(); ++fi) {
+    for (size_t fi = 0; fi < triArr.size() && triIdx < newNumTris; ++fi) {
         MR::FaceId fId(fi);
         if (triArr[fId][0].valid()) {
             (*outIndices)[triIdx * 3 + 0] = triArr[fId][0].get();
