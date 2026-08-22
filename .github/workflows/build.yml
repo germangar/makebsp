@@ -12,6 +12,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get current date
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+        shell: bash
+
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -29,7 +33,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: makebsp-windows
+          name: makebsp-windows-${{ env.DATE }}
           path: |
             makebsp.exe
             makelight.exe
@@ -45,6 +49,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get current date
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+        shell: bash
+
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential ocl-icd-opencl-dev
 
@@ -57,7 +65,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: makebsp-linux
+          name: makebsp-linux-${{ env.DATE }}
           path: |
             makebsp.elf
             makelight.elf

@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define POINTSCALE 7500.0f
 #define POINTSCALE_SOFT 10.0f
 #define POINTSCALE_SMOOTHSTEP 50.0f
-#define POINTSCALE_AREA 1.5f
+#define POINTSCALE_AREA 0.375f
 float   ambient_color_scale = 1.0f;
 
 qboolean nodirect;
@@ -48,7 +48,7 @@ int nogridlighting = 0;
 long long numTotalLuxels = 0;
 
 // for run time tweaking of all area sources in the level
-float areaScale = 0.25;
+float areaScale = 1.0f;
 float directScale = 1.0f;
 
 int CompareSurfaces(const void *a, const void *b)

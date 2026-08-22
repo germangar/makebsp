@@ -328,7 +328,7 @@ int main(int argc, char **argv) {
     _printf("\n----- Lighting (Ag Build v1.1) ----\n");
 
     verbose = qfalse;
-    areaScale = 0.25;
+    areaScale = 1.0f;
     directScale = 1.0f;
 
     openclEnabled = qtrue;
