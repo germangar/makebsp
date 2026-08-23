@@ -561,6 +561,8 @@ typedef struct modelInstance_s
     qboolean has_collision_type_override;
     modelCategory_t collision_type_override;
 
+    int maxtriangles; // budget for entire instance across all meshes
+
     int num_collision_meshes;
     struct colMesh_s *collision_meshes[MAX_MODEL_COLLISION_MESHES]; // Extracted, healed and decimated collision meshes
 
@@ -575,6 +577,7 @@ extern int c_triangleIndexes;
 
 void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst);
 void PerformMeshCSG(int startInst, int endInst);
+void PerformMeshDecimation(int startInst, int endInst);
 void FreeFuncTrimOperators(void);
 void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent);
 void AddTriangleModels(tree_t *tree);

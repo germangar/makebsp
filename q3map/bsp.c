@@ -87,6 +87,7 @@ void ProcessWorldModel(void)
     int startInst, endInst;
     LoadTriangleModels(&entities[0], &startInst, &endInst);
     PerformMeshCSG(startInst, endInst);
+    PerformMeshDecimation(startInst, endInst);
     IntegrateTriangleModels(startInst, endInst, &entities[0]);
 
     // build an initial bsp tree using all of the sides
@@ -304,6 +305,7 @@ void ProcessSubModel(void)
     int startInst, endInst;
     LoadTriangleModels(e, &startInst, &endInst);
     PerformMeshCSG(startInst, endInst);
+    PerformMeshDecimation(startInst, endInst);
     IntegrateTriangleModels(startInst, endInst, e);
 
     PatchMapDrawSurfs(e);

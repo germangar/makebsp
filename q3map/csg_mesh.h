@@ -15,4 +15,5 @@ typedef struct {
 void StoreFuncTrimOperator(funcTrimOperator_t *op);
 void FreeFuncTrimOperators(void);
 void PerformMeshCSG(int startInst, int endInst);
+void PerformMeshDecimation(int startInst, int endInst);
 

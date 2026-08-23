@@ -956,6 +956,11 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
                 }
             }
 
+            const char *maxTriStr = ValueForKey(entity, "maxtriangles");
+            if (!maxTriStr[0]) maxTriStr = ValueForKey(entity, "maxtriangle");
+            inst->maxtriangles = atoi(maxTriStr);
+            _printf("DEBUG misc_model '%s' parsed maxtriangles=%d\n", model, inst->maxtriangles);
+
             inst->numMeshes = 0;
             inst->numDrawSurfs = 0;
             inst->drawSurfs = malloc(sizeof(mapDrawSurface_t *) * 1024); // Allocate space for many potential chunks
