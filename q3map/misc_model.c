@@ -942,9 +942,7 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
             if (col_type_str[0])
             {
                 inst->has_collision_type_override = qtrue;
-                if (!Q_stricmp(col_type_str, "shell")) inst->collision_type_override = MC_SHELL;
-                else if (!Q_stricmp(col_type_str, "object")) inst->collision_type_override = MC_OBJECT;
-                else if (!Q_stricmp(col_type_str, "walkable")) inst->collision_type_override = MC_WALKABLE;
+                if (!Q_stricmp(col_type_str, "object")) inst->collision_type_override = MC_OBJECT;
                 else if (!Q_stricmp(col_type_str, "wrap")) inst->collision_type_override = MC_WRAP;
                 else if (!Q_stricmp(col_type_str, "extrude")) inst->collision_type_override = MC_EXTRUDE;
                 else if (!Q_stricmp(col_type_str, "objectdetail")) inst->collision_type_override = MC_OBJECTDETAIL;

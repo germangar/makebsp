@@ -520,11 +520,9 @@ typedef enum
 {
     MC_NONE,
     MC_OBJECT,
-    MC_WALKABLE,
     MC_WRAP,
-    MC_SHELL,
     MC_TERRAIN,
-    MC_EXTRUDE,        // user-forced only; never set by auto-categorization
+    MC_EXTRUDE,
     MC_OBJECTDETAIL,   // user-forced only; dual-mode extrude (solid) + object (playerclip)
     MC_WRAPDETAIL      // user-forced only; dual-mode extrude (solid) + wrap (playerclip)
 } modelCategory_t;

@@ -54,12 +54,8 @@ const char *CategoryString(modelCategory_t cat)
     {
     case MC_OBJECT:
         return "MC_OBJECT";
-    case MC_WALKABLE:
-        return "MC_WALKABLE";
     case MC_WRAP:
         return "MC_WRAP";
-    case MC_SHELL:
-        return "MC_SHELL";
     case MC_TERRAIN:
         return "MC_TERRAIN";
     case MC_EXTRUDE:
@@ -446,17 +442,13 @@ static void CategorizeModel(modelInstance_t *inst)
     {
         category = MC_TERRAIN;
     }
-    else if (upRatio > 0.3f || (isFlat && upRatio > 0.15f))
-    {
-        category = MC_WALKABLE;
-    }
     else if (outwardRatio > 0.8f)
     {
         category = MC_WRAP;
     }
     else if (inwardRatio > 0.8f)
     {
-        category = MC_SHELL;
+        category = MC_EXTRUDE;
     }
 
     if (inst->has_collision_type_override)
@@ -1179,12 +1171,13 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
         /* 3. Combine both sets of brushes */
         hulls_list = CombineBrushes(hulls_extrude, hulls_object);
     }
-    else if (category == MC_TERRAIN || category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)
+    else if (category == MC_OBJECT || category == MC_WRAP)
     {
         hulls_list = GenerateHACDCollision(inst, caulk);
     }
-    else if (category == MC_EXTRUDE)
+    else if (category == MC_TERRAIN || category == MC_EXTRUDE)
     {
+        /* TODO: Eventually implement axial aligned (-Z) extrusion for terrains */
         hulls_list = GenerateExtrusionCollision(inst, caulk);
     }
     else

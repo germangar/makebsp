@@ -66,19 +66,6 @@ static hacdSettings_t hacd_settings_object = {
     qtrue     // facePoints
 };
 
-/* Settings for walkable models (stairs, floors, smooth terrain) */
-static __attribute__((unused)) hacdSettings_t hacd_settings_walkable = {
-    1.0,      // scaleFactor (Standard, diagonal becomes 2.0)
-    qfalse,   // disableNormalize (Normalize the mesh so size doesn't skew math)
-    0.0001,      // compacity
-    0.0,      // volume
-    1.0,        // concavity (The smaller the tighter to the original shape)
-    1,        // nClusters (Let concavity dictate the stop condition)
-    0.0,      // ccConnectDist
-    qfalse,   // extraPoints (qfalse prevents the hulls from stretching across the mesh and acting like a wrapper)
-    qtrue     // facePoints
-};
-
 /* Settings for wrap/soft-wrap (TINY/Default) - Normalized soft wrap for stability */
 static hacdSettings_t hacd_settings_wrap = {
     1.0,      // scaleFactor (standard)
@@ -221,11 +208,6 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
         } else {
             s = &hacd_settings_wrap;
         }
-    }
-    else if (inst->category == MC_WALKABLE)
-    {
-        //s = &hacd_settings_walkable;
-        s = &hacd_settings_object;
     }
     else 
     {

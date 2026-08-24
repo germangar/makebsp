@@ -99,26 +99,11 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
     modelCategory_t category = inst->category;
     switch (category)
     {
-    case MC_WALKABLE:
-        threshold = 0.05f;
-        resolution = 500;
-        prep_resolution = 50;
-        mcts_max_depth = 12;
-        decimate = qfalse;
-        preprocess_mode = COACD_PREPROCESS_OFF;
-        break;
     case MC_WRAP:
     case MC_WRAPDETAIL:
         threshold = 0.2f;
         resolution = 1000;
         prep_resolution = 30;
-        mcts_max_depth = 3;
-        decimate = qtrue;
-        break;
-    case MC_SHELL:
-        threshold = 0.2f;
-        resolution = 80;
-        prep_resolution = 50;
         mcts_max_depth = 3;
         decimate = qtrue;
         break;
