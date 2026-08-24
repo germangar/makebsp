@@ -46,11 +46,6 @@ ifeq ($(RELEASE), 1)
 endif
 CXXFLAGS = $(CFLAGS) -Ilibs/MeshLib-Lite -Ilibs/MeshLib-Lite/MRMesh -Ilibs/MeshLib-Lite/MRPch -Ilibs/MeshLib-Lite/tbb -Ilibs/MeshLib-Lite/parallel_hashmap -Wno-class-memaccess
 Q3MAP_LDFLAGS = $(BASE_LDFLAGS) -lz
-
-ifeq ($(COACD_ENABLED), 1)
-    CFLAGS += -DCOACD_ENABLED -Ilibs/coacd/public
-    Q3MAP_LDFLAGS += -Llibs/coacd/build -lcoacd
-endif
 Q3LIGHT_LDFLAGS = $(BASE_LDFLAGS)
 
 # Directories

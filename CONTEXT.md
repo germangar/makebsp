@@ -45,7 +45,7 @@ The project implements a custom three-phase radiosity system:
 The BSP compiler (`makebsp.exe`) leverages modern libraries for texture and collision:
 - **xatlas Integration**: Handles automatic lightmap UV unwrapping and atlas packing for complex 3D models and subdivided geometry, ensuring unique mappings for all surfaces.
 - **MeshLib**: Performs geometric healing, decimation, and cleanup of complex triangle soup models to prepare them for physical collision hulls.
-- **CoACD & HACD**: Performs Approximate Convex Decomposition to convert meshes into optimized convex collision brushes. While CoACD handles general shape approximation, HACD is leveraged for `MC_WRAP` and `MC_OBJECT` profiles where tighter, non-voxelized wrapping is required.
+- **HACD**: Performs Hierarchical Approximate Convex Decomposition to convert meshes into optimized convex collision brushes for `MC_OBJECT`, `MC_WRAP`, and dual-mode detail profiles.
 
 ## 7. Technical Stack
 - **Language**: C (some C++ wrappers for libraries).

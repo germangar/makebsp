@@ -312,7 +312,14 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the model's lightmaps.
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
 - **forceuvgen**: Enable (default) or disable to force generating new lightmap UVs from scratch. Disabled uses the model UVs.
-- **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude, objectdetail (dual: extrude detail + playerclip hull), none (alias nosolid / nonsolid). More to come.
+- **collisiontype**: Overrides how the model's collision mesh is generated. Supported values:
+  - `object` *(default)*: Standard hierarchical convex decomposition (HACD) for solid props with distinct geometric parts.
+  - `wrap`: Loose/soft-wrap convex decomposition (HACD) creating a smooth outer envelope around complex organic or vehicle meshes.
+  - `extrude`: Solid per-polygon extruded collision prisms deflated along smoothed vertex normals with Minkowski edge bevels. Ideal for thin sheets, architectural details, pipes, or hollow/concave meshes.
+  - `objectdetail`: Dual-mode collision combining detailed extruded solid geometry for accurate weapon/bullet hits with an outer `playerclip` HACD hull for smooth player traversal.
+  - `wrapdetail`: Dual-mode collision combining detailed extruded solid geometry for accurate weapon/bullet hits with an outer `playerclip` shrink-wrap hull for smooth player traversal over complex props.
+  - `terrain`: Extruded collision geometry for terrain meshes.
+  - `none` (aliases: `nosolid`, `nonsolid`): Completely disables collision generation for the model.
 - **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links this `misc_model` to a brush model entity (like `func_plat` or `func_door`). When set to the same `modelgroup` name as a parent brush entity, the model's visuals and automatically generated collision hulls are bundled with the brush model and move seamlessly with it.
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup`, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.

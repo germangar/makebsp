@@ -305,7 +305,7 @@ static void PrepareClipEntityGroups(void)
 ====================
 CategorizeModel
 
-Reserved for future entity-specific classification for CoACD.
+Calculates geometric metrics for model collision auto-categorization.
 ====================
 */
 static void CategorizeModel(modelInstance_t *inst)
@@ -722,7 +722,7 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
 
     // Try full-polygon windings from plane intersections first.
     // If that fails (e.g. plane snapping made faces degenerate),
-    // fall back to 3-point windings from the best CoACD triangles.
+    // fall back to 3-point windings from the best hull triangles.
     if (!CreateBrushWindings(b))
     {
         qprintf("WARNING: CreateBrushWindings failed, using triangle fallback\n");
@@ -1182,12 +1182,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     }
     else
     {
-#ifdef COACD_ENABLED
-        qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
-        hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
-#else
         hulls_list = GenerateHACDCollision(inst, caulk);
-#endif
     }
 
     if (hulls_list)
