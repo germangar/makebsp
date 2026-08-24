@@ -108,6 +108,7 @@ bspbrush_t *GenerateCoACDCollision(modelInstance_t *inst, qboolean mergeMeshes, 
         preprocess_mode = COACD_PREPROCESS_OFF;
         break;
     case MC_WRAP:
+    case MC_WRAPDETAIL:
         threshold = 0.2f;
         resolution = 1000;
         prep_resolution = 30;

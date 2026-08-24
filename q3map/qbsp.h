@@ -525,7 +525,8 @@ typedef enum
     MC_SHELL,
     MC_TERRAIN,
     MC_EXTRUDE,        // user-forced only; never set by auto-categorization
-    MC_OBJECTDETAIL    // user-forced only; dual-mode extrude (solid) + object (playerclip)
+    MC_OBJECTDETAIL,   // user-forced only; dual-mode extrude (solid) + object (playerclip)
+    MC_WRAPDETAIL      // user-forced only; dual-mode extrude (solid) + wrap (playerclip)
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256

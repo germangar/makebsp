@@ -948,6 +948,7 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
                 else if (!Q_stricmp(col_type_str, "wrap")) inst->collision_type_override = MC_WRAP;
                 else if (!Q_stricmp(col_type_str, "extrude")) inst->collision_type_override = MC_EXTRUDE;
                 else if (!Q_stricmp(col_type_str, "objectdetail")) inst->collision_type_override = MC_OBJECTDETAIL;
+                else if (!Q_stricmp(col_type_str, "wrapdetail")) inst->collision_type_override = MC_WRAPDETAIL;
                 else if (!Q_stricmp(col_type_str, "terrain")) inst->collision_type_override = MC_TERRAIN;
                 else if (!Q_stricmp(col_type_str, "none") || !Q_stricmp(col_type_str, "nosolid") || !Q_stricmp(col_type_str, "nonsolid")) inst->collision_type_override = MC_NONE;
                 else

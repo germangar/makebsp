@@ -214,7 +214,7 @@ bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader) {
 
     hacdSettings_t *s;
 
-    if (inst->category == MC_WRAP)
+    if (inst->category == MC_WRAP || inst->category == MC_WRAPDETAIL)
     {
         if (diagonal > MS_LARGE) {
             s = &hacd_settings_bigwrap;

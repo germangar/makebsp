@@ -66,6 +66,8 @@ const char *CategoryString(modelCategory_t cat)
         return "MC_EXTRUDE";
     case MC_OBJECTDETAIL:
         return "MC_OBJECTDETAIL";
+    case MC_WRAPDETAIL:
+        return "MC_WRAPDETAIL";
     default:
         return "MC_NONE";
     }
@@ -1164,7 +1166,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
 
     shaderInfo_t *caulk = ShaderInfoForShader("textures/common/_miscmodelclip");
 
-    if (category == MC_OBJECTDETAIL)
+    if (category == MC_OBJECTDETAIL || category == MC_WRAPDETAIL)
     {
         /* 1. Generate detailed extrusion collision (uses caulk / _miscmodelclip) */
         bspbrush_t *hulls_extrude = GenerateExtrusionCollision(inst, caulk);
