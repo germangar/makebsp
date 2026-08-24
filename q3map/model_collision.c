@@ -1163,15 +1163,16 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     }
 
     shaderInfo_t *caulk = ShaderInfoForShader("textures/common/_miscmodelclip");
-    qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
 
     if (category == MC_OBJECTDETAIL)
     {
         /* 1. Generate detailed extrusion collision (uses caulk / _miscmodelclip) */
         bspbrush_t *hulls_extrude = GenerateExtrusionCollision(inst, caulk);
 
-        /* 2. Generate convex hull collision (HACD) - left as default full solid for testing */
+        /* 2. Generate convex hull collision (HACD) with playerclip */
+        shaderInfo_t *playerclip = ShaderInfoForShader("textures/common/playerclip");
         bspbrush_t *hulls_object = GenerateHACDCollision(inst, caulk);
+        ApplyShaderToBrushList(hulls_object, playerclip);
 
         /* 3. Combine both sets of brushes */
         hulls_list = CombineBrushes(hulls_extrude, hulls_object);
@@ -1187,6 +1188,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     else
     {
 #ifdef COACD_ENABLED
+        qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
         hulls_list = GenerateCoACDCollision(inst, mergeMeshes, caulk);
 #else
         hulls_list = GenerateHACDCollision(inst, caulk);

@@ -177,7 +177,8 @@ Uses axial-snapped extrusion direction for side planes (Garux clipModel_default)
 ====================
 */
 static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
-                                         float extrudeDist, shaderInfo_t *si)
+                                         float extrudeDist, shaderInfo_t *si,
+                                         vec3_t *neighborNormals)
 {
     si = GetCollisionShaderInfo(si);
     int N = poly->numVerts;
@@ -204,15 +205,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     vec3_t extrudeDir;
     VectorCopy(poly->normal, extrudeDir);
 
-    #define EXTRUDE_INTRUDE_OFFSET 0.125f
-
-    /* Intrude: offset front face points inward along -normal by the offset */
-    for (int i = 0; i < N; i++)
-    {
-        VectorMA(pts[i], -EXTRUDE_INTRUDE_OFFSET, extrudeDir, pts[i]);
-    }
-
-    /* Front face plane: use first 3 points of the intruded polygon */
+    /* Front face plane: use first 3 points of the polygon */
     /* We already have the normal from merging, but recompute from the actual
        polygon points to ensure consistency with MapPlaneFromPoints */
     int frontPlane = MapPlaneFromPoints(pts[0], pts[1], pts[2]);
@@ -223,7 +216,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         return NULL;
     }
 
-    /* Back face: offset all polygon points along -normal by extrudeDist from the intruded front face */
+    /* Back face: offset all polygon points along -normal by extrudeDist from the front face */
     vec3_t *bpts = malloc(N * sizeof(vec3_t));
     for (int i = 0; i < N; i++)
     {
@@ -255,13 +248,33 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     b->sides[1].planenum = backPlane;
     b->sides[1].shaderInfo = si;
 
-    /* Sides 2..N+1: edge planes from explicit edge quads
-       Each side plane is defined by two front verts and the corresponding back vert. */
+    /* Sides 2..N+1: edge planes (dihedral miter with neighbor if available, else perpendicular) */
     qboolean planesOk = qtrue;
     for (int i = 0; i < N; i++)
     {
         int next = (i + 1) % N;
-        b->sides[2 + i].planenum = MapPlaneFromPoints(pts[i], bpts[i], pts[next]);
+        vec3_t edgeMid, bisect, miterBackPt;
+        qboolean hasNeighbor = (neighborNormals != NULL && VectorLength(neighborNormals[i]) > 0.1f);
+
+        VectorAdd(pts[i], pts[next], edgeMid);
+        VectorScale(edgeMid, 0.5f, edgeMid);
+
+        if (hasNeighbor)
+        {
+            VectorAdd(poly->normal, neighborNormals[i], bisect);
+            if (VectorNormalize(bisect, bisect) < 0.1f)
+            {
+                VectorCopy(poly->normal, bisect);
+            }
+        }
+        else
+        {
+            VectorCopy(poly->normal, bisect);
+        }
+
+        VectorMA(edgeMid, -extrudeDist, bisect, miterBackPt);
+
+        b->sides[2 + i].planenum = MapPlaneFromPoints(pts[i], miterBackPt, pts[next]);
         b->sides[2 + i].shaderInfo = si;
 
         if (b->sides[2 + i].planenum == -1)
@@ -774,12 +787,78 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
 {
     si = GetCollisionShaderInfo(si);
     bspbrush_t *hulls_list = NULL;
-    float *verts = (float *)mesh->verts;
-    unsigned int *indices = (unsigned int *)mesh->tris;
     int numTris = mesh->numTris;
+    int numVerts = mesh->numVerts;
+    unsigned int *indices = (unsigned int *)mesh->tris;
+    float *verts = NULL;
+    vec3_t *vertNormals = NULL;
+    clipTri_t *tris = NULL;
+    int validTris = 0;
 
-    if (numTris == 0)
+    if (numTris == 0 || numVerts == 0)
         return NULL;
+
+    #define EXTRUDE_DEFLATE_OFFSET 0.125f
+
+    /* 0. Copy vertices and deflate inward along smoothed vertex normals */
+    verts = malloc(numVerts * 3 * sizeof(float));
+    memcpy(verts, mesh->verts, numVerts * 3 * sizeof(float));
+
+    vertNormals = calloc(numVerts, sizeof(vec3_t));
+
+    /* Pass 1: Accumulate triangle face normals into each vertex */
+    for (int i = 0; i < numTris; i++)
+    {
+        int base = i * 3;
+        int i0 = indices[base + 0];
+        int i1 = indices[base + 1];
+        int i2 = indices[base + 2];
+        vec3_t p0, p1, p2, t1, t2, normal;
+
+        VectorCopy((float*)&mesh->verts[i0], p0);
+        VectorCopy((float*)&mesh->verts[i1], p1);
+        VectorCopy((float*)&mesh->verts[i2], p2);
+
+        VectorSubtract(p2, p0, t1);
+        VectorSubtract(p1, p0, t2);
+        CrossProduct(t1, t2, normal);
+
+        if (VectorNormalize(normal, normal) > 0.0001f)
+        {
+            VectorAdd(vertNormals[i0], normal, vertNormals[i0]);
+            VectorAdd(vertNormals[i1], normal, vertNormals[i1]);
+            VectorAdd(vertNormals[i2], normal, vertNormals[i2]);
+        }
+    }
+
+    /* Pass 2: Merge normals for coincident vertices (UV seams, split normals) */
+    for (int vA = 0; vA < numVerts; vA++)
+    {
+        for (int vB = vA + 1; vB < numVerts; vB++)
+        {
+            if (PointsMatch((float*)mesh->verts, vA, vB))
+            {
+                vec3_t combined;
+                VectorAdd(vertNormals[vA], vertNormals[vB], combined);
+                VectorCopy(combined, vertNormals[vA]);
+                VectorCopy(combined, vertNormals[vB]);
+            }
+        }
+    }
+
+    /* Pass 3: Normalize and deflate vertices inward */
+    if (EXTRUDE_DEFLATE_OFFSET > 0.0f)
+    {
+        for (int v = 0; v < numVerts; v++)
+        {
+            if (VectorNormalize(vertNormals[v], vertNormals[v]) > 0.0001f)
+            {
+                VectorMA((float*)&mesh->verts[v], -EXTRUDE_DEFLATE_OFFSET, vertNormals[v], &verts[v * 3]);
+            }
+        }
+    }
+
+    free(vertNormals);
 
     #define ENABLE_SNAP_GRID 0
     #define SNAP_GRID 0.125f
@@ -792,8 +871,8 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
 #endif
 
     /* 1. Build triangle descriptors with normals and plane distances */
-    clipTri_t *tris = calloc(numTris, sizeof(clipTri_t));
-    int validTris = 0;
+    tris = calloc(numTris, sizeof(clipTri_t));
+    validTris = 0;
 
     for (int i = 0; i < numTris; i++)
     {
@@ -992,22 +1071,65 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     }
     */
 
-    /* 3. Extrude each remaining polygon into a brush */
-    int failedPolys = 0;
-    for (int i = 0; i < numPolys; i++)
+    /* 3. Build neighbor normal table for dihedral edge mitering */
     {
-        bspbrush_t *b = ExtrudePolygonToBrush(&polys[i], verts, extrudeDist, si);
-        if (b)
+        vec3_t (*neighborNormals)[MAX_POLY_VERTS] = calloc(numPolys, sizeof(vec3_t[MAX_POLY_VERTS]));
+        int pA, pB, eA, eB, nA, nB, v0A, v1A, v0B, v1B;
+        int failedPolys = 0;
+        int i;
+
+        for (pA = 0; pA < numPolys; pA++)
         {
-            b->next = hulls_list;
-            hulls_list = b;
+            nA = polys[pA].numVerts;
+            for (eA = 0; eA < nA; eA++)
+            {
+                if (VectorLength(neighborNormals[pA][eA]) > 0.1f)
+                    continue; /* Already matched */
+
+                v0A = polys[pA].verts[eA];
+                v1A = polys[pA].verts[(eA + 1) % nA];
+
+                for (pB = pA + 1; pB < numPolys; pB++)
+                {
+                    nB = polys[pB].numVerts;
+                    for (eB = 0; eB < nB; eB++)
+                    {
+                        v0B = polys[pB].verts[eB];
+                        v1B = polys[pB].verts[(eB + 1) % nB];
+
+                        /* Shared manifold edge has opposite winding */
+                        if (PointsMatch(verts, v0A, v1B) && PointsMatch(verts, v1A, v0B))
+                        {
+                            VectorCopy(polys[pB].normal, neighborNormals[pA][eA]);
+                            VectorCopy(polys[pA].normal, neighborNormals[pB][eB]);
+                            break;
+                        }
+                    }
+                    if (VectorLength(neighborNormals[pA][eA]) > 0.1f)
+                        break;
+                }
+            }
         }
-        else
+
+        /* 4. Extrude each remaining polygon into a brush */
+        for (i = 0; i < numPolys; i++)
         {
-            failedPolys++;
+            bspbrush_t *b = ExtrudePolygonToBrush(&polys[i], verts, extrudeDist, si, neighborNormals[i]);
+            if (b)
+            {
+                b->next = hulls_list;
+                hulls_list = b;
+            }
+            else
+            {
+                failedPolys++;
+            }
         }
+
+        free(neighborNormals);
     }
 
+    free(verts);
     free(tris);
     free(polys);
 
