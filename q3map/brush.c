@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
+#include <stddef.h>
 
 // if a brush just barely pokes onto the other side,
 // let it slide by without chopping
@@ -263,60 +264,174 @@ Adds any additional axial planes necessary to allow the brush being
 built to be expanded against axial bounding boxes (player box traces).
 =================
 */
-void AddBevelsToBrush(bspbrush_t *b)
+bspbrush_t *AddBevelsToBrush(bspbrush_t *b)
 {
-    int axis, dir;
-    int i;
-    vec3_t normal;
-    float dist;
-    side_t *s;
+    int i, j, k, l, m, a;
+    int axis, dir, found, valid, axial;
+    int refContents, refSurfFlags, originalSideCount, finalSides;
+    vec3_t normal, edge, axisVec;
+    float dist, d;
+    side_t *s, *s2;
+    plane_t *p;
+    winding_t *w, *w2;
+    bspbrush_t *tmp, *out;
 
-    // Add the 6 axial planes if they are not already present
-    for (axis = 0; axis < 3; axis++)
-    {
-        for (dir = -1; dir <= 1; dir += 2)
-        {
-            // see if the plane is already present
-            for (i = 0; i < b->numsides; i++)
-            {
-                if (mapplanes[b->sides[i].planenum].normal[axis] == dir &&
-                    mapplanes[b->sides[i].planenum].normal[(axis + 1) % 3] == 0 &&
-                    mapplanes[b->sides[i].planenum].normal[(axis + 2) % 3] == 0)
-                {
+    // 1. Allocate a staging buffer large enough to hold all bevels.
+    //    MAX_BRUSH_SIDES (1024) is already defined and is generous enough.
+    tmp = AllocBrush(MAX_BRUSH_SIDES);
+    
+    // Copy the fixed-size header fields
+    memcpy(tmp, b, (size_t)&(((bspbrush_t *)0)->sides));
+    tmp->numsides = b->numsides;
+    
+    // Copy original sides and their windings into tmp
+    for (i = 0; i < b->numsides; i++) {
+        tmp->sides[i] = b->sides[i];
+        if (b->sides[i].winding)
+            tmp->sides[i].winding = CopyWinding(b->sides[i].winding);
+    }
+
+    // Get reference contents/flags from the first non-bevel side
+    refContents = b->sides[0].contents;
+    refSurfFlags = b->sides[0].surfaceFlags;
+
+    //--- PHASE 1: Axial Bevels ---
+    // Add +/-X, +/-Y, +/-Z planes anchored at b->mins / b->maxs
+    for (axis = 0; axis < 3; axis++) {
+        for (dir = -1; dir <= 1; dir += 2) {
+            // Check if this axial plane already exists
+            found = 0;
+            for (i = 0; i < tmp->numsides; i++) {
+                p = &mapplanes[tmp->sides[i].planenum];
+                if (p->normal[axis] == dir &&
+                    p->normal[(axis+1)%3] == 0 &&
+                    p->normal[(axis+2)%3] == 0) {
+                    found = 1;
                     break;
                 }
             }
-
-            if (i == b->numsides)
-            { // add a new side
-                if (b->numsides == MAX_BRUSH_SIDES)
-                {
-                    _printf("WARNING: AddBevelsToBrush reached MAX_BRUSH_SIDES\n");
-                    return;
-                }
-                s = &b->sides[b->numsides];
-                memset(s, 0, sizeof(*s));
-                b->numsides++;
-
-                VectorClear(normal);
-                normal[axis] = dir;
-                if (dir == 1)
-                {
-                    dist = b->maxs[axis];
-                }
-                else
-                {
-                    dist = -b->mins[axis];
-                }
-
-                s->planenum = FindFloatPlane(normal, dist);
-                s->contents = b->sides[0].contents;
-                s->surfaceFlags = b->sides[0].surfaceFlags;
-                s->shaderInfo = b->sides[0].shaderInfo;
-                s->bevel = qtrue;
+            
+            if (found) continue;
+            
+            if (tmp->numsides == MAX_BRUSH_SIDES) {
+                _printf("WARNING: AddBevelsToBrush hit MAX_BRUSH_SIDES (axial)\n");
+                break;
             }
+            
+            VectorClear(normal);
+            normal[axis] = dir;
+            dist = (dir == 1) ? b->maxs[axis] : -b->mins[axis];
+            
+            s = &tmp->sides[tmp->numsides++];
+            memset(s, 0, sizeof(*s));
+            s->planenum = FindFloatPlane(normal, dist);
+            s->contents = refContents;
+            s->surfaceFlags = refSurfFlags;
+            s->bevel = qtrue;
+            // No shaderInfo (convention: bevel sides never have shaderInfo)
         }
     }
+
+    //--- PHASE 2: Edge Bevels ---
+    // Only needed for brushes with more than 6 sides (non-pure-axial)
+    if (tmp->numsides > 6) {
+        // Iterate over all non-bevel sides that have windings
+        originalSideCount = tmp->numsides; // freeze count before we add more
+        for (i = 0; i < originalSideCount; i++) {
+            s = &tmp->sides[i];
+            if (s->bevel) continue;
+            w = s->winding;
+            if (!w) continue;
+
+            for (j = 0; j < w->numpoints; j++) {
+                k = (j + 1) % w->numpoints;
+                VectorSubtract(w->points[j], w->points[k], edge);
+                
+                if (VectorNormalize(edge, edge) < 0.5f) continue;
+
+                // Skip near-axial edges (they already have axial bevel coverage)
+                SnapVector(edge);
+                axial = 0;
+                for (a = 0; a < 3; a++) {
+                    if (edge[a] == -1 || edge[a] == 1) { 
+                        axial = 1; 
+                        break; 
+                    }
+                }
+                
+                if (axial) continue; // only test non-axial edges
+
+                // Try the 6 possible slanted bevel planes from this edge
+                for (axis = 0; axis < 3; axis++) {
+                    for (dir = -1; dir <= 1; dir += 2) {
+                        VectorClear(axisVec);
+                        axisVec[axis] = dir;
+                        
+                        CrossProduct(edge, axisVec, normal);
+                        
+                        if (VectorNormalize(normal, normal) < 0.5f) continue;
+                        
+                        dist = DotProduct(w->points[j], normal);
+
+                        // Verify all points on all non-bevel windings are behind this plane
+                        valid = 1;
+                        for (m = 0; m < tmp->numsides && valid; m++) {
+                            // Dedup: skip if this plane already exists
+                            if (PlaneEqual(&mapplanes[tmp->sides[m].planenum], normal, dist)) {
+                                valid = 0; 
+                                break;
+                            }
+                            
+                            w2 = tmp->sides[m].winding;
+                            if (!w2) continue;
+                            
+                            for (l = 0; l < w2->numpoints; l++) {
+                                d = DotProduct(w2->points[l], normal) - dist;
+                                if (d > 0.1f) { 
+                                    valid = 0; 
+                                    break; 
+                                }
+                            }
+                        }
+                        
+                        if (!valid) continue;
+
+                        if (tmp->numsides == MAX_BRUSH_SIDES) {
+                            _printf("WARNING: AddBevelsToBrush hit MAX_BRUSH_SIDES (edge)\n");
+                            goto done_edge_bevels;
+                        }
+                        
+                        s2 = &tmp->sides[tmp->numsides++];
+                        memset(s2, 0, sizeof(*s2));
+                        s2->planenum = FindFloatPlane(normal, dist);
+                        s2->contents = refContents;
+                        s2->surfaceFlags = refSurfFlags;
+                        s2->bevel = qtrue;
+                    }
+                }
+            }
+        }
+        done_edge_bevels:;
+    }
+
+    // 3. Allocate a final, exactly-sized brush and transfer everything into it.
+    //    Free the old brush (b) and the temp buffer (tmp windings are moved, not copied).
+    finalSides = tmp->numsides;
+    out = AllocBrush(finalSides);
+    
+    memcpy(out, tmp, (size_t)&(((bspbrush_t *)0)->sides));
+    out->numsides = finalSides;
+    out->original = out; // reset self-reference
+    
+    for (i = 0; i < finalSides; i++) {
+        out->sides[i] = tmp->sides[i]; // winding pointers transferred
+        tmp->sides[i].winding = NULL;  // prevent double-free in FreeBrush(tmp)
+    }
+    
+    FreeBrush(tmp);
+    FreeBrush(b); // free original input brush
+
+    return out;
 }
 
 /*

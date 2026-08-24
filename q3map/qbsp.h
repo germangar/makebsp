@@ -336,7 +336,9 @@ qboolean CreateBrushWindings(bspbrush_t *brush);
 bspbrush_t *BrushFromBounds(vec3_t mins, vec3_t maxs);
 vec_t BrushVolume(bspbrush_t *brush);
 void WriteBspBrushMap(char *name, bspbrush_t *list);
-void AddBevelsToBrush(bspbrush_t *b);
+bspbrush_t *AddBevelsToBrush(bspbrush_t *b);
+void SnapVector(vec3_t normal);
+qboolean PlaneEqual(plane_t *p, vec3_t normal, vec_t dist);
 
 void ExportModels(int count, char **fileNames);
 
@@ -522,7 +524,8 @@ typedef enum
     MC_WRAP,
     MC_SHELL,
     MC_TERRAIN,
-    MC_EXTRUDE  // user-forced only; never set by auto-categorization
+    MC_EXTRUDE,        // user-forced only; never set by auto-categorization
+    MC_OBJECTDETAIL    // user-forced only; dual-mode extrude (solid) + object (playerclip)
 } modelCategory_t;
 
 #define MAX_MODEL_COLLISION_MESHES 256

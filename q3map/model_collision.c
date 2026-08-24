@@ -64,6 +64,8 @@ const char *CategoryString(modelCategory_t cat)
         return "MC_TERRAIN";
     case MC_EXTRUDE:
         return "MC_EXTRUDE";
+    case MC_OBJECTDETAIL:
+        return "MC_OBJECTDETAIL";
     default:
         return "MC_NONE";
     }
@@ -770,8 +772,8 @@ bspbrush_t *BrushFromHull(colHull_t *hull, shaderInfo_t *si)
         }
     }
 
-    // Add axial bevels to prevent player snagging on seams
-    AddBevelsToBrush(b);
+    // Add axial and edge bevels to prevent player snagging on seams
+    b = AddBevelsToBrush(b);
 
     return b;
 }
@@ -1110,6 +1112,39 @@ void FreeCollisionTris(modelInstance_t *inst)
 
 /*
 ====================
+ApplyShaderToBrushList
+
+Replaces the shader, contents, and surface flags on all sides and the contentShader
+of every brush in the given brush list.
+====================
+*/
+static void ApplyShaderToBrushList(bspbrush_t *list, shaderInfo_t *si)
+{
+    if (!list || !si)
+        return;
+
+    int flags = si->surfaceFlags;
+    flags &= ~(SURF_HINT | SURF_POINTLIGHT | SURF_NONSOLID | SURF_LIGHTFILTER | SURF_ALPHASHADOW);
+    flags |= (SURF_NODRAW | SURF_NOLIGHTMAP | SURF_NODLIGHT);
+
+    for (bspbrush_t *b = list; b; b = b->next)
+    {
+        b->contentShader = si;
+        b->contents = si->contents;
+        b->detail = qtrue;
+
+        for (int i = 0; i < b->numsides; i++)
+        {
+            b->sides[i].shaderInfo = si;
+            b->sides[i].contents = si->contents;
+            b->sides[i].surfaceFlags = flags;
+            b->sides[i].value = si->value;
+        }
+    }
+}
+
+/*
+====================
 DecomposeModelCollision
 
 Generate collision hulls from the model's geometry.
@@ -1130,7 +1165,18 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     shaderInfo_t *caulk = ShaderInfoForShader("textures/common/_miscmodelclip");
     qboolean mergeMeshes = (category == MC_WRAP) ? qtrue : qfalse;
 
-    if (category == MC_TERRAIN || category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)
+    if (category == MC_OBJECTDETAIL)
+    {
+        /* 1. Generate detailed extrusion collision (uses caulk / _miscmodelclip) */
+        bspbrush_t *hulls_extrude = GenerateExtrusionCollision(inst, caulk);
+
+        /* 2. Generate convex hull collision (HACD) - left as default full solid for testing */
+        bspbrush_t *hulls_object = GenerateHACDCollision(inst, caulk);
+
+        /* 3. Combine both sets of brushes */
+        hulls_list = CombineBrushes(hulls_extrude, hulls_object);
+    }
+    else if (category == MC_TERRAIN || category == MC_OBJECT || category == MC_WALKABLE || category == MC_WRAP)
     {
         hulls_list = GenerateHACDCollision(inst, caulk);
     }

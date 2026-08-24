@@ -200,7 +200,19 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         pts[i][2] = verts[poly->verts[i] * 3 + 2];
     }
 
-    /* Front face plane: use first 3 points of the polygon */
+    /* Use actual face normal for extrusion direction */
+    vec3_t extrudeDir;
+    VectorCopy(poly->normal, extrudeDir);
+
+    #define EXTRUDE_INTRUDE_OFFSET 0.125f
+
+    /* Intrude: offset front face points inward along -normal by the offset */
+    for (int i = 0; i < N; i++)
+    {
+        VectorMA(pts[i], -EXTRUDE_INTRUDE_OFFSET, extrudeDir, pts[i]);
+    }
+
+    /* Front face plane: use first 3 points of the intruded polygon */
     /* We already have the normal from merging, but recompute from the actual
        polygon points to ensure consistency with MapPlaneFromPoints */
     int frontPlane = MapPlaneFromPoints(pts[0], pts[1], pts[2]);
@@ -211,11 +223,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         return NULL;
     }
 
-    /* Use actual face normal for extrusion direction. Needs improving*/
-    vec3_t extrudeDir;
-    VectorCopy(poly->normal, extrudeDir);
-
-    /* Back face: offset all polygon points along -normal by extrudeDist */
+    /* Back face: offset all polygon points along -normal by extrudeDist from the intruded front face */
     vec3_t *bpts = malloc(N * sizeof(vec3_t));
     for (int i = 0; i < N; i++)
     {
@@ -294,7 +302,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         return NULL;
     }
 
-    AddBevelsToBrush(b);
+    b = AddBevelsToBrush(b);
 
     return b;
 }
@@ -467,7 +475,7 @@ static __attribute__((unused)) bspbrush_t *ExtrudeFanToBrush(int hubIdx, int *ri
         return NULL;
     }
 
-    AddBevelsToBrush(b);
+    b = AddBevelsToBrush(b);
 
     return b;
 }

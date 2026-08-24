@@ -312,10 +312,11 @@ List of additions and modifications made to shader parsing and features compared
 - **supersample**: Supersampling radius override for the model's lightmaps.
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
 - **forceuvgen**: Enable (default) or disable to force generating new lightmap UVs from scratch. Disabled uses the model UVs.
-- **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude (buggy), none (alias nosolid / nonsolid). More to come.
+- **collisiontype**: Overrides how the model's collision mesh is generated. Valid working values are: object, wrap, extrude, objectdetail (dual: extrude detail + playerclip hull), none (alias nosolid / nonsolid). More to come.
 - **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links this `misc_model` to a brush model entity (like `func_plat` or `func_door`). When set to the same `modelgroup` name as a parent brush entity, the model's visuals and automatically generated collision hulls are bundled with the brush model and move seamlessly with it.
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup`, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
+- **maxtriangles**: Sets a maximum budget for the number of triangles for this instance. If the model exceeds this budget, it will be automatically decimated.
 
 **Editor keys**
 - **model**: The path to the 3D model file to load.
