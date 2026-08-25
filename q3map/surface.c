@@ -1553,13 +1553,10 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
         memcpy(outv, &ds->verts[j], sizeof(*outv));
-        if (!ds->overrideVertexColor)
-        {
-            outv->color[0][0] = 255;
-            outv->color[0][1] = 255;
-            outv->color[0][2] = 255;
-            outv->color[0][3] = 255;
-        }
+        outv->color[0][0] = 255;
+        outv->color[0][1] = 255;
+        outv->color[0][2] = 255;
+        outv->color[0][3] = 255;
     }
 
     // create the indexes
@@ -1827,20 +1824,10 @@ void EmitModelSurf(mapDrawSurface_t *ds)
         outv = &drawVerts[numDrawVerts];
         numDrawVerts++;
         memcpy(outv, &ds->verts[j], sizeof(*outv));
-        if (ds->overrideVertexColor)
-        {
-            outv->color[0][0] = (byte)(ds->vertexColor[0] * 255.0f);
-            outv->color[0][1] = (byte)(ds->vertexColor[1] * 255.0f);
-            outv->color[0][2] = (byte)(ds->vertexColor[2] * 255.0f);
-            outv->color[0][3] = 255;
-        }
-        else
-        {
-            outv->color[0][0] = 255;
-            outv->color[0][1] = 255;
-            outv->color[0][2] = 255;
-            outv->color[0][3] = 255;
-        }
+        outv->color[0][0] = 255;
+        outv->color[0][1] = 255;
+        outv->color[0][2] = 255;
+        outv->color[0][3] = 255;
     }
 
     for (j = 0; j < ds->numIndexes; j++)
