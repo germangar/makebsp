@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "qbsp.h"
+#include "font_baker.h"
 #include "../shared/json_parser.h"
 
 #ifdef _WIN32
@@ -779,6 +780,34 @@ int main(int argc, char **argv)
             else
             {
                 Error("-convertKTX requires a file path argument");
+            }
+        }
+        if (!Q_stricmp(argv[i], "-fontatlas"))
+        {
+            if (i + 2 < argc)
+            {
+                const char *fontPath = argv[i + 1];
+                int atlasSize = atoi(argv[i + 2]);
+                int fontSize = 0;
+                
+                if (i + 3 < argc && argv[i + 3][0] != '-')
+                {
+                    fontSize = atoi(argv[i + 3]);
+                }
+                
+                if (BakeFontAtlas(fontPath, atlasSize, fontSize))
+                {
+                    Broadcast_Shutdown();
+                    return 0;
+                }
+                else
+                {
+                    Error("Failed to bake font atlas");
+                }
+            }
+            else
+            {
+                Error("Usage: makebsp -fontatlas <fontfile.ttf> <atlas_size> [font_pixel_size]");
             }
         }
         if (!strcmp(argv[i], "-exportmodels")) {

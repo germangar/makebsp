@@ -6,6 +6,7 @@ _decal entity processing
 */
 
 #include "qbsp.h"
+#include "font_parser.h"
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshC.h"
 
 
@@ -663,6 +664,184 @@ qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, v
 
 /*
 ================
+CreateTextDecalProjectors
+Generates decal projectors for a text string using a loaded font descriptor.
+================
+*/
+qboolean CreateTextDecalProjectors(vec3_t origin, vec3_t forward, vec3_t right, vec3_t up,
+                                   float distance, float height, const char *text,
+                                   const char *fontStr, const char *alignStr,
+                                   const char *valignStr, float tracking,
+                                   const char *decalgroup, const char *vertexcolorStr,
+                                   int entityNum)
+{
+    fontDescriptor_t *font;
+    shaderInfo_t *si;
+    float scale;
+    float totalWidth = 0.0f;
+    float cursorStartOffset = 0.0f;
+    float verticalOffset = 0.0f;
+    int textLen;
+    int i;
+    vec3_t pen;
+    int createdProjectors = 0;
+
+    if (!text || !text[0])
+    {
+        _printf("WARNING: misc_text_decal (entity %d) has empty 'text' key.\n", entityNum);
+        return qfalse;
+    }
+
+    if (!fontStr || !fontStr[0])
+    {
+        _printf("WARNING: misc_text_decal (entity %d) missing 'font' parameter.\n", entityNum);
+        return qfalse;
+    }
+
+    font = LoadFontDescriptor(fontStr);
+    if (!font)
+    {
+        _printf("WARNING: misc_text_decal (entity %d) could not load font descriptor '%s'.\n", entityNum, fontStr);
+        return qfalse;
+    }
+
+    si = ShaderInfoForShader(fontStr);
+    if (!si && font->texture[0])
+    {
+        si = ShaderInfoForShader(font->texture);
+    }
+    if (!si)
+    {
+        _printf("WARNING: misc_text_decal (entity %d) could not find shader for '%s'. Defaulting to nodraw.\n", entityNum, fontStr);
+        si = ShaderInfoForShader("textures/common/nodraw");
+    }
+
+    if (height <= 0.0f)
+    {
+        height = 32.0f;
+    }
+
+    scale = (font->fontSize > 0.0f) ? (height / font->fontSize) : 1.0f;
+    textLen = strlen(text);
+
+    // Pass 1: Measure total width
+    for (i = 0; i < textLen; i++)
+    {
+        int c = (unsigned char)text[i];
+        const glyph_t *g = FindGlyph(font, c);
+        if (g)
+        {
+            totalWidth += g->xadvance * scale;
+            if (i < textLen - 1)
+            {
+                totalWidth += tracking;
+            }
+        }
+    }
+
+    // Horizontal alignment
+    if (alignStr && (!Q_stricmp(alignStr, "center") || !Q_stricmp(alignStr, "middle")))
+    {
+        cursorStartOffset = -totalWidth * 0.5f;
+    }
+    else if (alignStr && !Q_stricmp(alignStr, "right"))
+    {
+        cursorStartOffset = -totalWidth;
+    }
+    else // "left" or default
+    {
+        cursorStartOffset = 0.0f;
+    }
+
+    // Vertical alignment
+    if (valignStr && (!Q_stricmp(valignStr, "center") || !Q_stricmp(valignStr, "middle")))
+    {
+        verticalOffset = -(font->ascent + font->descent) * 0.5f * scale;
+    }
+    else if (valignStr && !Q_stricmp(valignStr, "top"))
+    {
+        verticalOffset = -font->ascent * scale;
+    }
+    else if (valignStr && !Q_stricmp(valignStr, "bottom"))
+    {
+        verticalOffset = -font->descent * scale;
+    }
+    else // "baseline" or default
+    {
+        verticalOffset = 0.0f;
+    }
+
+    // Initialize pen position
+    VectorCopy(origin, pen);
+    VectorMA(pen, cursorStartOffset, right, pen);
+    VectorMA(pen, verticalOffset, up, pen);
+
+    // Pass 2: Generate glyph quads
+    for (i = 0; i < textLen; i++)
+    {
+        int c = (unsigned char)text[i];
+        const glyph_t *g = FindGlyph(font, c);
+        if (g)
+        {
+            if (g->w > 0 && g->h > 0)
+            {
+                mesh_t quad;
+                float left = g->xoff * scale;
+                float rightEdge = left + g->w * scale;
+                float top = -g->yoff * scale;
+                float bottom = top - g->h * scale;
+
+                quad.width = 2;
+                quad.height = 2;
+                quad.verts = (drawVert_t *)malloc(4 * sizeof(drawVert_t));
+                memset(quad.verts, 0, 4 * sizeof(drawVert_t));
+
+                // Top-Left (x=0, y=0) -> (u0, v0)
+                VectorMA(pen, top, up, quad.verts[0].xyz);
+                VectorMA(quad.verts[0].xyz, left, right, quad.verts[0].xyz);
+                quad.verts[0].st[0] = g->u0; quad.verts[0].st[1] = g->v0;
+
+                // Top-Right (x=1, y=0) -> (u1, v0)
+                VectorMA(pen, top, up, quad.verts[1].xyz);
+                VectorMA(quad.verts[1].xyz, rightEdge, right, quad.verts[1].xyz);
+                quad.verts[1].st[0] = g->u1; quad.verts[1].st[1] = g->v0;
+
+                // Bottom-Left (x=0, y=1) -> (u0, v1)
+                VectorMA(pen, bottom, up, quad.verts[2].xyz);
+                VectorMA(quad.verts[2].xyz, left, right, quad.verts[2].xyz);
+                quad.verts[2].st[0] = g->u0; quad.verts[2].st[1] = g->v1;
+
+                // Bottom-Right (x=1, y=1) -> (u1, v1)
+                VectorMA(pen, bottom, up, quad.verts[3].xyz);
+                VectorMA(quad.verts[3].xyz, rightEdge, right, quad.verts[3].xyz);
+                quad.verts[3].st[0] = g->u1; quad.verts[3].st[1] = g->v1;
+
+                if (MakeDecalProjectorForPatch(si, forward, distance, &quad,
+                                              &quad.verts[0], &quad.verts[1], &quad.verts[2], entityNum))
+                {
+                    if (numDecalProjectors > 0)
+                    {
+                        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr);
+                    }
+                    createdProjectors++;
+                }
+
+                free(quad.verts);
+            }
+
+            // Advance pen
+            VectorMA(pen, (g->xadvance * scale + tracking), right, pen);
+        }
+    }
+
+    _printf("misc_text_decal (ent %d): '%s' -> generated %d character projectors (font: %s, height: %.1f)\n",
+            entityNum, text, createdProjectors, font->name, height);
+
+    return (createdProjectors > 0) ? qtrue : qfalse;
+}
+
+/*
+================
 ParseDecalProjectors
 Phase A
 ================
@@ -684,9 +863,12 @@ void ParseDecalProjectors(void)
         const char *targetName;
         entity_t *targetEnt = NULL;
         qboolean isMiscDecal = qfalse;
+        qboolean isMiscTextDecal = qfalse;
 
         if (strcmp(classname, "misc_decal") == 0) 
             isMiscDecal = qtrue;
+        else if (strcmp(classname, "misc_text_decal") == 0)
+            isMiscTextDecal = qtrue;
         else if (strcmp(classname, "_decal") != 0) 
             continue;
         
@@ -695,7 +877,7 @@ void ParseDecalProjectors(void)
         if (targetName[0])
             targetEnt = FindTargetEntityByName(targetName);
             
-        if (!isMiscDecal && !e->patches && !e->brushes)
+        if (!isMiscDecal && !isMiscTextDecal && !e->patches && !e->brushes)
         {
             _printf("WARNING: Decal entity without geometry, ignoring.\n");
             continue;
@@ -709,14 +891,14 @@ void ParseDecalProjectors(void)
         vec3_t fallbackNormal;
         qboolean hasFallback = qfalse;
         
-        if (!isMiscDecal)
+        if (!isMiscDecal && !isMiscTextDecal)
             hasFallback = CalculateDecalFallbackNormal(e, fallbackNormal);
             
         vec3_t globalOrigin;
         vec3_t globalProjNormal;
         float globalDistance = 64.0f;
         
-        if (!isMiscDecal)
+        if (!isMiscDecal && !isMiscTextDecal)
         {
             if (VectorCompare(entityOrigin, vec3_origin))
             {
@@ -763,21 +945,16 @@ void ParseDecalProjectors(void)
             VectorCopy(entityOrigin, globalOrigin);
         }
 
-        if (isMiscDecal)
+        if (isMiscDecal || isMiscTextDecal)
         {
-            float width = FloatForKey(e, "width");
-            float height = FloatForKey(e, "height");
             const char *distStr = ValueForKey(e, "distance");
-            const char *shaderStr = ValueForKey(e, "shader");
             const char *decalgroup = ValueForKey(e, "decalgroup");
             const char *vcolStr = ValueForKey(e, "vertexcolor");
-            float scale = FloatForKey(e, "scale");
+            if (!vcolStr[0]) vcolStr = ValueForKey(e, "_color");
+
             vec3_t forward, right, up;
             vec3_t angles;
-
             float rotate = FloatForKey(e, "rotate");
-
-            if (scale == 0.0f) scale = 1.0f;
 
             if (!distStr[0]) distStr = ValueForKey(e, "depth");
             if (distStr[0])
@@ -831,8 +1008,35 @@ void ParseDecalProjectors(void)
                 up[2] = -tempRight[2] * s + tempUp[2] * c;
             }
 
-            CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
-                                     width, height, scale, shaderStr, decalgroup, vcolStr, i);
+            if (isMiscDecal)
+            {
+                float width = FloatForKey(e, "width");
+                float height = FloatForKey(e, "height");
+                const char *shaderStr = ValueForKey(e, "shader");
+                float scale = FloatForKey(e, "scale");
+                if (scale == 0.0f) scale = 1.0f;
+
+                CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
+                                         width, height, scale, shaderStr, decalgroup, vcolStr, i);
+            }
+            else if (isMiscTextDecal)
+            {
+                const char *text = ValueForKey(e, "text");
+                const char *fontStr = ValueForKey(e, "font");
+                if (!fontStr[0]) fontStr = ValueForKey(e, "shader");
+                if (!fontStr[0]) fontStr = ValueForKey(e, "texture");
+
+                float height = FloatForKey(e, "height");
+                if (height == 0.0f) height = FloatForKey(e, "size");
+
+                const char *alignStr = ValueForKey(e, "align");
+                const char *valignStr = ValueForKey(e, "valign");
+                float tracking = FloatForKey(e, "tracking");
+
+                CreateTextDecalProjectors(globalOrigin, forward, right, up, globalDistance,
+                                         height, text, fontStr, alignStr, valignStr,
+                                         tracking, decalgroup, vcolStr, i);
+            }
             
             goto clear_geometry; // Clear any brush geometry created accidentally
         }
@@ -1024,7 +1228,7 @@ clear_geometry:
             if (srcTarget[0] && !strcmp(srcTarget, tName))
             {
                 srcClass = ValueForKey(src, "classname");
-                if (strcmp(srcClass, "_decal") == 0)
+                if (!strcmp(srcClass, "_decal") || !strcmp(srcClass, "misc_decal") || !strcmp(srcClass, "misc_text_decal"))
                     targetedByDecal = qtrue;
                 else
                     targetedByNonDecal = qtrue;
@@ -1227,7 +1431,9 @@ void WeldDecalMesh(decalMesh_t *m, float epsilon)
         {
             if (fabs(m->verts[i].xyz[0] - m->verts[j].xyz[0]) < epsilon &&
                 fabs(m->verts[i].xyz[1] - m->verts[j].xyz[1]) < epsilon &&
-                fabs(m->verts[i].xyz[2] - m->verts[j].xyz[2]) < epsilon)
+                fabs(m->verts[i].xyz[2] - m->verts[j].xyz[2]) < epsilon &&
+                fabs(m->verts[i].st[0] - m->verts[j].st[0]) < 0.001f &&
+                fabs(m->verts[i].st[1] - m->verts[j].st[1]) < 0.001f)
             {
                 match = j;
                 break;
@@ -1736,20 +1942,22 @@ void MakeEntityDecals(entity_t *e)
         decalMesh_t decalPatch;
         int firstProjectorIndex = -1;
         
-        if (strcmp(classname, "_decal") != 0 && strcmp(classname, "misc_decal") != 0) continue;
+        if (strcmp(classname, "_decal") != 0 && strcmp(classname, "misc_decal") != 0 && strcmp(classname, "misc_text_decal") != 0) continue;
         
         InitDecalMesh(&decalTrisoup);
         InitDecalMesh(&decalPatch);
         
+        qboolean isMiscTextDecal_d = (strcmp(classname, "misc_text_decal") == 0);
         for (i = 0; i < numDecalProjectors; i++)
         {
             decalProjector_t localDp;
+            int trisBefore;
             
             if (decalProjectors[i].decalEntityNum != d) continue;
             if (firstProjectorIndex == -1) firstProjectorIndex = i;
             
             TransformDecalProjector(&decalProjectors[i], entityOrigin, &localDp);
-            
+
             for (s = e->firstDrawSurf; s < initialSurfs; s++)
             {
                 mapDrawSurface_t *ds = &mapDrawSurfs[s];
@@ -1860,7 +2068,8 @@ void MakeEntityDecals(entity_t *e)
                     }
                 }
             }
-        }
+        } // end of projector loop (i)
+
         float shadeAngle = FloatForKey(decalEnt, "shadeangle");
 
         if (decalTrisoup.numIndexes >= 3 && firstProjectorIndex != -1)
@@ -1870,6 +2079,7 @@ void MakeEntityDecals(entity_t *e)
                 templateDs = &mapDrawSurfs[e->firstDrawSurf];
             
             WeldDecalMesh(&decalTrisoup, 0.01f);
+
             if (shadeAngle > 0.0f)
             {
                 SmoothIndexedMeshNormalsByShadeAngle(&decalTrisoup.verts, &decalTrisoup.numVerts, &decalTrisoup.maxVerts,

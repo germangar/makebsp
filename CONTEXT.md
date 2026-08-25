@@ -41,11 +41,12 @@ The project implements a custom three-phase radiosity system:
 - **Radiosity Ambient Blending**: If `rad_color_ratio` is less than 1.0 and ambient color is present, the system uses the ambient color as a replacement for the bounced color. This reduces color bleeding while preserving overall energy. Ambient is added after radiosity to prevent overblowing.
 - **Singularity Guarding**: Implements distance clamping and fade-out gradients to prevent infinite energy accumulation ("Nuclear Glow") when emitters are too close to geometry.
 
-## 5. Geometry Processing: xatlas, MeshLib & Convex Decompositions
-The BSP compiler (`makebsp.exe`) leverages modern libraries for texture and collision:
+## 6. Geometry Processing & Model Collision: xatlas, MeshLib & Convex Decompositions
+The BSP compiler (`makebsp.exe`) leverages modern geometry processing for texturing, surface welding, and physical collision hulls:
 - **xatlas Integration**: Handles automatic lightmap UV unwrapping and atlas packing for complex 3D models and subdivided geometry, ensuring unique mappings for all surfaces.
 - **MeshLib**: Performs geometric healing, decimation, and cleanup of complex triangle soup models to prepare them for physical collision hulls.
-- **HACD**: Performs Hierarchical Approximate Convex Decomposition to convert meshes into optimized convex collision brushes for `MC_OBJECT`, `MC_WRAP`, and dual-mode detail profiles.
+- **HACD & Collision Profiles**: Performs Hierarchical Approximate Convex Decomposition to convert meshes into optimized convex collision brushes. Fully supports collision modes including `MC_OBJECT`, `MC_WRAP`, `MC_EXTRUDE`, and dual-mode detail profiles (`wrapdetail`, `objectdetail`).
+- **Extrusion Collision Pipeline**: Extrudes triangle/polygon soup faces into convex brush prisms with axial/edge beveling and tapered inward boundary planes to eliminate seam catches and player movement snagging.
 
 ## 7. Technical Stack
 - **Language**: C (some C++ wrappers for libraries).

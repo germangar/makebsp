@@ -881,6 +881,7 @@ void UnparseEntities(void)
         const char *classname = ValueForKey(&entities[i], "classname");
         if (!strcmp(classname, "func_group") || !strcmp(classname, "func_light") ||
             !strcmp(classname, "_decal") || !strcmp(classname, "misc_decal") ||
+            !strcmp(classname, "misc_text_decal") ||
             (!game->keepLights && !strcmp(classname, "light")))
         {
             if (!ValueForKey(&entities[i], "model")[0])
