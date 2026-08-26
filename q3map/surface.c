@@ -95,6 +95,10 @@ mapDrawSurface_t *AllocDrawSurf(void)
     ds->parentSurfaceNum = -1;
     ds->chamferConvexWidth = -1.0f;
     ds->chamferConcaveWidth = -1.0f;
+    ds->overrideVertexColor = 0;
+    VectorClear(ds->vertexColor);
+    ds->overrideVertexAlpha = 0;
+    ds->vertexAlpha = 1.0f;
     ds->entityNum = -1;
 
     return ds;
@@ -199,6 +203,21 @@ void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
     {
         ds->overrideVertexColor = 1;
         ParseColor(vcolStr, ds->vertexColor);
+    }
+
+    // Resolve vertexalpha override (func_group, misc_model, etc)
+    const char *valphaStr = ValueForEpair(epairs, "vertexalpha");
+    if (valphaStr[0])
+    {
+        float a = atof(valphaStr);
+        if (a > 1.0001f)
+        {
+            a /= 255.0f;
+        }
+        if (a < 0.0f) a = 0.0f;
+        if (a > 1.0f) a = 1.0f;
+        ds->overrideVertexAlpha = 1;
+        ds->vertexAlpha = a;
     }
 
     // Resolve upscale
@@ -530,7 +549,11 @@ void MergeDrawSurfs(entity_t *e)
 
                 // Must have same shader and samplesize
                 if (ds1->shaderInfo != ds2->shaderInfo ||
-                    ds1->samplesize != ds2->samplesize)
+                    ds1->samplesize != ds2->samplesize ||
+                    ds1->overrideVertexColor != ds2->overrideVertexColor ||
+                    (ds1->overrideVertexColor && !VectorCompare(ds1->vertexColor, ds2->vertexColor)) ||
+                    ds1->overrideVertexAlpha != ds2->overrideVertexAlpha ||
+                    (ds1->overrideVertexAlpha && fabs(ds1->vertexAlpha - ds2->vertexAlpha) > 0.001f))
                 {
                     continue;
                 }
@@ -1492,6 +1515,8 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexAlpha = ds->overrideVertexAlpha;
+    drawExtraSurfaces[numDrawSurfaces].vertexAlpha = ds->vertexAlpha;
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
@@ -1587,6 +1612,8 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexAlpha = ds->overrideVertexAlpha;
+    drawExtraSurfaces[numDrawSurfaces].vertexAlpha = ds->vertexAlpha;
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
@@ -1691,6 +1718,8 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexAlpha = ds->overrideVertexAlpha;
+    drawExtraSurfaces[numDrawSurfaces].vertexAlpha = ds->vertexAlpha;
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;
@@ -1759,6 +1788,8 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].lightSubdivide = ds->lightSubdivide;
     drawExtraSurfaces[numDrawSurfaces].overrideVertexColor = ds->overrideVertexColor;
     VectorCopy(ds->vertexColor, drawExtraSurfaces[numDrawSurfaces].vertexColor);
+    drawExtraSurfaces[numDrawSurfaces].overrideVertexAlpha = ds->overrideVertexAlpha;
+    drawExtraSurfaces[numDrawSurfaces].vertexAlpha = ds->vertexAlpha;
     drawExtraSurfaces[numDrawSurfaces].superSampleRadius = ds->superSampleRadius;
     drawExtraSurfaces[numDrawSurfaces].isHalo = ds->isHalo;
     drawExtraSurfaces[numDrawSurfaces].upscale = ds->upscale;

@@ -22,6 +22,8 @@ typedef struct {
     float lightSubdivide;
     int overrideVertexColor;
     vec3_t vertexColor;
+    int overrideVertexAlpha;
+    float vertexAlpha;
     float superSampleRadius;
     qboolean isHalo;
     int upscale;

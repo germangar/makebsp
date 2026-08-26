@@ -1208,6 +1208,25 @@ void BuildLocalSurfaces(void)
                 localSurfaces[i].overrideVertexColor = qtrue;
                 VectorCopy(extra[i].vertexColor, localSurfaces[i].vertexColor);
             }
+
+            // Resolve vertex alpha override: shader is the base, entity key wins.
+            if (si && si->overrideVertexAlpha)
+            {
+                localSurfaces[i].overrideVertexAlpha = qtrue;
+                localSurfaces[i].vertexAlpha = si->vertexAlpha;
+            }
+            else
+            {
+                localSurfaces[i].overrideVertexAlpha = qfalse;
+                localSurfaces[i].vertexAlpha = 1.0f;
+            }
+
+            // Entity-level 'vertexalpha' key (func_group / misc_model) overrides the shader.
+            if (extra && i < numExtra && extra[i].overrideVertexAlpha)
+            {
+                localSurfaces[i].overrideVertexAlpha = qtrue;
+                localSurfaces[i].vertexAlpha = extra[i].vertexAlpha;
+            }
         }
 
         // Apply supersampling override

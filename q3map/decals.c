@@ -570,7 +570,7 @@ static qboolean CalculateDecalFallbackNormal(entity_t *e, vec3_t outNormal)
 
 extern qboolean onlyents;
 
-static void PopulateDecalProjectorProperties(decalProjector_t *dp, const char *decalgroup, const char *vertexcolorStr)
+static void PopulateDecalProjectorProperties(decalProjector_t *dp, const char *decalgroup, const char *vertexcolorStr, const char *vertexalphaStr)
 {
     if (decalgroup && decalgroup[0])
     {
@@ -591,6 +591,24 @@ static void PopulateDecalProjectorProperties(decalProjector_t *dp, const char *d
     {
         dp->overrideVertexColor = 0;
     }
+
+    if (vertexalphaStr && vertexalphaStr[0])
+    {
+        float a = atof(vertexalphaStr);
+        if (a > 1.0001f)
+        {
+            a /= 255.0f;
+        }
+        if (a < 0.0f) a = 0.0f;
+        if (a > 1.0f) a = 1.0f;
+        dp->overrideVertexAlpha = 1;
+        dp->vertexAlpha = a;
+    }
+    else
+    {
+        dp->overrideVertexAlpha = 0;
+        dp->vertexAlpha = 1.0f;
+    }
 }
 
 /*
@@ -602,7 +620,7 @@ Standalone function to generate a misc_decal projector programmatically.
 qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, vec3_t up, 
                                   float distance, float width, float height, float scale,
                                   const char *shaderStr, const char *decalgroup, 
-                                  const char *vertexcolorStr, int entityNum)
+                                  const char *vertexcolorStr, const char *vertexalphaStr, int entityNum)
 {
     shaderInfo_t *si;
     mesh_t quad;
@@ -656,7 +674,7 @@ qboolean CreateMiscDecalProjector(vec3_t origin, vec3_t forward, vec3_t right, v
 
     if (result && numDecalProjectors > 0)
     {
-        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr);
+        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr, vertexalphaStr);
     }
 
     return result;
@@ -673,7 +691,7 @@ qboolean CreateTextDecalProjectors(vec3_t origin, vec3_t forward, vec3_t right, 
                                    const char *fontStr, const char *alignStr,
                                    const char *valignStr, float tracking,
                                    const char *decalgroup, const char *vertexcolorStr,
-                                   int entityNum)
+                                   const char *vertexalphaStr, int entityNum)
 {
     fontDescriptor_t *font;
     shaderInfo_t *si;
@@ -821,7 +839,7 @@ qboolean CreateTextDecalProjectors(vec3_t origin, vec3_t forward, vec3_t right, 
                 {
                     if (numDecalProjectors > 0)
                     {
-                        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr);
+                        PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vertexcolorStr, vertexalphaStr);
                     }
                     createdProjectors++;
                 }
@@ -951,6 +969,7 @@ void ParseDecalProjectors(void)
             const char *decalgroup = ValueForKey(e, "decalgroup");
             const char *vcolStr = ValueForKey(e, "vertexcolor");
             if (!vcolStr[0]) vcolStr = ValueForKey(e, "_color");
+            const char *valphaStr = ValueForKey(e, "vertexalpha");
 
             vec3_t forward, right, up;
             vec3_t angles;
@@ -1017,7 +1036,7 @@ void ParseDecalProjectors(void)
                 if (scale == 0.0f) scale = 1.0f;
 
                 CreateMiscDecalProjector(globalOrigin, forward, right, up, globalDistance, 
-                                         width, height, scale, shaderStr, decalgroup, vcolStr, i);
+                                         width, height, scale, shaderStr, decalgroup, vcolStr, valphaStr, i);
             }
             else if (isMiscTextDecal)
             {
@@ -1035,7 +1054,7 @@ void ParseDecalProjectors(void)
 
                 CreateTextDecalProjectors(globalOrigin, forward, right, up, globalDistance,
                                          height, text, fontStr, alignStr, valignStr,
-                                         tracking, decalgroup, vcolStr, i);
+                                         tracking, decalgroup, vcolStr, valphaStr, i);
             }
             
             goto clear_geometry; // Clear any brush geometry created accidentally
@@ -1117,7 +1136,8 @@ void ParseDecalProjectors(void)
             {
                 const char *decalgroup = ValueForKey(e, "decalgroup");
                 const char *vcolStr = ValueForKey(e, "vertexcolor");
-                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr);
+                const char *valphaStr = ValueForKey(e, "vertexalpha");
+                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr, valphaStr);
             }
             FreeMesh(tess);
         }
@@ -1171,7 +1191,8 @@ void ParseDecalProjectors(void)
             {
                 const char *decalgroup = ValueForKey(e, "decalgroup");
                 const char *vcolStr = ValueForKey(e, "vertexcolor");
-                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr);
+                const char *valphaStr = ValueForKey(e, "vertexalpha");
+                PopulateDecalProjectorProperties(&decalProjectors[numDecalProjectors - 1], decalgroup, vcolStr, valphaStr);
             }
         }
 
@@ -1881,6 +1902,12 @@ static void EmitDecalMeshAsMiscModel(decalMesh_t *m, decalProjector_t *dp, mapDr
         newDs->vertexColor[0] = dp->vertexColor[0];
         newDs->vertexColor[1] = dp->vertexColor[1];
         newDs->vertexColor[2] = dp->vertexColor[2];
+    }
+    // Resolve vertexalpha override
+    if (dp->overrideVertexAlpha)
+    {
+        newDs->overrideVertexAlpha = 1;
+        newDs->vertexAlpha = dp->vertexAlpha;
     }
 }
 

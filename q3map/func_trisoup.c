@@ -132,6 +132,8 @@ static void PromotePatchesToTrisoups(entity_t *e)
         newDs->noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
         newDs->overrideVertexColor = ds->overrideVertexColor;
         VectorCopy(ds->vertexColor, newDs->vertexColor);
+        newDs->overrideVertexAlpha = ds->overrideVertexAlpha;
+        newDs->vertexAlpha       = ds->vertexAlpha;
         newDs->isHalo            = ds->isHalo;
         newDs->cutoff            = ds->cutoff;
         newDs->fadeout           = ds->fadeout;

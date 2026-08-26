@@ -183,6 +183,8 @@ typedef struct drawsurf_s
     float lightSubdivide;
     int overrideVertexColor;
     vec3_t vertexColor;
+    int overrideVertexAlpha;
+    float vertexAlpha;
     float superSampleRadius;
     qboolean isHalo;
     int upscale;
@@ -646,6 +648,8 @@ typedef struct {
     char decalgroup[128];
     int overrideVertexColor;
     vec4_t vertexColor;
+    int overrideVertexAlpha;
+    float vertexAlpha;
 } decalProjector_t;
 
 extern int numDecalProjectors;

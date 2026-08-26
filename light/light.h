@@ -394,9 +394,11 @@ typedef struct
 	float smoothingRadius;
     shaderInfo_t *si_override;
 
-    // vertex color override
+    // vertex color & alpha override
     qboolean overrideVertexColor;
     vec3_t vertexColor;
+    qboolean overrideVertexAlpha;
+    float vertexAlpha;
     float superSampleRadius;
     int upscale;
     qboolean castShadows;

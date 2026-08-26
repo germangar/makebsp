@@ -2066,6 +2066,15 @@ void MergeAdjacentTrisoups(entity_t *e)
                 if (fabs(scaleA - scaleB) > 0.001f)
                     continue;
 
+                if (currDs->overrideVertexColor != dsB->overrideVertexColor)
+                    continue;
+                if (currDs->overrideVertexColor && !VectorCompare(currDs->vertexColor, dsB->vertexColor))
+                    continue;
+                if (currDs->overrideVertexAlpha != dsB->overrideVertexAlpha)
+                    continue;
+                if (currDs->overrideVertexAlpha && fabs(currDs->vertexAlpha - dsB->vertexAlpha) > 0.001f)
+                    continue;
+
                 if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
                     continue;
 

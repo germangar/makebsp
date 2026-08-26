@@ -355,6 +355,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->colorOverride = qfalse;
     si->overrideVertexColor = qfalse;
     VectorClear(si->vertexColor);
+    si->overrideVertexAlpha = qfalse;
+    si->vertexAlpha = 1.0f;
 
     return si;
 }
@@ -651,6 +653,22 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                     }
                 }
                 si->overrideVertexColor = qtrue;
+                continue;
+            }
+
+            // q3map_vertexalpha <value> or vertexalpha <value>
+            if (!Q_stricmp(token, "q3map_vertexalpha") || !Q_stricmp(token, "vertexalpha"))
+            {
+                GetToken(qfalse);
+                float a = atof(token);
+                if (a > 1.0001f)
+                {
+                    a /= 255.0f;
+                }
+                if (a < 0.0f) a = 0.0f;
+                if (a > 1.0f) a = 1.0f;
+                si->vertexAlpha = a;
+                si->overrideVertexAlpha = qtrue;
                 continue;
             }
 

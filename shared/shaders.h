@@ -85,6 +85,8 @@ typedef struct shaderInfo_s
     qboolean colorOverride;        // true if color was manually specified in shader
     vec3_t vertexColor;
     qboolean overrideVertexColor;
+    float vertexAlpha;
+    qboolean overrideVertexAlpha;
 
     int width, height;
     byte *pixels;

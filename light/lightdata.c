@@ -780,7 +780,7 @@ void DownConvertLightingData(void)
 
     DownConvertDrawVerts(scale, (game->hdr == HDR_8BIT));
 
-    // Apply q3map_vertexcolor overrides
+    // Apply q3map_vertexcolor & q3map_vertexalpha overrides
     for (int s = 0; s < numDrawSurfaces; s++)
     {
         if (localSurfaces[s].overrideVertexColor)
@@ -801,7 +801,22 @@ void DownConvertLightingData(void)
                 drawVerts[vertIdx].color[0][0] = c[0];
                 drawVerts[vertIdx].color[0][1] = c[1];
                 drawVerts[vertIdx].color[0][2] = c[2];
-                drawVerts[vertIdx].color[0][3] = 255; // Alpha
+                drawVerts[vertIdx].color[0][3] = 255; // Default Alpha
+            }
+        }
+
+        if (localSurfaces[s].overrideVertexAlpha)
+        {
+            dsurface_t *ds = &drawSurfaces[s];
+            int val = (int)(localSurfaces[s].vertexAlpha * 255.0f + 0.5f);
+            if (val < 0) val = 0;
+            else if (val > 255) val = 255;
+            byte a = (byte)val;
+
+            for (int v = 0; v < ds->numVerts; v++)
+            {
+                int vertIdx = ds->firstVert + v;
+                drawVerts[vertIdx].color[0][3] = a;
             }
         }
     }
