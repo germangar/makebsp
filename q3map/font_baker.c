@@ -1,5 +1,6 @@
 #include "qbsp.h"
 #include "font_baker.h"
+#include "imagelib.h"
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include "../libs/stb_rect_pack.h"
@@ -27,7 +28,6 @@ qboolean BakeFontAtlas(const char *fontPath, int atlasSize, int customFontSize)
     char baseName[1024];
     char outTgaPath[1024];
     char outJsonPath[1024];
-    char outDir[] = "textures/decals/fonts/";
     byte *atlasAlpha = NULL;
     byte *atlasRGBA = NULL;
     FILE *fJson = NULL;

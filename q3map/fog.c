@@ -53,7 +53,7 @@ void SplitMeshByPlane(mesh_t *in, vec3_t normal, float dist, mesh_t **front,
     int w, h, split;
     float d[MAX_PATCH_SIZE][MAX_PATCH_SIZE];
     drawVert_t *dv, *v1, *v2;
-    int c_front, c_back, c_on;
+    int c_front, c_back;
     mesh_t *f, *b;
     int i, j;
     float frac;
@@ -64,7 +64,6 @@ void SplitMeshByPlane(mesh_t *in, vec3_t normal, float dist, mesh_t **front,
         dv = in->verts;
         c_front = 0;
         c_back = 0;
-        c_on = 0;
         for (h = 0; h < in->height; h++)
         {
             for (w = 0; w < in->width; w++, dv++)
@@ -77,10 +76,6 @@ void SplitMeshByPlane(mesh_t *in, vec3_t normal, float dist, mesh_t **front,
                 else if (d[h][w] < -ON_EPSILON)
                 {
                     c_back++;
-                }
-                else
-                {
-                    c_on++;
                 }
             }
         }

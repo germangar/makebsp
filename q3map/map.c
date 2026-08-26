@@ -838,8 +838,6 @@ void Parse1DMatrixDouble(int x, double *m)
 void ParseRawBrush(void)
 {
     side_t *side;
-    int i, j;
-    vec3_t planepts[3];
     double planepts_d[3][3];
     int planenum;
     shaderInfo_t *si;
@@ -890,12 +888,6 @@ void ParseRawBrush(void)
         Parse1DMatrixDouble(3, planepts_d[0]);
         Parse1DMatrixDouble(3, planepts_d[1]);
         Parse1DMatrixDouble(3, planepts_d[2]);
-        
-        for (i = 0; i < 3; i++) {
-            for (j = 0; j < 3; j++) {
-                planepts[i][j] = (float)planepts_d[i][j];
-            }
-        }
 
         if (g_bBrushPrimit == BPRIMIT_NEWBRUSHES)
             // read the texture matrix

@@ -433,8 +433,6 @@ static void CategorizeModel(modelInstance_t *inst)
     float upperHemisphereRatio = upperHemisphereArea / totalArea;
     float outwardRatio = outwardArea / totalArea;
     float inwardRatio = inwardArea / totalArea;
-    float height = maxs[2] - mins[2];
-    qboolean isFlat = height < 8.0f;
 
     modelCategory_t category = MC_OBJECT;
 

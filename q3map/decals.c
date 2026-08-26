@@ -161,7 +161,7 @@ static qboolean MakeDecalProjectorForPatch(shaderInfo_t *si, vec3_t projNormal,
 {
     decalProjector_t *dp;
     vec3_t avgNormal, totalNormal;
-    vec3_t extent, backPoint;
+    vec3_t extent;
     int x, y, i;
     int W = tess->width;
     int H = tess->height;
@@ -1964,7 +1964,6 @@ void MakeEntityDecals(entity_t *e)
     {
         entity_t *decalEnt = &entities[d];
         const char *classname = ValueForKey(decalEnt, "classname");
-        const char *decalGroup = ValueForKey(decalEnt, "decalgroup");
         decalMesh_t decalTrisoup;
         decalMesh_t decalPatch;
         int firstProjectorIndex = -1;
@@ -1974,11 +1973,9 @@ void MakeEntityDecals(entity_t *e)
         InitDecalMesh(&decalTrisoup);
         InitDecalMesh(&decalPatch);
         
-        qboolean isMiscTextDecal_d = (strcmp(classname, "misc_text_decal") == 0);
         for (i = 0; i < numDecalProjectors; i++)
         {
             decalProjector_t localDp;
-            int trisBefore;
             
             if (decalProjectors[i].decalEntityNum != d) continue;
             if (firstProjectorIndex == -1) firstProjectorIndex = i;

@@ -345,10 +345,6 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
 
         // handle vertexcolor overrides so they become part of radiosity
         if (localSurfaces[i].overrideVertexColor) {
-            float r = localSurfaces[i].vertexColor[0];
-            float g = localSurfaces[i].vertexColor[1];
-            float b = localSurfaces[i].vertexColor[2];
-            
             // Unconditional 50/50 blend with the base texture albedo
             for (k = 0; k < 3; k++) {
                 albedo[k] = albedo[k] * 0.5f + localSurfaces[i].vertexColor[k] * 0.5f;

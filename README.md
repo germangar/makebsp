@@ -110,10 +110,11 @@ The `func_light` entity allows mappers to create complex light setups directly f
 - **Ease of Use:** Mappers can control light intensity, color, and attenuation directly via entity keys, making high-quality emissive lighting accessible without modifying assets.
 
 
-### 8. In-Editor Configurable Surface Colors
-Mappers can now tint and recolor materials directly within the map editor without having to author duplicate shader files (the shader must have been created for this purpose, tho).
-- **Entity Level Tinting:** By applying the `vertexcolor` key to entities like `misc_model` or `func_group`, the compiler automatically overrides the vertex colors of all associated surfaces.
-- **Workflow Efficiency:** This allows for rapid iteration and material reuse. For example, a single "car" model or "crate" brushwork group can be placed multiple times in a map, each tinted a different color exclusively via entity keys.
+### 8. In-Editor Configurable Surface Colors & Transparency
+Mappers can now tint and recolor materials, as well as control surface transparency/alpha, directly within the map editor without having to author duplicate shader files (the shader must have been created for this purpose, tho).
+- **Entity Level Tinting & Transparency:** By applying the `vertexcolor` and/or `vertexalpha` keys to entities like `misc_model`, `func_group`, `func_trisoup`, `func_light`, or decals, the compiler automatically overrides the vertex colors and alpha of all associated surfaces.
+- **Independent Alpha Override:** The `vertexalpha` key can be used alone without `vertexcolor`, allowing objects to retain their dynamic vertex lighting calculations while overriding their transparency.
+- **Workflow Efficiency:** This allows for rapid iteration and material reuse. For example, a single "car" model or "crate" brushwork group can be placed multiple times in a map, each tinted a different color or given semi-transparency exclusively via entity keys.
 
 
 ### 9. Modernized Color & Lighting Models
@@ -214,7 +215,8 @@ These parameters will be automatically recognized by the shader parser and mappe
 List of additions and modifications made to shader parsing and features compared to the original q3map.
 
 ### New Shader Directives
-- **q3map_vertexcolor <R G B>**: Overrides the vertex color for the surface.
+- **q3map_vertexcolor <R G B>**: Overrides the vertex color for the surface (supports floating-point `0.0..1.0`, integer `0..255`, or `#RRGGBB` hex).
+- **q3map_vertexalpha <value>**: Overrides the vertex alpha (transparency/opacity) for the surface (supports `0.0..1.0` float or `0..255` integer ranges).
 - **q3map_surfacelight_glow <value>**: Sets the backface glow fraction for surface lights (enabled by default in CONTENTS_LAVA and CONTENTS_SLIME).
 - **q3map_surfacelight_cutoff <value>**: Minimum energy threshold before the surface light is completely culled.
 - **q3map_surfacelight_fadeout <value>**: Percentage of the surface light's reach to use for a softness fade at the cutoff (0.0 to 1.0).
@@ -308,6 +310,7 @@ List of additions and modifications made to shader parsing and features compared
 - **smooth**: lightmap smooth filter radius to use on this model.
 - **smoothgroup**: Groups disjoint or intersecting models together. Models sharing the same `smoothgroup` name will share their volumetric lightmap smoothing passes, eliminating lighting seams between kitbashed pieces.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this model instance.
+- **vertexalpha**: Overrides the vertex alpha (opacity) for all surfaces of this model instance (`0.0` = fully transparent, `1.0` = fully opaque, or `0..255`). Can be used independently to preserve vertex lighting while setting transparency.
 - **upscale**: Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the model's lightmaps.
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
@@ -337,6 +340,7 @@ List of additions and modifications made to shader parsing and features compared
 **Brushes**
 - **smooth**: lightmap smooth filter radius to use on this group's surfaces.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
+- **vertexalpha**: Overrides the vertex alpha (opacity) for all surfaces of this group (`0.0` to `1.0` or `0` to `255`).
 - **upscale**: Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the group's lightmaps.
 - **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
@@ -364,6 +368,7 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **smooth**: Lightmap smooth filter radius to use on this entity's surfaces.
 - **smoothgroup**: Shares volumetric lightmap smoothing passes with other entities using the same group name.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
+- **vertexalpha**: Overrides the vertex alpha (opacity) for all surfaces of this group (`0.0` to `1.0` or `0` to `255`).
 - **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the entity's lightmaps.
 - **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
@@ -411,6 +416,7 @@ An iterative plane-trimming CSG operator for `misc_model` entities. It uses the 
 **Brushes**
 - **smooth**: Lightmap smooth filter radius to use on this entity's surfaces.
 - **vertexcolor**: Overrides the vertex color for all surfaces of this group.
+- **vertexalpha**: Overrides the vertex alpha (opacity) for all surfaces of this group (`0.0` to `1.0` or `0` to `255`).
 - **upscale**:  Enable or disable raytracing at 2x lightmap resolution.
 - **supersample**: Supersampling radius override for the entity's lightmaps.
 - **samplesize**: (Alias: `lightmapsamplesize`). Overrides the lightmap sample size for this entity's surfaces.
@@ -457,6 +463,8 @@ Projects a 2D surface (defined by patches or brushes) onto map geometry. This is
 - **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key. For brushes and patches, the key must be applied to the `func_group` they belong to.
 - **patchSubdivision**: Adjusts the resolution of the decal when projected onto curved patches. The default is 0.4. Lowering this value (e.g. down to 0.1) increases the triangle density for a smoother curve, while higher values (e.g. 1.0 or 4.0) reduce the triangle count.
+- **vertexcolor**: If specified, overwrites the vertex lighting of the projected decal geometry with a custom color.
+- **vertexalpha**: If specified, overwrites the vertex alpha (opacity) of the projected decal geometry (`0.0` to `1.0` or `0` to `255`).
 
 ### Entity: misc_decal
 
@@ -476,6 +484,7 @@ A point entity that projects a 2D quad decal onto map geometry without requiring
 - **target**: Target entity name used to determine the projection direction. If specified, the projection vector points from the `misc_decal` towards the target entity.
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key.
 - **vertexcolor**: If specified, overwrites the vertex lighting of the generated decal geometry with a flat custom color (format: `R G B` or hex `#RRGGBB`).
+- **vertexalpha**: If specified, overwrites the vertex alpha (opacity) of the generated decal geometry (`0.0` to `1.0` or `0` to `255`).
 
 ---
 

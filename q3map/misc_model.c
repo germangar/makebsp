@@ -1077,8 +1077,7 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
                 miscModelMesh_t *mm = malloc(sizeof(miscModelMesh_t));
                 memset(mm, 0, sizeof(miscModelMesh_t));
                 mm->si = si;
-                strncpy(mm->shaderName, shaderName, MAX_QPATH);
-                mm->shaderName[MAX_QPATH - 1] = '\0';
+                snprintf(mm->shaderName, sizeof(mm->shaderName), "%s", shaderName);
                 mm->wasCut = qfalse;
 
                 mm->uvChannel = (mesh->mTextureCoords[1]) ? 1 : 0;

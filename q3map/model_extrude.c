@@ -795,7 +795,7 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     clipTri_t *tris = NULL;
     int validTris = 0;
 
-    if (numTris == 0 || numVerts == 0)
+    if (numTris <= 0 || numVerts <= 0)
         return NULL;
 
     #define EXTRUDE_DEFLATE_OFFSET 0.125f

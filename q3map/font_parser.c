@@ -168,7 +168,7 @@ fontDescriptor_t *LoadFontDescriptor(const char *fontPath)
 
     f = (fontDescriptor_t *)malloc(sizeof(fontDescriptor_t));
     memset(f, 0, sizeof(fontDescriptor_t));
-    strncpy(f->name, baseName, sizeof(f->name) - 1);
+    snprintf(f->name, sizeof(f->name), "%s", baseName);
     f->fontSize = 32.0f; // default fallback
 
     for (el = rootObj->start; el; el = el->next)

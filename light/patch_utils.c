@@ -1,5 +1,6 @@
 #include "light.h"
 
+#if 0
 /*
 =================
 UnifyMeshNormals
@@ -183,6 +184,7 @@ static void OverrideOpenEdgeNormals(mesh_t *mesh) {
         }
     }
 }
+#endif
 
 /*
 =========================

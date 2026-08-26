@@ -139,7 +139,7 @@ static void PromotePatchesToTrisoups(entity_t *e)
         newDs->fadeout           = ds->fadeout;
         newDs->hasAttenuationOverride = ds->hasAttenuationOverride;
         newDs->attenuationModel  = ds->attenuationModel;
-        strncpy(newDs->decalgroup, ds->decalgroup, sizeof(newDs->decalgroup) - 1);
+        snprintf(newDs->decalgroup, sizeof(newDs->decalgroup), "%s", ds->decalgroup);
 
         // 5. Copy tessellated vertex data
         newDs->numVerts = numVerts;

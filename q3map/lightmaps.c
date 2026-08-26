@@ -478,7 +478,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     int x, y, ssize;
     float s, t;
     mesh_t srcMesh, *subdiv;
-    float maxLengthS, maxLengthT, lengthS, lengthT;
+    float maxLengthS, maxLengthT;
     vec3_t delta;
     float S_basis, T_basis;
 
@@ -1036,7 +1036,7 @@ static int CompareSortSurfAreaDesc(const void *a, const void *b) {
 }
 
 static void RepackLightmapsEntity(entity_t *e) {
-    int i, v, p;
+    int i, v;
     int sortCount = 0;
     sortSurf_t *sortArray;
     int oldNumLightmaps = numLightmaps;

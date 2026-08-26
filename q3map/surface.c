@@ -1531,7 +1531,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
-    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
+    snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 
     numDrawSurfaces++;
 
@@ -1628,7 +1628,7 @@ void EmitPatchSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
-    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
+    snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 
     numDrawSurfaces++;
 
@@ -1734,7 +1734,7 @@ void EmitFlareSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
-    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
+    snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 
     numDrawSurfaces++;
 
@@ -1804,7 +1804,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
     drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
-    strncpy(drawExtraSurfaces[numDrawSurfaces].smoothgroup, ds->smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup) - 1);
+    snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 
     numDrawSurfaces++;
 
