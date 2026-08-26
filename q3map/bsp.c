@@ -265,7 +265,6 @@ void ProcessWorldModel(void)
         {
             DecimateAllTrisoups(e, qtrue);
         }
-        GenerateTrisoupUVs(e);
     }
 
     if (!notjunc && !(game->chamferEdges && !chamfernosubdivide))
@@ -276,6 +275,8 @@ void ProcessWorldModel(void)
     MakeEntityDecals(e);
 
     GenerateHalos(e);
+
+    GenerateTrisoupUVs(e);
 
     // allocate lightmaps for faces and patches
     AllocateLightmaps(e);
@@ -380,7 +381,6 @@ void ProcessSubModel(void)
             {
                 DecimateAllTrisoups(e, qtrue);
             }
-            GenerateTrisoupUVs(e);
         }
 
     // add in any vertexes required to fix tjunctions
@@ -390,6 +390,8 @@ void ProcessSubModel(void)
     }
 
     MakeEntityDecals(e);
+
+    GenerateTrisoupUVs(e);
 
     // allocate lightmaps for faces and patches
     AllocateLightmaps(e);
