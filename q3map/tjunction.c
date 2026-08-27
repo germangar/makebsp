@@ -2328,7 +2328,7 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         }
     }
 
-    // Lock multi-plane, chamfer, and chamfer-adjacent vertices
+    // Lock multi-plane, chamfer, and chamfer-adjacent vertices (and UV seams)
     for (int v = 0; v < oldNumVerts; v++) {
         if (!isFree[v]) continue;
         if (vertToTriCount[v] == 0) { isFree[v] = qfalse; continue; }
@@ -2336,16 +2336,78 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         vec3_t refN;
         VectorCopy(faceNormals[vertToTriList[v][0]], refN);
 
+        // Compute reference UV tangents
+        vec3_t refTan, refBitan;
+        int refT = vertToTriList[v][0];
+        int *refIdx = &ds->indexes[refT * 3];
+        {
+            vec3_t edge1, edge2;
+            VectorSubtract(ds->verts[refIdx[1]].xyz, ds->verts[refIdx[0]].xyz, edge1);
+            VectorSubtract(ds->verts[refIdx[2]].xyz, ds->verts[refIdx[0]].xyz, edge2);
+            float du1 = ds->verts[refIdx[1]].st[0] - ds->verts[refIdx[0]].st[0];
+            float dv1 = ds->verts[refIdx[1]].st[1] - ds->verts[refIdx[0]].st[1];
+            float du2 = ds->verts[refIdx[2]].st[0] - ds->verts[refIdx[0]].st[0];
+            float dv2 = ds->verts[refIdx[2]].st[1] - ds->verts[refIdx[0]].st[1];
+            float det = (du1 * dv2 - du2 * dv1);
+            if (fabs(det) > 1e-6f) {
+                float f = 1.0f / det;
+                refTan[0] = f * (dv2 * edge1[0] - dv1 * edge2[0]);
+                refTan[1] = f * (dv2 * edge1[1] - dv1 * edge2[1]);
+                refTan[2] = f * (dv2 * edge1[2] - dv1 * edge2[2]);
+                refBitan[0] = f * (-du2 * edge1[0] + du1 * edge2[0]);
+                refBitan[1] = f * (-du2 * edge1[1] + du1 * edge2[1]);
+                refBitan[2] = f * (-du2 * edge1[2] + du1 * edge2[2]);
+                VectorNormalize(refTan, refTan);
+                VectorNormalize(refBitan, refBitan);
+            } else {
+                VectorClear(refTan);
+                VectorClear(refBitan);
+            }
+        }
+
         for (int ti = 0; ti < vertToTriCount[v]; ti++) {
             int t = vertToTriList[v][ti];
             // Check all triangles in 1-ring are coplanar to refN
             if (DotProduct(faceNormals[t], refN) < 0.999f) {
                 isFree[v] = qfalse; break;
             }
+
+            // Check UV continuity (prevent destroying mirrors/seams)
+            int *idx = &ds->indexes[t * 3];
+            vec3_t edge1, edge2, tan, bitan;
+            VectorSubtract(ds->verts[idx[1]].xyz, ds->verts[idx[0]].xyz, edge1);
+            VectorSubtract(ds->verts[idx[2]].xyz, ds->verts[idx[0]].xyz, edge2);
+            float du1 = ds->verts[idx[1]].st[0] - ds->verts[idx[0]].st[0];
+            float dv1 = ds->verts[idx[1]].st[1] - ds->verts[idx[0]].st[1];
+            float du2 = ds->verts[idx[2]].st[0] - ds->verts[idx[0]].st[0];
+            float dv2 = ds->verts[idx[2]].st[1] - ds->verts[idx[0]].st[1];
+            float det = (du1 * dv2 - du2 * dv1);
+            if (fabs(det) > 1e-6f) {
+                float f = 1.0f / det;
+                tan[0] = f * (dv2 * edge1[0] - dv1 * edge2[0]);
+                tan[1] = f * (dv2 * edge1[1] - dv1 * edge2[1]);
+                tan[2] = f * (dv2 * edge1[2] - dv1 * edge2[2]);
+                bitan[0] = f * (-du2 * edge1[0] + du1 * edge2[0]);
+                bitan[1] = f * (-du2 * edge1[1] + du1 * edge2[1]);
+                bitan[2] = f * (-du2 * edge1[2] + du1 * edge2[2]);
+                VectorNormalize(tan, tan);
+                VectorNormalize(bitan, bitan);
+                
+                // 0.996f allows roughly ~5 degrees of tolerance. 
+                // - Mirrored (opposite) tangents will result in ~ -1.0 (LOCKED)
+                // - Different rotations will fall below 0.996 (LOCKED)
+                // - Slight misalignments will remain above 0.996 (ALLOWED)
+                const float UV_ANGLE_EPSILON = 0.996f; 
+                if (DotProduct(tan, refTan) < UV_ANGLE_EPSILON || DotProduct(bitan, refBitan) < UV_ANGLE_EPSILON) {
+                    isFree[v] = qfalse; break;
+                }
+            } else if (VectorLength(refTan) > 0.1f) {
+                isFree[v] = qfalse; break;
+            }
+
             // Check all vertices connected to this triangle:
             // If any connected vertex normal is not equal to the surface normal refN,
             // the vertex is NOT accepted for removal.
-            int *idx = &ds->indexes[t * 3];
             for (int k = 0; k < 3; k++) {
                 int u = idx[k];
                 if (fabs(DotProduct(ds->verts[u].normal, refN)) < 0.999f) {

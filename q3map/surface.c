@@ -558,6 +558,21 @@ void MergeDrawSurfs(entity_t *e)
                     continue;
                 }
 
+                // Must have identical texture mapping to prevent destroying texture seams/mirrors
+                qboolean texMatch = qtrue;
+                for (int m = 0; m < 2; m++) {
+                    for (int n = 0; n < 3; n++) {
+                        if (fabs(ds1->side->texMat[m][n] - ds2->side->texMat[m][n]) > 0.001f) texMatch = qfalse;
+                    }
+                    for (int n = 0; n < 4; n++) {
+                        if (fabs(ds1->side->vecs[m][n] - ds2->side->vecs[m][n]) > 0.001f) texMatch = qfalse;
+                    }
+                }
+                if (!texMatch)
+                {
+                    continue;
+                }
+
                 w1 = WindingFromDrawSurf(ds1);
                 w2 = WindingFromDrawSurf(ds2);
 
