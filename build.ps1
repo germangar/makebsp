@@ -2,8 +2,8 @@ param(
     [switch]$release
 )
 
-$msysPath = "E:\CODE\msys64\mingw64\bin"
-$env:PATH = "$msysPath;$env:PATH"
+$msysPath = "D:\CODE\msys64\mingw64\bin"
+$env:PATH = "$msysPath;D:\CODE\msys64\usr\bin;$env:PATH"
 
 Clear-Host
 Write-Host "========================================" -ForegroundColor Cyan
