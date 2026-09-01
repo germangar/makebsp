@@ -347,7 +347,11 @@ List of additions and modifications made to shader parsing and features compared
 
 ### Entity: func_trim
 
-An iterative plane-trimming CSG operator for `misc_model` entities. It uses the drawable planes of its brushes to slice and trim away portions of any intersecting `misc_model` (turning standard brushes into an invisible cutting tool). The entity and its brushes are completely suppressed from the final BSP.
+An iterative plane-trimming CSG cutting tool for `misc_model` entities. It allows mappers to use standard editor brushes to slice away parts of 3D models directly during compilation:
+
+- **Visible Faces (Cutting Planes)**: Any brush face with a visible (drawable) texture acts as an active cutting plane. It slices and discards everything located on the outer (front/positive) side of that face's plane, keeping only the geometry behind it. The trimming plane is infinite, not limited to the brush boundaries. To limit the trimming to a misc_model it must be targetted.
+- **Invisible Faces (Caulk / Nodraw / skip)**: Faces textured with invisible shaders (like `caulk`, `nodraw`, `skip`, or non-drawable materials) are ignored and will not cut the model.
+- **BSP Suppression**: The `func_trim` entity and its cutting brushes are completely removed from the final compiled BSP (leaving no brush geometry or collision behind).
 
 **Targeting**
 - **target**: If specified, the `func_trim` will only cut `misc_model` entities that have a matching `targetname`. If left blank, it acts globally and cuts any intersecting `misc_model`.
