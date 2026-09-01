@@ -139,4 +139,7 @@ void SphereFromBounds(vec3_t mins, vec3_t maxs, vec3_t origin, float *radius);
 void TexturePlaneFromPoints(float plane[4], const vec3_t p0, float s0,
                             const vec3_t p1, float s1, const vec3_t p2, float s2);
 
+unsigned short FloatToHalf(float f);
+float HalfToFloat(unsigned short h);
+
 #endif

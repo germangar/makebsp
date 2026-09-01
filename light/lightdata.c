@@ -541,15 +541,30 @@ static void DownConvertLightmaps(float scale, qboolean lightmapRange)
         return;
     _printf("DownConvert: %d Lightmap pixels\n", numLightBytes / 3);
     int processedCount = 0;
+    
+    int bytesPerTexel = (game->hdr == HDR_32BIT) ? 12 : (game->hdr == HDR_16BIT) ? 6 : 3;
+
     for (i = 0; i < numLightBytes / 3; i++)
     {
-        if (lightmapRange)
-        {
-            InternalColorToBytesScaled(&lightFloats[i * 3], &lightBytes[i * 3], scale, game->lightmapsRGB);
-        }
-        else
-        {
-            InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * 3], game->lightmapsRGB);
+        if (game->hdr == HDR_32BIT) {
+            float *dst = (float *)&lightBytes[i * bytesPerTexel];
+            dst[0] = lightFloats[i * 3 + 0];
+            dst[1] = lightFloats[i * 3 + 1];
+            dst[2] = lightFloats[i * 3 + 2];
+        } else if (game->hdr == HDR_16BIT) {
+            unsigned short *dst = (unsigned short *)&lightBytes[i * bytesPerTexel];
+            dst[0] = FloatToHalf(lightFloats[i * 3 + 0]);
+            dst[1] = FloatToHalf(lightFloats[i * 3 + 1]);
+            dst[2] = FloatToHalf(lightFloats[i * 3 + 2]);
+        } else {
+            if (lightmapRange)
+            {
+                InternalColorToBytesScaled(&lightFloats[i * 3], &lightBytes[i * bytesPerTexel], scale, game->lightmapsRGB);
+            }
+            else
+            {
+                InternalColorToBytes(&lightFloats[i * 3], &lightBytes[i * bytesPerTexel], game->lightmapsRGB);
+            }
         }
         if (lightAlphaMask && lightAlphaMask[i])
             processedCount++;
@@ -564,16 +579,18 @@ static void DownConvertDeluxeMaps(void)
         return;
 
     int totalPixels = numLightBytes / 3;
+    int bytesPerTexel = (game->hdr == HDR_32BIT) ? 12 : (game->hdr == HDR_16BIT) ? 6 : 3;
     int numLMs = totalPixels / (game->lightmapSize * game->lightmapSize);
-    int lmSize = game->lightmapSize * game->lightmapSize * 3;
+    int lmSize = game->lightmapSize * game->lightmapSize * bytesPerTexel;
+    int rawLightBytes = totalPixels * bytesPerTexel;
 
     _printf("DownConvert: %d DeluxeMap pixels (interleaving as stride 2 for QFusion)\n", totalPixels);
 
     // Dynamically reallocate lightBytes to double its size for the deluxe layer
-    byte *newLightBytes = realloc(lightBytes, numLightBytes * 2);
+    byte *newLightBytes = realloc(lightBytes, rawLightBytes * 2);
     if (!newLightBytes)
     {
-        _printf("WARNING: DownConvertDeluxeMaps: Failed to reallocate %d bytes! Skipping deluxeMap layer.\n", numLightBytes * 2);
+        _printf("WARNING: DownConvertDeluxeMaps: Failed to reallocate %d bytes! Skipping deluxeMap layer.\n", rawLightBytes * 2);
         return;
     }
     lightBytes = newLightBytes;
@@ -595,20 +612,36 @@ static void DownConvertDeluxeMaps(void)
             vec3_t dir;
             VectorCopy(&deluxeFloats[(basePixel + i) * 3], dir);
 
-            byte *pixelDst = &dst[i * 3];
-
+            float mapped[3];
             if (VectorNormalize(dir, dir) > 0)
             {
-                pixelDst[0] = (byte)(dir[0] * 127.5f + 127.5f);
-                pixelDst[1] = (byte)(dir[1] * 127.5f + 127.5f);
-                pixelDst[2] = (byte)(dir[2] * 127.5f + 127.5f);
+                mapped[0] = dir[0] * 127.5f + 127.5f;
+                mapped[1] = dir[1] * 127.5f + 127.5f;
+                mapped[2] = dir[2] * 127.5f + 127.5f;
             }
             else
             {
                 // Default to Up (0,0,1)
-                pixelDst[0] = 127;
-                pixelDst[1] = 127;
-                pixelDst[2] = 255;
+                mapped[0] = 127.0f;
+                mapped[1] = 127.0f;
+                mapped[2] = 255.0f;
+            }
+
+            if (game->hdr == HDR_32BIT) {
+                float *pixelDst = (float *)&dst[i * bytesPerTexel];
+                pixelDst[0] = mapped[0];
+                pixelDst[1] = mapped[1];
+                pixelDst[2] = mapped[2];
+            } else if (game->hdr == HDR_16BIT) {
+                unsigned short *pixelDst = (unsigned short *)&dst[i * bytesPerTexel];
+                pixelDst[0] = FloatToHalf(mapped[0]);
+                pixelDst[1] = FloatToHalf(mapped[1]);
+                pixelDst[2] = FloatToHalf(mapped[2]);
+            } else {
+                byte *pixelDst = &dst[i * bytesPerTexel];
+                pixelDst[0] = (byte)mapped[0];
+                pixelDst[1] = (byte)mapped[1];
+                pixelDst[2] = (byte)mapped[2];
             }
         }
     }
@@ -677,8 +710,10 @@ static void ExportExternalLightmaps(void)
     char outDir[1024];
     char filename[1024];
     int size = game->lightmapSize;
-    int totalBytesPerImage = size * size * 3;
+    int bytesPerTexel = (game->hdr == HDR_32BIT) ? 12 : (game->hdr == HDR_16BIT) ? 6 : 3;
+    int totalBytesPerImage = size * size * bytesPerTexel;
     int numImages = numLightBytes / totalBytesPerImage;
+    const char *ext = (game->hdr == HDR_8BIT) ? "png" : "hdr";
 
     GetMapOutputDir(source, outDir);
 
@@ -697,20 +732,44 @@ static void ExportExternalLightmaps(void)
     }
 #endif
 
-    _printf("ExportExternalLightmaps: Exporting %d lightmaps to %s\n", numImages, outDir);
+    _printf("ExportExternalLightmaps: Exporting %d lightmaps (%s) to %s\n", numImages, ext, outDir);
+
+    float *tempFloatBuf = NULL;
+    if (game->hdr == HDR_16BIT) {
+        tempFloatBuf = malloc(size * size * 3 * sizeof(float));
+    }
 
     // Write the new lightmaps (this safely overwrites existing ones)
     for (int i = 0; i < numImages; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.png", outDir, i);
-        if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
-            _printf("WARNING: Failed to write %s\n", filename);
+        snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
+        if (game->hdr == HDR_8BIT) {
+            if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
+                _printf("WARNING: Failed to write %s\n", filename);
+            }
+        } else if (game->hdr == HDR_16BIT) {
+            unsigned short *src16 = (unsigned short *)&lightBytes[i * totalBytesPerImage];
+            for (int p = 0; p < size * size * 3; p++) {
+                tempFloatBuf[p] = HalfToFloat(src16[p]);
+            }
+            if (!stbi_write_hdr(filename, size, size, 3, tempFloatBuf)) {
+                _printf("WARNING: Failed to write %s\n", filename);
+            }
+        } else { // HDR_32BIT
+            const float *src32 = (const float *)&lightBytes[i * totalBytesPerImage];
+            if (!stbi_write_hdr(filename, size, size, 3, src32)) {
+                _printf("WARNING: Failed to write %s\n", filename);
+            }
         }
     }
 
-    // Delete older stale lightmaps from previous runs with more images
+    if (tempFloatBuf) {
+        free(tempFloatBuf);
+    }
+
+    // Delete older stale lightmaps from previous runs with more images (.png and .hdr)
     int missCount = 0;
     for (int i = numImages; i < 9999; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.png", outDir, i);
+        snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
         if (remove(filename) == 0) {
             missCount = 0;
         } else {
@@ -719,8 +778,8 @@ static void ExportExternalLightmaps(void)
         }
     }
 
-    // CRITICAL: Zero out the BSP lightmap lump so DarkPlaces/Xonotic falls back
-    // to loading the external lm_%04d.png files from disk.
+    // CRITICAL: Zero out the BSP lightmap lump so engines fall back
+    // to loading external lm_%04d files from disk.
     if (!g_debugExportLightmaps || game->externalLightmaps) {
         numLightBytes = 0;
     }
@@ -764,17 +823,29 @@ void DownConvertLightingData(void)
         _printf("LightingIntensity Fixed Normalization: Scale %f (_lightingIntensity %f)\n", scale, engineIntensity);
         SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
     }
+    else
+    {
+        // 16/32-bit still scales the lightgrid the same way as 8-bit, 
+        // using hdr8BitScale, so we still calculate and inject _lightingIntensity.
+        maxLightIntensity = 255.0f * game->hdr8BitScale;
+        scale = 255.0f / maxLightIntensity;
+        float engineIntensity = maxLightIntensity / 255.0f;
+        SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
+    }
+
+    int bytesPerTexel = (game->hdr == HDR_32BIT) ? 12 : (game->hdr == HDR_16BIT) ? 6 : 3;
+    int rawLightBytes = (numLightBytes / 3) * bytesPerTexel;
 
     if (!lightBytes)
     {
-        lightBytes = Q_Alloc(numLightBytes);
-        if (!lightBytes && numLightBytes > 0)
+        lightBytes = Q_Alloc(rawLightBytes);
+        if (!lightBytes && rawLightBytes > 0)
         {
-            Error("Failed to allocate %d bytes for lightBytes during DownConvert", numLightBytes);
+            Error("Failed to allocate %d bytes for lightBytes during DownConvert", rawLightBytes);
         }
         if (lightBytes)
         {
-            memset(lightBytes, 0, numLightBytes);
+            memset(lightBytes, 0, rawLightBytes);
         }
     }
 
@@ -823,23 +894,25 @@ void DownConvertLightingData(void)
 
     DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
 
-    if (g_debugMagentaTrisoups || g_debugCyanPatches || g_debugGreenPlanar) {
-        _printf("Coloring debug lightmaps based on surface types...\n");
-        int totalPixels = numLightBytes / 3;
-        for (int i = 0; i < totalPixels; i++) {
-            if (lightAlphaMask && lightAlphaMask[i]) {
-                if (g_debugMagentaTrisoups && lightAlphaMask[i] == MST_TRIANGLE_SOUP) {
-                    lightBytes[i*3+0] = 255;
-                    lightBytes[i*3+1] = 0;
-                    lightBytes[i*3+2] = 255;
-                } else if (g_debugCyanPatches && lightAlphaMask[i] == MST_PATCH) {
-                    lightBytes[i*3+0] = 0;
-                    lightBytes[i*3+1] = 255;
-                    lightBytes[i*3+2] = 255;
-                } else if (g_debugGreenPlanar && lightAlphaMask[i] == MST_PLANAR) {
-                    lightBytes[i*3+0] = 0;
-                    lightBytes[i*3+1] = 255;
-                    lightBytes[i*3+2] = 0;
+    if (game->hdr == HDR_8BIT) {
+        if (g_debugMagentaTrisoups || g_debugCyanPatches || g_debugGreenPlanar) {
+            _printf("Coloring debug lightmaps based on surface types...\n");
+            int totalPixels = numLightBytes / 3;
+            for (int i = 0; i < totalPixels; i++) {
+                if (lightAlphaMask && lightAlphaMask[i]) {
+                    if (g_debugMagentaTrisoups && lightAlphaMask[i] == MST_TRIANGLE_SOUP) {
+                        lightBytes[i*3+0] = 255;
+                        lightBytes[i*3+1] = 0;
+                        lightBytes[i*3+2] = 255;
+                    } else if (g_debugCyanPatches && lightAlphaMask[i] == MST_PATCH) {
+                        lightBytes[i*3+0] = 0;
+                        lightBytes[i*3+1] = 255;
+                        lightBytes[i*3+2] = 255;
+                    } else if (g_debugGreenPlanar && lightAlphaMask[i] == MST_PLANAR) {
+                        lightBytes[i*3+0] = 0;
+                        lightBytes[i*3+1] = 255;
+                        lightBytes[i*3+2] = 0;
+                    }
                 }
             }
         }
@@ -850,6 +923,18 @@ void DownConvertLightingData(void)
 
     if (game->externalLightmaps || g_debugExportLightmaps) {
         ExportExternalLightmaps();
+    }
+
+    // Set the final numLightBytes for BSP writing
+    if (deluxeFloats) {
+        numLightBytes = (numLightBytes / 3) * bytesPerTexel * 2;
+    } else {
+        numLightBytes = (numLightBytes / 3) * bytesPerTexel;
+    }
+    
+    // Check if ExportExternalLightmaps zeroed it out
+    if (game->externalLightmaps && game->hdr == HDR_8BIT && !g_debugExportLightmaps) {
+        numLightBytes = 0;
     }
 
     _printf("DownConvert: Done\n");

@@ -570,3 +570,64 @@ void TexturePlaneFromPoints(float plane[4], const vec3_t p0, float s0,
   plane[0] = m[0][3] - plane[2] * m[0][2] - plane[1] * m[0][1];
   plane[3] = 0;
 }
+
+// Convert 32-bit float to 16-bit float (half)
+unsigned short FloatToHalf(float f) {
+    union { float f; unsigned int i; } v;
+    v.f = f;
+    unsigned int sign = (v.i >> 16) & 0x8000;
+    unsigned int exponent = (v.i >> 23) & 0xff;
+    unsigned int mantissa = v.i & 0x7fffff;
+    unsigned short half;
+
+    if (exponent == 0) {
+        half = sign; // +/- 0
+    } else if (exponent == 0xff) {
+        half = sign | 0x7c00 | (mantissa ? (mantissa >> 13) | 1 : 0); // Inf / NaN
+    } else {
+        int new_exp = exponent - 127 + 15;
+        if (new_exp >= 31) {
+            half = sign | 0x7c00; // overflow to Inf
+        } else if (new_exp <= 0) {
+            // Underflow to denormal or zero
+            if (14 - new_exp <= 24) {
+                unsigned int denorm_mant = mantissa | 0x800000;
+                half = sign | (denorm_mant >> (14 - new_exp));
+            } else {
+                half = sign;
+            }
+        } else {
+            half = sign | (new_exp << 10) | (mantissa >> 13);
+        }
+    }
+    return half;
+}
+
+// Convert 16-bit float (half) to 32-bit float
+float HalfToFloat(unsigned short h) {
+    union { float f; unsigned int i; } v;
+    unsigned int sign = (h & 0x8000) << 16;
+    unsigned int exponent = (h >> 10) & 0x1f;
+    unsigned int mantissa = h & 0x3ff;
+
+    if (exponent == 0) {
+        if (mantissa == 0) {
+            v.i = sign;
+        } else {
+            // Subnormal
+            while (!(mantissa & 0x400)) {
+                mantissa <<= 1;
+                exponent--;
+            }
+            exponent++;
+            mantissa &= ~0x400;
+            v.i = sign | ((exponent + (127 - 15)) << 23) | (mantissa << 13);
+        }
+    } else if (exponent == 31) {
+        v.i = sign | 0x7f800000 | (mantissa ? (mantissa << 13) | 1 : 0);
+    } else {
+        v.i = sign | ((exponent + (127 - 15)) << 23) | (mantissa << 13);
+    }
+    return v.f;
+}
+

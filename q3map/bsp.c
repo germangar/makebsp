@@ -1320,6 +1320,9 @@ int main(int argc, char **argv)
         SetKeyValue(&entities[0], "_lightmapImageSize", buf);
         sprintf(buf, "%.2f", game->hdr8BitScale);
         SetKeyValue(&entities[0], "_lightingIntensity", buf);
+
+        const char *bitsStr = (game->hdr == HDR_32BIT) ? "32" : (game->hdr == HDR_16BIT ? "16" : "8");
+        SetKeyValue(&entities[0], "_lightmapbits", bitsStr);
     }
 
     InjectSunEntity();

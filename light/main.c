@@ -82,6 +82,14 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->hdr8BitScale <= 0.0f) game->hdr8BitScale = 1.0f;
     }
 
+    val = ValueForKey(ent, "_lightmapbits");
+    if (val[0]) {
+        int bits = atoi(val);
+        if (bits == 32) game->hdr = HDR_32BIT;
+        else if (bits == 16) game->hdr = HDR_16BIT;
+        else game->hdr = HDR_8BIT;
+    }
+
     // map keys
     val = ValueForKey(ent, "cutoff");
     if (val[0] && !HasArg("-cutoff", argc, argv)) {
@@ -748,6 +756,13 @@ int main(int argc, char **argv) {
             i++;
         } else if (!strcmp(argv[i], "-lightmaprange")) {
             game->hdr = HDR_8BIT;
+        } else if (!strcmp(argv[i], "-lightmapbits")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-lightmapbits requires a mode (8, 16, 32)");
+            int bits = atoi(argv[i + 1]);
+            if (bits == 32) game->hdr = HDR_32BIT;
+            else if (bits == 16) game->hdr = HDR_16BIT;
+            else game->hdr = HDR_8BIT;
+            i++;
         } else if (!strcmp(argv[i], "-fast")) {
             g_fast = qtrue;
             _printf("Optimized voxelization mode (FAST) enabled\n");
@@ -788,6 +803,7 @@ int main(int argc, char **argv) {
                 "   sunshading_softbias <F> = override the sun soft bias\n"
                 "   -lowmem        = use memory-mapped files for massive radiosity passes\n");
         _printf("   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
+                "   -lightmapbits <8|16|32> = Set the output lightmap format depth (overrides map setting)\n"
                 "   -magentatrisoups = Color TRISOUP lightmaps flat magenta (for export debugging)\n"
                 "   -cyanpatches    = Color PATCH lightmaps flat cyan (for export debugging)\n"
                 "   -greenplanar    = Color PLANAR lightmaps flat green (for export debugging)\n"
