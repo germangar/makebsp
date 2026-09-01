@@ -26,9 +26,9 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
 - [📦 Entity Keys Reference](#-entity-keys-reference)
     - [worldspawn](#entity-worldspawn)
     - [misc_model](#entity-misc_model)
+    - [func_trim](#entity-func_trim)
     - [func_group](#entity-func_group)
     - [func_trisoup](#entity-func_trisoup)
-    - [func_trim](#entity-func_trim)
     - [func_light](#entity-func_light)
     - [light](#entity-light)
     - [_decal](#entity-_decal)
@@ -345,6 +345,13 @@ List of additions and modifications made to shader parsing and features compared
 - **modelscale**: A uniform scaling factor applied to all axes (defaults to 1.0).
 - **modelscale_vec**: A non-uniform scaling vector (X Y Z). If set to 0 0 0, it falls back to modelscale.
 
+### Entity: func_trim
+
+An iterative plane-trimming CSG operator for `misc_model` entities. It uses the drawable planes of its brushes to slice and trim away portions of any intersecting `misc_model` (turning standard brushes into an invisible cutting tool). The entity and its brushes are completely suppressed from the final BSP.
+
+**Targeting**
+- **target**: If specified, the `func_trim` will only cut `misc_model` entities that have a matching `targetname`. If left blank, it acts globally and cuts any intersecting `misc_model`.
+
 ### Entity: func_group
 
 **Brushes**
@@ -386,13 +393,6 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 - **chamfer_convexwidth**: To do (Currently inactive because brushes are converted to a trisoup prior to the chamfering pass).
 - **chamfer_concavewidth**: To do (Currently inactive because brushes are converted to a trisoup prior to the chamfering pass).
-
-### Entity: func_trim
-
-An iterative plane-trimming CSG operator for `misc_model` entities. It uses the drawable planes of its brushes to slice and trim away portions of any intersecting `misc_model` (turning standard brushes into an invisible cutting tool). The entity and its brushes are completely suppressed from the final BSP.
-
-**Targeting**
-- **target**: If specified, the `func_trim` will only cut `misc_model` entities that have a matching `targetname`. If left blank, it acts globally and cuts any intersecting `misc_model`.
 
 ### Entity: func_light
 
