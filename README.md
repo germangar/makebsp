@@ -266,7 +266,7 @@ List of additions and modifications made to shader parsing and features compared
 ### Entity: worldspawn
 
 **Lighting / Global Ambiance**
-- **ambient**: Global uniform ambient light intensity. Default 0.
+- **ambient**: Macro occlusion ambient light intensity. Default 0.
 - **color**: Sets the global ambient color. Default 1 1 1.
 - **ambient_sky**: The RGB color vector for the sky ambient light. Used for surfaces facing upwards, overriding the global color.
 - **shading**: Global light shading mode. Valid modes are: halflambert, lambert, quadratic, doublequadratic, unreal. Default lambert.
@@ -304,7 +304,7 @@ List of additions and modifications made to shader parsing and features compared
 - **radiosity**: Global radiosity (bounced light) intensity. Defaults to 1.0. Set to 0 to disable radiosity.
 - **rad_color_ratio**: Radiosity color transfer (how much the texture color tints the bounce light). Default 1.0. When using ambient lighting reducing 'rad_color_ratio' transfers the ambient sky color into the radiosity light.
 - **rad_interval**: Radiosity surface voxelization interval/grid size. Default 4. Must be a factor of 2. The bigger the faster the radiosity passes, but it impacts the intensity.
-- **rad_ao_intensity**: Ambient Occlusion intensity multiplier (0.0 to 1.0) applied during the first radiosity pass. The bigger, the darker the occlusion shadows. Default 0.5.
+- **rad_ao_intensity**: Ambient Occlusion intensity multiplier (0.0 to 1.0) applied during the first radiosity pass. This is the small scale occlusion shading visible on corners and holes. The bigger value, the darker the occlusion shadows. Default 0.5.
 - **rad_ao_min**: Minimum ambient occlusion fade distance. Default 0 world units. The ambient occlusion will fade from rad_ao_intensity at rad_ao_min to 0.0 at rad_ao_max.
 - **rad_ao_max**: Maximum ambient occlusion fade distance. Default 24 world units.
 
