@@ -574,6 +574,10 @@ These switches change the primary mode of the executable.
 - `-exportmodels <bspname>`: Exports all `misc_model` (Triangle Soup) geometry from a BSP into `.obj` files. Models processed with -meta/forcemeta will be split in multple mini-meshes and unusable. Only useful for models originally compiled for vertex lighting.
     - `-ignoreplanar 1|0`: When enabled (default 1), skips exporting trisoup surfaces that are perfectly flat/planar (useful to avoid exporting standard wall geometry that was meta'd).
 - `-info <bspname>`: Displays detailed statistics and lump information for the specified BSP file.
+- `-fontatlas <fontfile.ttf> <atlas_size> [font_pixel_size]`: Bakes a TrueType/OpenType font (`.ttf`, `.otf`) into an atlas texture (`.tga`) and descriptor (`.json`) for use with `misc_text_decal`.
+    - `<atlas_size>`: Resolution of the output texture atlas (e.g. `1024`, `2048`).
+    - `[font_pixel_size]`: (Optional) Explicit pixel glyph height. If omitted or set to `0`, Makebsp automatically calculates the largest possible font size that fits all 95 ASCII characters into the atlas.
+    - *Tip (Windows)*: You can drag and drop any `.ttf` or `.otf` file onto `convert_FONT.bat` to automatically generate a 2048x2048 atlas.
 
 ---
 
