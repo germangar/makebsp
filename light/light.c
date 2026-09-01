@@ -117,7 +117,6 @@ vec3_t sunLight = {0, 0, 0};
 qboolean hasSun = qfalse;
 
 int numSkyBrushes;
-skyBrush_t *skyBrushes;
 
 /*
 =================================================================
@@ -136,7 +135,6 @@ void FindSkyBrushes(void)
 {
     int i, j;
     dbrush_t *b;
-    skyBrush_t *sb;
     dbrushside_t *s;
 
     // find the brushes
@@ -148,20 +146,6 @@ void FindSkyBrushes(void)
             s = &dbrushsides[b->firstSide + j];
             if (dshaders[s->shaderNum].surfaceFlags & SURF_SKY)
             {
-                sb = &skyBrushes[numSkyBrushes];
-                sb->b = b;
-                sb->bounds[0][0] =
-                    -dplanes[dbrushsides[b->firstSide + 0].planeNum].dist - 1;
-                sb->bounds[1][0] =
-                    dplanes[dbrushsides[b->firstSide + 1].planeNum].dist + 1;
-                sb->bounds[0][1] =
-                    -dplanes[dbrushsides[b->firstSide + 2].planeNum].dist - 1;
-                sb->bounds[1][1] =
-                    dplanes[dbrushsides[b->firstSide + 3].planeNum].dist + 1;
-                sb->bounds[0][2] =
-                    -dplanes[dbrushsides[b->firstSide + 4].planeNum].dist - 1;
-                sb->bounds[1][2] =
-                    dplanes[dbrushsides[b->firstSide + 5].planeNum].dist + 1;
                 numSkyBrushes++;
                 break;
             }
@@ -1031,7 +1015,6 @@ void BuildLocalSurfaces(void)
     int numPatchesSubdivided = 0;
 
     brushCastsShadow = malloc(numbrushes * sizeof(qboolean));
-    skyBrushes = malloc(numbrushes * sizeof(skyBrush_t));
 
     _printf("--- BuildLocalSurfaces ---\n");
 

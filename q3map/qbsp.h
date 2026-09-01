@@ -600,7 +600,6 @@ void CreateCollisionTris(modelInstance_t *inst);
 bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader);
 bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader);
 
-int CSGMergeBrushList(bspbrush_t **pList);
 const char *CategoryString(modelCategory_t cat);
 
 //=============================================================================

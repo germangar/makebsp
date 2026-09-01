@@ -336,12 +336,6 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
     return (energy > 0.0f) ? energy : 0.0f;
 }
 
-typedef struct
-{
-	dbrush_t *b;
-	vec3_t bounds[2];
-} skyBrush_t;
-
 extern vec3_t sunDirection, sunLight, ambientColor;
 extern qboolean hasSun;
 extern vec3_t skyColor, groundColor;    // hemisphere ambient colors
@@ -355,7 +349,6 @@ extern qboolean ambient_enabled;         // true if sky/ground color is non-zero
 extern int numSkyBrushes;
 extern int *surfaceWorkOrder;
 extern int numLights;
-extern skyBrush_t *skyBrushes;
 extern vec3_t gridMins, gridSize;
 extern int gridBounds[3], numGridPoints;
 

@@ -795,10 +795,8 @@ int main(int argc, char **argv) {
                 "   deluxe_minangle <A> = clamp the minimum angle of incidence for deluxe vectors (in degrees)\n"
                 "   deluxe_ambient_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during ambient pass\n");
         _printf("   deluxe_radiosity_exaggerate <F> = scalar factor to exaggerate deluxemap incidence angle during radiosity pass\n"
-                "   brutetrace      = disable all tracing optimizations for debugging\n"
                 "   debuglightmaps = generate BMP files showing lightmap allocation (FAST)\n"
                 "   debuglightmapsalpha = generate BMP files showing exact lit pixels (SLOW)\n"
-                "    -deluxemode <0-2>   Output deluxe lighting to direction lightmaps. 0=none, 1=average, 2=bumpmap.\n"
                 "    -directonly         Skip radiosity and ambient passes.\n"
                 "    -radiosityonly      Skip ambient and clear direct lighting before merging radiosity.\n");
         _printf("    -ambientonly        Skip direct and radiosity passes.\n"

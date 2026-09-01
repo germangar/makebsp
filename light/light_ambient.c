@@ -1,43 +1,5 @@
 #include "light.h"
 #include "connect.h"
-/*
-================
-StratifiedCosineDir
-
-Generates the i-th stratified cosine-weighted hemisphere sample.
-
-The hemisphere is divided into N equal solid-angle strata arranged
-along the azimuth. Within each stratum, random jitter (seeded per
-texel via randU/randV) perturbs both azimuth and elevation.
-
-Cosine weighting (cosTheta = sqrt(1 - xi)) concentrates samples
-near the zenith where lambertian contribution is highest, and
-eliminated wasteful grazing-angle samples entirely.
-
-The result is a direction in the UPPER hemisphere (z >= 0).
-Callers must negate z for ground-hemisphere rays.
-================
-*/
-#if 0
-static void StratifiedCosineDir(int i, int N, float randU, float randV, vec3_t out)
-{
-    // Stratified azimuth: divide [0, 2pi) into N equal slices,
-    // then jitter within the slice using randU in [0, 1).
-    float sliceWidth = (2.0f * (float)M_PI) / (float)N;
-    float phi = ((float)i + randU) * sliceWidth;
-
-    // Cosine-weighted elevation: xi maps uniformly to cos^2-distributed
-    // polar angle via the CDF inverse: cosTheta = sqrt(1 - xi)
-    float xi = ((float)i + randV) / (float)N;  // stratified in [0,1)
-    xi = xi - floorf(xi);                        // wrap to [0,1) for safety
-    float cosTheta = sqrtf(1.0f - xi);           // cosine-weighted
-    float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
-
-    out[0] = cosf(phi) * sinTheta;
-    out[1] = sinf(phi) * sinTheta;
-    out[2] = cosTheta;  // always >= 0 (upper hemisphere)
-}
-#endif
 
 static void StratifiedUniformDir(int i, int N, float randU, float randV, vec3_t out)
 {

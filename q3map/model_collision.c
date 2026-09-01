@@ -1183,11 +1183,6 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
         hulls_list = GenerateHACDCollision(inst, caulk);
     }
 
-    if (hulls_list)
-    {
-        // CSGMergeBrushList(&hulls_list);
-    }
-
     for (bspbrush_t *b = hulls_list; b; b = b->next)
     {
         numHulls++;
