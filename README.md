@@ -509,7 +509,7 @@ A point entity that projects a 2D quad decal onto map geometry without requiring
 
 A point entity that renders a string of text into projected decal geometry using pre-baked font atlas descriptors (JSON).
 
-- **Font Atlas Support**: Automatically extracts glyph UV coordinates, dimensions, offsets, and character advances from JSON font descriptors baked via the `-fontatlas` CLI tool.
+- **Font Atlas Support**: Automatically extracts glyph UV coordinates, dimensions, offsets, and character advances from JSON font descriptors generated via makebsp's `-fontatlas` CLI command
 - **Projection Direction**: Same as `misc_decal`, uses `angles`, `angle`, or `target` aiming.
 
 **Keys**
