@@ -2075,24 +2075,6 @@ void MergeAdjacentTrisoups(entity_t *e)
                 if (currDs->overrideVertexAlpha && fabs(currDs->vertexAlpha - dsB->vertexAlpha) > 0.001f)
                     continue;
 
-                // Must have identical texture mapping to prevent destroying texture seams/mirrors
-                // (if they originated from brushes with different UV projections, merging them would cause
-                // the engine to weld their seam vertices and average their discontinuous tangents, destroying the mirror)
-                qboolean texMatch = qtrue;
-                if (currDs->side && dsB->side) {
-                    for (int m = 0; m < 2; m++) {
-                        for (int n = 0; n < 3; n++) {
-                            if (fabs(currDs->side->texMat[m][n] - dsB->side->texMat[m][n]) > 0.001f) texMatch = qfalse;
-                        }
-                        for (int n = 0; n < 4; n++) {
-                            if (fabs(currDs->side->vecs[m][n] - dsB->side->vecs[m][n]) > 0.001f) texMatch = qfalse;
-                        }
-                    }
-                }
-                if (!texMatch)
-                {
-                    continue;
-                }
 
                 if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
                     continue;
