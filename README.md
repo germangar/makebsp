@@ -326,11 +326,11 @@ List of additions and modifications made to shader parsing and features compared
 - **lightmapscale**: Entity-level scaling factor for lightmap resolution on the model (clamped between 0.01 and 16.0).
 - **forceuvgen**: Enable (default) or disable to force generating new lightmap UVs from scratch. Disabled uses the model UVs.
 - **collisiontype**: Overrides how the model's collision mesh is generated. Supported values:
-  - `object` *(default)*: Standard hierarchical convex decomposition (HACD) for solid props with distinct geometric parts.
-  - `wrap`: Loose/soft-wrap convex decomposition (HACD) creating a smooth outer envelope around complex organic or vehicle meshes.
-  - `extrude`: Solid per-polygon extruded collision prisms deflated along smoothed vertex normals with Minkowski edge bevels. Ideal for thin sheets, architectural details, pipes, or hollow/concave meshes.
-  - `objectdetail`: Dual-mode collision combining detailed extruded solid geometry for accurate weapon/bullet hits with an outer `playerclip` HACD hull for smooth player traversal.
-  - `wrapdetail`: Dual-mode collision combining detailed extruded solid geometry for accurate weapon/bullet hits with an outer `playerclip` shrink-wrap hull for smooth player traversal over complex props.
+  - `object` *(default)*: Standard hierarchical convex decomposition (HACD) for solid props with distinct geometric parts. Think of it as clipping. It adjusts to the model shape, but not tight.
+  - `wrap`: Loose/soft-wrap convex decomposition (HACD) creating a smooth outer envelope around complex organic or vehicle meshes. Recommended for small objects the player would step over.
+  - `extrude`: Solid per-polygon extruded collision prisms deflated along smoothed vertex normals with Minkowski edge bevels. Adjusts to the trisoup at a cost of performance and more prone to glitch. Ideal for thin sheets, architectural details, pipes, or hollow/concave meshes.
+  - `objectdetail`: Dual-mode collision combining detailed extruded solid geometry (for accurate weapon/bullet hits) with an outer 'object type' playerclip HACD hull for smooth player traversal.
+  - `wrapdetail`: Dual-mode collision combining detailed extruded solid geometry (for accurate weapon/bullet hits) with an outer 'wrap type' playerclip hull for smooth player traversal over complex props.
   - `terrain`: Extruded collision geometry for terrain meshes.
   - `none` (aliases: `nosolid`, `nonsolid`): Completely disables collision generation for the model.
 - **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
