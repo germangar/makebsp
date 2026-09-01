@@ -1,5 +1,8 @@
 # Makebsp
 
+> [!NOTE]
+> **Public Beta Available**: Pre-compiled binaries for Windows and Linux can be downloaded from the [Releases page](https://github.com/germangar/makebsp/releases).
+
 Makebsp is a high-performance idTech 3 BSP compiler modernization based on the original id Software `q3map` source code.
 
 ## Table of Contents
