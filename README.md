@@ -336,7 +336,7 @@ List of additions and modifications made to shader parsing and features compared
 - **castshadows**: Enable (1) or disable (0) the entity's geometry from casting shadows into the lightmap. Default 1.
 - **modelgroup**: Links this `misc_model` to a brush model entity (like `func_plat` or `func_door`). When set to the same `modelgroup` name as a parent brush entity, the model's visuals and automatically generated collision hulls are bundled with the brush model and move seamlessly with it.
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup`, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
-- **maxtriangles**: Sets a maximum budget for the number of triangles for this instance. If the model exceeds this budget, it will be automatically decimated.
+- **maxtriangles**: Sets a maximum budget for the number of triangles for this instance. If the model exceeds this budget, it will be automatically decimated to meet its triangles quota (as far as the decimation doesn't deform the model beyond recognition).
 
 **Editor keys**
 - **model**: The path to the 3D model file to load.
