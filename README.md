@@ -356,6 +356,9 @@ An iterative plane-trimming CSG cutting tool for `misc_model` entities. It allow
 **Targeting**
 - **target**: If specified, the `func_trim` will only cut `misc_model` entities that have a matching `targetname`. If left blank, it acts globally and cuts any intersecting `misc_model`.
 
+> [!NOTE]
+> **Order of Operations (Trimming & Decimation)**: `func_trim` operations are applied **before** `maxtriangles` decimation. Slicing away unnecessary model portions first reduces the initial triangle count, which allows any subsequent decimation pass to better preserve detail on the remaining visible mesh.
+
 ### Entity: func_group
 
 **Brushes**
