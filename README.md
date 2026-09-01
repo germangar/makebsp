@@ -147,7 +147,7 @@ Spotlights and directed light sources can now automatically generate volumetric 
 - **Vertex Color Integration:** Halos inherit their color from the light source.
 
 ### 13. Expanded Decal & Text Projection Pipeline
-Decal authoring and surface projections have been extensively overhauled and upgraded beyond legacy `q3map2`:
+Decal authoring and surface projections have been extensively overhauled and modernized with powerful new workflows:
 - **Multi-Brush & Patch Decals (`_decal`):** A single `_decal` entity can now contain multiple brushes as well as curved Bezier patches as its projection source, automatically deriving projection planes and unified bounding frustums.
 - **Geometry-Free Decals (`misc_decal`):** A pure point entity that projects a 2D quad decal directly onto world geometry, patches, and `misc_model` meshes without requiring in-map brush or patch construction in the editor. Supports custom dimensions, scale, distance/depth, rotation, targeting, and `decalgroup` filtering.
 - **Dynamic Text Decals (`misc_text_decal`):** Generate lightmapped text decals directly from strings using TrueType font atlas descriptors. Supports configurable font size/height, tracking (character spacing), horizontal alignment (`left`, `center`, `right`), vertical alignment (`baseline`, `top`, `center`, `bottom`), custom tinting, and opacity.
