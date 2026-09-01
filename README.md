@@ -19,6 +19,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
     - [10. High-Quality 2D Filtering](#10-high-quality-2d-filtering)
     - [11. Customizable Game Profiles (JSON)](#11-customizable-game-profiles-json)
     - [12. Automatic Light Halos](#12-automatic-light-halos)
+    - [13. Expanded Decal & Text Projection Pipeline](#13-expanded-decal--text-projection-pipeline)
 - [🛠 Recommended Workflow](#-recommended-workflow)
 - [⚙️ Game Profiles (makebspdata)](#-game-profiles-makebspdata)
 - [🎨 Shader Modifications](#-shader-modifications)
@@ -32,6 +33,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
     - [light](#entity-light)
     - [_decal](#entity-_decal)
     - [misc_decal](#entity-misc_decal)
+    - [misc_text_decal](#entity-misc_text_decal)
 - [💻 CLI Command Reference](#-cli-command-reference)
 
 ---
@@ -144,7 +146,12 @@ Spotlights and directed light sources can now automatically generate volumetric 
 - **Shader Control:** Mappers can override the default halo effect using the `haloshader` key or disable it entirely for specific lights. The halo size can also be controlled with the `haloscale` key.
 - **Vertex Color Integration:** Halos inherit their color from the light source.
 
-
+### 13. Expanded Decal & Text Projection Pipeline
+Decal authoring and surface projections have been extensively overhauled and upgraded beyond legacy `q3map2`:
+- **Multi-Brush & Patch Decals (`_decal`):** A single `_decal` entity can now contain multiple brushes as well as curved Bezier patches as its projection source, automatically deriving projection planes and unified bounding frustums.
+- **Geometry-Free Decals (`misc_decal`):** A pure point entity that projects a 2D quad decal directly onto world geometry, patches, and `misc_model` meshes without requiring in-map brush or patch construction in the editor. Supports custom dimensions, scale, distance/depth, rotation, targeting, and `decalgroup` filtering.
+- **Dynamic Text Decals (`misc_text_decal`):** Generate lightmapped text decals directly from strings using TrueType font atlas descriptors. Supports configurable font size/height, tracking (character spacing), horizontal alignment (`left`, `center`, `right`), vertical alignment (`baseline`, `top`, `center`, `bottom`), custom tinting, and opacity.
+- **Curvature-Adaptive Extrusion & Decimation:** Projected decal meshes automatically apply curvature-biased normal extrusion and MeshLib polygon decimation to eliminate Z-fighting artifacts on curved surfaces while keeping geometry clean and efficient.
 
 ---
 
@@ -458,12 +465,14 @@ An iterative plane-trimming CSG operator for `misc_model` entities. It uses the 
 
 ### Entity: _decal
 
-Projects a 2D surface (defined by patches or brushes) onto map geometry. This is a classic q3map2 feature.
+Projects a 2D surface onto map geometry. In Makebsp, a single `_decal` entity can contain multiple brushes as well as curved Bezier patches as its projection sources.
 - **Surface Types**: Can be casted on all surface types (brushes, patches, and `misc_model`s).
+- **Multi-Source Support**: Can bundle multiple projection brushes and curved patches in the same entity.
 - **Limitations**: Distance alphablending is not supported.
 
 **Keys**
-- **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects straight down.
+- **target**: Target entity name used to determine the projection direction and bounds. If omitted, the decal projects along its calculated surface normal or straight down.
+- **distance** / **depth**: Projection distance/depth in game units (default: 64).
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key. For brushes and patches, the key must be applied to the `func_group` they belong to.
 - **patchSubdivision**: Adjusts the resolution of the decal when projected onto curved patches. The default is 0.4. Lowering this value (e.g. down to 0.1) increases the triangle density for a smoother curve, while higher values (e.g. 1.0 or 4.0) reduce the triangle count.
 - **vertexcolor**: If specified, overwrites the vertex lighting of the projected decal geometry with a custom color.
@@ -488,6 +497,28 @@ A point entity that projects a 2D quad decal onto map geometry without requiring
 - **decalgroup**: If specified, this decal will *only* project onto brushes, patches, and models that share the exact same `decalgroup` key.
 - **vertexcolor**: If specified, overwrites the vertex lighting of the generated decal geometry with a flat custom color (format: `R G B` or hex `#RRGGBB`).
 - **vertexalpha**: If specified, overwrites the vertex alpha (opacity) of the generated decal geometry (`0.0` to `1.0` or `0` to `255`).
+
+### Entity: misc_text_decal
+
+A point entity that renders a string of text into projected decal geometry using pre-baked font atlas descriptors (JSON).
+
+- **Font Atlas Support**: Automatically extracts glyph UV coordinates, dimensions, offsets, and character advances from JSON font descriptors baked via the `-fontatlas` CLI tool.
+- **Projection Direction**: Same as `misc_decal`, uses `angles`, `angle`, or `target` aiming.
+
+**Keys**
+- **text**: The text string to project (e.g. `"SECTOR 7"`, `"CAUTION"`).
+- **font**: The font descriptor name/path or font shader (e.g. `"fonts/roboto"` or `"fonts/roboto.json"`). Can also use `shader` or `texture` as fallbacks.
+- **height** / **size**: Desired character height in game units. Font glyphs and advances are scaled proportionally based on the font descriptor's native baseline size. Default: `32.0`.
+- **align**: Horizontal text alignment relative to the entity origin: `left` (default), `center` (or `middle`), `right`.
+- **valign**: Vertical text alignment relative to the entity origin: `baseline` (default), `top`, `center` (or `middle`), `bottom`.
+- **tracking**: Additional spacing in game units added between consecutive characters. Default: `0.0`.
+- **distance** / **depth**: Projection depth/distance in game units. Default: `64.0`.
+- **angles**: Rotation angles (Pitch Yaw Roll) defining the projection direction.
+- **rotate**: Angle in degrees to rotate the entire text line around the projection axis.
+- **target**: Target entity to aim the text projection at.
+- **decalgroup**: Restricts projection to matching receiver surfaces.
+- **vertexcolor**: Custom color tint applied to the generated text vertices (`R G B` or hex `#RRGGBB`).
+- **vertexalpha**: Opacity override applied to the text vertices (`0.0` to `1.0` or `0` to `255`).
 
 ---
 
