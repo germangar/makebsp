@@ -925,16 +925,13 @@ void DownConvertLightingData(void)
         ExportExternalLightmaps();
     }
 
-    // Set the final numLightBytes for BSP writing
-    if (deluxeFloats) {
-        numLightBytes = (numLightBytes / 3) * bytesPerTexel * 2;
-    } else {
+    // Set the final numLightBytes for BSP writing.
+    // At this point numLightBytes is in units of (numPixels * 3), where numPixels
+    // already accounts for deluxe doubling (DownConvertDeluxeMaps did numLightBytes *= 2).
+    // We only need to rescale from 3-bytes-per-pixel to bytesPerTexel.
+    // Do NOT multiply by 2 again for deluxe — that's already baked in.
+    if (numLightBytes > 0) {
         numLightBytes = (numLightBytes / 3) * bytesPerTexel;
-    }
-    
-    // Check if ExportExternalLightmaps zeroed it out
-    if (game->externalLightmaps && game->hdr == HDR_8BIT && !g_debugExportLightmaps) {
-        numLightBytes = 0;
     }
 
     _printf("DownConvert: Done\n");
