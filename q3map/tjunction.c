@@ -2075,6 +2075,22 @@ void MergeAdjacentTrisoups(entity_t *e)
                 if (currDs->overrideVertexAlpha && fabs(currDs->vertexAlpha - dsB->vertexAlpha) > 0.001f)
                     continue;
 
+                // Block merges where surfaces have antiparallel U-tangents.
+                // This happens with intentional texture mirrors (e.g. two halves of an arrow
+                // made from the same diagonal texture, one flipped). Merging them would weld
+                // their shared seam vertices, causing the engine to compute degenerate tangents
+                // (adjacent triangles pulling in opposite directions) and corrupt normal mapping.
+                // We only block the antiparallel case (dot < -0.5); surfaces with orthogonal
+                // or similar UV projections are still merged freely.
+                if (currDs->side && dsB->side) {
+                    vec3_t tanA, tanB;
+                    VectorCopy(currDs->side->vecs[0], tanA);
+                    VectorCopy(dsB->side->vecs[0],   tanB);
+                    VectorNormalize(tanA, tanA);
+                    VectorNormalize(tanB, tanB);
+                    if (DotProduct(tanA, tanB) < -0.5f)
+                        continue;
+                }
 
                 if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
                     continue;
