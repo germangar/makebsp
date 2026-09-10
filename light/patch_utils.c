@@ -24,7 +24,7 @@ mesh_t *SubdividePatchForLighting(dsurface_t *ds, float ssize) {
         /* Planar: Use strictly the geometry logic that matches the old BSP path 
            to guarantee lightmap texel alignment. */
         mesh_t *subdivided;
-        int widthtable[MAX_EXPANDED_AXIS], heighttable[MAX_EXPANDED_AXIS];
+        int widthtable[LIGHTMAP_WIDTH], heighttable[LIGHTMAP_WIDTH];
 
         mesh = SubdivideMesh(srcMesh, 8.0f, 999.0f);
         PutMeshOnCurve(*mesh);

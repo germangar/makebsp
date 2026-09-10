@@ -33,7 +33,6 @@ mapDrawSurface_t *surfsOnShader[MAX_MAP_SHADERS];
 int totalLightmappedShaders = 0;
 
 #define MAX_LIGHTMAPS 2048
-#define MAX_LIGHTMAP_WIDTH 1024
 #define UV_PRECISION_NUDGE 0.0001f
 int *lightmapHeights = NULL;
 
@@ -47,7 +46,7 @@ void PrepareNewLightmap(void)
         Error("MAX_LIGHTMAPS exceeded");
     }
     // Explicitly clear the memory for the new lightmap's heightmap
-    memset(&lightmapHeights[numLightmaps * MAX_LIGHTMAP_WIDTH], 0, sizeof(int) * MAX_LIGHTMAP_WIDTH);
+    memset(&lightmapHeights[numLightmaps * LIGHTMAP_WIDTH], 0, sizeof(int) * LIGHTMAP_WIDTH);
     numLightmaps++;
 }
 
@@ -61,7 +60,7 @@ returns a texture number and the position inside it
 qboolean AllocLMBlock(int lmIndex, int w, int h, int *x, int *y)
 {
     int i, j;
-    int *allocated = &lightmapHeights[lmIndex * MAX_LIGHTMAP_WIDTH];
+    int *allocated = &lightmapHeights[lmIndex * LIGHTMAP_WIDTH];
     int bestY;
 
     // Search for the first horizontal run where it fits vertically
@@ -495,7 +494,7 @@ void AllocateLightmapForPatch(mapDrawSurface_t *ds)
     if (IsMeshPlanar(&srcMesh))
     {
         /* Old b013afa4ecdb7a5a75e55613c2d216e168302162 logic strictly for planar patches */
-        int widthtable[1024], heighttable[1024];
+        int widthtable[LIGHTMAP_WIDTH], heighttable[LIGHTMAP_WIDTH];
         mesh_t *subdividedMesh, *tempMesh, *newmesh;
         
         newmesh = SubdivideMesh(srcMesh, 8, 999);
@@ -1124,7 +1123,7 @@ void AllocateLightmaps(entity_t *e)
 
     if (!lightmapHeights)
     {
-        lightmapHeights = calloc(MAX_LIGHTMAPS * MAX_LIGHTMAP_WIDTH, sizeof(int));
+        lightmapHeights = calloc(MAX_LIGHTMAPS * LIGHTMAP_WIDTH, sizeof(int));
         numLightmaps = 0;
         PrepareNewLightmap(); // Start with the first lightmap
     }

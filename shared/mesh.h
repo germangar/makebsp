@@ -31,10 +31,8 @@ typedef struct {
 	drawVert_t	*verts;
 } mesh_t;
 
-#define	MAX_EXPANDED_AXIS		1024
-
-extern	__thread int	originalWidths[MAX_EXPANDED_AXIS];
-extern	__thread int	originalHeights[MAX_EXPANDED_AXIS];
+extern	__thread int	*originalWidths;
+extern	__thread int	*originalHeights;
 
 void FreeMesh( mesh_t *m );
 mesh_t *CopyMesh( mesh_t *mesh );

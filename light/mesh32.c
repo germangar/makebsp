@@ -149,31 +149,39 @@ mesh32_t *SubdivideMesh32(mesh32_t in, float maxError, float minLength) {
 	drawVert32_t prev, next, mid;
 	vec3_t prevxyz, nextxyz, midxyz, delta;
 	mesh32_t out;
-	drawVert32_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert32_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
 
+	int expandSize = in.width * 4;
+	if (expandSize < 256) expandSize = 256;
+	int expandSizeH = in.height * 4;
+	if (expandSizeH < 256) expandSizeH = 256;
+	if (expandSizeH > expandSize) expandSize = expandSizeH;
+
+	drawVert32_t *expand = malloc(sizeof(drawVert32_t) * expandSize * expandSize);
 	if (!expand) Error("SubdivideMesh32: malloc failed");
+#define EXP32(row, col) expand[(row) * expandSize + (col)]
+
 	out.width = in.width; out.height = in.height;
-	for (i = 0; i < in.width; i++) for (j = 0; j < in.height; j++) expand[j][i] = in.verts[j * in.width + i];
+	for (i = 0; i < in.width; i++) for (j = 0; j < in.height; j++) EXP32(j, i) = in.verts[j * in.width + i];
 
 	for (j = 0; j + 2 < out.width; j += 2) {
 		for (i = 0; i < out.height; i++) {
 			for (l = 0; l < 3; l++) {
-				prevxyz[l] = expand[i][j + 1].xyz[l] - expand[i][j].xyz[l];
-				nextxyz[l] = expand[i][j + 2].xyz[l] - expand[i][j + 1].xyz[l];
-				midxyz[l] = (expand[i][j].xyz[l] + expand[i][j + 1].xyz[l] * 2 + expand[i][j + 2].xyz[l]) * 0.25f;
+				prevxyz[l] = EXP32(i, j + 1).xyz[l] - EXP32(i, j).xyz[l];
+				nextxyz[l] = EXP32(i, j + 2).xyz[l] - EXP32(i, j + 1).xyz[l];
+				midxyz[l] = (EXP32(i, j).xyz[l] + EXP32(i, j + 1).xyz[l] * 2 + EXP32(i, j + 2).xyz[l]) * 0.25f;
 			}
 			if (VectorLength(prevxyz) > minLength || VectorLength(nextxyz) > minLength) break;
-			VectorSubtract(expand[i][j + 1].xyz, midxyz, delta);
+			VectorSubtract(EXP32(i, j + 1).xyz, midxyz, delta);
 			if (VectorLength(delta) > maxError) break;
 		}
-		if (out.width + 2 >= MAX_EXPANDED_AXIS || i == out.height) { if (i == out.height) continue; break; }
+		if (out.width + 2 >= expandSize || i == out.height) { if (i == out.height) continue; break; }
 		out.width += 2;
 		for (i = 0; i < out.height; i++) {
-			LerpDrawVert32(&expand[i][j], &expand[i][j + 1], &prev);
-			LerpDrawVert32(&expand[i][j + 1], &expand[i][j + 2], &next);
+			LerpDrawVert32(&EXP32(i, j), &EXP32(i, j + 1), &prev);
+			LerpDrawVert32(&EXP32(i, j + 1), &EXP32(i, j + 2), &next);
 			LerpDrawVert32(&prev, &next, &mid);
-			for (k = out.width - 1; k > j + 3; k--) expand[i][k] = expand[i][k - 2];
-			expand[i][j + 1] = prev; expand[i][j + 2] = mid; expand[i][j + 3] = next;
+			for (k = out.width - 1; k > j + 3; k--) EXP32(i, k) = EXP32(i, k - 2);
+			EXP32(i, j + 1) = prev; EXP32(i, j + 2) = mid; EXP32(i, j + 3) = next;
 		}
 		j -= 2;
 	}
@@ -181,29 +189,33 @@ mesh32_t *SubdivideMesh32(mesh32_t in, float maxError, float minLength) {
 	for (j = 0; j + 2 < out.height; j += 2) {
 		for (i = 0; i < out.width; i++) {
 			for (l = 0; l < 3; l++) {
-				prevxyz[l] = expand[j + 1][i].xyz[l] - expand[j][i].xyz[l];
-				nextxyz[l] = expand[j + 2][i].xyz[l] - expand[j + 1][i].xyz[l];
-				midxyz[l] = (expand[j][i].xyz[l] + expand[j + 1][i].xyz[l] * 2 + expand[j + 2][i].xyz[l]) * 0.25f;
+				prevxyz[l] = EXP32(j + 1, i).xyz[l] - EXP32(j, i).xyz[l];
+				nextxyz[l] = EXP32(j + 2, i).xyz[l] - EXP32(j + 1, i).xyz[l];
+				midxyz[l] = (EXP32(j, i).xyz[l] + EXP32(j + 1, i).xyz[l] * 2 + EXP32(j + 2, i).xyz[l]) * 0.25f;
 			}
 			if (VectorLength(prevxyz) > minLength || VectorLength(nextxyz) > minLength) break;
-			VectorSubtract(expand[j + 1][i].xyz, midxyz, delta);
+			VectorSubtract(EXP32(j + 1, i).xyz, midxyz, delta);
 			if (VectorLength(delta) > maxError) break;
 		}
-		if (out.height + 2 >= MAX_EXPANDED_AXIS || i == out.width) { if (i == out.width) continue; break; }
+		if (out.height + 2 >= expandSize || i == out.width) { if (i == out.width) continue; break; }
 		out.height += 2;
 		for (i = 0; i < out.width; i++) {
-			LerpDrawVert32(&expand[j][i], &expand[j + 1][i], &prev);
-			LerpDrawVert32(&expand[j + 1][i], &expand[j + 2][i], &next);
+			LerpDrawVert32(&EXP32(j, i), &EXP32(j + 1, i), &prev);
+			LerpDrawVert32(&EXP32(j + 1, i), &EXP32(j + 2, i), &next);
 			LerpDrawVert32(&prev, &next, &mid);
-			for (k = out.height - 1; k > j + 3; k--) expand[k][i] = expand[k - 2][i];
-			expand[j + 1][i] = prev; expand[j + 2][i] = mid; expand[j + 3][i] = next;
+			for (k = out.height - 1; k > j + 3; k--) EXP32(k, i) = EXP32(k - 2, i);
+			EXP32(j + 1, i) = prev; EXP32(j + 2, i) = mid; EXP32(j + 3, i) = next;
 		}
 		j -= 2;
 	}
+#undef EXP32
 
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert32_t));
-	mesh32_t *result = CopyMesh32(&out);
+	out.verts = malloc(out.width * out.height * sizeof(drawVert32_t));
+	if (!out.verts) Error("SubdivideMesh32: malloc failed for output verts");
+	for (i = 0; i < out.height; i++)
+		memcpy(&out.verts[i * out.width], &expand[i * expandSize], out.width * sizeof(drawVert32_t));
+	mesh32_t *result = malloc(sizeof(mesh32_t));
+	*result = out;
 	free(expand);
 	return result;
 }
@@ -213,17 +225,20 @@ mesh32_t *SubdivideMeshQuads32(mesh32_t *in, float minLength, int maxsize, int w
 	vec3_t dir;
 	float maxLength, amount;
 	mesh32_t out;
-	drawVert32_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert32_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	int stride = maxsize;
+	drawVert32_t *expand = malloc(sizeof(drawVert32_t) * maxsize * maxsize);
 
 	if (!expand) Error("SubdivideMeshQuads32: malloc failed");
+#define EXP32(row, col) expand[(row) * stride + (col)]
+
 	out.width = in->width; out.height = in->height;
-	for (i = 0; i < in->width; i++) for (j = 0; j < in->height; j++) expand[j][i] = in->verts[j * in->width + i];
+	for (i = 0; i < in->width; i++) for (j = 0; j < in->height; j++) EXP32(j, i) = in->verts[j * in->width + i];
 
 	maxsubdivisions = (maxsize - in->width) / (in->width - 1);
 	for (w = 0, j = 0; w < in->width - 1; w++, j += subdivisions + 1) {
 		maxLength = 0;
 		for (i = 0; i < out.height; i++) {
-			VectorSubtract(expand[i][j + 1].xyz, expand[i][j].xyz, dir);
+			VectorSubtract(EXP32(i, j + 1).xyz, EXP32(i, j).xyz, dir);
 			if (VectorLength(dir) > maxLength) maxLength = VectorLength(dir);
 		}
 		subdivisions = (int)(maxLength / minLength);
@@ -232,10 +247,10 @@ mesh32_t *SubdivideMeshQuads32(mesh32_t *in, float minLength, int maxsize, int w
 		if (subdivisions <= 0) continue;
 		out.width += subdivisions;
 		for (i = 0; i < out.height; i++) {
-			for (k = out.width - 1; k > j + subdivisions; k--) expand[i][k] = expand[i][k - subdivisions];
+			for (k = out.width - 1; k > j + subdivisions; k--) EXP32(i, k) = EXP32(i, k - subdivisions);
 			for (k = 1; k <= subdivisions; k++) {
 				amount = (float)k / (subdivisions + 1);
-				LerpDrawVertAmount32(&expand[i][j], &expand[i][j + subdivisions + 1], amount, &expand[i][j + k]);
+				LerpDrawVertAmount32(&EXP32(i, j), &EXP32(i, j + subdivisions + 1), amount, &EXP32(i, j + k));
 			}
 		}
 	}
@@ -244,7 +259,7 @@ mesh32_t *SubdivideMeshQuads32(mesh32_t *in, float minLength, int maxsize, int w
 	for (h = 0, j = 0; h < in->height - 1; h++, j += subdivisions + 1) {
 		maxLength = 0;
 		for (i = 0; i < out.width; i++) {
-			VectorSubtract(expand[j + 1][i].xyz, expand[j][i].xyz, dir);
+			VectorSubtract(EXP32(j + 1, i).xyz, EXP32(j, i).xyz, dir);
 			if (VectorLength(dir) > maxLength) maxLength = VectorLength(dir);
 		}
 		subdivisions = (int)(maxLength / minLength);
@@ -253,17 +268,21 @@ mesh32_t *SubdivideMeshQuads32(mesh32_t *in, float minLength, int maxsize, int w
 		if (subdivisions <= 0) continue;
 		out.height += subdivisions;
 		for (i = 0; i < out.width; i++) {
-			for (k = out.height - 1; k > j + subdivisions; k--) expand[k][i] = expand[k - subdivisions][i];
+			for (k = out.height - 1; k > j + subdivisions; k--) EXP32(k, i) = EXP32(k - subdivisions, i);
 			for (k = 1; k <= subdivisions; k++) {
 				amount = (float)k / (subdivisions + 1);
-				LerpDrawVertAmount32(&expand[j][i], &expand[j + subdivisions + 1][i], amount, &expand[j + k][i]);
+				LerpDrawVertAmount32(&EXP32(j, i), &EXP32(j + subdivisions + 1, i), amount, &EXP32(j + k, i));
 			}
 		}
 	}
+#undef EXP32
 
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert32_t));
-	mesh32_t *result = CopyMesh32(&out);
+	out.verts = malloc(out.width * out.height * sizeof(drawVert32_t));
+	if (!out.verts) Error("SubdivideMeshQuads32: malloc failed for output verts");
+	for (i = 0; i < out.height; i++)
+		memcpy(&out.verts[i * out.width], &expand[i * stride], out.width * sizeof(drawVert32_t));
+	mesh32_t *result = malloc(sizeof(mesh32_t));
+	*result = out;
 	free(expand);
 	return result;
 }
@@ -281,41 +300,49 @@ mesh32_t *RemoveLinearMeshColumnsRows32(mesh32_t *in) {
 	float maxLength;
 	vec3_t proj, dir;
 	mesh32_t out;
-	drawVert32_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert32_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	int stride = in->width;
+	drawVert32_t *expand = malloc(sizeof(drawVert32_t) * in->width * in->height);
 
 	if (!expand) Error("RemoveLinearMeshColumnsRows32: malloc failed");
+#define EXP32(row, col) expand[(row) * stride + (col)]
+
 	out.width = in->width; out.height = in->height;
-	for (i = 0; i < in->width; i++) for (j = 0; j < in->height; j++) expand[j][i] = in->verts[j * in->width + i];
+	for (i = 0; i < in->width; i++) for (j = 0; j < in->height; j++) EXP32(j, i) = in->verts[j * in->width + i];
 
 	for (j = 1; j < out.width - 1; j++) {
 		maxLength = 0;
 		for (i = 0; i < out.height; i++) {
-			ProjectPointOntoVector32(expand[i][j].xyz, expand[i][j - 1].xyz, expand[i][j + 1].xyz, proj);
-			VectorSubtract(expand[i][j].xyz, proj, dir);
+			ProjectPointOntoVector32(EXP32(i, j).xyz, EXP32(i, j - 1).xyz, EXP32(i, j + 1).xyz, proj);
+			VectorSubtract(EXP32(i, j).xyz, proj, dir);
 			if (VectorLength(dir) > maxLength) maxLength = VectorLength(dir);
 		}
 		if (maxLength < 0.1f) {
 			out.width--;
-			for (i = 0; i < out.height; i++) for (k = j; k < out.width; k++) expand[i][k] = expand[i][k + 1];
+			for (i = 0; i < out.height; i++) for (k = j; k < out.width; k++) EXP32(i, k) = EXP32(i, k + 1);
 			j--;
 		}
 	}
 	for (j = 1; j < out.height - 1; j++) {
 		maxLength = 0;
 		for (i = 0; i < out.width; i++) {
-			ProjectPointOntoVector32(expand[j][i].xyz, expand[j - 1][i].xyz, expand[j + 1][i].xyz, proj);
-			VectorSubtract(expand[j][i].xyz, proj, dir);
+			ProjectPointOntoVector32(EXP32(j, i).xyz, EXP32(j - 1, i).xyz, EXP32(j + 1, i).xyz, proj);
+			VectorSubtract(EXP32(j, i).xyz, proj, dir);
 			if (VectorLength(dir) > maxLength) maxLength = VectorLength(dir);
 		}
 		if (maxLength < 0.1f) {
 			out.height--;
-			for (i = 0; i < out.width; i++) for (k = j; k < out.height; k++) expand[k][i] = expand[k + 1][i];
+			for (i = 0; i < out.width; i++) for (k = j; k < out.height; k++) EXP32(k, i) = EXP32(k + 1, i);
 			j--;
 		}
 	}
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert32_t));
-	mesh32_t *result = CopyMesh32(&out);
+#undef EXP32
+
+	out.verts = malloc(out.width * out.height * sizeof(drawVert32_t));
+	if (!out.verts) Error("RemoveLinearMeshColumnsRows32: malloc failed for output verts");
+	for (i = 0; i < out.height; i++)
+		memcpy(&out.verts[i * out.width], &expand[i * stride], out.width * sizeof(drawVert32_t));
+	mesh32_t *result = malloc(sizeof(mesh32_t));
+	*result = out;
 	free(expand);
 	return result;
 }

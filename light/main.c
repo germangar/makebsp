@@ -73,7 +73,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         _printf("Adapting lightmap atlas size from profile default (%d) to BSP value (%d).\n",
                 game->lightmapSize, bspLmSize);
         game->lightmapSize = bspLmSize;
-        game->externalLightmaps = qtrue;
     }
 
     val = ValueForKey(ent, "_lightingIntensity");
@@ -772,6 +771,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-exportlightmaps")) {
             g_debugExportLightmaps = qtrue;
             _printf("Exporting a copy of the lightmaps as images for visual inspection\n");
+        } else if (!strcmp(argv[i], "-externallightmaps")) {
+            game->externalLightmaps = qtrue;
+            _printf("External lightmaps enabled (storing lightmaps externally)\n");
         } else if (!strcmp(argv[i], "-magentatrisoups")) {
             g_debugMagentaTrisoups = qtrue;
             _printf("Coloring TRISOUP lightmaps flat magenta\n");
@@ -803,6 +805,7 @@ int main(int argc, char **argv) {
                 "   sunshading_softbias <F> = override the sun soft bias\n"
                 "   -lowmem        = use memory-mapped files for massive radiosity passes\n");
         _printf("   -exportlightmaps = Export a copy of the lightmaps as images for visual inspection\n"
+                "   -externallightmaps = Store lightmaps purely as external images (omits internal BSP lump)\n"
                 "   -lightmapbits <8|16|32> = Set the output lightmap format depth (overrides map setting)\n"
                 "   -magentatrisoups = Color TRISOUP lightmaps flat magenta (for export debugging)\n"
                 "   -cyanpatches    = Color PATCH lightmaps flat cyan (for export debugging)\n"

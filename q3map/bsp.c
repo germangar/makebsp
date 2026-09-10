@@ -1146,9 +1146,12 @@ int main(int argc, char **argv)
 
             if (newSize != game->lightmapSize) {
                 game->lightmapSize = newSize;
-                game->externalLightmaps = qtrue;
             }
             i++;
+        }
+        else if (!strcmp(argv[i], "-externallightmaps"))
+        {
+            game->externalLightmaps = qtrue;
         }
         else
         {

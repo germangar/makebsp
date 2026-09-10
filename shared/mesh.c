@@ -27,8 +27,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/bspfile.h"
 #include "mesh.h"
 
-__thread int	originalWidths[MAX_EXPANDED_AXIS];
-__thread int	originalHeights[MAX_EXPANDED_AXIS];
+__thread int	*originalWidths  = NULL;
+__thread int	*originalHeights = NULL;
 
 
 /*
@@ -349,9 +349,27 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 	vec3_t delta;
 	float len;
 	mesh_t out;
-	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+
+	/* Each subdivision pass can at most triple the axis count (insert 2 between
+	   every adjacent pair).  A Bezier patch control grid is typically small
+	   (max 9×9), but be conservative: clamp at 4× the initial size or 256,
+	   whichever is larger, matching the original q3map2 implicit cap. */
+	int expandSize = in.width * 4;
+	if (expandSize < 256) expandSize = 256;
+	int expandSizeH = in.height * 4;
+	if (expandSizeH < 256) expandSizeH = 256;
+	if (expandSizeH > expandSize) expandSize = expandSizeH;
+
+	drawVert_t *expand = malloc(sizeof(drawVert_t) * expandSize * expandSize);
 	if (!expand) {
 		Error("SubdivideMesh: malloc failed for expand buffer");
+	}
+#define EXP(row, col) expand[(row) * expandSize + (col)]
+
+	originalWidths  = malloc(expandSize * sizeof(int));
+	originalHeights = malloc(expandSize * sizeof(int));
+	if (!originalWidths || !originalHeights) {
+		Error("SubdivideMesh: malloc failed for original tables");
 	}
 
 	out.width = in.width;
@@ -359,7 +377,7 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 
 	for (i = 0; i < in.width; i++) {
 		for (j = 0; j < in.height; j++) {
-			expand[j][i] = in.verts[j * in.width + i];
+			EXP(j, i) = in.verts[j * in.width + i];
 		}
 	}
 
@@ -375,9 +393,9 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 		// check subdivided midpoints against control points
 		for (i = 0; i < out.height; i++) {
 			for (l = 0; l < 3; l++) {
-				prevxyz[l] = expand[i][j + 1].xyz[l] - expand[i][j].xyz[l];
-				nextxyz[l] = expand[i][j + 2].xyz[l] - expand[i][j + 1].xyz[l];
-				midxyz[l] = (expand[i][j].xyz[l] + expand[i][j + 1].xyz[l] * 2 + expand[i][j + 2].xyz[l]) * 0.25;
+				prevxyz[l] = EXP(i, j + 1).xyz[l] - EXP(i, j).xyz[l];
+				nextxyz[l] = EXP(i, j + 2).xyz[l] - EXP(i, j + 1).xyz[l];
+				midxyz[l] = (EXP(i, j).xyz[l] + EXP(i, j + 1).xyz[l] * 2 + EXP(i, j + 2).xyz[l]) * 0.25;
 			}
 
 			// if the span length is too long, force a subdivision
@@ -386,14 +404,14 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 			}
 
 			// see if this midpoint is off far enough to subdivide
-			VectorSubtract(expand[i][j + 1].xyz, midxyz, delta);
+			VectorSubtract(EXP(i, j + 1).xyz, midxyz, delta);
 			len = VectorLength(delta);
 			if (len > maxError) {
 				break;
 			}
 		}
 
-		if (out.width + 2 >= MAX_EXPANDED_AXIS) {
+		if (out.width + 2 >= expandSize) {
 			break; // can't subdivide any more
 		}
 
@@ -412,16 +430,16 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 		originalWidths[j + 1] = originalWidths[j];
 
 		for (i = 0; i < out.height; i++) {
-			LerpDrawVert(&expand[i][j], &expand[i][j + 1], &prev);
-			LerpDrawVert(&expand[i][j + 1], &expand[i][j + 2], &next);
+			LerpDrawVert(&EXP(i, j), &EXP(i, j + 1), &prev);
+			LerpDrawVert(&EXP(i, j + 1), &EXP(i, j + 2), &next);
 			LerpDrawVert(&prev, &next, &mid);
 
 			for (k = out.width - 1; k > j + 3; k--) {
-				expand[i][k] = expand[i][k - 2];
+				EXP(i, k) = EXP(i, k - 2);
 			}
-			expand[i][j + 1] = prev;
-			expand[i][j + 2] = mid;
-			expand[i][j + 3] = next;
+			EXP(i, j + 1) = prev;
+			EXP(i, j + 2) = mid;
+			EXP(i, j + 3) = next;
 		}
 
 		// back up and recheck this set again, it may need more subdivision
@@ -434,9 +452,9 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 		// check subdivided midpoints against control points
 		for (i = 0; i < out.width; i++) {
 			for (l = 0; l < 3; l++) {
-				prevxyz[l] = expand[j + 1][i].xyz[l] - expand[j][i].xyz[l];
-				nextxyz[l] = expand[j + 2][i].xyz[l] - expand[j + 1][i].xyz[l];
-				midxyz[l] = (expand[j][i].xyz[l] + expand[j + 1][i].xyz[l] * 2 + expand[j + 2][i].xyz[l]) * 0.25;
+				prevxyz[l] = EXP(j + 1, i).xyz[l] - EXP(j, i).xyz[l];
+				nextxyz[l] = EXP(j + 2, i).xyz[l] - EXP(j + 1, i).xyz[l];
+				midxyz[l] = (EXP(j, i).xyz[l] + EXP(j + 1, i).xyz[l] * 2 + EXP(j + 2, i).xyz[l]) * 0.25;
 			}
 
 			// if the span length is too long, force a subdivision
@@ -444,14 +462,14 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 				break;
 			}
 			// see if this midpoint is off far enough to subdivide
-			VectorSubtract(expand[j + 1][i].xyz, midxyz, delta);
+			VectorSubtract(EXP(j + 1, i).xyz, midxyz, delta);
 			len = VectorLength(delta);
 			if (len > maxError) {
 				break;
 			}
 		}
 
-		if (out.height + 2 >= MAX_EXPANDED_AXIS) {
+		if (out.height + 2 >= expandSize) {
 			break; // can't subdivide any more
 		}
 
@@ -470,32 +488,37 @@ mesh_t *SubdivideMesh(mesh_t in, float maxError, float minLength) {
 		originalHeights[j + 1] = originalHeights[j];
 
 		for (i = 0; i < out.width; i++) {
-			LerpDrawVert(&expand[j][i], &expand[j + 1][i], &prev);
-			LerpDrawVert(&expand[j + 1][i], &expand[j + 2][i], &next);
+			LerpDrawVert(&EXP(j, i), &EXP(j + 1, i), &prev);
+			LerpDrawVert(&EXP(j + 1, i), &EXP(j + 2, i), &next);
 			LerpDrawVert(&prev, &next, &mid);
 
 			for (k = out.height - 1; k > j + 3; k--) {
-				expand[k][i] = expand[k - 2][i];
+				EXP(k, i) = EXP(k - 2, i);
 			}
-			expand[j + 1][i] = prev;
-			expand[j + 2][i] = mid;
-			expand[j + 3][i] = next;
+			EXP(j + 1, i) = prev;
+			EXP(j + 2, i) = mid;
+			EXP(j + 3, i) = next;
 		}
 
 		// back up and recheck this set again, it may need more subdivision
 		j -= 2;
 
 	}
+#undef EXP
 
-	// collapse the verts
-
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) {
-		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
+	// collapse the verts into a compact array
+	out.verts = malloc(out.width * out.height * sizeof(drawVert_t));
+	if (!out.verts) Error("SubdivideMesh: malloc failed for output verts");
+	for (i = 0; i < out.height; i++) {
+		memcpy(&out.verts[i * out.width], &expand[i * expandSize], out.width * sizeof(drawVert_t));
 	}
 
-	mesh_t *result = CopyMesh(&out);
 	free(expand);
+	/* originalWidths / originalHeights ownership transfers to the caller;
+	   they will be freed by the next call that overwrites these TLS pointers,
+	   or by RemoveLinearMeshColumnsRows which re-uses them in place. */
+	mesh_t *result = malloc(sizeof(mesh_t));
+	*result = out;
 	return result;
 }
 
@@ -525,26 +548,30 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 	float len, maxLength;
 	vec3_t proj, dir;
 	mesh_t out;
-	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	/* This function only removes columns/rows — it never grows the mesh.
+	   The input dimensions are therefore the maximum required buffer size. */
+	int stride = in->width;
+	drawVert_t *expand = malloc(sizeof(drawVert_t) * in->width * in->height);
 
 	if (!expand) {
 		Error("RemoveLinearMeshColumnsRows: malloc failed for expand buffer");
 	}
+#define EXP(row, col) expand[(row) * stride + (col)]
 
 	out.width = in->width;
 	out.height = in->height;
 
 	for (i = 0; i < in->width; i++) {
 		for (j = 0; j < in->height; j++) {
-			expand[j][i] = in->verts[j * in->width + i];
+			EXP(j, i) = in->verts[j * in->width + i];
 		}
 	}
 
 	for (j = 1; j < out.width - 1; j++) {
 		maxLength = 0;
 		for (i = 0; i < out.height; i++) {
-			ProjectPointOntoVector(expand[i][j].xyz, expand[i][j - 1].xyz, expand[i][j + 1].xyz, proj);
-			VectorSubtract(expand[i][j].xyz, proj, dir);
+			ProjectPointOntoVector(EXP(i, j).xyz, EXP(i, j - 1).xyz, EXP(i, j + 1).xyz, proj);
+			VectorSubtract(EXP(i, j).xyz, proj, dir);
 			len = VectorLength(dir);
 			if (len > maxLength) {
 				maxLength = len;
@@ -554,7 +581,7 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 			out.width--;
 			for (i = 0; i < out.height; i++) {
 				for (k = j; k < out.width; k++) {
-					expand[i][k] = expand[i][k + 1];
+					EXP(i, k) = EXP(i, k + 1);
 				}
 			}
 			for (k = j; k < out.width; k++) {
@@ -566,8 +593,8 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 	for (j = 1; j < out.height - 1; j++) {
 		maxLength = 0;
 		for (i = 0; i < out.width; i++) {
-			ProjectPointOntoVector(expand[j][i].xyz, expand[j - 1][i].xyz, expand[j + 1][i].xyz, proj);
-			VectorSubtract(expand[j][i].xyz, proj, dir);
+			ProjectPointOntoVector(EXP(j, i).xyz, EXP(j - 1, i).xyz, EXP(j + 1, i).xyz, proj);
+			VectorSubtract(EXP(j, i).xyz, proj, dir);
 			len = VectorLength(dir);
 			if (len > maxLength) {
 				maxLength = len;
@@ -577,7 +604,7 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 			out.height--;
 			for (i = 0; i < out.width; i++) {
 				for (k = j; k < out.height; k++) {
-					expand[k][i] = expand[k + 1][i];
+					EXP(k, i) = EXP(k + 1, i);
 				}
 			}
 			for (k = j; k < out.height; k++) {
@@ -586,14 +613,18 @@ mesh_t *RemoveLinearMeshColumnsRows(mesh_t *in) {
 			j--;
 		}
 	}
-	// collapse the verts
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) {
-		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
+#undef EXP
+
+	// collapse the verts into a compact array
+	out.verts = malloc(out.width * out.height * sizeof(drawVert_t));
+	if (!out.verts) Error("RemoveLinearMeshColumnsRows: malloc failed for output verts");
+	for (i = 0; i < out.height; i++) {
+		memcpy(&out.verts[i * out.width], &expand[i * stride], out.width * sizeof(drawVert_t));
 	}
 
-	mesh_t *result = CopyMesh(&out);
 	free(expand);
+	mesh_t *result = malloc(sizeof(mesh_t));
+	*result = out;
 	return result;
 }
 
@@ -637,24 +668,31 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 	vec3_t dir;
 	float length, maxLength, amount;
 	mesh_t out;
-	drawVert_t (*expand)[MAX_EXPANDED_AXIS] = malloc(sizeof(drawVert_t) * MAX_EXPANDED_AXIS * MAX_EXPANDED_AXIS);
+	/* maxsize is the caller-imposed upper bound on width and height after
+	   subdivision.  The buffer needs to accommodate maxsize × maxsize verts. */
+	int stride = maxsize;
+	drawVert_t *expand = malloc(sizeof(drawVert_t) * maxsize * maxsize);
 
 	if (!expand) {
-		Error("SubdivideMeshQuads: malloc failed for expand buffer");
+		Error("SubdivideMeshQuads: malloc failed for expand buffer (%d x %d)", maxsize, maxsize);
 	}
 
+	/* Grow (or allocate) the per-thread original-index tables to fit maxsize,
+	   preserving any existing content written by SubdivideMesh. */
+	originalWidths  = realloc(originalWidths,  maxsize * sizeof(int));
+	originalHeights = realloc(originalHeights, maxsize * sizeof(int));
+	if (!originalWidths || !originalHeights) {
+		Error("SubdivideMeshQuads: realloc failed for original index tables");
+	}
+#define EXP(row, col) expand[(row) * stride + (col)]
 
 	out.width = in->width;
 	out.height = in->height;
 
 	for (i = 0; i < in->width; i++) {
 		for (j = 0; j < in->height; j++) {
-			expand[j][i] = in->verts[j * in->width + i];
+			EXP(j, i) = in->verts[j * in->width + i];
 		}
-	}
-
-	if (maxsize > MAX_EXPANDED_AXIS) {
-		Error("SubdivideMeshQuads: maxsize > MAX_EXPANDED_AXIS");
 	}
 
 	// horizontal subdivisions
@@ -664,7 +702,7 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 	for (w = 0, j = 0; w < in->width - 1; w++, j += subdivisions + 1) {
 		maxLength = 0;
 		for (i = 0; i < out.height; i++) {
-			VectorSubtract(expand[i][j + 1].xyz, expand[i][j].xyz, dir);
+			VectorSubtract(EXP(i, j + 1).xyz, EXP(i, j).xyz, dir);
 			length = VectorLength(dir);
 			if (length > maxLength) {
 				maxLength = length;
@@ -692,11 +730,11 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 
 		for (i = 0; i < out.height; i++) {
 			for (k = out.width - 1; k > j + subdivisions; k--) {
-				expand[i][k] = expand[i][k - subdivisions];
+				EXP(i, k) = EXP(i, k - subdivisions);
 			}
 			for (k = 1; k <= subdivisions; k++) {
 				amount = (float)k / (subdivisions + 1);
-				LerpDrawVertAmount(&expand[i][j], &expand[i][j + subdivisions + 1], amount, &expand[i][j + k]);
+				LerpDrawVertAmount(&EXP(i, j), &EXP(i, j + subdivisions + 1), amount, &EXP(i, j + k));
 			}
 		}
 	}
@@ -706,7 +744,7 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 	for (h = 0, j = 0; h < in->height - 1; h++, j += subdivisions + 1) {
 		maxLength = 0;
 		for (i = 0; i < out.width; i++) {
-			VectorSubtract(expand[j + 1][i].xyz, expand[j][i].xyz, dir);
+			VectorSubtract(EXP(j + 1, i).xyz, EXP(j, i).xyz, dir);
 			length = VectorLength(dir);
 			if (length > maxLength) {
 				maxLength = length;
@@ -734,23 +772,27 @@ mesh_t *SubdivideMeshQuads(mesh_t *in, float minLength, int maxsize, int widthta
 
 		for (i = 0; i < out.width; i++) {
 			for (k = out.height - 1; k > j + subdivisions; k--) {
-				expand[k][i] = expand[k - subdivisions][i];
+				EXP(k, i) = EXP(k - subdivisions, i);
 			}
 			for (k = 1; k <= subdivisions; k++) {
 				amount = (float)k / (subdivisions + 1);
-				LerpDrawVertAmount(&expand[j][i], &expand[j + subdivisions + 1][i], amount, &expand[j + k][i]);
+				LerpDrawVertAmount(&EXP(j, i), &EXP(j + subdivisions + 1, i), amount, &EXP(j + k, i));
 			}
 		}
 	}
+#undef EXP
 
-	// collapse the verts
-	out.verts = &expand[0][0];
-	for (i = 1; i < out.height; i++) {
-		memmove(&out.verts[i * out.width], expand[i], out.width * sizeof(drawVert_t));
+	// collapse the verts into a compact array
+	out.verts = malloc(out.width * out.height * sizeof(drawVert_t));
+	if (!out.verts) Error("SubdivideMeshQuads: malloc failed for output verts");
+	for (i = 0; i < out.height; i++) {
+		memcpy(&out.verts[i * out.width], &expand[i * stride], out.width * sizeof(drawVert_t));
 	}
 
-	mesh_t *result = CopyMesh(&out);
 	free(expand);
+	/* originalWidths / originalHeights remain live for the caller (e.g. lightmaps.c). */
+	mesh_t *result = malloc(sizeof(mesh_t));
+	*result = out;
 	return result;
 }
 
