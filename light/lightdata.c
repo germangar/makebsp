@@ -711,8 +711,9 @@ static void ExportExternalLightmaps(void)
     char filename[1024];
     int size = game->lightmapSize;
     int bytesPerTexel = (game->hdr == HDR_32BIT) ? 12 : (game->hdr == HDR_16BIT) ? 6 : 3;
-    int totalBytesPerImage = size * size * bytesPerTexel;
-    int numImages = numLightBytes / totalBytesPerImage;
+    int pixelsPerImage = size * size;
+    int totalBytesPerImage = pixelsPerImage * bytesPerTexel;
+    int numImages = (pixelsPerImage > 0) ? (numLightBytes / 3) / pixelsPerImage : 0;
     const char *ext = (game->hdr == HDR_8BIT) ? "png" : "hdr";
 
     GetMapOutputDir(source, outDir);
@@ -744,7 +745,7 @@ static void ExportExternalLightmaps(void)
         snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
         if (game->hdr == HDR_8BIT) {
             if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
-                _printf("WARNING: Failed to write %s\n", filename);
+                Error("ExportExternalLightmaps: Failed to write %s", filename);
             }
         } else if (game->hdr == HDR_16BIT) {
             unsigned short *src16 = (unsigned short *)&lightBytes[i * totalBytesPerImage];
@@ -752,12 +753,12 @@ static void ExportExternalLightmaps(void)
                 tempFloatBuf[p] = HalfToFloat(src16[p]);
             }
             if (!stbi_write_hdr(filename, size, size, 3, tempFloatBuf)) {
-                _printf("WARNING: Failed to write %s\n", filename);
+                Error("ExportExternalLightmaps: Failed to write %s", filename);
             }
         } else { // HDR_32BIT
             const float *src32 = (const float *)&lightBytes[i * totalBytesPerImage];
             if (!stbi_write_hdr(filename, size, size, 3, src32)) {
-                _printf("WARNING: Failed to write %s\n", filename);
+                Error("ExportExternalLightmaps: Failed to write %s", filename);
             }
         }
     }
