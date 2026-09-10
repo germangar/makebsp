@@ -220,15 +220,12 @@ static qboolean IsPossibleSymlinkBuffer(const byte *buffer, int buflen, char *ou
             return qfalse;
     }
 
-    char text[1024];
-    memcpy(text, buffer, end);
-    text[end] = '\0';
+    memcpy(outPath, buffer, end);
+    outPath[end] = '\0';
 
-    if (strchr(text, '/') == NULL && strchr(text, '.') == NULL)
+    if (strchr(outPath, '/') == NULL && strchr(outPath, '.') == NULL)
         return qfalse;
 
-    strncpy(outPath, text, outSize - 1);
-    outPath[outSize - 1] = '\0';
     return qtrue;
 }
 
