@@ -156,6 +156,7 @@ ASSIMP_SRC = $(ASSIMP_COMMON_SRC) \
              $(wildcard libs/assimp/src/code/AssetLib/FBX/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/glTF2/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/glTF/*.cpp) \
+             $(wildcard libs/assimp/src/code/AssetLib/3DS/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/ASE/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/MD3/*.cpp) \
              $(wildcard libs/assimp/src/code/AssetLib/LWO/*.cpp) \
@@ -244,7 +245,7 @@ $(OBJ_DIR)/hacd/%.o: $(HACD_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Compile rules for Assimp-Lite
-ASSIMP_CXXFLAGS = $(filter-out -DSTB_IMAGE_IMPLEMENTATION, $(CXXFLAGS)) -Ilibs/assimp/include -Ilibs/assimp/src/code -Ilibs/assimp/src/contrib -Ilibs/assimp/src/contrib/pugixml/src -Ilibs/assimp/src/contrib/rapidjson/include -Ilibs/assimp/src/contrib/utf8cpp/source -Ilibs/assimp/src/contrib/stb -DASSIMP_BUILD_NO_OWN_ZLIB=1 -DASSIMP_BUILD_NO_EXPORT=1 -DASSIMP_BUILD_NO_X3D_IMPORTER=1 -DASSIMP_BUILD_NO_M3D_IMPORTER=1 -DASSIMP_BUILD_NO_3DS_IMPORTER=1 -DASSIMP_BUILD_NO_DRACO=1
+ASSIMP_CXXFLAGS = $(filter-out -DSTB_IMAGE_IMPLEMENTATION, $(CXXFLAGS)) -Ilibs/assimp/include -Ilibs/assimp/src/code -Ilibs/assimp/src/contrib -Ilibs/assimp/src/contrib/pugixml/src -Ilibs/assimp/src/contrib/rapidjson/include -Ilibs/assimp/src/contrib/utf8cpp/source -Ilibs/assimp/src/contrib/stb -DASSIMP_BUILD_NO_OWN_ZLIB=1 -DASSIMP_BUILD_NO_EXPORT=1 -DASSIMP_BUILD_NO_X3D_IMPORTER=1 -DASSIMP_BUILD_NO_M3D_IMPORTER=1 -DASSIMP_BUILD_NO_DRACO=1
 
 $(OBJ_ASSIMP_DIR)/%.o: libs/assimp/src/code/%.cpp
 	mkdir -p $(dir $@)
