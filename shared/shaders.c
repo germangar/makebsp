@@ -133,6 +133,105 @@ LoadShaderImage
 ===============
 */
 
+static void CanonicalizeRelativePath(const char *baseDir, const char *relPath, char *out, size_t outSize)
+{
+    char combined[1024];
+    if (relPath[0] == '/' || relPath[0] == '\\')
+    {
+        snprintf(combined, sizeof(combined), "%s", relPath + 1);
+    }
+    else if (baseDir && baseDir[0])
+    {
+        int baseLen = strlen(baseDir);
+        if (baseDir[baseLen - 1] == '/' || baseDir[baseLen - 1] == '\\')
+            snprintf(combined, sizeof(combined), "%s%s", baseDir, relPath);
+        else
+            snprintf(combined, sizeof(combined), "%s/%s", baseDir, relPath);
+    }
+    else
+    {
+        snprintf(combined, sizeof(combined), "%s", relPath);
+    }
+
+    for (int i = 0; combined[i]; i++)
+    {
+        if (combined[i] == '\\') combined[i] = '/';
+    }
+
+    char *tokens[64];
+    int tokenCount = 0;
+    char *p = combined;
+    while (*p)
+    {
+        while (*p == '/') p++;
+        if (!*p) break;
+        char *start = p;
+        while (*p && *p != '/') p++;
+        if (*p) *p++ = '\0';
+        if (!strcmp(start, "."))
+        {
+            continue;
+        }
+        else if (!strcmp(start, ".."))
+        {
+            if (tokenCount > 0) tokenCount--;
+        }
+        else
+        {
+            if (tokenCount < 64) tokens[tokenCount++] = start;
+        }
+    }
+
+    out[0] = '\0';
+    for (int i = 0; i < tokenCount; i++)
+    {
+        if (i > 0) strncat(out, "/", outSize - strlen(out) - 1);
+        strncat(out, tokens[i], outSize - strlen(out) - 1);
+    }
+}
+
+static qboolean IsPossibleSymlinkBuffer(const byte *buffer, int buflen, char *outPath, size_t outSize)
+{
+    if (buflen <= 0 || buflen >= 1024)
+        return qfalse;
+
+    // Reject known binary image magic headers
+    if (buflen >= 2 && buffer[0] == 0xFF && buffer[1] == 0xD8) // JPEG
+        return qfalse;
+    if (buflen >= 4 && buffer[0] == 0x89 && buffer[1] == 0x50 && buffer[2] == 0x4E && buffer[3] == 0x47) // PNG
+        return qfalse;
+    if (buflen >= 4 && buffer[0] == 0xAB && buffer[1] == 0x4B && buffer[2] == 0x54 && buffer[3] == 0x58) // KTX
+        return qfalse;
+    if (buflen >= 2 && buffer[0] == 'B' && buffer[1] == 'M') // BMP
+        return qfalse;
+
+    // Check if buffer contains only printable ASCII characters and trailing whitespace/newlines
+    int end = buflen;
+    while (end > 0 && ((unsigned char)buffer[end - 1] <= 32 || buffer[end - 1] == '\0'))
+        end--;
+
+    if (end <= 0 || end >= (int)outSize)
+        return qfalse;
+
+    for (int i = 0; i < end; i++)
+    {
+        unsigned char c = buffer[i];
+        if (c < 32 || c > 126) // non-printable ASCII
+            return qfalse;
+    }
+
+    char text[1024];
+    memcpy(text, buffer, end);
+    text[end] = '\0';
+
+    if (strchr(text, '/') == NULL && strchr(text, '.') == NULL)
+        return qfalse;
+
+    strncpy(outPath, text, outSize - 1);
+    outPath[outSize - 1] = '\0';
+    return qtrue;
+}
+
 // Returns the length of the file, and sets *bTGA to qtrue if the matched extension is .tga
 int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
 {
@@ -154,9 +253,41 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
         nLen = vfsLoadFile(testPath, (void **)&buffer);
         if (nLen >= 0)
         {
+            // Follow Unix symlinks inside PK3s/archives if the loaded buffer is an ASCII alias path
+            char targetRel[1024];
+            int hops = 0;
+            char currentPath[1024];
+            strcpy(currentPath, testPath);
+
+            while (hops < 4 && IsPossibleSymlinkBuffer(buffer, nLen, targetRel, sizeof(targetRel)))
+            {
+                char baseDir[1024];
+                char resolvedPath[1024];
+                ExtractFilePath(currentPath, baseDir);
+                CanonicalizeRelativePath(baseDir, targetRel, resolvedPath, sizeof(resolvedPath));
+
+                void *newBuf = NULL;
+                int newLen = vfsLoadFile(resolvedPath, &newBuf);
+                if (newLen >= 0 && newBuf != NULL)
+                {
+                    qprintf("Resolved image alias: '%s' -> '%s' (%d bytes)\n", currentPath, resolvedPath, newLen);
+                    free(buffer);
+                    buffer = (byte *)newBuf;
+                    nLen = newLen;
+                    strcpy(currentPath, resolvedPath);
+                    hops++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
             if (bTGA)
             {
-                *bTGA = (exts[i][1] == 't' || exts[i][1] == 'T');
+                char ext[128];
+                ExtractFileExtension(currentPath, ext);
+                *bTGA = (!Q_stricmp(ext, "tga"));
             }
             *bufferptr = buffer;
             return nLen;
