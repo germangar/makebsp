@@ -1597,17 +1597,21 @@ void PostProcessLightmaps(void) {
     fallback:
         if(FILTER_UPSCALE) {
             _printf("  High-Fidelity Filtering: "); int prg=0;
+            size_t bytes = (size_t)numLightBytes * 4;
+            float *tF = Q_Alloc(bytes);
+            if (tF) memcpy(tF, lightFloats, bytes);
             #pragma omp parallel for schedule(dynamic,1)
             for(int s=0;s<numPlanarSurfaces;s++) {
                 float r = planarSurfaces[s].smoothingRadius;
                 if (r > 0.0f) {
-                    FilterPlanarSurfaceHighFidelityCPU(s,r,lightFloats,lightmapAA,lightmapSmoothPasses);
+                    FilterPlanarSurfaceHighFidelityCPU(s, r, tF ? tF : lightFloats, lightmapAA, lightmapSmoothPasses);
                 }
                 int c;
                 #pragma omp atomic capture
                 c=++prg;
                 if(numPlanarSurfaces>=10 && (c*10/numPlanarSurfaces > (c-1)*10/numPlanarSurfaces)) { ThreadLock(); _printf("."); ThreadUnlock(); }
             }
+            if (tF) Q_Free(tF);
             _printf("Done\n");
         }
     }
