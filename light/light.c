@@ -1238,7 +1238,7 @@ void BuildLocalSurfaces(void)
         }
 
         if (extra && i < numExtra) {
-            localSurfaces[i].surfaceIsPlanar = extra[i].isPlanar;
+            localSurfaces[i].isPlanarDerived = extra[i].isPlanarDerived;
             localSurfaces[i].sampleSize = extra[i].sampleSize;
             strncpy(localSurfaces[i].smoothgroup, extra[i].smoothgroup, sizeof(localSurfaces[i].smoothgroup) - 1);
         } else {

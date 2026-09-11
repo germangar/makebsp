@@ -106,10 +106,6 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
     vec3_t bestExtrapCentroid;
     VectorClear(bestExtrapCentroid);
 
-    // Identify if this surface is planar
-    int surfIndex = (int)(ds - drawSurfaces);
-    qboolean isPlanar = localSurfaces[surfIndex].surfaceIsPlanar;
-
     for (j = 0; j < ds->numIndexes; j += 3)
     {
         int i0 = drawIndexes[ds->firstIndex + j];

@@ -36,7 +36,7 @@ typedef struct {
     float gridAmbientScale;
     float gridDirectScale;
     int castShadows;
-    qboolean isPlanar;
+    qboolean isPlanarDerived;
     float sampleSize;
     char smoothgroup[32];
 } extraSurface_t;

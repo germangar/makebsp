@@ -833,7 +833,7 @@ qboolean PointInTrisoup(vec3_t origin, vec3_t normal)
         dsurface_t *ds = &drawSurfaces[rayhit.hit.geomID];
         if (ds->surfaceType == MST_TRIANGLE_SOUP)
         {
-            if (localSurfaces && localSurfaces[rayhit.hit.geomID].surfaceIsPlanar)
+            if (localSurfaces && localSurfaces[rayhit.hit.geomID].isPlanarDerived)
             {
                 return qfalse;
             }
