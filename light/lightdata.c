@@ -76,11 +76,6 @@ static void DilateLightmapAtlas(int width, int passes)
             if (sLM < 0)
                 continue;
 
-            // Skip dilation for standard (non-planar) trisoups only.
-            // isPlanar trisoups pass through to dilate inner islands and outer gutters.
-            if (ds->surfaceType == MST_TRIANGLE_SOUP && !localSurfaces[s].surfaceIsPlanar)
-                continue;
-
             int sX = ds->lightmapOffset[0][0];
             int sY = ds->lightmapOffset[0][1];
             int sW = ds->lightmapWidth;
@@ -793,7 +788,7 @@ void DownConvertLightingData(void)
     _printf("--- DownConvertLightingData ---\n");
     tonemapMode = game->exposureFilter;
 
-    DilateLightmapAtlas(game->lightmapSize, 2);
+    DilateLightmapAtlas(game->lightmapSize, 4);
 
     // Deferred Deluxe Division: convert lightFloats from Radiance to Radiance/w
     if (deluxeFloats && normalFloats)

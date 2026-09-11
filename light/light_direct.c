@@ -1527,10 +1527,6 @@ void PrecacheTexelGeometryThread(int i)
                 texelSize /= scale;
                 
                 float margin = texelSize * 1.5f;
-                if (localSurfaces[i].upscale > 1) {
-                    margin *= 2.0f;
-                }
-                
                 if (BoxInSolid(origin, margin, qfalse)) {
                     hit = qfalse; // Cull deeply buried texel
                 }
