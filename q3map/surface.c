@@ -1544,7 +1544,7 @@ void EmitPlanarSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
     drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
-    drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].isPlanar = qtrue;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
     snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 
@@ -1817,7 +1817,7 @@ void EmitModelSurf(mapDrawSurface_t *ds)
     drawExtraSurfaces[numDrawSurfaces].gridAmbientScale = ds->gridAmbientScale;
     drawExtraSurfaces[numDrawSurfaces].gridDirectScale = ds->gridDirectScale;
     drawExtraSurfaces[numDrawSurfaces].castShadows = ds->castShadows;
-    drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->isPlanar;
+    drawExtraSurfaces[numDrawSurfaces].isPlanar = ds->planarDerived || ds->isPlanar;
     drawExtraSurfaces[numDrawSurfaces].sampleSize = ds->samplesize;
     snprintf(drawExtraSurfaces[numDrawSurfaces].smoothgroup, sizeof(drawExtraSurfaces[numDrawSurfaces].smoothgroup), "%s", ds->smoothgroup);
 

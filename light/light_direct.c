@@ -206,69 +206,36 @@ qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t n
             // Check if better than previous extrapolation
             if (edgeBest >= 0 && dMin < bestExtrapolatedDistSq)
             {
-                if (isPlanar)
-                {
-                    float ct = bestT;
-                    if (ct < 0.0f) ct = 0.0f;
-                    if (ct > 1.0f) ct = 1.0f;
+                float ct = bestT;
+                if (ct < 0.0f) ct = 0.0f;
+                if (ct > 1.0f) ct = 1.0f;
 
-                    if (edgeBest == 0) {
-                        w0 = 1.0f - ct; w1 = ct; w2 = 0.0f;
-                    } else if (edgeBest == 1) {
-                        w0 = 0.0f; w1 = 1.0f - ct; w2 = ct;
-                    } else {
-                        w0 = ct; w1 = 0.0f; w2 = 1.0f - ct;
-                    }
-
-                    for (k = 0; k < 3; k++)
-                    {
-                        bestExtrapOrigin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
-                        bestExtrapNormal[k] =
-                            w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
-                    }
-                    VectorNormalize(bestExtrapNormal, bestExtrapNormal);
-                    bestExtrapCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
-                    bestExtrapCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
-                    bestExtrapCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
-                    bestExtrapolatedDistSq = dMin;
+                if (edgeBest == 0) {
+                    w0 = 1.0f - ct; w1 = ct; w2 = 0.0f;
+                } else if (edgeBest == 1) {
+                    w0 = 0.0f; w1 = 1.0f - ct; w2 = ct;
+                } else {
+                    w0 = ct; w1 = 0.0f; w2 = 1.0f - ct;
                 }
-                else
+
+                for (k = 0; k < 3; k++)
                 {
-                    // Calculate raw barycentric coordinates (extrapolation)
-                    area = (st1[1] - st2[1]) * (st0[0] - st2[0]) +
-                           (st2[0] - st1[0]) * (st0[1] - st2[1]);
-                    if (fabs(area) < 0.0001f)
-                        continue;
-
-                    w0 = ((st1[1] - st2[1]) * (st[0] - st2[0]) +
-                          (st2[0] - st1[0]) * (st[1] - st2[1])) /
-                         area;
-                    w1 = ((st2[1] - st0[1]) * (st[0] - st2[0]) +
-                          (st0[0] - st2[0]) * (st[1] - st2[1])) /
-                         area;
-                    w2 = 1.0f - w0 - w1;
-
-                    for (k = 0; k < 3; k++)
-                    {
-                        bestExtrapOrigin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
-                        bestExtrapNormal[k] =
-                            w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
-                    }
-                    VectorNormalize(bestExtrapNormal, bestExtrapNormal);
-                    bestExtrapCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
-                    bestExtrapCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
-                    bestExtrapCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
-                    bestExtrapolatedDistSq = dMin;
+                    bestExtrapOrigin[k] = w0 * v0->xyz[k] + w1 * v1->xyz[k] + w2 * v2->xyz[k];
+                    bestExtrapNormal[k] =
+                        w0 * v0->normal[k] + w1 * v1->normal[k] + w2 * v2->normal[k];
                 }
+                VectorNormalize(bestExtrapNormal, bestExtrapNormal);
+                bestExtrapCentroid[0] = (v0->xyz[0] + v1->xyz[0] + v2->xyz[0]) / 3.0f;
+                bestExtrapCentroid[1] = (v0->xyz[1] + v1->xyz[1] + v2->xyz[1]) / 3.0f;
+                bestExtrapCentroid[2] = (v0->xyz[2] + v1->xyz[2] + v2->xyz[2]) / 3.0f;
+                bestExtrapolatedDistSq = dMin;
             }
         }
     }
 
-    // If we found no exact match but found a valid extrapolation, use it
-    // For planar-derived trisoups (which xatlas splits with padding), limit extrapolation to 1 texel
-    // to prevent pushing the origin deep into adjacent concave walls and causing false shadows.
-    // Standard trisoups (e.g. terrain) use the full 2 texel (4.0f) extrapolation limit.
-    float maxExtrapDistSq = isPlanar ? (float)GUTTER * GUTTER * 1.0f : (float)GUTTER * GUTTER * 4.0f;
+    // If we found no exact match but found a valid extrapolation, use it.
+    // Clamp to 1 texel distance to prevent pushing the origin into adjacent concave walls.
+    float maxExtrapDistSq = (float)GUTTER * GUTTER * 1.0f;
 
     if (bestExtrapolatedDistSq < maxExtrapDistSq)
     {

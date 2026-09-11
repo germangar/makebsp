@@ -788,7 +788,7 @@ void DownConvertLightingData(void)
     _printf("--- DownConvertLightingData ---\n");
     tonemapMode = game->exposureFilter;
 
-    DilateLightmapAtlas(game->lightmapSize, 4);
+    DilateLightmapAtlas(game->lightmapSize, 8);
 
     // Deferred Deluxe Division: convert lightFloats from Radiance to Radiance/w
     if (deluxeFloats && normalFloats)
