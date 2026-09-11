@@ -104,15 +104,79 @@ AllocateLightmapForMiscModel
 void AllocateLightmapForMiscModel(mapDrawSurface_t *ds)
 {
     int i, x, y;
+    int w, h;
+
+    if (ds->numIndexes < 3)
+        return;
+
+    // ===== FAST PATH: Prescribed dimensions from GenerateAtomicUVsWithXAtlas =====
+    if (ds->xatlasPrescribedW > 0 && ds->xatlasPrescribedH > 0)
+    {
+        w = ds->xatlasPrescribedW;
+        h = ds->xatlasPrescribedH;
+        float maxDim = (float)((w > h) ? w : h);
+
+        // Clamp to page size with proportional uniform scaling if oversized
+        if (w > LIGHTMAP_WIDTH - 2 || h > LIGHTMAP_HEIGHT - 2)
+        {
+            float scaleFactor = 1.0f;
+            if (w > LIGHTMAP_WIDTH - 2)
+                scaleFactor = (float)(LIGHTMAP_WIDTH - 2) / (float)w;
+            if (h > LIGHTMAP_HEIGHT - 2)
+            {
+                float sY = (float)(LIGHTMAP_HEIGHT - 2) / (float)h;
+                if (sY < scaleFactor) scaleFactor = sY;
+            }
+            w = (int)floor((float)w * scaleFactor);
+            h = (int)floor((float)h * scaleFactor);
+            maxDim *= scaleFactor;
+        }
+
+        if (w < 1) w = 1;
+        if (h < 1) h = 1;
+
+        // Allocate lightmap block with 1-texel gutter border (w + 2, h + 2)
+        qboolean allocated_success = qfalse;
+        for (i = 0; i < numLightmaps; i++)
+        {
+            if (AllocLMBlock(i, w + 2, h + 2, &x, &y))
+            {
+                ds->lightmapNum = i;
+                allocated_success = qtrue;
+                break;
+            }
+        }
+        if (!allocated_success)
+        {
+            PrepareNewLightmap();
+            if (!AllocLMBlock(numLightmaps - 1, w + 2, h + 2, &x, &y))
+            {
+                Error("misc_model (prescribed): Lightmap allocation failed");
+            }
+            ds->lightmapNum = numLightmaps - 1;
+        }
+
+        ds->lightmapWidth  = w;
+        ds->lightmapHeight = h;
+        ds->lightmapX      = x + 1;
+        ds->lightmapY      = y + 1;
+
+        // Remap normalized UVs [0, 1] relative to maxDim into lightmap page UVs
+        for (i = 0; i < ds->numVerts; i++)
+        {
+            float raw_u = ds->verts[i].lightmap[0][0] * maxDim;
+            float raw_v = ds->verts[i].lightmap[0][1] * maxDim;
+            ds->verts[i].lightmap[0][0] = ((float)(x + 1) + 0.5f + raw_u) / (float)LIGHTMAP_WIDTH;
+            ds->verts[i].lightmap[0][1] = ((float)(y + 1) + 0.5f + raw_v) / (float)LIGHTMAP_HEIGHT;
+        }
+        return;
+    }
+
     float ssize;
     float min_s, max_s, min_t, max_t;
     double area3D = 0, areaUV = 0;
     float s, t, scale;
-    int w, h;
     drawVert_t *v0, *v1, *v2;
-
-    if (ds->numIndexes < 3)
-        return;
 
     ssize = ds->samplesize;
 

@@ -611,6 +611,7 @@ static uv_t *TryXAtlasUVsFromArrays(const float *uvs2f, int numVerts, const floa
     uv_t *outUVs = calloc(numIndices, sizeof(uv_t));
     xatlasMesh *xMesh = &atlas->meshes[0];
 
+    float maxDimAtlas = (float)((atlas->width > atlas->height) ? atlas->width : atlas->height);
     for (int i = 0; i < numIndices / 3; i++)
     {
         for (int v = 0; v < 3; v++)
@@ -618,8 +619,8 @@ static uv_t *TryXAtlasUVsFromArrays(const float *uvs2f, int numVerts, const floa
             uint32_t xIdx = xMesh->indexArray[i * 3 + v];
             xatlasVertex *xv = &xMesh->vertexArray[xIdx];
 
-            outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
-            outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
+            outUVs[i * 3 + v].u = xv->uv[0] / maxDimAtlas;
+            outUVs[i * 3 + v].v = xv->uv[1] / maxDimAtlas;
         }
     }
 
@@ -724,6 +725,7 @@ static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts,
     uv_t *outUVs = calloc(numIndices, sizeof(uv_t));
     xatlasMesh *xMesh = &atlas->meshes[0];
 
+    float maxDimAtlas = (float)((atlas->width > atlas->height) ? atlas->width : atlas->height);
     for (int i = 0; i < numIndices / 3; i++)
     {
         for (int v = 0; v < 3; v++)
@@ -731,8 +733,8 @@ static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts,
             uint32_t xIdx = xMesh->indexArray[i * 3 + v];
             xatlasVertex *xv = &xMesh->vertexArray[xIdx];
 
-            outUVs[i * 3 + v].u = xv->uv[0] / (float)atlas->width;
-            outUVs[i * 3 + v].v = xv->uv[1] / (float)atlas->height;
+            outUVs[i * 3 + v].u = xv->uv[0] / maxDimAtlas;
+            outUVs[i * 3 + v].v = xv->uv[1] / maxDimAtlas;
         }
     }
 

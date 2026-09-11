@@ -146,14 +146,35 @@ static void PromotePatchesToTrisoups(entity_t *e)
         newDs->verts = malloc(numVerts * sizeof(drawVert_t));
         memcpy(newDs->verts, tess->verts, numVerts * sizeof(drawVert_t));
 
-        // 6. Flag internal vs boundary vertices using lightmap[0][0]
+        // 6. Compute cumulative physical arc lengths along the tessellated grid rows and columns
+        float *arcS = calloc(W, sizeof(float));
+        float *arcT = calloc(H, sizeof(float));
+
+        for (int x = 1; x < W; x++) {
+            float sumLen = 0.0f;
+            for (int y = 0; y < H; y++) {
+                vec3_t delta;
+                VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[y * W + (x - 1)].xyz, delta);
+                sumLen += VectorLength(delta);
+            }
+            arcS[x] = arcS[x - 1] + (sumLen / (float)H);
+        }
+
+        for (int y = 1; y < H; y++) {
+            float sumLen = 0.0f;
+            for (int x = 0; x < W; x++) {
+                vec3_t delta;
+                VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[(y - 1) * W + x].xyz, delta);
+                sumLen += VectorLength(delta);
+            }
+            arcT[y] = arcT[y - 1] + (sumLen / (float)W);
+        }
+
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 qboolean isBoundary = (x == 0 || x == W - 1 || y == 0 || y == H - 1);
-                // Populate true UV coordinates (grid relative) so AllocateLightmapForMiscModel
-                // can properly calculate the areaUV and assign a proportional lightmap.
-                newDs->verts[y * W + x].lightmap[0][0] = (float)x;
-                newDs->verts[y * W + x].lightmap[0][1] = (float)y;
+                newDs->verts[y * W + x].lightmap[0][0] = arcS[x];
+                newDs->verts[y * W + x].lightmap[0][1] = arcT[y];
                 // Initialize RGB to white so we don't multiply lighting by black
                 newDs->verts[y * W + x].color[0][0] = 255;
                 newDs->verts[y * W + x].color[0][1] = 255;
@@ -162,6 +183,9 @@ static void PromotePatchesToTrisoups(entity_t *e)
                 newDs->verts[y * W + x].color[0][3] = isBoundary ? 0 : 255;
             }
         }
+
+        free(arcS);
+        free(arcT);
 
         // Diagnostic: Print the normal of the first vertex to verify it's not zero
         if (H >= 1 && W >= 1) {

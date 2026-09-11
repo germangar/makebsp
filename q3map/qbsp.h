@@ -204,6 +204,8 @@ typedef struct drawsurf_s
     float chamferConvexWidth;
     float chamferConcaveWidth;
     char smoothgroup[32];
+    int xatlasPrescribedW;  // When > 0, AllocateLightmapForMiscModel uses these directly
+    int xatlasPrescribedH;  // instead of computing scale from area3D/areaUV.
 } mapDrawSurface_t;
 
 #define MAX_CHAMFER_VERTS 256

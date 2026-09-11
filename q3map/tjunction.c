@@ -1581,29 +1581,18 @@ static void GenerateAtomicUVsWithXAtlas(mapDrawSurface_t *ds)
     xatlasChartOptionsInit(&chartOpts);
     xatlasComputeCharts(atlas, &chartOpts);
 
-    float area3D = 0.0f;
-    for (int i = 0; i < ds->numIndexes; i += 3)
-    {
-        vec3_t s1, s2, cross;
-        VectorSubtract(ds->verts[ds->indexes[i + 1]].xyz, ds->verts[ds->indexes[i]].xyz, s1);
-        VectorSubtract(ds->verts[ds->indexes[i + 2]].xyz, ds->verts[ds->indexes[i]].xyz, s2);
-        CrossProduct(s1, s2, cross);
-        area3D += 0.5f * VectorLength(cross);
-    }
-
     float sampleSizeVal = ds->samplesize > 0.0f ? ds->samplesize : (float)game->defaultSampleSize;
-    float scaleVal = ds->lightmapScale > 0.0f ? ds->lightmapScale : 1.0f;
-    int targetRes = (int)ceil(sqrt(area3D) / sampleSizeVal * scaleVal);
-    if (targetRes > LIGHTMAP_WIDTH - 2)
-        targetRes = LIGHTMAP_WIDTH - 2;
-    if (targetRes < 16)
-        targetRes = 16;
+    float scaleVal      = ds->lightmapScale > 0.0f ? ds->lightmapScale : 1.0f;
 
     xatlasPackOptions packOpts;
     xatlasPackOptionsInit(&packOpts);
-    packOpts.padding = 2;
-    packOpts.texelsPerUnit = 0.0f;
-    packOpts.resolution = targetRes;
+    packOpts.padding       = 2;                        // 2 texels padding between inner charts
+    packOpts.texelsPerUnit = scaleVal / sampleSizeVal; // physically correct density
+    packOpts.resolution    = 0;                        // unconstrained: xatlas sizes to fit density
+
+    if (guessUVs)
+        packOpts.texelsPerUnit *= 1.1f;
+
     xatlasPackCharts(atlas, &packOpts);
 
     if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
@@ -1614,31 +1603,38 @@ static void GenerateAtomicUVsWithXAtlas(mapDrawSurface_t *ds)
         return;
     }
 
+    int prescribedW = (int)atlas->width;
+    int prescribedH = (int)atlas->height;
+    if (prescribedW > LIGHTMAP_WIDTH - 2)  prescribedW = LIGHTMAP_WIDTH - 2;
+    if (prescribedH > LIGHTMAP_HEIGHT - 2) prescribedH = LIGHTMAP_HEIGHT - 2;
+
+    ds->xatlasPrescribedW = prescribedW;
+    ds->xatlasPrescribedH = prescribedH;
+
     xatlasMesh *xm = &atlas->meshes[0];
 
     // If xatlas split any vertices at UV seams, rebuild ds->verts
-    if (1)
-    {
-        drawVert_t *newVerts = malloc(xm->vertexCount * sizeof(drawVert_t));
-        for (uint32_t i = 0; i < xm->vertexCount; i++)
-        {
-            newVerts[i] = ds->verts[xm->vertexArray[i].xref];
-        }
-        free(ds->verts);
-        ds->verts = newVerts;
-        ds->numVerts = (int)xm->vertexCount;
-
-        ds->numIndexes = (int)xm->indexCount;
-        for (int i = 0; i < ds->numIndexes; i++)
-        {
-            ds->indexes[i] = (int)xm->indexArray[i];
-        }
-    }
-
+    drawVert_t *newVerts = malloc(xm->vertexCount * sizeof(drawVert_t));
     for (uint32_t i = 0; i < xm->vertexCount; i++)
     {
-        ds->verts[i].lightmap[0][0] = xm->vertexArray[i].uv[0] / (float)atlas->width;
-        ds->verts[i].lightmap[0][1] = xm->vertexArray[i].uv[1] / (float)atlas->height;
+        newVerts[i] = ds->verts[xm->vertexArray[i].xref];
+    }
+    free(ds->verts);
+    ds->verts    = newVerts;
+    ds->numVerts = (int)xm->vertexCount;
+
+    ds->numIndexes = (int)xm->indexCount;
+    for (int i = 0; i < ds->numIndexes; i++)
+    {
+        ds->indexes[i] = (int)xm->indexArray[i];
+    }
+
+    // Isotropic normalization using max dimension preserves aspect ratio
+    float maxDimAtlas = (float)((atlas->width > atlas->height) ? atlas->width : atlas->height);
+    for (uint32_t i = 0; i < xm->vertexCount; i++)
+    {
+        ds->verts[i].lightmap[0][0] = xm->vertexArray[i].uv[0] / maxDimAtlas;
+        ds->verts[i].lightmap[0][1] = xm->vertexArray[i].uv[1] / maxDimAtlas;
     }
 
     xatlasDestroy(atlas);
@@ -2097,29 +2093,27 @@ void MergeAdjacentTrisoups(entity_t *e)
 
                 float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
                 float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
-                float scaleVal = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
-                int limit = LIGHTMAP_WIDTH - 2;
+                float scaleVal      = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
+                float texelsPerUnit = scaleVal / sampleSizeVal;
+                int   limit         = LIGHTMAP_WIDTH - 2;
 
-                // 1. Check 60% Area Rule
-                float maxArea = (limit * limit) * 0.6f;
-                float candidateAreaRes = (candidateArea / (sampleSizeVal * sampleSizeVal)) * (scaleVal * scaleVal);
-                if (candidateAreaRes > maxArea)
+                // 1. Conservative Area Rule (50% of page area accounts for packing efficiency + padding)
+                float maxAreaTexels   = (float)(limit * limit) * 0.50f;
+                float candidateTexels = candidateArea * (texelsPerUnit * texelsPerUnit);
+                if (candidateTexels > maxAreaTexels)
                     continue;
 
-                // 2. Check Linear Length Rule via Bounding Box
+                // 2. Diagonal Linear Rule (worst-case chart length for rotated/diagonal geometry)
                 vec3_t candidateMins, candidateMaxs;
                 VectorCopy(groupMins, candidateMins);
                 VectorCopy(groupMaxs, candidateMaxs);
                 for (int v = 0; v < dsB->numVerts; v++)
                     AddPointToBounds(dsB->verts[v].xyz, candidateMins, candidateMaxs);
-                
+
                 vec3_t size;
                 VectorSubtract(candidateMaxs, candidateMins, size);
-                float maxDimension = size[0];
-                if (size[1] > maxDimension) maxDimension = size[1];
-                if (size[2] > maxDimension) maxDimension = size[2];
-
-                if ((maxDimension / sampleSizeVal * scaleVal) > limit)
+                float diagLength = VectorLength(size);
+                if ((diagLength * texelsPerUnit) > (float)limit * 0.85f)
                     continue;
 
                 visited[j] = qtrue;
