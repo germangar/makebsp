@@ -124,9 +124,134 @@ static void VFS_Close(struct aiFileIO* io, struct aiFile* file) {
 
 /*
 ============
+VirtualizeAndNormalizeShaderPath
+============
+*/
+static void VirtualizeAndNormalizeShaderPath(char *out, const char *in, int outSize)
+{
+    if (!in || !in[0])
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    char temp[1024];
+    strncpy(temp, in, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+
+    // Normalize backslashes to forward slashes
+    for (int i = 0; temp[i]; i++)
+    {
+        if (temp[i] == '\\')
+            temp[i] = '/';
+    }
+
+    // Strip leading drive letter (e.g., "F:/...")
+    const char *p = temp;
+    if (p[0] && p[1] == ':' && (p[2] == '/' || p[2] == '\0'))
+    {
+        p += 2;
+        while (*p == '/') p++;
+    }
+
+    // Check if path contains active gamedirs (e.g., "basewsw/", "baseq3/")
+    for (int i = 0; i < numActiveGamedirs; i++)
+    {
+        const char *gamedir = activeGamedirs[i];
+        int glen = strlen(gamedir);
+        const char *found = p;
+
+        while ((found = Q_stristr(found, gamedir)) != NULL)
+        {
+            qboolean isStart = (found == p);
+            qboolean hasPreSlash = (!isStart && (*(found - 1) == '/'));
+
+            if (isStart || hasPreSlash)
+            {
+                const char *after = found + glen;
+                if (*after == '/' || *after == '\0')
+                {
+                    if (*after == '/') after++;
+                    p = after;
+                    break;
+                }
+            }
+            found++;
+        }
+    }
+
+    // Also check if path contains "textures/" or "models/" as an absolute/deep path anchor
+    const char *anchor = Q_stristr(p, "textures/");
+    if (!anchor) anchor = Q_stristr(p, "models/");
+    if (anchor && anchor != p)
+    {
+        if (anchor == p || *(anchor - 1) == '/')
+        {
+            // If the anchor path exists in VFS/shaders, prioritize the anchored subpath
+            if (ShaderExists(anchor))
+            {
+                p = anchor;
+            }
+        }
+    }
+
+    // Strip leading slashes
+    while (*p == '/') p++;
+
+    strncpy(out, p, outSize - 1);
+    out[outSize - 1] = '\0';
+    StripExtension(out);
+}
+
+/*
+============
+FindRelativeCandidate
+============
+*/
+static qboolean FindRelativeCandidate(const char *name, const char *modelDir, const char *modelNameOnly, char *out)
+{
+    char candidate[MAX_QPATH];
+
+    if (!name || !name[0] || !Q_stricmp(name, "default"))
+        return qfalse;
+
+    // Only apply relative search if name doesn't already have directories
+    if (strchr(name, '/') == NULL)
+    {
+        // 1: Same directory as model
+        snprintf(candidate, sizeof(candidate), "%s%s", modelDir, name);
+        if (ShaderExists(candidate))
+        {
+            strcpy(out, candidate);
+            return qtrue;
+        }
+
+        // 2: Subdirectory named after model
+        snprintf(candidate, sizeof(candidate), "%s%s/%s", modelDir, modelNameOnly, name);
+        if (ShaderExists(candidate))
+        {
+            strcpy(out, candidate);
+            return qtrue;
+        }
+
+        // 3: "textures" subdirectory
+        snprintf(candidate, sizeof(candidate), "%stextures/%s", modelDir, name);
+        if (ShaderExists(candidate))
+        {
+            strcpy(out, candidate);
+            return qtrue;
+        }
+    }
+
+    return qfalse;
+}
+
+/*
+============
 ShaderForMesh
 
-Determine the shader name for a given mesh, applying format-specific rules.
+Determine the shader name for a given mesh, prioritizing valid texture maps,
+falling back to material names, and smart guessing relative paths.
 ============
 */
 static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
@@ -136,6 +261,12 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
     struct aiMaterial *mat;
     struct aiString path;
     struct aiString matName;
+    char rawTex[1024] = {0};
+    char rawMat[1024] = {0};
+    char virtTex[MAX_QPATH] = {0};
+    char virtMat[MAX_QPATH] = {0};
+    char modelDir[1024];
+    char modelNameOnly[1024];
 
     if (mesh->mMaterialIndex >= scene->mNumMaterials)
     {
@@ -145,131 +276,82 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
 
     mat = scene->mMaterials[mesh->mMaterialIndex];
 
-    // Step 1: Prioritize high-level texture API (Diffuse) for all formats
+    // 1. Retrieve raw texture path if present
     if (aiGetMaterialTexture(mat, aiTextureType_DIFFUSE, 0, &path, NULL, NULL,
                              NULL, NULL, NULL, NULL) == aiReturn_SUCCESS)
     {
-        strncpy(shaderName, path.data, MAX_QPATH - 1);
-        shaderName[MAX_QPATH - 1] = '\0';
-        StripExtension(shaderName);
+        strncpy(rawTex, path.data, sizeof(rawTex) - 1);
     }
     else
     {
         ExtractFileExtension(modelPath, ext);
-
         if (!Q_stricmp(ext, "obj"))
         {
-            if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) ==
-                aiReturn_SUCCESS)
+            if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) == aiReturn_SUCCESS)
             {
-                strncpy(shaderName, path.data, MAX_QPATH - 1);
-                shaderName[MAX_QPATH - 1] = '\0';
-                StripExtension(shaderName);
-            }
-            else if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
-            {
-                strncpy(shaderName, matName.data, MAX_QPATH - 1);
-                shaderName[MAX_QPATH - 1] = '\0';
-            }
-            else
-            {
-                strcpy(shaderName, "default");
-                return;
-            }
-        }
-        else
-        {
-            if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
-            {
-                strncpy(shaderName, matName.data, MAX_QPATH - 1);
-                shaderName[MAX_QPATH - 1] = '\0';
-            }
-            else
-            {
-                strcpy(shaderName, "default");
-                return;
+                strncpy(rawTex, path.data, sizeof(rawTex) - 1);
             }
         }
     }
 
-    // Step 1.5: Virtualize absolute paths
-    // If the path contains directories, check if it contains any active gamedir name
-    if (strchr(shaderName, '/') != NULL || strchr(shaderName, '\\') != NULL)
+    // 2. Retrieve raw material name if present
+    if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
     {
-        for (int i = 0; i < numActiveGamedirs; i++)
-        {
-            const char *gamedir = activeGamedirs[i];
-            int glen = strlen(gamedir);
-            const char *p = shaderName;
-            
-            while ((p = strstr(p, gamedir)) != NULL)
-            {
-                qboolean isStart = (p == shaderName);
-                qboolean hasPreSlash = (!isStart && (*(p - 1) == '/' || *(p - 1) == '\\'));
-                
-                if (isStart || hasPreSlash)
-                {
-                    const char *after = p + glen;
-                    if (*after == '/' || *after == '\\' || *after == '\0')
-                    {
-                        char temp[MAX_QPATH];
-                        if (*after == '/' || *after == '\\') after++;
-                        strcpy(temp, after);
-                        strcpy(shaderName, temp);
-                        goto virtualization_done;
-                    }
-                }
-                p++;
-            }
-        }
+        strncpy(rawMat, matName.data, sizeof(rawMat) - 1);
     }
-virtualization_done:
 
-    // Step 2: Smart Guessing for poorly configured models
-    // If the resolved shaderName has no path, attempt tiered fallbacks
-    if (strchr(shaderName, '/') == NULL && strchr(shaderName, '\\') == NULL && Q_stricmp(shaderName, "default"))
+    // Virtualize & normalize both candidates
+    if (rawTex[0])
+        VirtualizeAndNormalizeShaderPath(virtTex, rawTex, sizeof(virtTex));
+    if (rawMat[0])
+        VirtualizeAndNormalizeShaderPath(virtMat, rawMat, sizeof(virtMat));
+
+    // Priority 1: Texture map path exists directly
+    if (virtTex[0] && ShaderExists(virtTex))
     {
-        char modelDir[1024];
-        char modelNameOnly[1024];
-        char candidate[MAX_QPATH];
-        char original[MAX_QPATH];
+        strcpy(shaderName, virtTex);
+        return;
+    }
 
-        strcpy(original, shaderName);
-        ExtractFilePath(modelPath, modelDir);
-        
-        // Extract model filename without extension
-        const char *lastSlash = strrchr(modelPath, '/');
-        if (!lastSlash) lastSlash = strrchr(modelPath, '\\');
-        const char *start = lastSlash ? lastSlash + 1 : modelPath;
-        strcpy(modelNameOnly, start);
-        StripExtension(modelNameOnly);
+    // Priority 2: Material name path exists directly
+    if (virtMat[0] && ShaderExists(virtMat))
+    {
+        strcpy(shaderName, virtMat);
+        return;
+    }
 
-        // Tier 1: Literal (Already in shaderName)
-        if (ShaderExists(shaderName)) return;
+    // Priority 3: Smart relative guessing
+    ExtractFilePath(modelPath, modelDir);
+    const char *lastSlash = strrchr(modelPath, '/');
+    if (!lastSlash) lastSlash = strrchr(modelPath, '\\');
+    const char *start = lastSlash ? lastSlash + 1 : modelPath;
+    strcpy(modelNameOnly, start);
+    StripExtension(modelNameOnly);
 
-        // Tier 2: Same directory as model
-        sprintf(candidate, "%s%s", modelDir, original);
-        if (ShaderExists(candidate)) {
-            strcpy(shaderName, candidate);
-            return;
-        }
+    // Try relative guessing on texture path first
+    if (virtTex[0] && FindRelativeCandidate(virtTex, modelDir, modelNameOnly, shaderName))
+    {
+        return;
+    }
 
-        // Tier 3: Subdirectory named after model
-        sprintf(candidate, "%s%s/%s", modelDir, modelNameOnly, original);
-        if (ShaderExists(candidate)) {
-            strcpy(shaderName, candidate);
-            return;
-        }
+    // Try relative guessing on material name second
+    if (virtMat[0] && FindRelativeCandidate(virtMat, modelDir, modelNameOnly, shaderName))
+    {
+        return;
+    }
 
-        // Tier 4: "textures" subdirectory
-        sprintf(candidate, "%stextures/%s", modelDir, original);
-        if (ShaderExists(candidate)) {
-            strcpy(shaderName, candidate);
-            return;
-        }
-
-        // Tier 5: Accept defeat, revert to original for standard warning
-        strcpy(shaderName, original);
+    // Final fallback: Use virtualized texture path if non-empty, otherwise material name, otherwise default
+    if (virtTex[0])
+    {
+        strcpy(shaderName, virtTex);
+    }
+    else if (virtMat[0])
+    {
+        strcpy(shaderName, virtMat);
+    }
+    else
+    {
+        strcpy(shaderName, "default");
     }
 }
 
