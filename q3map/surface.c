@@ -411,6 +411,31 @@ mapDrawSurface_t *DrawSurfaceForSide(bspbrush_t *b, side_t *s, winding_t *w)
         }
     }
 
+    // normalize the texture coordinates to the full [0..1] span for autosprite
+    // surfaces: frustum/plane-specific repeats would otherwise make every vertex
+    // of the camera-facing billboard clamp to the same edge texel of a clampmap
+    if (si->autosprite)
+    {
+        float stMins[2], stMaxs[2];
+
+        stMins[0] = stMins[1] = 99999;
+        stMaxs[0] = stMaxs[1] = -99999;
+        for (i = 0; i < w->numpoints; i++)
+        {
+            dv = ds->verts + i;
+            if (dv->st[0] < stMins[0]) stMins[0] = dv->st[0];
+            if (dv->st[0] > stMaxs[0]) stMaxs[0] = dv->st[0];
+            if (dv->st[1] < stMins[1]) stMins[1] = dv->st[1];
+            if (dv->st[1] > stMaxs[1]) stMaxs[1] = dv->st[1];
+        }
+        for (i = 0; i < w->numpoints; i++)
+        {
+            dv = ds->verts + i;
+            if (stMaxs[0] > stMins[0]) dv->st[0] = (dv->st[0] - stMins[0]) / (stMaxs[0] - stMins[0]);
+            if (stMaxs[1] > stMins[1]) dv->st[1] = (dv->st[1] - stMins[1]) / (stMaxs[1] - stMins[1]);
+        }
+    }
+
     return ds;
 }
 
