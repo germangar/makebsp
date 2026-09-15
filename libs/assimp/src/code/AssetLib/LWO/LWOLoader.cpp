@@ -527,6 +527,7 @@ void LWOImporter::ComputeNormals(aiMesh *mesh, const std::vector<unsigned int> &
                         continue;
                     vNormals += v;
                 }
+                mesh->mNormals[idx] = vNormals.Normalize();
             }
         }
     }
@@ -547,6 +548,7 @@ void LWOImporter::ComputeNormals(aiMesh *mesh, const std::vector<unsigned int> &
                     const aiVector3D &v = faceNormals[*a];
                     vNormals += v;
                 }
+                vNormals.Normalize();
                 for (std::vector<unsigned int>::const_iterator a = poResult.begin(); a != poResult.end(); ++a) {
                     mesh->mNormals[*a] = vNormals;
                     vertexDone[*a] = true;
@@ -825,9 +827,13 @@ void LWOImporter::LoadLWO2Polygons(unsigned int length) {
 // ------------------------------------------------------------------------------------------------
 void LWOImporter::CountVertsAndFacesLWO2(unsigned int &verts, unsigned int &faces,
         uint16_t *&cursor, const uint16_t *const end, unsigned int max) {
-    while (cursor < end && max--) {
+    uint8_t *p = (uint8_t *)cursor;
+    const uint8_t *const pEnd = (const uint8_t *)end;
+
+    while (p < pEnd && max--) {
         uint16_t numIndices;
-        ::memcpy(&numIndices, cursor++, 2);
+        ::memcpy(&numIndices, p, 2);
+        p += 2;
         AI_LSWAP2(numIndices);
         numIndices &= 0x03FF;
 
@@ -835,19 +841,25 @@ void LWOImporter::CountVertsAndFacesLWO2(unsigned int &verts, unsigned int &face
         ++faces;
 
         for (uint16_t i = 0; i < numIndices; i++) {
-            ReadVSizedIntLWO2((uint8_t *&)cursor);
+            ReadVSizedIntLWO2(p);
         }
     }
+
+    cursor = (uint16_t *)p;
 }
 
 // ------------------------------------------------------------------------------------------------
 void LWOImporter::CopyFaceIndicesLWO2(FaceList::iterator &it,
         uint16_t *&cursor,
         const uint16_t *const end) {
-    while (cursor < end) {
+    uint8_t *p = (uint8_t *)cursor;
+    const uint8_t *const pEnd = (const uint8_t *)end;
+
+    while (p < pEnd) {
         LWO::Face &face = *it++;
         uint16_t numIndices;
-        ::memcpy(&numIndices, cursor++, 2);
+        ::memcpy(&numIndices, p, 2);
+        p += 2;
         AI_LSWAP2(numIndices);
         face.mNumIndices = numIndices & 0x03FF;
 
@@ -855,7 +867,7 @@ void LWOImporter::CopyFaceIndicesLWO2(FaceList::iterator &it,
         {
             face.mIndices = new unsigned int[face.mNumIndices];
             for (unsigned int i = 0; i < face.mNumIndices; i++) {
-                face.mIndices[i] = ReadVSizedIntLWO2((uint8_t *&)cursor) + mCurLayer->mPointIDXOfs;
+                face.mIndices[i] = ReadVSizedIntLWO2(p) + mCurLayer->mPointIDXOfs;
                 if (face.mIndices[i] > mCurLayer->mTempPoints.size()) {
                     ASSIMP_LOG_WARN("LWO2: Failure evaluating face record, index is out of range");
                     face.mIndices[i] = (unsigned int)mCurLayer->mTempPoints.size() - 1;
@@ -864,6 +876,8 @@ void LWOImporter::CopyFaceIndicesLWO2(FaceList::iterator &it,
         } else
             throw DeadlyImportError("LWO2: Encountered invalid face record with zero indices");
     }
+
+    cursor = (uint16_t *)p;
 }
 
 // ------------------------------------------------------------------------------------------------
