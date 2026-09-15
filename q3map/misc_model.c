@@ -124,10 +124,13 @@ static void VFS_Close(struct aiFileIO* io, struct aiFile* file) {
 
 /*
 ============
-VirtualizeAndNormalizeShaderPath
+StripDriveLetterAndGamedir
+
+Removes drive letters, active gamedirs, and leading slashes from a
+path so it becomes relative to the active game directory.
 ============
 */
-static void VirtualizeAndNormalizeShaderPath(char *out, const char *in, int outSize)
+static void StripDriveLetterAndGamedir(char *out, const char *in, int outSize)
 {
     if (!in || !in[0])
     {
@@ -180,6 +183,34 @@ static void VirtualizeAndNormalizeShaderPath(char *out, const char *in, int outS
         }
     }
 
+    // Strip leading slashes
+    while (*p == '/') p++;
+
+    strncpy(out, p, outSize - 1);
+    out[outSize - 1] = '\0';
+}
+
+/*
+============
+VirtualizeAndNormalizeShaderPath
+============
+*/
+static void VirtualizeAndNormalizeShaderPath(char *out, const char *in, int outSize)
+{
+    if (!in || !in[0])
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    char temp[1024];
+    strncpy(temp, in, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+
+    // Strip drive letters, gamedirs, and leading slashes
+    StripDriveLetterAndGamedir(temp, temp, sizeof(temp));
+    const char *p = temp;
+
     // Also check if path contains "textures/" or "models/" as an absolute/deep path anchor
     const char *anchor = Q_stristr(p, "textures/");
     if (!anchor) anchor = Q_stristr(p, "models/");
@@ -194,9 +225,6 @@ static void VirtualizeAndNormalizeShaderPath(char *out, const char *in, int outS
             }
         }
     }
-
-    // Strip leading slashes
-    while (*p == '/') p++;
 
     strncpy(out, p, outSize - 1);
     out[outSize - 1] = '\0';
@@ -322,6 +350,7 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
 
     // Priority 3: Smart relative guessing
     ExtractFilePath(modelPath, modelDir);
+    StripDriveLetterAndGamedir(modelDir, modelDir, sizeof(modelDir));
     const char *lastSlash = strrchr(modelPath, '/');
     if (!lastSlash) lastSlash = strrchr(modelPath, '\\');
     const char *start = lastSlash ? lastSlash + 1 : modelPath;
