@@ -384,6 +384,8 @@ loadTga:
 
     free(buffer);
 
+    si->hasImage = qtrue;
+
     count = si->width * si->height;
 
     VectorClear(color);
@@ -427,7 +429,15 @@ qboolean ShaderExists(const char *shaderName)
     {
         if (!Q_stricmp(shader, shaderInfo[i].shader))
         {
-            return qtrue;
+            // Only count entries backed by a real asset: parsed from an actual
+            // .shader script, or carrying a loaded image. On-demand placeholder
+            // registrations (e.g. misc_model material fallbacks that failed to
+            // load any image) must not make ShaderExists return true, or they
+            // would shadow valid relative-path lookups for other models.
+            if (shaderInfo[i].fromScript || shaderInfo[i].hasImage)
+            {
+                return qtrue;
+            }
         }
     }
 
@@ -610,6 +620,7 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
 
         si = AllocShaderInfo();
         strcpy(si->shader, shaderName);
+        si->fromScript = qtrue;
         
         MatchToken("{");
         int shaderDepth = 1;

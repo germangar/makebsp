@@ -56,6 +56,10 @@ typedef struct shaderInfo_s
     float chamferConcaveWidth; // from "q3map_chamfer_concavewidth"
 
     qboolean hasPasses; // false if the shader doesn't define any rendering passes
+    qboolean fromScript; // true if this entry was parsed from an actual .shader script,
+                         // false for on-demand registrations (e.g. misc_model fallbacks)
+    qboolean hasImage; // true only if an image was actually loaded for this shader
+                       // (placeholder fallbacks allocate a 64x64 buffer but never set this)
 
     qboolean globalTexture; // don't normalize texture repeats
 
