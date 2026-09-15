@@ -937,7 +937,9 @@ static bool ddsktx__parse_ktx(ddsktx_texture_info* tc, const void* file_data, in
 
     int count = sizeof(k__translate_ktx_fmt)/sizeof(ddsktx__ktx_format_info);
     for (int i = 0; i < count; i++) {
-        if (k__translate_ktx_fmt[i].internal_fmt == header.internal_format) {
+        if (k__translate_ktx_fmt[i].internal_fmt == header.internal_format ||
+            (k__translate_ktx_fmt[i].internal_fmt_srgb != DDSKTX__KTX_ZERO &&
+             k__translate_ktx_fmt[i].internal_fmt_srgb == header.internal_format)) {
             format = (ddsktx_format)i;
             break;
         }

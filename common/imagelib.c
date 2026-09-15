@@ -104,14 +104,14 @@ void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, in
     *pixels = (byte *)data;
 }
 
-void LoadKTXFromMemory(byte *buffer, int buflen, byte **pixels, int *width, int *height)
+void LoadKTXFromMemory(const char *name, byte *buffer, int buflen, byte **pixels, int *width, int *height)
 {
     ddsktx_texture_info tc = {0};
     ddsktx_error err;
 
     if (!ddsktx_parse(&tc, buffer, buflen, &err))
     {
-        Error("Failed to parse KTX image buffer: %s", err.msg);
+        Error("Failed to parse KTX image buffer: %s: %s", name, err.msg);
     }
 
     if (width) *width = tc.width;
@@ -121,20 +121,20 @@ void LoadKTXFromMemory(byte *buffer, int buflen, byte **pixels, int *width, int 
     int h = tc.height;
     if (w <= 0 || h <= 0)
     {
-        Error("KTX image has invalid dimensions: %d x %d", w, h);
+        Error("KTX image has invalid dimensions: %s: %d x %d", name, w, h);
     }
 
     ddsktx_sub_data sub_data;
     ddsktx_get_sub(&tc, &sub_data, buffer, buflen, 0, 0, 0);
     if (!sub_data.buff)
     {
-        Error("Failed to get sub-data for KTX image");
+        Error("Failed to get sub-data for KTX image: %s", name);
     }
 
     byte *out_pixels = malloc(w * h * 4);
     if (!out_pixels)
     {
-        Error("Out of memory allocating %d bytes for KTX image", w * h * 4);
+        Error("Out of memory allocating %d bytes for KTX image: %s", w * h * 4, name);
     }
 
     if (tc.format == DDSKTX_FORMAT_RGBA8)
@@ -288,7 +288,7 @@ void LoadKTXFromMemory(byte *buffer, int buflen, byte **pixels, int *width, int 
     else
     {
         free(out_pixels);
-        Error("Unsupported KTX image format (%s)", ddsktx_format_str(tc.format));
+        Error("Unsupported KTX image format (%s): %s", ddsktx_format_str(tc.format), name);
     }
 
     *pixels = out_pixels;

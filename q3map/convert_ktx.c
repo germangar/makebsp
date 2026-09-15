@@ -20,7 +20,7 @@ void ConvertKTX(const char *path)
     int height = 0;
 
     _printf("Loading KTX image: %s\n", path);
-    LoadKTXFromMemory(buffer, length, &pixels, &width, &height);
+    LoadKTXFromMemory(path, buffer, length, &pixels, &width, &height);
 
     if (!pixels || width <= 0 || height <= 0)
     {

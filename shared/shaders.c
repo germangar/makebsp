@@ -229,8 +229,9 @@ static qboolean IsPossibleSymlinkBuffer(const byte *buffer, int buflen, char *ou
     return qtrue;
 }
 
-// Returns the length of the file, and sets *bTGA to qtrue if the matched extension is .tga
-int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
+// Returns the length of the file, sets *bTGA to qtrue if the matched extension is .tga,
+// and if resolvedPath is non-NULL stores the actual image file that was loaded there.
+int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA, char *resolvedPath)
 {
     byte *buffer = NULL;
     int nLen = 0;
@@ -259,19 +260,19 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
             while (hops < 4 && IsPossibleSymlinkBuffer(buffer, nLen, targetRel, sizeof(targetRel)))
             {
                 char baseDir[1024];
-                char resolvedPath[1024];
+                char symlinkTarget[1024];
                 ExtractFilePath(currentPath, baseDir);
-                CanonicalizeRelativePath(baseDir, targetRel, resolvedPath, sizeof(resolvedPath));
+                CanonicalizeRelativePath(baseDir, targetRel, symlinkTarget, sizeof(symlinkTarget));
 
                 void *newBuf = NULL;
-                int newLen = vfsLoadFile(resolvedPath, &newBuf);
+                int newLen = vfsLoadFile(symlinkTarget, &newBuf);
                 if (newLen >= 0 && newBuf != NULL)
                 {
-                    qprintf("Resolved image alias: '%s' -> '%s' (%d bytes)\n", currentPath, resolvedPath, newLen);
+                    qprintf("Resolved image alias: '%s' -> '%s' (%d bytes)\n", currentPath, symlinkTarget, newLen);
                     free(buffer);
                     buffer = (byte *)newBuf;
                     nLen = newLen;
-                    strcpy(currentPath, resolvedPath);
+                    strcpy(currentPath, symlinkTarget);
                     hops++;
                 }
                 else
@@ -285,6 +286,10 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA)
                 char ext[128];
                 ExtractFileExtension(currentPath, ext);
                 *bTGA = (!Q_stricmp(ext, "tga"));
+            }
+            if (resolvedPath)
+            {
+                strcpy(resolvedPath, currentPath);
             }
             *bufferptr = buffer;
             return nLen;
@@ -300,12 +305,14 @@ static void LoadShaderImage(shaderInfo_t *si)
     int i, count, nLen;
     float color[4];
     byte *buffer;
+    char loadedImage[1024];
     qboolean bTGA = qtrue;
+    loadedImage[0] = '\0';
 
     // look for the lightimage if it is specified
     if (si->lightimage[0])
     {
-        nLen = LoadImageFile(si->lightimage, &buffer, &bTGA);
+        nLen = LoadImageFile(si->lightimage, &buffer, &bTGA, loadedImage);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -315,7 +322,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the editorimage if it is specified
     if (si->editorimage[0])
     {
-        nLen = LoadImageFile(si->editorimage, &buffer, &bTGA);
+        nLen = LoadImageFile(si->editorimage, &buffer, &bTGA, loadedImage);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -325,7 +332,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     // look for the materialImage if it is specified
     if (si->materialImage[0])
     {
-        nLen = LoadImageFile(si->materialImage, &buffer, &bTGA);
+        nLen = LoadImageFile(si->materialImage, &buffer, &bTGA, loadedImage);
         if (buffer != NULL)
         {
             goto loadTga;
@@ -333,7 +340,7 @@ static void LoadShaderImage(shaderInfo_t *si)
     }
 
     // try the shader name
-    nLen = LoadImageFile(si->shader, &buffer, &bTGA);
+    nLen = LoadImageFile(si->shader, &buffer, &bTGA, loadedImage);
     if (buffer != NULL)
     {
         goto loadTga;
@@ -364,7 +371,7 @@ static void LoadShaderImage(shaderInfo_t *si)
 loadTga:
     if (nLen >= 12 && buffer[0] == 0xAB && buffer[1] == 0x4B && buffer[2] == 0x54 && buffer[3] == 0x58)
     {
-        LoadKTXFromMemory(buffer, nLen, &si->pixels, &si->width, &si->height);
+        LoadKTXFromMemory(loadedImage[0] ? loadedImage : si->shader, buffer, nLen, &si->pixels, &si->width, &si->height);
     }
     else if (bTGA)
     {
@@ -425,7 +432,7 @@ qboolean ShaderExists(const char *shaderName)
     }
 
     // 2. check for image files in VFS
-    if (LoadImageFile(shader, &buffer, NULL) > 0)
+    if (LoadImageFile(shader, &buffer, NULL, NULL) > 0)
     {
         free(buffer);
         return qtrue;
