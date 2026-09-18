@@ -2198,12 +2198,28 @@ static void CleanupSingleTrisoup(mapDrawSurface_t *ds)
         int i2 = ds->indexes[t*3+2];
         if (i0 == i1 || i1 == i2 || i2 == i0) continue; // topological degenerate
 
-        // Check for geometric degenerate (zero-area collinear slivers)
-        vec3_t e1, e2, cross;
+        // Check for geometric degenerate (overlapping vertices or zero-thickness collinear slivers)
+        vec3_t e1, e2, e3, cross;
         VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, e1);
         VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, e2);
+        VectorSubtract(ds->verts[i2].xyz, ds->verts[i1].xyz, e3);
+
+        float len1Sq = DotProduct(e1, e1);
+        float len2Sq = DotProduct(e2, e2);
+        float len3Sq = DotProduct(e3, e3);
+
+        const float COINCIDENT_EPSILON_SQ = 0.01f * 0.01f;
+        if (len1Sq < COINCIDENT_EPSILON_SQ || len2Sq < COINCIDENT_EPSILON_SQ || len3Sq < COINCIDENT_EPSILON_SQ)
+            continue; // 2 vertices overlapping within 0.01 units
+
         CrossProduct(e1, e2, cross);
-        if (VectorLength(cross) < 0.1f) continue; // geometric degenerate
+        float twiceArea = VectorLength(cross);
+        float maxEdgeSq = len1Sq;
+        if (len2Sq > maxEdgeSq) maxEdgeSq = len2Sq;
+        if (len3Sq > maxEdgeSq) maxEdgeSq = len3Sq;
+
+        float height = twiceArea / sqrtf(maxEdgeSq);
+        if (height < 0.005f) continue; // true zero-height collinear foldback (< 0.005 units)
 
         // Check against already added clean triangles
         qboolean isDup = qfalse;
@@ -2540,7 +2556,7 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         // Topological degenerate (two identical indices)
         if (i0 == i1 || i1 == i2 || i0 == i2) continue;
 
-        // Geometric degenerate (aspect-ratio sliver check)
+        // Geometric degenerate (overlapping vertices or zero-thickness collinear slivers)
         vec3_t ce1, ce2, ce3, cross;
         VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, ce1);
         VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, ce2);
@@ -2550,7 +2566,11 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         float len2Sq = DotProduct(ce2, ce2);
         float len3Sq = DotProduct(ce3, ce3);
         
-        if (len1Sq < 1e-9f || len2Sq < 1e-9f || len3Sq < 1e-9f) { geomDegensRemoved++; continue; }
+        const float COINCIDENT_EPSILON_SQ = 0.01f * 0.01f;
+        if (len1Sq < COINCIDENT_EPSILON_SQ || len2Sq < COINCIDENT_EPSILON_SQ || len3Sq < COINCIDENT_EPSILON_SQ) {
+            geomDegensRemoved++;
+            continue;
+        }
         
         CrossProduct(ce1, ce2, cross);
         float twiceArea = VectorLength(cross);
@@ -2559,8 +2579,8 @@ static void DecimateSingleTrisoup(mapDrawSurface_t *ds)
         if (len2Sq > maxEdgeSq) maxEdgeSq = len2Sq;
         if (len3Sq > maxEdgeSq) maxEdgeSq = len3Sq;
         
-        float sliverMetric = twiceArea / maxEdgeSq;
-        if (sliverMetric < 0.001f) { geomDegensRemoved++; continue; }
+        float height = twiceArea / sqrtf(maxEdgeSq);
+        if (height < 0.005f) { geomDegensRemoved++; continue; }
 
         ds->indexes[validIndexes+0] = i0;
         ds->indexes[validIndexes+1] = i1;
@@ -2881,7 +2901,7 @@ static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
         // Topological degenerate
         if (i0 == i1 || i1 == i2 || i0 == i2) continue;
 
-        // Geometric degenerate (aspect-ratio sliver check)
+        // Geometric degenerate (overlapping vertices or zero-thickness collinear slivers)
         vec3_t ce1, ce2, ce3, cross;
         VectorSubtract(ds->verts[i1].xyz, ds->verts[i0].xyz, ce1);
         VectorSubtract(ds->verts[i2].xyz, ds->verts[i0].xyz, ce2);
@@ -2891,7 +2911,11 @@ static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
         float len2Sq = DotProduct(ce2, ce2);
         float len3Sq = DotProduct(ce3, ce3);
         
-        if (len1Sq < 1e-9f || len2Sq < 1e-9f || len3Sq < 1e-9f) { geomDegensRemoved++; continue; }
+        const float COINCIDENT_EPSILON_SQ = 0.01f * 0.01f;
+        if (len1Sq < COINCIDENT_EPSILON_SQ || len2Sq < COINCIDENT_EPSILON_SQ || len3Sq < COINCIDENT_EPSILON_SQ) {
+            geomDegensRemoved++;
+            continue;
+        }
         
         CrossProduct(ce1, ce2, cross);
         float twiceArea = VectorLength(cross);
@@ -2900,8 +2924,8 @@ static void DecimateCollinearBoundaries(mapDrawSurface_t *ds)
         if (len2Sq > maxEdgeSq) maxEdgeSq = len2Sq;
         if (len3Sq > maxEdgeSq) maxEdgeSq = len3Sq;
         
-        float sliverMetric = twiceArea / maxEdgeSq;
-        if (sliverMetric < 0.001f) { geomDegensRemoved++; continue; }
+        float height = twiceArea / sqrtf(maxEdgeSq);
+        if (height < 0.005f) { geomDegensRemoved++; continue; }
 
         ds->indexes[validIndexes+0] = i0;
         ds->indexes[validIndexes+1] = i1;
