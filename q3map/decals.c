@@ -1917,26 +1917,57 @@ IsInDecalGroup
 Checks if a projector's group exists in a space or comma separated list of surface groups.
 ================
 */
-static qboolean IsInDecalGroup(const char *projectorGroup, const char *surfaceGroups)
+static qboolean IsInDecalGroup(const char *projectorGroups, const char *surfaceGroups)
 {
-    const char *p;
-    int len;
+    const char *p = projectorGroups;
+    char currentGroup[128];
+    int i = 0;
 
-    if (!projectorGroup || !projectorGroup[0]) return qtrue;
+    if (!projectorGroups || !projectorGroups[0]) return qtrue;
     if (!surfaceGroups || !surfaceGroups[0]) return qfalse;
 
-    len = strlen(projectorGroup);
-    p = surfaceGroups;
-
-    while ((p = Q_stristr(p, projectorGroup)) != NULL)
+    while (*p)
     {
-        qboolean startBoundary = (p == surfaceGroups || *(p - 1) == ' ' || *(p - 1) == ',');
-        qboolean endBoundary = (*(p + len) == '\0' || *(p + len) == ' ' || *(p + len) == ',');
-        
-        if (startBoundary && endBoundary)
-            return qtrue;
+        // Skip spaces and commas
+        while (*p == ' ' || *p == ',')
+            p++;
             
-        p += len;
+        if (!*p)
+            break;
+            
+        // Read the next group token
+        i = 0;
+        while (*p && *p != ' ' && *p != ',')
+        {
+            if (i < sizeof(currentGroup) - 1)
+                currentGroup[i++] = *p;
+            p++;
+        }
+        currentGroup[i] = '\0';
+        
+        // Check if this single group is in surfaceGroups
+        if (i > 0)
+        {
+            const char *sp = surfaceGroups;
+            int len = strlen(currentGroup);
+            qboolean found = qfalse;
+            
+            while ((sp = Q_stristr(sp, currentGroup)) != NULL)
+            {
+                qboolean startBoundary = (sp == surfaceGroups || *(sp - 1) == ' ' || *(sp - 1) == ',');
+                qboolean endBoundary = (*(sp + len) == '\0' || *(sp + len) == ' ' || *(sp + len) == ',');
+                
+                if (startBoundary && endBoundary)
+                {
+                    found = qtrue;
+                    break;
+                }
+                sp += len;
+            }
+            
+            if (found)
+                return qtrue;
+        }
     }
     
     return qfalse;

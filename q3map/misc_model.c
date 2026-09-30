@@ -1095,7 +1095,7 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
                 // ==========================================
                 // Misc_Model Light Tag Processing
                 // ==========================================
-                if (!Q_stricmp(shaderName, "tag_light"))
+                if (!Q_stricmp(shaderName, "tag_light") || !Q_stricmp(shaderName, "textures/tag_light"))
                 {
                     float lightIntensity = FloatForKey(entity, "light");
                     if (lightIntensity > 0.0f)
