@@ -2052,7 +2052,7 @@ void MergeAdjacentTrisoups(entity_t *e)
                         continue;
                 }
                 
-                if (currDs->decalgroup[0] || dsB->decalgroup[0])
+                if (currDs->decalgroup[0] && dsB->decalgroup[0])
                 {
                     if (Q_stricmp(currDs->decalgroup, dsB->decalgroup) != 0)
                         continue;
@@ -2160,6 +2160,11 @@ void MergeAdjacentTrisoups(entity_t *e)
 
                 if (g > 0)
                 {
+                    if (!dsA->decalgroup[0] && ds->decalgroup[0])
+                        strcpy(dsA->decalgroup, ds->decalgroup);
+                    if (!dsA->smoothgroup[0] && ds->smoothgroup[0])
+                        strcpy(dsA->smoothgroup, ds->smoothgroup);
+
                     if (ds->verts) free(ds->verts);
                     if (ds->indexes) free(ds->indexes);
                     ds->verts = NULL;
