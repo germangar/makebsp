@@ -2052,6 +2052,12 @@ void MergeAdjacentTrisoups(entity_t *e)
                         continue;
                 }
                 
+                if (currDs->decalgroup[0] || dsB->decalgroup[0])
+                {
+                    if (Q_stricmp(currDs->decalgroup, dsB->decalgroup) != 0)
+                        continue;
+                }
+                
                 float sampleSizeA = currDs->samplesize > 0.0f ? currDs->samplesize : (float)game->defaultSampleSize;
                 float sampleSizeB = dsB->samplesize > 0.0f ? dsB->samplesize : (float)game->defaultSampleSize;
                 if (fabs(sampleSizeA - sampleSizeB) > 0.001f)
