@@ -543,6 +543,7 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-externallightmaps`: Forces pure external lightmap mode (lightmaps stored as external files on disk; zeroes out the internal BSP lump).
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.
 - `-guessuvs`: [Experimental] Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
+- `-patchtris <F>`: Converts every world bezier patch into a continuous triangle soup, as if each patch had been individually wrapped in a `func_trisoup` entity. Cooked patches receive unique lightmap UVs (xatlas) and weld with adjacent triangle soups; solid patches keep their collision through an invisible clip surface. `<F>` is the flattening error tolerance in world units (smaller = finer; `0` = use the worldspawn `trisoup_subdivide` key or the game profile default). Patches inside explicit `func_trisoup` entities are left alone and keep their own per-entity settings.
 - `-noautocaulk`: Disables early automatic face caulking (by default, makebsp automatically strips and caulks redundant coplanar, contained, or fully submerged faces before BSP construction).
 - `-rootdir / -basepath / -fs_basepath <P>`: Set the engine root directory path. Can be specified multiple times to build layered search paths.
 - `-userdir / -fs_homepath <P>`: Set the user/home directory path (where the compiled BSP will be written). Can be specified multiple times.

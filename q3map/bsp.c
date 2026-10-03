@@ -44,6 +44,8 @@ qboolean nomerge;
 qboolean nofog;
 qboolean chamfernosubdivide;
 qboolean mergetrisoups = qtrue;
+qboolean patchtris = qfalse;
+float    patchtrisSubdivide = 0.0f;
 qboolean nosubdivide;
 qboolean testExpand;
 qboolean showseams;
@@ -136,6 +138,20 @@ void ProcessWorldModel(void)
     }
 
     // Process all func_trisoup entities as part of the world model!
+    // If -patchtris is active, snapshot the func_trisoup entity indices
+    // first: the loop below frees their epairs, and the global cook must
+    // skip their patches so per-entity settings keep winning.
+    int ftEntities[MAX_MAP_ENTITIES];
+    int ftEntCount = 0;
+    if (patchtris)
+    {
+        for (int i = 1; i < num_entities; i++)
+        {
+            entity_t *te = &entities[i];
+            if (te->epairs && !strcmp(ValueForKey(te, "classname"), "func_trisoup"))
+                ftEntities[ftEntCount++] = i;
+        }
+    }
     for (int i = 1; i < num_entities; i++)
     {
         entity_t *trisent = &entities[i];
@@ -145,6 +161,13 @@ void ProcessWorldModel(void)
             FreeEpairs(trisent->epairs);
             trisent->epairs = NULL;
         }
+    }
+
+    // Global -patchtris cook: every remaining world patch becomes trisoup
+    if (patchtris)
+    {
+        _printf("----- PromoteAllPatchesToTrisoups -----\n");
+        PromoteAllPatchesToTrisoups(ftEntities, ftEntCount);
     }
 
     // save out information for visibility processing
@@ -1032,6 +1055,22 @@ int main(int argc, char **argv)
             _printf("adjacent trisoup merging = %d\n", mergetrisoups);
             i++;
         }
+        else if (!strcmp(argv[i], "-patchtris"))
+        {
+            if (i + 1 >= argc || argv[i + 1][0] == '-')
+                Error("-patchtris requires a numeric argument "
+                      "(flattening error tolerance in world units)");
+            patchtris = qtrue;
+            patchtrisSubdivide = atof(argv[i + 1]);
+            if (patchtrisSubdivide > 0.0f)
+                _printf("patchtris: cooking all bezier patches "
+                        "(error tolerance %f wu)\n",
+                        patchtrisSubdivide);
+            else
+                _printf("patchtris: cooking all bezier patches "
+                        "(tolerance from worldspawn/profile default chain)\n");
+            i++;
+        }
         else if (!strcmp(argv[i], "-nodecimateplanar"))
         {
             nodecimateplanar = qtrue;
@@ -1190,6 +1229,9 @@ int main(int argc, char **argv)
                 "   chamferconvexwidth  = size of the convex chamfer strip (default 1.25)\n");
         _printf("   chamferconcavewidth = size of concave chamfer strips (< 0 uses -chamferconvexwidth, 0 skips concave chamfers)\n"
                 "   mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
+                "   patchtris <F>       = cook all bezier patches to triangle soup\n"
+                "                         at flattening error F world units\n"
+                "                         (smaller = finer; 0 = worldspawn/profile default)\n"
                 "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"

@@ -24,6 +24,212 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 /*
 ==================
+CookPatchIntoTrisoup
+
+Shared per-patch cook: tessellates a patch drawsurf into a
+MST_TRIANGLE_SOUP surface and resolves the original patch's
+collision/visibility role. Used by the per-entity func_trisoup
+pass and by the global -patchtris pass. Returns qtrue when a soup
+was emitted, qfalse when the patch was skipped or degenerate.
+==================
+*/
+static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
+{
+    shaderInfo_t *si = ds->shaderInfo;
+    if (!si) return qfalse;
+
+    // If the shader is nodraw/sky/nolightmap, skip the whole surface.
+    if (si->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NOLIGHTMAP)) return qfalse;
+
+    // 1. Build source mesh from the patch drawsurf's control points
+    mesh_t srcMesh;
+    srcMesh.width  = ds->patchWidth;
+    srcMesh.height = ds->patchHeight;
+    srcMesh.verts  = ds->verts;
+
+    // 2. Exact 3-stage Bezier tessellation with 2-pass normal generation (mirrors DrawSurfaceForMesh)
+    mesh_t *subMesh = SubdivideMesh(srcMesh, subdivide, 999.0f);
+
+    // Pass 1: compute normals on the raw subdivided grid (exact at non-degenerate edges)
+    MakeMeshNormals(*subMesh);
+
+    // Snap vertices to curve
+    PutMeshOnCurve(*subMesh);
+
+    // Pass 2: recompute normals on the curve-fitted mesh (handles degenerate/collapsed edges)
+    mesh_t *tempForNormals = CopyMesh(subMesh);
+    MakeMeshNormals(*tempForNormals);
+
+    // Blend: only override pass 1 normals if pass 2 diverges by more than ~41 degrees
+    int numMeshVerts = subMesh->width * subMesh->height;
+    for (int n = 0; n < numMeshVerts; n++) {
+        if (DotProduct(tempForNormals->verts[n].normal, subMesh->verts[n].normal) < 0.75f) {
+            VectorCopy(tempForNormals->verts[n].normal, subMesh->verts[n].normal);
+        }
+    }
+    FreeMesh(tempForNormals);
+
+    mesh_t *tess = RemoveLinearMeshColumnsRows(subMesh);
+    FreeMesh(subMesh);
+
+    // 3. Degenerate guard
+    if (tess->width < 2 || tess->height < 2) {
+        FreeMesh(tess);
+        ds->numVerts = 0; // suppress original too
+        return qfalse;
+    }
+
+    int W = tess->width;
+    int H = tess->height;
+    int numVerts = W * H;
+    int numQuads = (W - 1) * (H - 1);
+    int numIndexes = numQuads * 6;
+
+    // 4. Allocate new Trisoup drawsurf
+    mapDrawSurface_t *newDs = AllocDrawSurf();
+
+    newDs->entityNum    = ds->entityNum;
+    newDs->shaderInfo   = si;
+    newDs->miscModel    = qtrue;
+    newDs->patch        = qfalse;
+    newDs->patchDerived = qtrue;
+    newDs->planarDerived = qfalse;
+    newDs->isPlanar      = qfalse;
+    newDs->mapBrush      = NULL;
+    newDs->side          = NULL;
+    newDs->fogNum        = -1;
+    newDs->lightmapNum   = -1;
+
+    // Inherit lighting sidecar metadata
+    newDs->samplesize        = ds->samplesize;
+    newDs->lightmapScale     = ds->lightmapScale;
+    newDs->smoothingRadius   = ds->smoothingRadius;
+    newDs->superSampleRadius = ds->superSampleRadius;
+    newDs->upscale           = ds->upscale;
+    newDs->castShadows       = ds->castShadows;
+    newDs->gridAmbientScale  = ds->gridAmbientScale;
+    newDs->gridDirectScale   = ds->gridDirectScale;
+    newDs->lightValue        = ds->lightValue;
+    VectorCopy(ds->lightColor, newDs->lightColor);
+    newDs->backsplashFraction = ds->backsplashFraction;
+    newDs->lightSubdivide    = ds->lightSubdivide;
+    newDs->noDeluxeInfluence = ds->noDeluxeInfluence;
+    newDs->noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
+    newDs->overrideVertexColor = ds->overrideVertexColor;
+    VectorCopy(ds->vertexColor, newDs->vertexColor);
+    newDs->overrideVertexAlpha = ds->overrideVertexAlpha;
+    newDs->vertexAlpha       = ds->vertexAlpha;
+    newDs->isHalo            = ds->isHalo;
+    newDs->cutoff            = ds->cutoff;
+    newDs->fadeout           = ds->fadeout;
+    newDs->hasAttenuationOverride = ds->hasAttenuationOverride;
+    newDs->attenuationModel  = ds->attenuationModel;
+    snprintf(newDs->decalgroup, sizeof(newDs->decalgroup), "%s", ds->decalgroup);
+    snprintf(newDs->smoothgroup, sizeof(newDs->smoothgroup), "%s", ds->smoothgroup);
+
+    // 5. Copy tessellated vertex data
+    newDs->numVerts = numVerts;
+    newDs->verts = malloc(numVerts * sizeof(drawVert_t));
+    memcpy(newDs->verts, tess->verts, numVerts * sizeof(drawVert_t));
+
+    // 6. Compute cumulative physical arc lengths along the tessellated grid rows and columns
+    float *arcS = calloc(W, sizeof(float));
+    float *arcT = calloc(H, sizeof(float));
+
+    for (int x = 1; x < W; x++) {
+        float sumLen = 0.0f;
+        for (int y = 0; y < H; y++) {
+            vec3_t delta;
+            VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[y * W + (x - 1)].xyz, delta);
+            sumLen += VectorLength(delta);
+        }
+        arcS[x] = arcS[x - 1] + (sumLen / (float)H);
+    }
+
+    for (int y = 1; y < H; y++) {
+        float sumLen = 0.0f;
+        for (int x = 0; x < W; x++) {
+            vec3_t delta;
+            VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[(y - 1) * W + x].xyz, delta);
+            sumLen += VectorLength(delta);
+        }
+        arcT[y] = arcT[y - 1] + (sumLen / (float)W);
+    }
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            qboolean isBoundary = (x == 0 || x == W - 1 || y == 0 || y == H - 1);
+            newDs->verts[y * W + x].lightmap[0][0] = arcS[x];
+            newDs->verts[y * W + x].lightmap[0][1] = arcT[y];
+            // Initialize RGB to white so we don't multiply lighting by black
+            newDs->verts[y * W + x].color[0][0] = 255;
+            newDs->verts[y * W + x].color[0][1] = 255;
+            newDs->verts[y * W + x].color[0][2] = 255;
+            // Use vertex color alpha channel as the smoothing boundary sentinel instead
+            newDs->verts[y * W + x].color[0][3] = isBoundary ? 0 : 255;
+        }
+    }
+
+    free(arcS);
+    free(arcT);
+
+    // Diagnostic: Print the normal of the first vertex to verify it's not zero
+    if (H >= 1 && W >= 1) {
+        vec3_t *midNormal = &newDs->verts[0].normal;
+        vec3_t *midXyz = &newDs->verts[0].xyz;
+        qprintf("    [DEBUG] Patch Vert 0 XYZ(%f, %f, %f) Normal: %f, %f, %f\n",
+            (*midXyz)[0], (*midXyz)[1], (*midXyz)[2],
+            (*midNormal)[0], (*midNormal)[1], (*midNormal)[2]);
+    }
+
+    // 7. Generate triangle indices with the exact Clockwise grid winding
+    // that the Q3 engine uses in tr_curve.c for MST_PATCH tristrips.
+    newDs->numIndexes = numIndexes;
+    newDs->indexes = malloc(numIndexes * sizeof(int));
+    int idx = 0;
+    for (int y = 0; y < H - 1; y++) {
+        for (int x = 0; x < W - 1; x++) {
+            int v0 = y * W + x;
+            int v1 = y * W + (x + 1);
+            int v2 = (y + 1) * W + (x + 1);
+            int v3 = (y + 1) * W + x;
+
+            // Tri 1
+            newDs->indexes[idx++] = v0;
+            newDs->indexes[idx++] = v3;
+            newDs->indexes[idx++] = v2;
+            // Tri 2
+            newDs->indexes[idx++] = v0;
+            newDs->indexes[idx++] = v2;
+            newDs->indexes[idx++] = v1;
+        }
+    }
+
+    FreeMesh(tess);
+
+    // 8. Handle the original patch's collision/visibility role
+    qboolean isSolid = (si->contents & CONTENTS_SOLID) != 0;
+    if (isSolid) {
+        ds->shaderInfo = GetCollisionShaderInfo(si);
+        // Prevent the collision twin from double-emitting light
+        ds->lightValue            = -1.0f;
+        VectorSet(ds->lightColor, -1.0f, -1.0f, -1.0f);
+        ds->backsplashFraction    = -1.0f;
+        ds->lightSubdivide         = -1.0f;
+        ds->cutoff                 = 0.0f;
+        ds->fadeout                = 0.0f;
+        ds->hasAttenuationOverride = qfalse;
+    } else {
+        ds->numVerts = 0;
+    }
+
+    qprintf("  patch -> trisoup: %s (%dx%d ctrl -> %dx%d tess, %d tris)\n",
+            si->shader, ds->patchWidth, ds->patchHeight, W, H, numQuads * 2);
+    return qtrue;
+}
+
+/*
+==================
 PromotePatchesToTrisoups
 ==================
 */
@@ -50,188 +256,7 @@ static void PromotePatchesToTrisoups(entity_t *e)
         if (!ds->patch || ds->numVerts <= 0) continue;
         if (ds->entityNum != entNum) continue;
 
-        shaderInfo_t *si = ds->shaderInfo;
-        if (!si) continue;
-
-        // If the shader is nodraw/sky/nolightmap, skip the whole surface.
-        if (si->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NOLIGHTMAP)) continue;
-
-        // 1. Build source mesh from the patch drawsurf's control points
-        mesh_t srcMesh;
-        srcMesh.width  = ds->patchWidth;
-        srcMesh.height = ds->patchHeight;
-        srcMesh.verts  = ds->verts;
-
-        // 2. Exact 3-stage Bezier tessellation with 2-pass normal generation (mirrors DrawSurfaceForMesh)
-        mesh_t *subMesh = SubdivideMesh(srcMesh, subdivide, 999.0f);
-
-        // Pass 1: compute normals on the raw subdivided grid (exact at non-degenerate edges)
-        MakeMeshNormals(*subMesh);
-
-        // Snap vertices to curve
-        PutMeshOnCurve(*subMesh);
-
-        // Pass 2: recompute normals on the curve-fitted mesh (handles degenerate/collapsed edges)
-        mesh_t *tempForNormals = CopyMesh(subMesh);
-        MakeMeshNormals(*tempForNormals);
-
-        // Blend: only override pass 1 normals if pass 2 diverges by more than ~41 degrees
-        int numMeshVerts = subMesh->width * subMesh->height;
-        for (int n = 0; n < numMeshVerts; n++) {
-            if (DotProduct(tempForNormals->verts[n].normal, subMesh->verts[n].normal) < 0.75f) {
-                VectorCopy(tempForNormals->verts[n].normal, subMesh->verts[n].normal);
-            }
-        }
-        FreeMesh(tempForNormals);
-
-        mesh_t *tess = RemoveLinearMeshColumnsRows(subMesh);
-        FreeMesh(subMesh);
-
-        // 3. Degenerate guard
-        if (tess->width < 2 || tess->height < 2) {
-            FreeMesh(tess);
-            ds->numVerts = 0; // suppress original too
-            continue;
-        }
-
-        int W = tess->width;
-        int H = tess->height;
-        int numVerts = W * H;
-        int numQuads = (W - 1) * (H - 1);
-        int numIndexes = numQuads * 6;
-
-        // 4. Allocate new Trisoup drawsurf
-        mapDrawSurface_t *newDs = AllocDrawSurf();
-
-        newDs->entityNum    = entNum;
-        newDs->shaderInfo   = si;
-        newDs->miscModel    = qtrue;
-        newDs->patch        = qfalse;
-        newDs->patchDerived = qtrue;
-        newDs->planarDerived = qfalse;
-        newDs->isPlanar      = qfalse;
-        newDs->mapBrush      = NULL;
-        newDs->side          = NULL;
-        newDs->fogNum        = -1;
-        newDs->lightmapNum   = -1;
-
-        // Inherit lighting sidecar metadata
-        newDs->samplesize        = ds->samplesize;
-        newDs->lightmapScale     = ds->lightmapScale;
-        newDs->smoothingRadius   = ds->smoothingRadius;
-        newDs->superSampleRadius = ds->superSampleRadius;
-        newDs->upscale           = ds->upscale;
-        newDs->castShadows       = ds->castShadows;
-        newDs->gridAmbientScale  = ds->gridAmbientScale;
-        newDs->gridDirectScale   = ds->gridDirectScale;
-        newDs->lightValue        = ds->lightValue;
-        VectorCopy(ds->lightColor, newDs->lightColor);
-        newDs->backsplashFraction = ds->backsplashFraction;
-        newDs->lightSubdivide    = ds->lightSubdivide;
-        newDs->noDeluxeInfluence = ds->noDeluxeInfluence;
-        newDs->noDeluxeInfluenceBacksplash = ds->noDeluxeInfluenceBacksplash;
-        newDs->overrideVertexColor = ds->overrideVertexColor;
-        VectorCopy(ds->vertexColor, newDs->vertexColor);
-        newDs->overrideVertexAlpha = ds->overrideVertexAlpha;
-        newDs->vertexAlpha       = ds->vertexAlpha;
-        newDs->isHalo            = ds->isHalo;
-        newDs->cutoff            = ds->cutoff;
-        newDs->fadeout           = ds->fadeout;
-        newDs->hasAttenuationOverride = ds->hasAttenuationOverride;
-        newDs->attenuationModel  = ds->attenuationModel;
-        snprintf(newDs->decalgroup, sizeof(newDs->decalgroup), "%s", ds->decalgroup);
-
-        // 5. Copy tessellated vertex data
-        newDs->numVerts = numVerts;
-        newDs->verts = malloc(numVerts * sizeof(drawVert_t));
-        memcpy(newDs->verts, tess->verts, numVerts * sizeof(drawVert_t));
-
-        // 6. Compute cumulative physical arc lengths along the tessellated grid rows and columns
-        float *arcS = calloc(W, sizeof(float));
-        float *arcT = calloc(H, sizeof(float));
-
-        for (int x = 1; x < W; x++) {
-            float sumLen = 0.0f;
-            for (int y = 0; y < H; y++) {
-                vec3_t delta;
-                VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[y * W + (x - 1)].xyz, delta);
-                sumLen += VectorLength(delta);
-            }
-            arcS[x] = arcS[x - 1] + (sumLen / (float)H);
-        }
-
-        for (int y = 1; y < H; y++) {
-            float sumLen = 0.0f;
-            for (int x = 0; x < W; x++) {
-                vec3_t delta;
-                VectorSubtract(tess->verts[y * W + x].xyz, tess->verts[(y - 1) * W + x].xyz, delta);
-                sumLen += VectorLength(delta);
-            }
-            arcT[y] = arcT[y - 1] + (sumLen / (float)W);
-        }
-
-        for (int y = 0; y < H; y++) {
-            for (int x = 0; x < W; x++) {
-                qboolean isBoundary = (x == 0 || x == W - 1 || y == 0 || y == H - 1);
-                newDs->verts[y * W + x].lightmap[0][0] = arcS[x];
-                newDs->verts[y * W + x].lightmap[0][1] = arcT[y];
-                // Initialize RGB to white so we don't multiply lighting by black
-                newDs->verts[y * W + x].color[0][0] = 255;
-                newDs->verts[y * W + x].color[0][1] = 255;
-                newDs->verts[y * W + x].color[0][2] = 255;
-                // Use vertex color alpha channel as the smoothing boundary sentinel instead
-                newDs->verts[y * W + x].color[0][3] = isBoundary ? 0 : 255;
-            }
-        }
-
-        free(arcS);
-        free(arcT);
-
-        // Diagnostic: Print the normal of the first vertex to verify it's not zero
-        if (H >= 1 && W >= 1) {
-            vec3_t *midNormal = &newDs->verts[0].normal;
-            vec3_t *midXyz = &newDs->verts[0].xyz;
-            _printf("    [DEBUG] Patch Vert 0 XYZ(%f, %f, %f) Normal: %f, %f, %f\n", 
-                (*midXyz)[0], (*midXyz)[1], (*midXyz)[2],
-                (*midNormal)[0], (*midNormal)[1], (*midNormal)[2]);
-        }
-
-
-        // 7. Generate triangle indices with the exact Clockwise grid winding 
-        // that the Q3 engine uses in tr_curve.c for MST_PATCH tristrips.
-        newDs->numIndexes = numIndexes;
-        newDs->indexes = malloc(numIndexes * sizeof(int));
-        int idx = 0;
-        for (int y = 0; y < H - 1; y++) {
-            for (int x = 0; x < W - 1; x++) {
-                int v0 = y * W + x;
-                int v1 = y * W + (x + 1);
-                int v2 = (y + 1) * W + (x + 1);
-                int v3 = (y + 1) * W + x;
-                
-                // Tri 1
-                newDs->indexes[idx++] = v0;
-                newDs->indexes[idx++] = v3;
-                newDs->indexes[idx++] = v2;
-                // Tri 2
-                newDs->indexes[idx++] = v0;
-                newDs->indexes[idx++] = v2;
-                newDs->indexes[idx++] = v1;
-            }
-        }
-
-        FreeMesh(tess);
-
-        // 8. Handle the original patch's collision/visibility role
-        qboolean isSolid = (si->contents & CONTENTS_SOLID) != 0;
-        if (isSolid) {
-            ds->shaderInfo = GetCollisionShaderInfo(si);
-        } else {
-            ds->numVerts = 0;
-        }
-
-        _printf("  patch -> trisoup: %s (%dx%d ctrl -> %dx%d tess, %d tris)\n",
-                si->shader, ds->patchWidth, ds->patchHeight, W, H, numQuads * 2);
+        CookPatchIntoTrisoup(ds, subdivide);
     }
 }
 
@@ -405,4 +430,58 @@ void ProcessFuncTrisoup(entity_t *e)
 
     // 4. Promote standard brush faces to atomic trisoups (triangulate N-gon to CCW fan)
     PromoteBrushesToAtomicTrisoups(e);
+}
+
+/*
+==================
+PromoteAllPatchesToTrisoups
+
+Global -patchtris pass: cooks every remaining world patch into
+triangle soup. Patches owned by explicitly wrapped func_trisoup
+entities are skipped (their indices were snapshotted in
+ProcessWorldModel before the entity epairs were freed, so their
+per-entity settings keep winning).
+==================
+*/
+void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount)
+{
+    // Density chain: CLI > worldspawn > game profile > 6.0
+    float subdivide = patchtrisSubdivide;
+    if (subdivide <= 0.0f)
+        subdivide = FloatForKey(&entities[0], "trisoup_subdivide");
+    if (subdivide <= 0.0f)
+        subdivide = FloatForKey(&entities[0], "trisoup_subdivisions");
+    if (subdivide <= 0.0f)
+        subdivide = game->defaultTrisoupSubdivisions;
+    if (subdivide <= 0.0f)
+        subdivide = 6.0f;
+
+    _printf("  error tolerance: %f wu\n", subdivide);
+
+    int origCount = numMapDrawSurfs;
+    int cooked = 0, skipped = 0;
+
+    for (int i = 0; i < origCount; i++)
+    {
+        mapDrawSurface_t *ds = &mapDrawSurfs[i];
+        if (!ds->patch || ds->numVerts <= 0) continue;
+
+        // Skip patches owned by any func_trisoup entity
+        qboolean isFuncTrisoupOwned = qfalse;
+        for (int k = 0; k < ftEntCount; k++) {
+            if (ds->entityNum == ftEntities[k]) {
+                isFuncTrisoupOwned = qtrue;
+                break;
+            }
+        }
+        if (isFuncTrisoupOwned) continue;
+
+        // Shader skips (nodraw/sky/nolightmap) are applied inside the cook helper
+        if (CookPatchIntoTrisoup(ds, subdivide))
+            cooked++;
+        else
+            skipped++;
+    }
+
+    _printf("  %i patches cooked into triangle soup (%i skipped)\n", cooked, skipped);
 }
