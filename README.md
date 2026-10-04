@@ -582,6 +582,11 @@ These switches change the primary mode of the executable.
   - `-nopassage`: Disables the passage-flow visibility optimization.
 - `-exportmodels <bspname>`: Exports all `misc_model` (Triangle Soup) geometry from a BSP into `.obj` files. Models processed with -meta/forcemeta will be split in multple mini-meshes and unusable. Only useful for models originally compiled for vertex lighting.
     - `-ignoreplanar 1|0`: When enabled (default 1), skips exporting trisoup surfaces that are perfectly flat/planar (useful to avoid exporting standard wall geometry that was meta'd).
+- `-bsp2obj <bspname>`: Converts a compiled BSP into a single Wavefront `.obj`/`.mtl` model written next to the source BSP. Every draw surface is exported faithfully as compiled (brush faces with chamfer strips, welded triangle soups, decals), grouped per surface (q3map2-style `g` groups under one object).
+    - Materials carry the raw shader name (`newmtl`/`usemtl textures/...`), so map editors resolve them to the actual shader and render textured immediately; `map_Kd` references the extension-less shader path for easy re-import into `.map` files.
+    - Bezier patches are exported as meshes: the BSP stores patch grids without index buffers, so their faces are generated locally with the same winding rules the engine uses. Flare surfaces are skipped.
+    - Axis conversion: Q3 Z-up -> OBJ Y-up (X=X, Y=Z, Z=-Y). Winding/axis/UV conventions are the exact inverse of both makebsp's `misc_model` and NetRadiant's `assmodel` importers, so exported models display correctly in the editor and re-compile identically through `misc_model`.
+    - Prints a per-type summary (planar/patch/trisoup surfaces, verts, stored vs patch-generated faces, skipped degenerates) that can be verified against `-info` lump counts.
 - `-info <bspname>`: Displays detailed statistics and lump information for the specified BSP file.
 - `-fontatlas <fontfile.ttf> <atlas_size> [font_pixel_size]`: Bakes a TrueType/OpenType font (`.ttf`, `.otf`) into an atlas texture (`.tga`) and descriptor (`.json`) for use with `misc_text_decal`.
     - `<atlas_size>`: Resolution of the output texture atlas (e.g. `1024`, `2048`).

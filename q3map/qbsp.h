@@ -345,6 +345,7 @@ void SnapVector(vec3_t normal);
 qboolean PlaneEqual(plane_t *p, vec3_t normal, vec_t dist);
 
 void ExportModels(int count, char **fileNames);
+void Bsp2Obj(int count, char **args);
 
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);

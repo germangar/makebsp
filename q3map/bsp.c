@@ -840,6 +840,11 @@ int main(int argc, char **argv)
             Broadcast_Shutdown();
             return 0;
         }
+        if (!strcmp(argv[i], "-bsp2obj")) {
+            Bsp2Obj(argc - (i + 1), argv + (i + 1));
+            Broadcast_Shutdown();
+            return 0;
+        }
     }
 
     // Initialize game profile from JSON and CLI
