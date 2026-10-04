@@ -38,8 +38,14 @@ static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
     shaderInfo_t *si = ds->shaderInfo;
     if (!si) return qfalse;
 
-    // If the shader is nodraw/sky/nolightmap, skip the whole surface.
-    if (si->surfaceFlags & (SURF_NODRAW | SURF_SKY | SURF_NOLIGHTMAP)) return qfalse;
+    // Invisible or engine-special shaders stay native patches (nodraw =
+    // invisible collision-only, sky = must remain sky). Visible geometry
+    // is always cooked, even without lightmaps (e.g. env-mapped chrome).
+    if (si->surfaceFlags & (SURF_NODRAW | SURF_SKY))
+    {
+        qprintf("cook skip: %s flags=%x\n", si->shader, si->surfaceFlags);
+        return qfalse;
+    }
 
     // 1. Build source mesh from the patch drawsurf's control points
     mesh_t srcMesh;
@@ -236,6 +242,7 @@ PromotePatchesToTrisoups
 static void PromotePatchesToTrisoups(entity_t *e)
 {
     int entNum = e - entities;
+    int cooked = 0, skipped = 0;
 
     // Read 'subdivide' key with fallback aliases, then worldspawn, then game profile
     float subdivide = FloatForKey(e, "subdivide");
@@ -244,6 +251,8 @@ static void PromotePatchesToTrisoups(entity_t *e)
     if (subdivide <= 0.0f) subdivide = FloatForKey(&entities[0], "trisoup_subdivisions");
     if (subdivide <= 0.0f) subdivide = game->defaultTrisoupSubdivisions;
     if (subdivide <= 0.0f) subdivide = 6.0f; // Failsafe
+
+    _printf("  func_trisoup: patch cooking (error tolerance %f wu)\n", subdivide);
 
     // Only scan surfaces that existed before this function was called.
     int origCount = numMapDrawSurfs;
@@ -256,8 +265,13 @@ static void PromotePatchesToTrisoups(entity_t *e)
         if (!ds->patch || ds->numVerts <= 0) continue;
         if (ds->entityNum != entNum) continue;
 
-        CookPatchIntoTrisoup(ds, subdivide);
+        if (CookPatchIntoTrisoup(ds, subdivide))
+            cooked++;
+        else
+            skipped++;
     }
+
+    _printf("  %i patches cooked into triangle soup (%i skipped)\n", cooked, skipped);
 }
 
 /*

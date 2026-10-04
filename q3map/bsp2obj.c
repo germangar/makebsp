@@ -12,7 +12,6 @@ model. See bsp2obj_study.txt for the implementation plan.
 
 #define BSP2OBJ_NAME_CAP       96
 #define BSP2OBJ_STREAM_BUF     (4 * 1024 * 1024)
-#define BSP2OBJ_COLINEAR_AREA  10
 
 typedef struct
 {
@@ -23,8 +22,9 @@ typedef struct
 
 #define C_OTHER     0
 #define C_INVALID   1
-#define C_STORED    2
-#define C_PATCHGEN  3
+#define C_PATCHSKIP 2
+#define C_NODRAW    3
+#define C_STORED    4
 
 static int           *s_class;
 static int           *s_mat;
@@ -32,9 +32,9 @@ static objMaterial_t *s_materials;
 static int            s_numMaterials;
 
 static int c_models, c_modelskip;
-static int c_planar, c_patch, c_soup;
-static int c_other, c_invalid;
-static int c_verts, c_facesStored, c_facesPatch, c_degen;
+static int c_planar, c_soup, c_patch;
+static int c_nodraw, c_other, c_invalid;
+static int c_verts, c_facesStored, c_degen;
 
 static void SanitizeName(const char *in, char *out, int cap)
 {
@@ -71,31 +71,19 @@ static void StripImageExtension(const char *in, char *out, int cap)
     }
 }
 
-static qboolean TriDegenerate(drawVert_t *points, int a, int b, int c)
-{
-    vec3_t v1, v2, v3;
-    float d;
-
-    VectorSubtract(points[b].xyz, points[a].xyz, v1);
-    VectorSubtract(points[c].xyz, points[a].xyz, v2);
-    CrossProduct(v1, v2, v3);
-    d = VectorLength(v3);
-
-    if (d < BSP2OBJ_COLINEAR_AREA)
-        return qtrue;
-
-    return qfalse;
-}
-
 static int ClassifySurface(dsurface_t *ds)
 {
+    if (ds->surfaceType == MST_PATCH)
+        return C_PATCHSKIP;
+
     if (ds->surfaceType != MST_PLANAR &&
-        ds->surfaceType != MST_PATCH &&
         ds->surfaceType != MST_TRIANGLE_SOUP)
         return C_OTHER;
 
     if (ds->shaderNum < 0 || ds->shaderNum >= numShaders)
         return C_INVALID;
+    if (dshaders[ds->shaderNum].surfaceFlags & SURF_NODRAW)
+        return C_NODRAW;
     if (ds->numVerts <= 0 || ds->firstVert < 0 ||
         ds->firstVert + ds->numVerts > numDrawVerts)
         return C_INVALID;
@@ -103,16 +91,6 @@ static int ClassifySurface(dsurface_t *ds)
         ds->firstIndex + ds->numIndexes > numDrawIndexes ||
         (ds->numIndexes % 3) != 0)
         return C_INVALID;
-
-    if (ds->surfaceType == MST_PATCH && ds->numIndexes == 0)
-    {
-        if (ds->patchWidth < 0 || ds->patchHeight < 0 ||
-            ds->patchWidth > 4096 || ds->patchHeight > 4096)
-            return C_INVALID;
-        if (ds->numVerts < ds->patchWidth * ds->patchHeight)
-            return C_INVALID;
-        return C_PATCHGEN;
-    }
 
     if (ds->numIndexes < 3)
         return C_INVALID;
@@ -176,7 +154,11 @@ static void ClassifyAll(void)
             int cls = ClassifySurface(&drawSurfaces[sIdx]);
             s_class[sIdx] = cls;
 
-            if (cls == C_OTHER)
+            if (cls == C_PATCHSKIP)
+                c_patch++;
+            else if (cls == C_NODRAW)
+                c_nodraw++;
+            else if (cls == C_OTHER)
                 c_other++;
             else if (cls == C_INVALID)
                 c_invalid++;
@@ -184,8 +166,6 @@ static void ClassifyAll(void)
             {
                 if (drawSurfaces[sIdx].surfaceType == MST_PLANAR)
                     c_planar++;
-                else if (drawSurfaces[sIdx].surfaceType == MST_PATCH)
-                    c_patch++;
                 else
                     c_soup++;
 
@@ -256,43 +236,6 @@ static int EmitStoredFaces(FILE *fObj, dsurface_t *ds, int base)
     return faces;
 }
 
-static int EmitPatchGridFaces(FILE *fObj, dsurface_t *ds, int base)
-{
-    int W = ds->patchWidth;
-    int H = ds->patchHeight;
-    drawVert_t *verts = drawVerts + ds->firstVert;
-    int i, j, faces = 0;
-
-    for (j = 0; j + 1 < H; j++)
-    {
-        for (i = 0; i + 1 < W; i++)
-        {
-            int v0 = j * W + i;
-            int v1 = v0 + 1;
-            int v2 = v0 + W;
-            int v3 = v2 + 1;
-
-            if (!TriDegenerate(verts, v0, v2, v1))
-            {
-                EmitFace(fObj, base + v0 + 1, base + v1 + 1, base + v2 + 1);
-                faces++;
-            }
-            else
-                c_degen++;
-
-            if (!TriDegenerate(verts, v1, v2, v3))
-            {
-                EmitFace(fObj, base + v1 + 1, base + v3 + 1, base + v2 + 1);
-                faces++;
-            }
-            else
-                c_degen++;
-        }
-    }
-
-    return faces;
-}
-
 static void WriteOBJModel(const char *objName, const char *base, const char *source)
 {
     FILE *fObj;
@@ -333,7 +276,7 @@ static void WriteOBJModel(const char *objName, const char *base, const char *sou
             int cls = s_class[sIdx];
             int vbase = runningVerts;
 
-            if (cls != C_STORED && cls != C_PATCHGEN)
+            if (cls != C_STORED)
                 continue;
 
             fprintf(fObj, "g mat%dm%ds%d\n", s_mat[sIdx], m, sIdx);
@@ -351,16 +294,57 @@ static void WriteOBJModel(const char *objName, const char *base, const char *sou
             }
             c_verts += ds->numVerts;
 
-            if (cls == C_STORED)
-                c_facesStored += EmitStoredFaces(fObj, ds, vbase);
-            else
-                c_facesPatch += EmitPatchGridFaces(fObj, ds, vbase);
+            c_facesStored += EmitStoredFaces(fObj, ds, vbase);
 
             runningVerts += ds->numVerts;
         }
     }
 
     fclose(fObj);
+}
+
+static qboolean RunBsp2ObjExport(const char *objName, const char *mtlName,
+                                 const char *base, const char *source)
+{
+    c_models = c_modelskip = 0;
+    c_planar = c_soup = c_patch = 0;
+    c_nodraw = c_other = c_invalid = 0;
+    c_verts = c_facesStored = c_degen = 0;
+
+    s_class = malloc(numDrawSurfaces * sizeof(int));
+    s_mat = malloc(numDrawSurfaces * sizeof(int));
+    s_materials = malloc((numShaders > 0 ? numShaders : 1) * sizeof(objMaterial_t));
+    s_numMaterials = 0;
+
+    if (!s_class || !s_mat || !s_materials)
+    {
+        _printf("ERROR: Out of memory\n");
+        free(s_class);
+        free(s_mat);
+        free(s_materials);
+        s_class = s_mat = NULL;
+        s_materials = NULL;
+        return qfalse;
+    }
+
+    ClassifyAll();
+    WriteMTL(mtlName);
+    WriteOBJModel(objName, base, source);
+
+    _printf("%d models exported (%d empty skipped)\n", c_models, c_modelskip);
+    _printf("%d surfaces: %d planar, %d trisoup\n",
+            c_planar + c_soup, c_planar, c_soup);
+    _printf("skipped: %d patches, %d nodraw, %d flares/other, %d invalid\n",
+            c_patch, c_nodraw, c_other, c_invalid);
+    _printf("%d verts, %d faces (%d degenerate skipped)\n",
+            c_verts, c_facesStored, c_degen);
+
+    free(s_class);
+    free(s_mat);
+    free(s_materials);
+    s_class = s_mat = NULL;
+    s_materials = NULL;
+    return qtrue;
 }
 
 void Bsp2Obj(int count, char **args)
@@ -407,46 +391,36 @@ void Bsp2Obj(int count, char **args)
             _printf("No draw surfaces found.\n");
             continue;
         }
-        ParseEntities();
 
-        c_models = c_modelskip = 0;
-        c_planar = c_patch = c_soup = 0;
-        c_other = c_invalid = 0;
-        c_verts = c_facesStored = c_facesPatch = c_degen = 0;
+        RunBsp2ObjExport(objName, mtlName, base, source);
+    }
+}
 
-        s_class = malloc(numDrawSurfaces * sizeof(int));
-        s_mat = malloc(numDrawSurfaces * sizeof(int));
-        s_materials = malloc((numShaders > 0 ? numShaders : 1) * sizeof(objMaterial_t));
-        s_numMaterials = 0;
+void Bsp2ObjFromCompiledState(const char *source)
+{
+    char base[MAX_QPATH];
+    char objName[1024];
+    char mtlName[1024];
 
-        if (!s_class || !s_mat || !s_materials)
-        {
-            _printf("ERROR: Out of memory\n");
-            free(s_class);
-            free(s_mat);
-            free(s_materials);
-            s_class = s_mat = NULL;
-            s_materials = NULL;
-            return;
-        }
+    ExtractFileBase(source, base);
+    snprintf(objName, sizeof(objName), "%s.obj", source);
+    snprintf(mtlName, sizeof(mtlName), "%s.mtl", source);
 
-        ClassifyAll();
-        WriteMTL(mtlName);
-        WriteOBJModel(objName, base, source);
+    _printf("--- map2obj: %s -> %s ---\n", source, objName);
 
-        _printf("%d models exported (%d empty skipped)\n", c_models, c_modelskip);
-        _printf("%d surfaces: %d planar, %d patch, %d trisoup\n",
-                c_planar + c_patch + c_soup, c_planar, c_patch, c_soup);
-        _printf("skipped: %d flares/other, %d invalid\n", c_other, c_invalid);
-        _printf("%d verts, %d faces (%d stored + %d patch-generated, "
-                "%d degenerate skipped)\n",
-                c_verts, c_facesStored + c_facesPatch, c_facesStored,
-                c_facesPatch, c_degen);
+    if (numDrawSurfaces <= 0)
+    {
+        _printf("No draw surfaces found.\n");
+        return;
+    }
 
-        free(s_class);
-        free(s_mat);
-        free(s_materials);
-        s_class = s_mat = NULL;
-        s_materials = NULL;
+    if (!RunBsp2ObjExport(objName, mtlName, base, source))
+        return;
+
+    if (!saveprt)
+    {
+        char prtName[1024];
+        snprintf(prtName, sizeof(prtName), "%s.prt", source);
+        remove(prtName);
     }
 }

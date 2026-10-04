@@ -45,6 +45,7 @@ qboolean nofog;
 qboolean chamfernosubdivide;
 qboolean mergetrisoups = qtrue;
 qboolean patchtris = qfalse;
+qboolean map2Obj = qfalse;
 float    patchtrisSubdivide = 0.0f;
 qboolean nosubdivide;
 qboolean testExpand;
@@ -1076,6 +1077,11 @@ int main(int argc, char **argv)
                         "(tolerance from worldspawn/profile default chain)\n");
             i++;
         }
+        else if (!strcmp(argv[i], "-map2obj"))
+        {
+            map2Obj = qtrue;
+            _printf("map2obj: compiling to OBJ model instead of BSP\n");
+        }
         else if (!strcmp(argv[i], "-nodecimateplanar"))
         {
             nodecimateplanar = qtrue;
@@ -1203,6 +1209,18 @@ int main(int argc, char **argv)
         }
     }
 
+    if (map2Obj)
+    {
+        if (!patchtris)
+        {
+            patchtris = qtrue;
+            _printf("map2obj: -patchtris patch cooking enabled "
+                    "(tolerance from worldspawn/profile default chain)\n");
+        }
+        novis = qtrue;
+        _printf("map2obj: inline visibility skipped\n");
+    }
+
     if (g_fast && (game->chamferEdges))
     {
         _printf("Note: -fast mode enabled, disabling edge chamfering.\n");
@@ -1237,6 +1255,9 @@ int main(int argc, char **argv)
                 "   patchtris <F>       = cook all bezier patches to triangle soup\n"
                 "                         at flattening error F world units\n"
                 "                         (smaller = finer; 0 = worldspawn/profile default)\n"
+                "   map2obj             = compile the map and export the result as\n"
+                "                         OBJ/MTL instead of writing the BSP\n"
+                "                         (patchtris cooking is always enabled)\n"
                 "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
@@ -1379,9 +1400,15 @@ int main(int argc, char **argv)
     
     PrintMapGeometryStatistics();
 
-    EndBSPFile();
-
-    WriteSurfaceExtraFile(source);
+    if (map2Obj)
+    {
+        Bsp2ObjFromCompiledState(source);
+    }
+    else
+    {
+        EndBSPFile();
+        WriteSurfaceExtraFile(source);
+    }
 
     end = I_FloatTime();
     _printf("%5.0f seconds elapsed\n", end - start);

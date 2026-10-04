@@ -346,6 +346,7 @@ qboolean PlaneEqual(plane_t *p, vec3_t normal, vec_t dist);
 
 void ExportModels(int count, char **fileNames);
 void Bsp2Obj(int count, char **args);
+void Bsp2ObjFromCompiledState(const char *source);
 
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);
@@ -636,6 +637,10 @@ void ProcessFuncTrisoup(entity_t *e);
 void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount);
 extern qboolean patchtris;
 extern float    patchtrisSubdivide;
+
+// bsp2obj.c (map2obj compile mode)
+extern qboolean map2Obj;
+extern qboolean saveprt;
 
 //==============================================================================
 // decals.c
