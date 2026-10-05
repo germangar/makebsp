@@ -91,6 +91,99 @@ static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
     int numQuads = (W - 1) * (H - 1);
     int numIndexes = numQuads * 6;
 
+    // Wrap-seam closure: cylinders made from wrapped patches carry a hard
+    // shading seam where the first and last grid column/row meet (the
+    // classic patch artifact). Only a true wrap qualifies - every point of
+    // one end must coincide with the other (within the patch-adjacency
+    // epsilon used by PatchMapDrawSurfs). Seam pairs are position-snapped
+    // to their midpoint and their normals averaged, so the tube shades
+    // smoothly around. Texture UVs stay untouched (a wrapped surface
+    // inherently requires a texture seam) and misc_model geometry never
+    // reaches this code - only patch cooks call it.
+    {
+        int seamPairs = 0;
+
+        if (W >= 3)
+        {
+            qboolean wrapX = qtrue;
+            for (int y = 0; y < H; y++)
+            {
+                vec3_t delta;
+                VectorSubtract(tess->verts[y * W + 0].xyz,
+                               tess->verts[y * W + W - 1].xyz, delta);
+                if (VectorLength(delta) > 1.0f)
+                {
+                    wrapX = qfalse;
+                    break;
+                }
+            }
+            if (wrapX)
+            {
+                for (int y = 0; y < H; y++)
+                {
+                    drawVert_t *a = &tess->verts[y * W + 0];
+                    drawVert_t *b = &tess->verts[y * W + W - 1];
+                    vec3_t mid, n, nn;
+
+                    VectorAdd(a->xyz, b->xyz, mid);
+                    VectorScale(mid, 0.5f, mid);
+                    VectorCopy(mid, a->xyz);
+                    VectorCopy(mid, b->xyz);
+
+                    VectorAdd(a->normal, b->normal, n);
+                    if (VectorNormalize(n, nn) > 0.0f)
+                    {
+                        VectorCopy(nn, a->normal);
+                        VectorCopy(nn, b->normal);
+                    }
+                    seamPairs++;
+                }
+            }
+        }
+
+        if (H >= 3)
+        {
+            qboolean wrapY = qtrue;
+            for (int x = 0; x < W; x++)
+            {
+                vec3_t delta;
+                VectorSubtract(tess->verts[0 * W + x].xyz,
+                               tess->verts[(H - 1) * W + x].xyz, delta);
+                if (VectorLength(delta) > 1.0f)
+                {
+                    wrapY = qfalse;
+                    break;
+                }
+            }
+            if (wrapY)
+            {
+                for (int x = 0; x < W; x++)
+                {
+                    drawVert_t *a = &tess->verts[0 * W + x];
+                    drawVert_t *b = &tess->verts[(H - 1) * W + x];
+                    vec3_t mid, n, nn;
+
+                    VectorAdd(a->xyz, b->xyz, mid);
+                    VectorScale(mid, 0.5f, mid);
+                    VectorCopy(mid, a->xyz);
+                    VectorCopy(mid, b->xyz);
+
+                    VectorAdd(a->normal, b->normal, n);
+                    if (VectorNormalize(n, nn) > 0.0f)
+                    {
+                        VectorCopy(nn, a->normal);
+                        VectorCopy(nn, b->normal);
+                    }
+                    seamPairs++;
+                }
+            }
+        }
+
+        if (seamPairs > 0)
+            qprintf("  %s: closed wrap seam (%d pairs smoothed)\n",
+                    si->shader, seamPairs);
+    }
+
     // 4. Allocate new Trisoup drawsurf
     mapDrawSurface_t *newDs = AllocDrawSurf();
 
