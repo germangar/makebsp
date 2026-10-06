@@ -164,11 +164,14 @@ void ProcessWorldModel(void)
         }
     }
 
-    // Global -patchtris cook: every remaining world patch becomes trisoup
+    // Global -patchtris cook: every remaining world patch becomes trisoup.
+    // nosolidGroupEntities carries the nosolid func_group indices (snapshotted
+    // in ProcessMapEntities) so their patches cook without collision twins.
     if (patchtris)
     {
         _printf("----- PromoteAllPatchesToTrisoups -----\n");
-        PromoteAllPatchesToTrisoups(ftEntities, ftEntCount);
+        PromoteAllPatchesToTrisoups(ftEntities, ftEntCount,
+                                    nonsolidGroupEntities, numNonsolidGroupEntities);
     }
 
     // save out information for visibility processing

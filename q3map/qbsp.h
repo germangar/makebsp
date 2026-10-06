@@ -637,9 +637,14 @@ qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon);
 
 // func_trisoup.c
 void ProcessFuncTrisoup(entity_t *e);
-void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount);
+void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount,
+                                 const int *nsEntities, int nsEntCount);
 extern qboolean patchtris;
 extern float    patchtrisSubdivide;
+
+// map.c - nosolid func_group entity index snapshot (see map.c)
+extern int nonsolidGroupEntities[MAX_MAP_ENTITIES];
+extern int numNonsolidGroupEntities;
 
 // bsp2obj.c (map2obj compile mode)
 extern qboolean map2Obj;

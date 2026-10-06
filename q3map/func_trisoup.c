@@ -549,10 +549,13 @@ Global -patchtris pass: cooks every remaining world patch into
 triangle soup. Patches owned by explicitly wrapped func_trisoup
 entities are skipped (their indices were snapshotted in
 ProcessWorldModel before the entity epairs were freed, so their
-per-entity settings keep winning).
+per-entity settings keep winning). Patches originating from nosolid
+func_group entities (indices snapshotted in ProcessMapEntities,
+before those entities die) cook without the invisible collision twin.
 ==================
 */
-void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount)
+void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount,
+                                  const int *nsEntities, int nsEntCount)
 {
     // Density chain: CLI > worldspawn > game profile > 6.0
     float subdivide = patchtrisSubdivide;
@@ -585,10 +588,20 @@ void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount)
         }
         if (isFuncTrisoupOwned) continue;
 
-        // Shader skips (nodraw/sky) are applied inside the cook helper;
-        // the global cook never suppresses collision (nosolid is a
-        // func_trisoup entity key)
-        if (CookPatchIntoTrisoup(ds, subdivide, qfalse))
+        // Patches from nosolid func_group entities: render-only, so the
+        // cook must not emit the invisible collision twin. Patch
+        // drawsurfs keep their originating entity number, so the
+        // snapshot identifies them even after the entity is gone.
+        qboolean nonsolid = qfalse;
+        for (int k = 0; k < nsEntCount; k++) {
+            if (ds->entityNum == nsEntities[k]) {
+                nonsolid = qtrue;
+                break;
+            }
+        }
+
+        // Shader skips (nodraw/sky) are applied inside the cook helper
+        if (CookPatchIntoTrisoup(ds, subdivide, nonsolid))
             cooked++;
         else
             skipped++;

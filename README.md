@@ -374,6 +374,7 @@ An iterative plane-trimming CSG cutting tool for `misc_model` entities. It allow
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 - **chamfer_convexwidth**: Overrides the chamfer width for convex edges on this group's surfaces.
 - **chamfer_concavewidth**: Overrides the chamfer width for concave edges on this group's surfaces.
+- **nosolid**: (Aliases: `nonsolid`, or `collisiontype` with value `none`, `nosolid`, `nonsolid`, or `0`). Makes the entire entity render-only: its brushes produce no collision brushes in the BSP (they are forced to detail and excluded from all leafbrush references and from the brush lumps), and its solid patches no longer generate the invisible collision twin when cooked through `-patchtris`. Rendering is fully preserved. If such geometry is the only thing sealing the map, the map will leak — this is intended.
 
 **Terrain** *(This is the original untouched and unverified q3map terrain.)*
 - **terrain**: If set to "1", converts the brushes in this group into a blended terrain surface using an alphamap.

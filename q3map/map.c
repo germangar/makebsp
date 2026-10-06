@@ -54,6 +54,14 @@ int c_areaportals;
 int c_detail;
 int c_structural;
 
+// nosolid func_group entities: original entity indices, snapshotted in
+// ProcessMapEntities before the entity epairs are freed. Consumed by the
+// global -patchtris cook (PromoteAllPatchesToTrisoups) to suppress patch
+// collision twins - patch drawsurfs keep their originating ds->entityNum,
+// so the indices identify the moved-to-worldspawn geometry.
+int nonsolidGroupEntities[MAX_MAP_ENTITIES];
+int numNonsolidGroupEntities;
+
 // brushes are parsed into a temporary array of sides,
 // which will have the bevels added and duplicates
 // removed before the final brush is allocated
@@ -1440,18 +1448,23 @@ qboolean ParseMapEntity(void)
         pm->epairs = CopyEpairs(mapent->epairs);
     }
 
-    // func_trisoup "nosolid"/"nonsolid"/"collisiontype none": stamp brushes
-    // as render-only (no collision, no tree role). Scoped to func_trisoup
-    // only for now; the patch collision twins are suppressed separately in
-    // the cook (PromotePatchesToTrisoups reads the live entity key).
+    // func_trisoup / func_group "nosolid"/"nonsolid"/"collisiontype none":
+    // stamp brushes as render-only (no collision, no tree role). Scoped to
+    // these classnames for now; func_trisoup patch collision twins are
+    // suppressed separately in the cook (PromotePatchesToTrisoups reads the
+    // live entity key), func_group patch twins via the entity index snapshot
+    // in ProcessMapEntities (their entity dies in Phase 2).
     // Structural = solid by definition, so nosolid forces detail.
-    if (!strcmp(ValueForKey(mapent, "classname"), "func_trisoup") &&
-        EntityNonsolid(mapent))
     {
-        for (bspbrush_t *b = mapent->brushes; b; b = b->next)
+        const char *stampClass = ValueForKey(mapent, "classname");
+        if ((!strcmp(stampClass, "func_trisoup") || !strcmp(stampClass, "func_group")) &&
+            EntityNonsolid(mapent))
         {
-            b->nosolid = qtrue;
-            b->detail = qtrue;
+            for (bspbrush_t *b = mapent->brushes; b; b = b->next)
+            {
+                b->nosolid = qtrue;
+                b->detail = qtrue;
+            }
         }
     }
 
@@ -1499,6 +1512,16 @@ void ProcessMapEntities(void)
         // 2. func_group: brushes move to worldspawn.
         if (!strcmp("func_group", classname))
         {
+            // Snapshot nosolid groups before the epairs are freed: the
+            // global -patchtris cook must suppress their patch collision
+            // twins long after this entity is gone (brushes are already
+            // stamped at parse time; this list is only for patches).
+            if (EntityNonsolid(mapent))
+            {
+                if (numNonsolidGroupEntities < MAX_MAP_ENTITIES)
+                    nonsolidGroupEntities[numNonsolidGroupEntities++] = i;
+            }
+
             MoveBrushesToWorld(mapent); // sets mapent->brushes/patches = NULL
             FreeEpairs(mapent->epairs);
             mapent->epairs = NULL;
