@@ -629,6 +629,10 @@ void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree)
         {
             continue;
         }
+        if (b->nosolid)
+        {
+            continue; // render-only: no leafbrush refs, no collision
+        }
         c_unique++;
         newb = CopyBrush(b);
         r = FilterBrushIntoTree_r(newb, tree->headnode);
@@ -674,6 +678,10 @@ void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree)
         if (b->detail)
         {
             continue;
+        }
+        if (b->nosolid)
+        {
+            continue; // render-only: no leafbrush refs, no collision
         }
         c_unique++;
         newb = CopyBrush(b);

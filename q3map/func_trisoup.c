@@ -33,7 +33,8 @@ pass and by the global -patchtris pass. Returns qtrue when a soup
 was emitted, qfalse when the patch was skipped or degenerate.
 ==================
 */
-static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
+static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide,
+                                     qboolean nonsolid)
 {
     shaderInfo_t *si = ds->shaderInfo;
     if (!si) return qfalse;
@@ -308,7 +309,10 @@ static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
 
     // 8. Handle the original patch's collision/visibility role
     qboolean isSolid = (si->contents & CONTENTS_SOLID) != 0;
-    if (isSolid) {
+    if (nonsolid || !isSolid) {
+        // Render-only: no invisible collision twin at all
+        ds->numVerts = 0;
+    } else {
         ds->shaderInfo = GetCollisionShaderInfo(si);
         // Prevent the collision twin from double-emitting light
         ds->lightValue            = -1.0f;
@@ -318,8 +322,6 @@ static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide)
         ds->cutoff                 = 0.0f;
         ds->fadeout                = 0.0f;
         ds->hasAttenuationOverride = qfalse;
-    } else {
-        ds->numVerts = 0;
     }
 
     qprintf("  patch -> trisoup: %s (%dx%d ctrl -> %dx%d tess, %d tris)\n",
@@ -358,7 +360,7 @@ static void PromotePatchesToTrisoups(entity_t *e)
         if (!ds->patch || ds->numVerts <= 0) continue;
         if (ds->entityNum != entNum) continue;
 
-        if (CookPatchIntoTrisoup(ds, subdivide))
+        if (CookPatchIntoTrisoup(ds, subdivide, EntityNonsolid(e)))
             cooked++;
         else
             skipped++;
@@ -583,8 +585,10 @@ void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount)
         }
         if (isFuncTrisoupOwned) continue;
 
-        // Shader skips (nodraw/sky/nolightmap) are applied inside the cook helper
-        if (CookPatchIntoTrisoup(ds, subdivide))
+        // Shader skips (nodraw/sky) are applied inside the cook helper;
+        // the global cook never suppresses collision (nosolid is a
+        // func_trisoup entity key)
+        if (CookPatchIntoTrisoup(ds, subdivide, qfalse))
             cooked++;
         else
             skipped++;

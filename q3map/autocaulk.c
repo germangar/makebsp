@@ -401,6 +401,8 @@ void AutoCaulkBrushes(void)
         {
             // Skip transparent brushes (don't caulk them, nor any face looking at them)
             if (!brushA->opaque || (brushA->contents & CONTENTS_TRANSLUCENT)) continue;
+            // Never caulk render-only brushes, never let them caulk others
+            if (brushA->nosolid) continue;
 
             for (sA = 0; sA < brushA->numsides; sA++)
             {
@@ -429,6 +431,8 @@ void AutoCaulkBrushes(void)
                     {
                         // Skip transparent brushes (don't caulk them, nor any face looking at them)
                         if (!brushB->opaque || (brushB->contents & CONTENTS_TRANSLUCENT)) continue;
+                        // Never caulk render-only brushes, never let them caulk others
+                        if (brushB->nosolid) continue;
 
                         // --- AABB early-out ---
                         if (brushA->maxs[0] < brushB->mins[0] - AUTOCAULK_EPSILON ||

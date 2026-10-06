@@ -1311,6 +1311,32 @@ void ProcessFuncLight(entity_t *ent)
 
 /*
 ================
+EntityNonsolid
+
+True when the entity requests render-only geometry through any of the
+accepted key forms: "nosolid" / "nonsolid" <1|true|yes|on>, or
+"collisiontype" with one of the misc_model MC_NONE aliases: "none",
+"nosolid", "nonsolid" (plus "0").
+================
+*/
+qboolean EntityNonsolid(const entity_t *e)
+{
+    const char *ct;
+
+    if (BoolForKey(e, "nosolid") || BoolForKey(e, "nonsolid"))
+        return qtrue;
+
+    ct = ValueForKey(e, "collisiontype");
+    if (ct[0] &&
+        (!Q_stricmp(ct, "none") || !Q_stricmp(ct, "nosolid") ||
+         !Q_stricmp(ct, "nonsolid") || !Q_stricmp(ct, "0")))
+        return qtrue;
+
+    return qfalse;
+}
+
+/*
+================
 ParseMapEntity
 ================
 */
@@ -1412,6 +1438,21 @@ qboolean ParseMapEntity(void)
     for (parseMesh_t *pm = mapent->patches; pm; pm = pm->next)
     {
         pm->epairs = CopyEpairs(mapent->epairs);
+    }
+
+    // func_trisoup "nosolid"/"nonsolid"/"collisiontype none": stamp brushes
+    // as render-only (no collision, no tree role). Scoped to func_trisoup
+    // only for now; the patch collision twins are suppressed separately in
+    // the cook (PromotePatchesToTrisoups reads the live entity key).
+    // Structural = solid by definition, so nosolid forces detail.
+    if (!strcmp(ValueForKey(mapent, "classname"), "func_trisoup") &&
+        EntityNonsolid(mapent))
+    {
+        for (bspbrush_t *b = mapent->brushes; b; b = b->next)
+        {
+            b->nosolid = qtrue;
+            b->detail = qtrue;
+        }
     }
 
     return qtrue;

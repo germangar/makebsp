@@ -444,8 +444,11 @@ void EmitBrushes ( bspbrush_t *brushes ) {
 	bspbrush_t		*b;
 	dbrushside_t	*cp;
 
-	for ( b = brushes ; b ; b = b->next ) {
-		if ( numbrushes >= MAX_MAP_BRUSHES_LIMIT ) {
+    for ( b = brushes ; b ; b = b->next ) {
+        if ( b->nosolid ) {
+            continue; // render-only: no collision brush in the BSP at all
+        }
+        if ( numbrushes >= MAX_MAP_BRUSHES_LIMIT ) {
 			Error( "MAX_MAP_BRUSHES_LIMIT" );
 		}
 		b->outputNumber = numbrushes;

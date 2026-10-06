@@ -1065,6 +1065,23 @@ vec_t FloatForKey(const entity_t *ent, const char *key)
     return FloatForEpair(ent->epairs, key);
 }
 
+qboolean BoolForEpair(epair_t *epairs, const char *key)
+{
+    const char *v = ValueForEpair(epairs, key);
+
+    if (!v[0])
+        return qfalse;
+    if (!Q_stricmp(v, "1") || !Q_stricmp(v, "true") ||
+        !Q_stricmp(v, "yes") || !Q_stricmp(v, "on"))
+        return qtrue;
+    return qfalse;
+}
+
+qboolean BoolForKey(const entity_t *ent, const char *key)
+{
+    return BoolForEpair(ent->epairs, key);
+}
+
 void GetVectorForEpair(epair_t *epairs, const char *key, vec3_t vec)
 {
     const char *k;

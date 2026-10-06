@@ -387,6 +387,8 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 
 **Trisoup set up**
 - **shadeangle**: The angle threshold (in degrees) used to calculate smooth vertex normals across the mesh. Edges with an angle less than this value will have their normals blended for smooth lighting. Defaults to 46.0.
+- **subdivide**: (Alias: `subdivisions`). Flattening error tolerance in world units used when cooking this entity's bezier patches into the trisoup. Smaller values produce finer curves. Falls back to the worldspawn `trisoup_subdivide` key, then the game profile default (6.0).
+- **nosolid**: (Aliases: `nonsolid`, or `collisiontype` with value `none`, `nosolid`, `nonsolid`, or `0`). Makes the entire entity render-only: its brushes produce no collision brushes in the BSP (they are forced to detail and excluded from all leafbrush references and from the brush lumps), and its solid patches no longer generate the invisible collision twin. Rendering is fully preserved. If such geometry is the only thing sealing the map, the map will leak — this is intended.
 
 **Brushes**
 - **smooth**: Lightmap smooth filter radius to use on this entity's surfaces.

@@ -120,6 +120,7 @@ typedef struct bspbrush_s
     int contents;
     qboolean detail;
     qboolean opaque;
+    qboolean nosolid; // entity key "nosolid": render-only, no collision, no tree role
     int outputNumber; // set when the brush is written to the file list
 
     int portalareas[2];
@@ -368,6 +369,8 @@ extern char (*mapIndexedShaders)[MAX_QPATH];
 extern int numMapIndexedShaders;
 
 extern entity_t *mapent;
+
+qboolean EntityNonsolid(const entity_t *e);
 
 #define MAX_BUILD_SIDES 300
 extern bspbrush_t *buildBrush;
