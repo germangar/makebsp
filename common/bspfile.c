@@ -252,6 +252,32 @@ void LoadBSPFile(const char *filename)
         } else {
             lightArray = NULL;
         }
+
+        // The on-disk FBSP lightgrid is palette-compressed: gridData holds
+        // only the unique points and lightArray maps every grid cell to its
+        // palette index. Expand to the canonical in-memory form (one point
+        // per cell) so the shared CompressGrid() in WriteBSPFile
+        // re-compresses losslessly. Without this, loading an already-lit
+        // BSP and writing it back (makebsp -onlyents) would treat the
+        // palette as the full cell grid and destroy the cell mapping.
+        if (numLightArray > 0 && numGridPoints > 0)
+        {
+            bspGridPoint_t *expanded = malloc(numLightArray * sizeof(bspGridPoint_t));
+            if (!expanded)
+                Error("LoadBSPFile: lightgrid expansion failed");
+            for (i = 0; i < numLightArray; i++)
+            {
+                int idx = lightArray[i];
+                if (idx < 0 || idx >= numGridPoints)
+                    idx = 0; // corrupt index guard
+                expanded[i] = gridData[idx];
+            }
+            free(gridData);
+            gridData = expanded;
+            numGridPoints = numLightArray;
+            // lightArray is kept as loaded; CompressGrid() frees and
+            // rebuilds it at write time
+        }
     }
     else
     {
