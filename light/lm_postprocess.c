@@ -1717,7 +1717,7 @@ void PostProcessLightmaps(void) {
         _printf("  Applying saturation filter (%.2f, ramp: %s): ", game->saturation, rampStr);
         float sat = game->saturation;
         satRamp_t ramp = game->saturationRamp;
-        
+
         // 1. Lightmaps
         int numPixels = numLightBytes / 3;
         #pragma omp parallel for schedule(static)
@@ -1738,10 +1738,14 @@ void PostProcessLightmaps(void) {
         
         // 3. Volumetric Lightgrid
         if (gridData32) {
+            // The grid's ambient component lives in a lower value range than the
+            // lightmaps, so it holds its color much better; a full-strength
+            // saturation boost oversaturates it.
+            float gridAmbSat = (sat > 1.0f) ? 1.0f + (sat - 1.0f) * 0.5f : sat;
             #pragma omp parallel for schedule(static)
             for (int i = 0; i < numGridPoints; i++) {
                 for (int j = 0; j < 4; j++) {
-                    ApplySaturationToVector(gridData32[i].ambient[j], sat, ramp);
+                    ApplySaturationToVector(gridData32[i].ambient[j], gridAmbSat, ramp);
                     ApplySaturationToVector(gridData32[i].directed[j], sat, ramp);
                 }
             }
