@@ -513,6 +513,27 @@ void Bspinfo(int count, char **fileNames)
 
 /*
 ============
+AllocateMapGeometryBuffers
+
+Dynamic geometry tables shared by the full compile and the -onlyents
+pass: LoadMapFile parses brushes, patches, and shader references through
+these tables even when only the entities will be kept.
+============
+*/
+static void AllocateMapGeometryBuffers(void)
+{
+    mapDrawSurfs = malloc(game->maxMapDrawSurfs * sizeof(mapDrawSurface_t));
+    drawExtraSurfaces = malloc(game->maxMapDrawSurfs * sizeof(extraSurface_t));
+    surfaceNeighbors = malloc(game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
+    mapplanes = malloc(game->maxMapPlanes * sizeof(plane_t));
+    mapIndexedShaders = malloc(game->maxMapBrushSides * sizeof(char[MAX_QPATH]));
+    if (!mapDrawSurfs || !drawExtraSurfaces || !surfaceNeighbors || !mapplanes || !mapIndexedShaders)
+        Error("Failed to allocate dynamic global surfaces for makebsp. Out of memory.");
+    memset(surfaceNeighbors, 0, game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
+}
+
+/*
+============
 OnlyEnts
 ============
 */
@@ -524,6 +545,12 @@ void OnlyEnts(void)
 
     sprintf(out, "%s.bsp", source);
     LoadBSPFile(out);
+
+    // LoadBSPFile only copies the raw entity lump bytes; parse them into
+    // entities[] so the worldspawn key preservation below can actually
+    // see the old compile's keys (fresh process: num_entities is 0 here
+    // without this call, and the preservation silently no-ops).
+    ParseEntities();
     
     // Preserve compiler-injected worldspawn keys from the existing BSP
     if (num_entities > 0)
@@ -532,6 +559,7 @@ void OnlyEnts(void)
         {
             if (!Q_stricmp(ep->key, "_lightingIntensity") ||
                 !Q_stricmp(ep->key, "_lightmapImageSize") ||
+                !Q_stricmp(ep->key, "_lightmapbits") ||
                 (ep->key[0] == '_' && ep->key[1] == '_'))
             {
                 epair_t *newep = malloc(sizeof(epair_t));
@@ -1316,13 +1344,20 @@ int main(int argc, char **argv)
     strcpy(source, ExpandArg(argv[i]));
     StripExtension(source);
 
-    ClearCacheDirectory();
+    // -onlyents preserves the geometry of the original compile, so all of
+    // its byproducts (the .srf sidecar in the cache dir, the .prt/.lin
+    // files) must survive too: makelight reads the sidecar afterwards and
+    // the portal data stays valid since geometry is unchanged.
+    if (!onlyents)
+    {
+        ClearCacheDirectory();
 
-    // delete portal and line files
-    sprintf(path, "%s.prt", source);
-    remove(path);
-    sprintf(path, "%s.lin", source);
-    remove(path);
+        // delete portal and line files
+        sprintf(path, "%s.prt", source);
+        remove(path);
+        sprintf(path, "%s.lin", source);
+        remove(path);
+    }
 
     strcpy(name, ExpandArg(argv[i]));
     if (strcmp(name + strlen(name) - 4, ".reg"))
@@ -1339,6 +1374,12 @@ int main(int argc, char **argv)
     //
     if (onlyents)
     {
+        // LoadMapFile fully parses the new map (brushes, patches, shader
+        // lookups) even though only the entities will be kept, so the
+        // dynamic geometry tables and the shader table must exist here too.
+        AllocateMapGeometryBuffers();
+        LoadShaderInfo();
+
         OnlyEnts();
         Broadcast_Shutdown();
         return 0;
@@ -1348,15 +1389,8 @@ int main(int argc, char **argv)
     // start from scratch
     //
     BSP_AllocateForWrite();
-    
-    mapDrawSurfs = malloc(game->maxMapDrawSurfs * sizeof(mapDrawSurface_t));
-    drawExtraSurfaces = malloc(game->maxMapDrawSurfs * sizeof(extraSurface_t));
-    surfaceNeighbors = malloc(game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
-    mapplanes = malloc(game->maxMapPlanes * sizeof(plane_t));
-    mapIndexedShaders = malloc(game->maxMapBrushSides * sizeof(char[MAX_QPATH]));
-    if (!mapDrawSurfs || !drawExtraSurfaces || !surfaceNeighbors || !mapplanes || !mapIndexedShaders)
-        Error("Failed to allocate dynamic global surfaces for makebsp. Out of memory.");
-    memset(surfaceNeighbors, 0, game->maxMapDrawSurfs * sizeof(surfaceNeighbor_t*));
+
+    AllocateMapGeometryBuffers();
 
     LoadShaderInfo();
 
