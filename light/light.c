@@ -1074,6 +1074,14 @@ void BuildLocalSurfaces(void)
     int numExtra = 0;
     extraSurface_t *extra = LoadSurfaceExtraFile(mapName, &numExtra);
     
+    // Remember each surface's sidecar castShadows value (-1 = unset) so the
+    // Map Shadow Groups pass can preserve per-surface overrides (func_group /
+    // func_trisoup geometry merged into worldspawn) while still applying the
+    // dmodel-level default for everything else.
+    int *sidecarCastShadows = malloc(numDrawSurfaces * sizeof(int));
+    if (!sidecarCastShadows)
+        Error("BuildLocalSurfaces: malloc failed for sidecarCastShadows");
+    
     // rad_interval is now game->radiosityInterval
     for (i = 0; i < numDrawSurfaces; i++)
     {
@@ -1233,7 +1241,9 @@ void BuildLocalSurfaces(void)
 
         // Pass sidecar castShadows (initially defaulting to qtrue before dmodel overrides)
         localSurfaces[i].castShadows = qtrue; 
+        sidecarCastShadows[i] = -1;
         if (extra && i < numExtra && extra[i].castShadows != -1) {
+            sidecarCastShadows[i] = extra[i].castShadows;
             localSurfaces[i].castShadows = extra[i].castShadows ? qtrue : qfalse;
         }
 
@@ -1296,10 +1306,18 @@ void BuildLocalSurfaces(void)
             }
             
             for (s = 0; s < dmodels[m].numSurfaces; s++) {
-                localSurfaces[dmodels[m].firstSurface + s].castShadows = casts;
+                // A per-surface sidecar override (func_group / func_trisoup /
+                // misc_model castshadows key) takes precedence over the
+                // dmodel-level default.
+                int surf = dmodels[m].firstSurface + s;
+                if (sidecarCastShadows[surf] != -1)
+                    continue;
+                localSurfaces[surf].castShadows = casts;
             }
         }
     }
+
+    free(sidecarCastShadows);
 }
 
 /*

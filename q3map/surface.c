@@ -254,6 +254,12 @@ void ResolveSurfaceExtraProperties(mapDrawSurface_t *ds, epair_t *epairs)
     const char *smoothGroupStr = ValueForEpair(epairs, "smoothgroup");
     if (smoothGroupStr[0])
         strncpy(ds->smoothgroup, smoothGroupStr, sizeof(ds->smoothgroup) - 1);
+
+    // Resolve castshadows override
+    const char *csStr = ValueForEpair(epairs, "castshadows");
+    if (!csStr[0]) csStr = ValueForEpair(epairs, "cs"); // alias
+    if (csStr[0])
+        ds->castShadows = atoi(csStr) ? 1 : 0;
 }
 
 /*
