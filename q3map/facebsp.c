@@ -60,6 +60,7 @@ SelectSplitPlaneNum
 */
 int hintsplit;
 
+#define	HINT_PRIORITY	1000	/* force hint splits before all others (q3map2) */
 #define	BLOCK_SIZE	1024
 int SelectSplitPlaneNum( node_t *node, bspface_t *list ) {
 	bspface_t	*split;
@@ -238,6 +239,15 @@ void	BuildFaceTree_r( node_t *node, bspface_t *list ) {
 			node->children[1]->maxs[i] = plane->dist;
 			break;
 		}
+		else if ( plane->normal[i] == -1 ) {
+			// front side of a -1 axis plane is x < -dist, back is x > -dist
+			// (q3map2 parity: narrow child bounds for both axis signs -
+			// without this, -1 splits leave stale bounds that skew the
+			// blocksize forced-split checks and split scoring)
+			node->children[0]->maxs[i] = -plane->dist;
+			node->children[1]->mins[i] = -plane->dist;
+			break;
+		}
 	}
 
 	for ( i = 0 ; i < 2 ; i++ ) {
@@ -333,6 +343,12 @@ bspface_t	*MakeStructuralBspFaceList( bspbrush_t *list ) {
 			f->planenum = s->planenum & ~1;
 			f->next = flist;
 			if (s->surfaceFlags & SURF_HINT) {
+				// Hint split priority DISABLED BY MEASUREMENT (2026-10-08):
+				// forcing hint planes as early splits on wbomb4 produced
+				// +12.2% PVS pairs, +12% leafs, +15% visdata - existing
+				// maps' hint placement evolved under the no-priority regime.
+				// See studies/vis_q3map2_comparison.txt. Hint flags still
+				// flow to portals/vis normally.
 				//f->priority = HINT_PRIORITY;
 				f->hint = qtrue;
 			}
@@ -374,6 +390,12 @@ bspface_t	*MakeVisibleBspFaceList( bspbrush_t *list ) {
 			f->planenum = s->planenum & ~1;
 			f->next = flist;
 			if (s->surfaceFlags & SURF_HINT) {
+				// Hint split priority DISABLED BY MEASUREMENT (2026-10-08):
+				// forcing hint planes as early splits on wbomb4 produced
+				// +12.2% PVS pairs, +12% leafs, +15% visdata - existing
+				// maps' hint placement evolved under the no-priority regime.
+				// See studies/vis_q3map2_comparison.txt. Hint flags still
+				// flow to portals/vis normally.
 				//f->priority = HINT_PRIORITY;
 				f->hint = qtrue;
 			}

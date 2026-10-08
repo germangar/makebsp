@@ -487,6 +487,12 @@ int TryMergeLeaves(int l1num, int l2num)
     vportal_t *p1, *p2;
     vportal_t *v_portals[MAX_PORTALS_ON_LEAF];
 
+    // guard: the merged portal list below must fit the local array
+    if (v_leafs[l1num].numportals_in_leaf + v_leafs[l2num].numportals_in_leaf > MAX_PORTALS_ON_LEAF)
+        return qfalse;
+    if (faceleafs[l1num].numportals_in_leaf + faceleafs[l2num].numportals_in_leaf > MAX_PORTALS_ON_LEAF)
+        return qfalse;
+
     for (k = 0; k < 2; k++)
     {
         if (k)

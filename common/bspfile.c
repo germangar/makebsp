@@ -550,6 +550,182 @@ void BSP_AllocateForWrite(void)
 
 /*
 =============
+CompactVisData
+
+Post-vis PVS compaction: clusters whose visibility rows AND incoming
+columns are both byte-identical are merged into one row and all cluster
+indices renumbered, shrinking the visdata lump. Row equality alone is not
+sufficient: computed PVS is slightly asymmetric at grazing boundaries, so
+a third cluster may see A without seeing B even when A and B see exactly
+the same things. Requiring column equality as well makes the merge exact
+- the PVS relation is preserved bit for bit. Runs at BSP write time,
+covering the inline vis, -visonly, and the makelight round trip alike;
+a no-op on data without mergeable rows.
+=============
+*/
+#define PVS_HEADER_SIZE 8
+
+static byte *g_cvdRows;
+static int g_cvdLeafbytes, g_cvdValidbytes;
+static unsigned int *g_cvdHashes;
+
+static int CompactRowCmp(const void *a, const void *b)
+{
+    int ia = *(const int *)a, ib = *(const int *)b;
+
+    if (g_cvdHashes[ia] != g_cvdHashes[ib])
+        return g_cvdHashes[ia] < g_cvdHashes[ib] ? -1 : 1;
+    return memcmp(g_cvdRows + ia * g_cvdLeafbytes,
+                  g_cvdRows + ib * g_cvdLeafbytes, g_cvdValidbytes);
+}
+
+// all clusters' visibility bits at positions a and b must agree
+static qboolean CompactColumnsMatch(int a, int b, int numclusters)
+{
+    int r;
+
+    for (r = 0; r < numclusters; r++)
+    {
+        byte *row = g_cvdRows + r * g_cvdLeafbytes;
+        if (((row[a >> 3] >> (a & 7)) & 1) != ((row[b >> 3] >> (b & 7)) & 1))
+            return qfalse;
+    }
+    return qtrue;
+}
+
+static void CompactVisData(void)
+{
+    int numclusters, leafbytes, validbytes, newleafbytes;
+    int i, n, unique, newcount, colrep;
+    unsigned int *hashes;
+    int *order, *remap, *rep;
+    byte *newvis;
+
+    if (numVisBytes <= PVS_HEADER_SIZE)
+        return;
+
+    numclusters = ((int *)visBytes)[0];
+    leafbytes = ((int *)visBytes)[1];
+    if (numclusters <= 0 || leafbytes <= 0 ||
+        numVisBytes < PVS_HEADER_SIZE + numclusters * leafbytes)
+        return;
+    validbytes = (numclusters + 7) >> 3;
+
+    hashes = malloc(numclusters * sizeof(*hashes));
+    order = malloc(numclusters * sizeof(*order));
+    remap = malloc(numclusters * sizeof(*remap));
+    if (!hashes || !order || !remap)
+        Error("CompactVisData: alloc failed");
+
+    // hash each row (FNV-1a over the valid bits)
+    for (i = 0; i < numclusters; i++)
+    {
+        unsigned int h = 2166136261u;
+        byte *row = visBytes + PVS_HEADER_SIZE + i * leafbytes;
+        for (n = 0; n < validbytes; n++)
+        {
+            h ^= row[n];
+            h *= 16777619u;
+        }
+        hashes[i] = h;
+        order[i] = i;
+    }
+
+    // sort row indices: identical rows end up adjacent
+    g_cvdRows = visBytes + PVS_HEADER_SIZE;
+    g_cvdLeafbytes = leafbytes;
+    g_cvdValidbytes = validbytes;
+    g_cvdHashes = hashes;
+    qsort(order, numclusters, sizeof(order[0]), CompactRowCmp);
+
+    // walk sorted order: rows identical AND incoming columns identical
+    // merge into one cluster; column equality is transitive so checking
+    // against the group's last accepted member is sufficient
+    unique = 1;
+    remap[order[0]] = 0;
+    colrep = order[0];
+    for (i = 1; i < numclusters; i++)
+    {
+        int cur = order[i];
+        if (hashes[cur] == hashes[colrep] &&
+            memcmp(visBytes + PVS_HEADER_SIZE + colrep * leafbytes,
+                   visBytes + PVS_HEADER_SIZE + cur * leafbytes,
+                   validbytes) == 0 &&
+            CompactColumnsMatch(colrep, cur, numclusters))
+        {
+            remap[cur] = remap[colrep]; // exact merge with the group
+        }
+        else
+        {
+            remap[cur] = unique++;
+            colrep = cur; // starts a new group
+        }
+    }
+
+    if (unique == numclusters)
+    {
+        free(hashes);
+        free(order);
+        free(remap);
+        return; // nothing to compact
+    }
+
+    newcount = unique;
+    newleafbytes = ((newcount + 63) & ~63) >> 3;
+
+    rep = malloc(newcount * sizeof(*rep));
+    newvis = malloc(PVS_HEADER_SIZE + newcount * newleafbytes);
+    if (!rep || !newvis)
+        Error("CompactVisData: alloc failed (2)");
+    memset(newvis, 0, PVS_HEADER_SIZE + newcount * newleafbytes);
+    ((int *)newvis)[0] = newcount;
+    ((int *)newvis)[1] = newleafbytes;
+
+    // group representatives: first member of each run in sorted order
+    rep[remap[order[0]]] = order[0];
+    for (i = 1; i < numclusters; i++)
+    {
+        if (remap[order[i]] != remap[order[i - 1]])
+            rep[remap[order[i]]] = order[i];
+    }
+
+    // rebuild each unique row with renumbered bits
+    for (n = 0; n < newcount; n++)
+    {
+        byte *src = visBytes + PVS_HEADER_SIZE + rep[n] * leafbytes;
+        byte *dst = newvis + PVS_HEADER_SIZE + n * newleafbytes;
+        for (i = 0; i < numclusters; i++)
+        {
+            if (src[i >> 3] & (1 << (i & 7)))
+            {
+                int nn = remap[i];
+                dst[nn >> 3] |= (1 << (nn & 7));
+            }
+        }
+    }
+
+    memcpy(visBytes, newvis, PVS_HEADER_SIZE + newcount * newleafbytes);
+    numVisBytes = PVS_HEADER_SIZE + newcount * newleafbytes;
+    free(newvis);
+
+    // renumber the leaf cluster references
+    for (i = 0; i < numleafs; i++)
+    {
+        if (dleafs[i].cluster >= 0 && dleafs[i].cluster < numclusters)
+            dleafs[i].cluster = remap[dleafs[i].cluster];
+    }
+
+    _printf("Compacted PVS: %i clusters -> %i unique (%i duplicate rows removed)\n",
+            numclusters, newcount, numclusters - newcount);
+
+    free(hashes);
+    free(order);
+    free(remap);
+    free(rep);
+}
+
+/*
+=============
 WriteBSPFile
 
 Swaps the bsp file in place, so it should not be referenced again
@@ -596,6 +772,10 @@ void WriteBSPFile(const char *filename)
              j < drawSurfaces[i].firstVert + drawSurfaces[i].numVerts; j++)
             memset(&drawVerts[j].lightmap[0][0], 0, sizeof(drawVerts[j].lightmap[0]));
     }
+
+    // merge byte-identical PVS rows and renumber clusters (exact, no-op
+    // when there are no duplicates)
+    CompactVisData();
 
     // swap everything in place (internal format)
 
