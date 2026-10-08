@@ -22,6 +22,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "qbsp.h"
 #include "model_collision.h"
 
+// Per-run tallies for the grouped func_trisoup summary print
+static int gTrisoupEntities;
+static int gTrisoupCooked;
+static int gTrisoupSkipped;
+
 /*
 ==================
 CookPatchIntoTrisoup
@@ -347,7 +352,10 @@ static void PromotePatchesToTrisoups(entity_t *e)
     if (subdivide <= 0.0f) subdivide = game->defaultTrisoupSubdivisions;
     if (subdivide <= 0.0f) subdivide = 6.0f; // Failsafe
 
-    _printf("  func_trisoup: patch cooking (error tolerance %f wu)\n", subdivide);
+    if (verbose)
+        _printf("  func_trisoup: patch cooking (error tolerance %f wu)\n", subdivide);
+
+    gTrisoupEntities++;
 
     // Only scan surfaces that existed before this function was called.
     int origCount = numMapDrawSurfs;
@@ -366,7 +374,11 @@ static void PromotePatchesToTrisoups(entity_t *e)
             skipped++;
     }
 
-    _printf("  %i patches cooked into triangle soup (%i skipped)\n", cooked, skipped);
+    gTrisoupCooked += cooked;
+    gTrisoupSkipped += skipped;
+
+    if (verbose)
+        _printf("  %i patches cooked into triangle soup (%i skipped)\n", cooked, skipped);
 }
 
 /*
@@ -526,7 +538,8 @@ ProcessFuncTrisoup
 void ProcessFuncTrisoup(entity_t *e)
 {
     int entNum = e - entities;
-    _printf("----- ProcessFuncTrisoup -----\n");
+    if (verbose)
+        _printf("----- ProcessFuncTrisoup -----\n");
 
     // 1. Tessellate Bezier patches into trisoups FIRST
     PromotePatchesToTrisoups(e);
@@ -539,6 +552,21 @@ void ProcessFuncTrisoup(entity_t *e)
 
     // 4. Promote standard brush faces to atomic trisoups (triangulate N-gon to CCW fan)
     PromoteBrushesToAtomicTrisoups(e);
+}
+
+/*
+==================
+PrintFuncTrisoupSummary
+
+Prints a single grouped line summarizing all func_trisoup entities
+processed this run (instead of one banner per entity).
+==================
+*/
+void PrintFuncTrisoupSummary(void)
+{
+    if (gTrisoupEntities > 0)
+        _printf("func_trisoup: %i entities processed, %i patches cooked into triangle soup (%i skipped)\n",
+                gTrisoupEntities, gTrisoupCooked, gTrisoupSkipped);
 }
 
 /*

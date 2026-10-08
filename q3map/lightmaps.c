@@ -1254,9 +1254,6 @@ void AllocateLightmaps(entity_t *e)
             if (si->surfaceFlags & SURF_NOLIGHTMAP)
             {
                 ds->lightmapNum = -1;
-                if (ds->miscModel)
-                    _printf("TriSoup surface skipped (SURF_NOLIGHTMAP): shader %s\n",
-                            si->shader);
             }
             else if (si->surfaceFlags & SURF_POINTLIGHT)
             {

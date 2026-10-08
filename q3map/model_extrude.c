@@ -609,8 +609,6 @@ bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shad
 {
     bspbrush_t *hulls_list = NULL;
 
-    _printf("Instance %s: Running Generic Extrusion (%s)\n", inst->modelName, CategoryString(inst->category));
-
     if (inst->num_collision_meshes == 0)
     {
         return NULL;

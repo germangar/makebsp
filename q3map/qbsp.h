@@ -637,6 +637,7 @@ qboolean VectorsNearEqual(const vec3_t a, const vec3_t b, float epsilon);
 
 // func_trisoup.c
 void ProcessFuncTrisoup(entity_t *e);
+void PrintFuncTrisoupSummary(void);
 void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount,
                                  const int *nsEntities, int nsEntCount);
 extern qboolean patchtris;

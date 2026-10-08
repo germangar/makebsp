@@ -1072,7 +1072,6 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
             const char *maxTriStr = ValueForKey(entity, "maxtriangles");
             if (!maxTriStr[0]) maxTriStr = ValueForKey(entity, "maxtriangle");
             inst->maxtriangles = atoi(maxTriStr);
-            _printf("DEBUG misc_model '%s' parsed maxtriangles=%d\n", model, inst->maxtriangles);
 
             inst->numMeshes = 0;
             inst->numDrawSurfs = 0;
@@ -1359,9 +1358,9 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
             }
             
             if (!xatlasUVs) {
-                if (entForceUVGen)
+                if (entForceUVGen != forceUVGen)
                     _printf("Model %s (mesh %d) forcing UV generation from scratch...\n", inst->modelName, j);
-                else
+                else if (!entForceUVGen)
                     _printf("Mesh missing or invalid UVs for model %s (mesh %d). Generating entirely new UVs from scratch...\n", inst->modelName, j);
                 xatlasUVs = GenerateXAtlasUVsFromArrays(mm->positions, mm->numVerts, mm->indices, mm->numIndices, ssize, inst->lightmapScale);
             }

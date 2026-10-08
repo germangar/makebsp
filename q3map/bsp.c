@@ -190,6 +190,7 @@ void ProcessWorldModel(void)
             trisent->epairs = NULL;
         }
     }
+    PrintFuncTrisoupSummary();
 
     // Global -patchtris cook: every remaining world patch becomes trisoup.
     // nosolidGroupEntities carries the nosolid func_group indices (snapshotted

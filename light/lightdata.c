@@ -1096,10 +1096,6 @@ void VoxelCache_BakeAll(void)
         dsurface_t *ds = &drawSurfaces[i];
         if (ds->surfaceType != MST_TRIANGLE_SOUP || ds->lightmapNum[0] < 0)
         {
-            if (ds->surfaceType == MST_TRIANGLE_SOUP)
-            {
-                _printf("      Surface %d (Trisoup) skipped: lightmapNum[0] = %d\n", i, ds->lightmapNum[0]);
-            }
             continue;
         }
 
