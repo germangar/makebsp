@@ -49,6 +49,11 @@ winding_t *AllocWinding(int points)
     winding_t *w;
     int s;
 
+    // clip paths allocate in->numpoints + 4; beyond that the winding can
+    // never be valid (the clip side/distance arrays are sized to match)
+    if (points > MAX_POINTS_ON_WINDING + 4)
+        Error("AllocWinding: %i points exceeds MAX_POINTS_ON_WINDING (%i)", points, MAX_POINTS_ON_WINDING);
+
     s = sizeof(vec_t) * 3 * points + sizeof(int);
     w = malloc(s);
     memset(w, 0, s);
@@ -143,21 +148,33 @@ vec_t WindingArea(winding_t *w)
 
 void WindingBounds(winding_t *w, vec3_t mins, vec3_t maxs)
 {
-    vec_t v;
     int i, j;
 
-    mins[0] = mins[1] = mins[2] = 99999;
-    maxs[0] = maxs[1] = maxs[2] = -99999;
-
-    for (i = 0; i < w->numpoints; i++)
+    // init from the first point; do NOT clamp to a hardcoded constant below
+    // the world size (the old +-99999 clamp was wrong for our +-131072 world).
+    // Empty windings yield an inverted box.
+    if (!w || w->numpoints <= 0)
     {
-        for (j = 0; j < 3; j++)
+        for (i = 0; i < 3; i++)
         {
-            v = w->points[i][j];
-            if (v < mins[j])
-                mins[j] = v;
-            if (v > maxs[j])
-                maxs[j] = v;
+            mins[i] = MAX_WORLD_COORD * 2;
+            maxs[i] = -MAX_WORLD_COORD * 2;
+        }
+        return;
+    }
+    for (i = 0; i < 3; i++)
+    {
+        mins[i] = w->points[0][i];
+        maxs[i] = w->points[0][i];
+    }
+    for (j = 1; j < w->numpoints; j++)
+    {
+        for (i = 0; i < 3; i++)
+        {
+            if (w->points[j][i] < mins[i])
+                mins[i] = w->points[j][i];
+            if (w->points[j][i] > maxs[i])
+                maxs[i] = w->points[j][i];
         }
     }
 }
@@ -253,6 +270,59 @@ winding_t *BaseWindingForPlane(vec3_t normal, vec_t dist)
     VectorSubtract(w->points[3], vup, w->points[3]);
 
     w->numpoints = 4;
+
+    // Self-check: the rectangle must cover the plane's cross-section with
+    // the world cube. A face of the cube that the plane intersects must be
+    // reached by the winding; falling short (the pre-fix "x1" scale bug)
+    // silently truncates every portal/face born from this winding and
+    // narrows the PVS.
+    {
+        static int c_coverwarn = 0;
+        vec_t wmins[3], wmaxs[3];
+        int i, j, k, side, p;
+
+        for (i = 0; i < 3; i++)
+        {
+            wmins[i] = w->points[0][i];
+            wmaxs[i] = w->points[0][i];
+        }
+        for (p = 1; p < 4; p++)
+        {
+            for (i = 0; i < 3; i++)
+            {
+                if (w->points[p][i] < wmins[i])
+                    wmins[i] = w->points[p][i];
+                if (w->points[p][i] > wmaxs[i])
+                    wmaxs[i] = w->points[p][i];
+            }
+        }
+
+        for (i = 0; i < 3; i++)
+        {
+            j = (i + 1) % 3;
+            k = (i + 2) % 3;
+            for (side = 0; side < 2; side++)
+            {
+                vec_t c = side ? MAX_WORLD_COORD : -MAX_WORLD_COORD;
+                // does the plane meet the face x[i]=c inside the cube?
+                vec_t need = dist - normal[i] * c;
+                vec_t range = (fabs(normal[j]) + fabs(normal[k])) * MAX_WORLD_COORD;
+                if (need < -range - 1.0 || need > range + 1.0)
+                    continue; // face not intersected, no reach requirement
+                if ((side && wmaxs[i] < c - 1.0) || (!side && wmins[i] > c + 1.0))
+                {
+                    if (c_coverwarn < 16)
+                        _printf("WARNING: BaseWindingForPlane: base rectangle under-covers world cube "
+                                "(plane %f %f %f %f, axis %i %s side reaches %.1f)\n",
+                                normal[0], normal[1], normal[2], dist, i,
+                                side ? "max" : "min", side ? wmaxs[i] : wmins[i]);
+                    else if (c_coverwarn == 16)
+                        _printf("WARNING: further BaseWindingForPlane coverage warnings suppressed\n");
+                    c_coverwarn++;
+                }
+            }
+        }
+    }
 
     return w;
 }

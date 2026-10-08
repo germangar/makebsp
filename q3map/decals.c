@@ -415,7 +415,7 @@ static qboolean MakeDecalProjectorForWinding(side_t *side, vec3_t projNormal,
         dp->planes[dp->numPlanes].dist = DotProduct(sideNormal, p0);
         dp->numPlanes++;
         
-        if (dp->numPlanes >= MAX_POINTS_ON_WINDING + 2)
+        if (dp->numPlanes >= MAX_DECAL_PLANES)
             break;
     }
 
