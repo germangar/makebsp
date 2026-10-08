@@ -118,6 +118,14 @@ void ProcessWorldModel(void)
         tree = FaceBSP(faces);
         MakeTreePortals(tree);
         FilterStructuralBrushesIntoTree(e, tree);
+
+        // flood again to discard portals in the void (also matches
+        // NetRadiant q3map2 ProcessWorldModel). Without this, every
+        // unreachable leaf of the rebuilt tree receives a real vis
+        // cluster and its portals are written to the .prt, inflating
+        // cluster/portal counts toward the vis limits.
+        FloodEntities(tree);
+        FillOutside(tree->headnode);
         leaked = qfalse;
     }
     else

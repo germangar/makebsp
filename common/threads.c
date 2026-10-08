@@ -217,9 +217,10 @@ void RunThreadsOn(int workcnt, qboolean showpacifier, void (*func)(int))
         {
             threadhandle[i] = CreateThread(
                 NULL,                         // LPSECURITY_ATTRIBUTES lpsa,
-                0,                            // DWORD cbStack,
+                4 * 1024 * 1024,              // DWORD cbStack (large stack for vis recursion,
+                                               // see NetRadiant threads.cpp - 1MB crashes on win32),
                 (LPTHREAD_START_ROUTINE)func, // LPTHREAD_START_ROUTINE lpStartAddr,
-                (LPVOID)(intptr_t)i,          // LPVOID lpvThreadParm,
+                (LPVOID)(intptr_t)i,           // LPVOID lpvThreadParm,
                 0,                            //   DWORD fdwCreate,
                 &threadid[i]);
         }

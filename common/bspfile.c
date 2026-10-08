@@ -394,6 +394,9 @@ void LoadBSPFile(const char *filename)
     numFogs = CopyLump(header, LUMP_FOGS, dfogs, sizeof(dfog_t));
     ALLOC_AND_COPY_LUMP(header, LUMP_DRAWINDEXES, drawIndexes, int, numDrawIndexes);
 
+    if (header->lumps[LUMP_VISIBILITY].filelen > MAX_MAP_VISIBILITY)
+        Error("LoadBSPFile: visibility lump (%i bytes) exceeds MAX_MAP_VISIBILITY (%i)",
+              header->lumps[LUMP_VISIBILITY].filelen, MAX_MAP_VISIBILITY);
     numVisBytes = CopyLump(header, LUMP_VISIBILITY, visBytes, 1);
     
     numLightBytes = CopyLump(header, LUMP_LIGHTMAPS, NULL, 1);

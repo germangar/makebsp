@@ -228,8 +228,14 @@ winding_t *BaseWindingForPlane(vec3_t normal, vec_t dist)
 
     CrossProduct(vup, normal, vright);
 
-    VectorScale(vup, MAX_WORLD_COORD, vup);
-    VectorScale(vright, MAX_WORLD_COORD, vright);
+    // The base rectangle must be larger than the world cube's cross-section
+    // on the plane, which for diagonal planes needs half-extent
+    // MAX_WORLD_COORD * sqrt(2). Scale by 2 so the winding always covers
+    // the full passage; at x1 diagonal planes are born with a truncated
+    // wedge that silently narrows visibility portals (LordHavoc fix, also
+    // applied by NetRadiant q3map2).
+    VectorScale(vup, MAX_WORLD_COORD * 2, vup);
+    VectorScale(vright, MAX_WORLD_COORD * 2, vright);
 
     // project a really big	axis aligned box onto the plane
     w = AllocWinding(4);
@@ -297,7 +303,8 @@ void ClipWindingEpsilon(winding_t *in, vec3_t normal, vec_t dist, vec_t epsilon,
     vec_t dists[MAX_POINTS_ON_WINDING + 4];
     int sides[MAX_POINTS_ON_WINDING + 4];
     int counts[3];
-    static vec_t dot; // VC 4.2 optimizer bug if not static
+    vec_t dot;        // classification distance
+    double dotfrac;   // split fraction in double precision (NetRadiant fix)
     int i, j;
     vec_t *p1, *p2;
     vec3_t mid;
@@ -374,7 +381,7 @@ void ClipWindingEpsilon(winding_t *in, vec3_t normal, vec_t dist, vec_t epsilon,
         // generate a split point
         p2 = in->points[(i + 1) % in->numpoints];
 
-        dot = dists[i] / (dists[i] - dists[i + 1]);
+        dotfrac = (double)dists[i] / ((double)dists[i] - (double)dists[i + 1]);
         for (j = 0; j < 3; j++)
         { // avoid round off error when possible
             if (normal[j] == 1)
@@ -382,7 +389,7 @@ void ClipWindingEpsilon(winding_t *in, vec3_t normal, vec_t dist, vec_t epsilon,
             else if (normal[j] == -1)
                 mid[j] = -dist;
             else
-                mid[j] = p1[j] + dot * (p2[j] - p1[j]);
+                mid[j] = p1[j] + dotfrac * (p2[j] - p1[j]);
         }
 
         VectorCopy(mid, f->points[f->numpoints]);
@@ -410,7 +417,8 @@ void ChopWindingInPlace(winding_t **inout, vec3_t normal, vec_t dist,
     vec_t dists[MAX_POINTS_ON_WINDING + 4];
     int sides[MAX_POINTS_ON_WINDING + 4];
     int counts[3];
-    static vec_t dot; // VC 4.2 optimizer bug if not static
+    vec_t dot;        // classification distance
+    double dotfrac;   // split fraction in double precision (NetRadiant fix)
     int i, j;
     vec_t *p1, *p2;
     vec3_t mid;
@@ -476,7 +484,7 @@ void ChopWindingInPlace(winding_t **inout, vec3_t normal, vec_t dist,
         // generate a split point
         p2 = in->points[(i + 1) % in->numpoints];
 
-        dot = dists[i] / (dists[i] - dists[i + 1]);
+        dotfrac = (double)dists[i] / ((double)dists[i] - (double)dists[i + 1]);
         for (j = 0; j < 3; j++)
         { // avoid round off error when possible
             if (normal[j] == 1)
@@ -484,7 +492,7 @@ void ChopWindingInPlace(winding_t **inout, vec3_t normal, vec_t dist,
             else if (normal[j] == -1)
                 mid[j] = -dist;
             else
-                mid[j] = p1[j] + dot * (p2[j] - p1[j]);
+                mid[j] = p1[j] + dotfrac * (p2[j] - p1[j]);
         }
 
         VectorCopy(mid, f->points[f->numpoints]);

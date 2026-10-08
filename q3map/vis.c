@@ -332,15 +332,20 @@ SetPortalSphere
 void SetPortalSphere(vportal_t *p)
 {
     int i;
-    vec3_t total, dist;
+    // accumulate in double precision (NetRadiant fix): on huge portals the
+    // float accumulation under-estimates the radius, making every radius
+    // fast-reject in the vis flow more aggressive at grazing angles
+    double total[3], dist[3];
     winding_t *w;
-    float r, bestr;
+    double r, bestr;
 
     w = p->winding;
-    VectorCopy(vec3_origin, total);
+    total[0] = total[1] = total[2] = 0;
     for (i = 0; i < w->numpoints; i++)
     {
-        VectorAdd(total, w->points[i], total);
+        total[0] += w->points[i][0];
+        total[1] += w->points[i][1];
+        total[2] += w->points[i][2];
     }
 
     for (i = 0; i < 3; i++)
@@ -349,13 +354,17 @@ void SetPortalSphere(vportal_t *p)
     bestr = 0;
     for (i = 0; i < w->numpoints; i++)
     {
-        VectorSubtract(w->points[i], total, dist);
-        r = VectorLength(dist);
+        dist[0] = w->points[i][0] - total[0];
+        dist[1] = w->points[i][1] - total[1];
+        dist[2] = w->points[i][2] - total[2];
+        r = sqrt(dist[0] * dist[0] + dist[1] * dist[1] + dist[2] * dist[2]);
         if (r > bestr)
             bestr = r;
     }
-    VectorCopy(total, p->origin);
-    p->radius = bestr;
+    p->origin[0] = (vec_t)total[0];
+    p->origin[1] = (vec_t)total[1];
+    p->origin[2] = (vec_t)total[2];
+    p->radius = (vec_t)bestr;
 }
 
 /*
@@ -842,6 +851,14 @@ void LoadPortals(char *name)
     _printf("%6i v_numportals\n", v_numportals);
     _printf("%6i v_numfaces\n", v_numfaces);
 
+    // Bounds guards (ported from NetRadiant q3map2 vis.cpp LoadPortals):
+    // exceeding these silently smashes the fixed mightsee/portalvector
+    // stack buffers and the visBytes array, corrupting the PVS.
+    if (v_numportals > MAX_PORTALS)
+        Error("LoadPortals: %i portals exceeds MAX_PORTALS (%i)", v_numportals, MAX_PORTALS);
+    if (v_portalclusters >= MAX_PORTALS)
+        Error("LoadPortals: %i portal clusters exceeds MAX_PORTALS (%i)", v_portalclusters, MAX_PORTALS);
+
     // these counts should take advantage of 64 bit systems automatically
     leafbytes = ((v_portalclusters + 63) & ~63) >> 3;
     leaflongs = leafbytes / sizeof(long);
@@ -860,6 +877,9 @@ void LoadPortals(char *name)
         v_leafs[i].merged = -1;
 
     numVisBytes = VIS_HEADER_SIZE + v_portalclusters * leafbytes;
+
+    if (numVisBytes > MAX_MAP_VISIBILITY)
+        Error("LoadPortals: %i vis bytes exceeds MAX_MAP_VISIBILITY (%i)", numVisBytes, MAX_MAP_VISIBILITY);
 
     ((int *)visBytes)[0] = v_portalclusters;
     ((int *)visBytes)[1] = leafbytes;

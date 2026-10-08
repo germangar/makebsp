@@ -65,7 +65,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define	MAX_MAP_PORTALS		0x100000
 #define	MAX_MAP_LIGHTING	0x8000000
 #define	MAX_MAP_LIGHTGRID	0x2000000 // Increased for FBSP
-#define	MAX_MAP_VISIBILITY	0x400000
+#define	MAX_MAP_VISIBILITY	0x8000000
 
 
 // key / value pair sizes in the entities lump
