@@ -303,7 +303,9 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
             float distRatio = dist / light->reach;
             if (distRatio >= 1.0f) return 0.0f;
             float window = 1.0f - (distRatio * distRatio);
-            energy = light->photons * (window * window) / (offset * offset);
+            float norm = (offset * offset);
+            if (norm <= 0.0f) norm = 1.0f;
+            energy = light->photons * (window * window) / norm;
             break;
         }
         case ATTENUATION_INVERSE_SQUARE_PI:

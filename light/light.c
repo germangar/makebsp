@@ -271,6 +271,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         // Configure specific cutoff and fadeout for backsplash
         dl2->min_light_add = 0.5f;
         dl2->fadeout = 0.3f;
+        dl2->prestep = 0.0f;
         
         float scaled_cutoff = sqrt(dl2->photons) * 0.1f; // Reach = sqrt(intensity) * 10
         if (scaled_cutoff > dl2->min_light_add)
@@ -279,7 +280,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         dl2->attenuationModel = ATTENUATION_INVERSE;
         dl2->photons *= (POINTSCALE_SOFT / POINTSCALE);
 
-        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
+        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, dl2->prestep, dl2->attenuationModel);
         dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
 #else
         if (ls->hasAttenuationOverride)
@@ -292,7 +293,7 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
         else if (dl2->attenuationModel == ATTENUATION_INVERSE)
             dl2->photons *= (POINTSCALE_SOFT / POINTSCALE);
 
-        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, DEFAULT_ATTN_OFFSET, dl2->attenuationModel);
+        dl2->reach = CalculateLightReach(0, dl2->photons, dl2->min_light_add, dl2->prestep, dl2->attenuationModel);
         dl2->attnSoftnessRange = dl2->reach * dl2->fadeout;
 #endif
     }
@@ -869,6 +870,7 @@ void CreateEntityLights(void)
                 VectorMA(dl->origin, 4.0f, dl->normal, bl->origin);
                 bl->type = emit_point;
                 bl->attenuationModel = ATTENUATION_INVERSE; // backsplash lights are always soft
+                bl->prestep = 0.0f;
                 bl->photons = rawIntensity * bsFraction * POINTSCALE_SOFT;
                 
                 // Configure specific cutoff and fadeout for backsplash
@@ -880,7 +882,7 @@ void CreateEntityLights(void)
                 if (scaled_cutoff > bl->min_light_add)
                     bl->min_light_add = scaled_cutoff;
                 
-                bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, DEFAULT_ATTN_OFFSET, bl->attenuationModel);
+                bl->reach = CalculateLightReach(0, bl->photons, bl->min_light_add, bl->prestep, bl->attenuationModel);
                 bl->attnSoftnessRange = bl->reach * bl->fadeout;
             }
         }
