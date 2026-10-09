@@ -31,7 +31,7 @@ int numModelInstances;
 
 typedef struct modelCache_s
 {
-    char name[MAX_QPATH];
+    char *name;
     const struct aiScene *scene;
 } modelCache_t;
 
@@ -428,12 +428,13 @@ static const struct aiScene *GetCachedModel(const char *modelName)
         return NULL;
     }
 
-    if (strlen(modelName) >= MAX_QPATH)
+    size_t nameLen = strlen(modelName);
+    modelCache[numModelCache].name = malloc(nameLen + 1);
+    if (modelCache[numModelCache].name == NULL)
     {
-        _printf("WARNING: Model name %s exceeds MAX_QPATH\n", modelName);
+        Error("Failed to allocate model cache name");
     }
-    strncpy(modelCache[numModelCache].name, modelName, MAX_QPATH - 1);
-    modelCache[numModelCache].name[MAX_QPATH - 1] = '\0';
+    memcpy(modelCache[numModelCache].name, modelName, nameLen + 1);
     modelCache[numModelCache].scene = scene;
     numModelCache++;
 
