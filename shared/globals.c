@@ -66,6 +66,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		0.0f,       // chamferConcaveWidth
 		0.0f,       // decalExtrusion
 		6.0f,       // defaultTrisoupSubdivisions
+		qfalse,     // patchtris
         qtrue,      // enforceSampleSize
         qtrue,      // forceUVGen
         HDR_8BIT,   // hdr
@@ -97,8 +98,10 @@ game_t gameTemplates[MAX_GAMES] = {
         TONEMAP_REINHARD, // exposureFilter
         1.25f,      // saturation
         SATRAMP_HALF_POWER, // saturationRamp
-        0.1f,       // cutoff
-        0.0f,       // fadeout
+        0.1f,       // minLightAdd (absolute energy floor)
+        1.0f,       // cutoffAnchor (auto cutoff budget for a reference light 300)
+        0.0f,       // energyCutoff (absolute energy override, 0 = auto mode)
+        0.05f,      // fadeout
         0.1f,       // backSplashSpot
         0.0f,       // backSplashSurface
 		qtrue,      // deluxeMap
@@ -147,6 +150,7 @@ game_t gameTemplates[MAX_GAMES] = {
 		0.0f,       // chamferConcaveWidth
 		0.0f,       // decalExtrusion
 		6.0f,       // defaultTrisoupSubdivisions
+		qfalse,     // patchtris
         qtrue,       // enforceSampleSize
         qtrue,       // forceUVGen
         HDR_OFF,    // hdr
@@ -178,8 +182,10 @@ game_t gameTemplates[MAX_GAMES] = {
         TONEMAP_LINEAR, // exposureFilter
         1.0f,       // saturation
         SATRAMP_OFF, // saturationRamp
-        0.1f,       // cutoff
-        0.0f,       // fadeout
+        0.1f,       // minLightAdd (absolute energy floor)
+        1.0f,       // cutoffAnchor (auto cutoff budget for a reference light 300)
+        0.0f,       // energyCutoff (absolute energy override, 0 = auto mode)
+        0.05f,      // fadeout
         0.1f,       // backSplashSpot
         0.0f,       // backSplashSurface
 		qfalse,     // deluxeMap

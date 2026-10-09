@@ -325,9 +325,9 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         }
         else if (!Q_stricmp(key, "cutoff") && val->type == json_type_number)
         {
-            game->minLightAdd = (float)atof(json_value_as_number(val)->number);
-            if (game->minLightAdd < 0.001f)
-                game->minLightAdd = 0.001f;
+            game->cutoffAnchor = (float)atof(json_value_as_number(val)->number);
+            if (game->cutoffAnchor < 0.001f)
+                game->cutoffAnchor = 0.001f;
         }
         else if (!Q_stricmp(key, "fadeout") && val->type == json_type_number)
         {
@@ -581,6 +581,13 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->defaultTrisoupSubdivisions = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "patchtris"))
+        {
+            if (val->type == json_type_true)
+                game->patchtris = qtrue;
+            else if (val->type == json_type_false)
+                game->patchtris = qfalse;
+        }
         else if (!Q_stricmp(key, "enforceSampleSize"))
         {
             if (val->type == json_type_true)
@@ -820,7 +827,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"shading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunShading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
-            "  \"cutoff\": %f, /* Minimum remaining light energy to apply the contribution to a surface */\n"
+            "  \"cutoff\": %f, /* Auto-scaled cutoff anchor: discard budget for a reference light 300 */\n"
             "  \"fadeout\": %f, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */\n"
             "  \"backSplashSpot\": %f, /* Default entity spotlight backsplash fraction (0.0 to 1.0) */\n"
             "  \"backSplashSurface\": %f, /* Default surface light backsplash fraction (0.0 to 1.0) */\n"
@@ -838,6 +845,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"chamferConcaveWidth\": %.2f,\n"
             "  \"decalExtrusion\": %.2f,\n"
             "  \"defaultTrisoupSubdivisions\": %.2f,\n"
+            "  \"patchtris\": %s,\n"
             "  \"enforceSampleSize\": %s,\n"
             "  \"forceUVGen\": %s,\n"
             "  \"flareShader\": \"%s\",\n"
@@ -876,7 +884,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             shadingModelStr,
             sunShadingModelStr,
             attenuationModelStr,
-            game->minLightAdd,
+            game->cutoffAnchor,
             game->fadeout,
             game->backSplashSpot,
             game->backSplashSurface,
@@ -895,6 +903,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->chamferConcaveWidth,
             game->decalExtrusion,
             game->defaultTrisoupSubdivisions,
+            game->patchtris ? "true" : "false",
             game->enforceSampleSize ? "true" : "false",
             game->forceUVGen ? "true" : "false",
             game->flareShader ? game->flareShader : "",

@@ -114,6 +114,7 @@ typedef struct {
 	float       chamferConcaveWidth;
 	float       decalExtrusion;
 	float       defaultTrisoupSubdivisions;
+	qboolean    patchtris;
     qboolean    enforceSampleSize;
     qboolean    forceUVGen;
     hdrFormat_t hdr;
@@ -146,6 +147,8 @@ typedef struct {
     float       saturation;
     satRamp_t   saturationRamp;
     float       minLightAdd;
+    float       cutoffAnchor;
+    float       energyCutoff;
     float       fadeout;
     float       backSplashSpot;
     float       backSplashSurface;

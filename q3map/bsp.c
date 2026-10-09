@@ -764,6 +764,19 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         _printf("Worldspawn override: enforceSampleSize = %d\n", game->enforceSampleSize);
     }
 
+    // resolve the global patch cook: CLI (-patchtris) > worldspawn key > game profile
+    qboolean wsPatchtris = qfalse;
+    val = ValueForKey(ent, "patchtris");
+    if (val[0] && !HasArg("-patchtris", argc, argv) && !map2Obj) {
+        wsPatchtris = qtrue;
+        patchtris = (atoi(val) != 0 || !Q_stricmp(val, "true")) && Q_stricmp(val, "false");
+        _printf("Worldspawn override: patchtris = %s\n", patchtris ? "true" : "false");
+    }
+    if (!patchtris && !wsPatchtris && game->patchtris) {
+        patchtris = qtrue;
+        _printf("patchtris: enabled by game profile\n");
+    }
+
     val = ValueForKey(ent, "haloshader");
     if (val[0]) {
         game->haloShader = copystring(val);
@@ -1308,7 +1321,9 @@ int main(int argc, char **argv)
                 "   mergetrisoups <0/1> = enable/disable global merging of adjacent triangle soups (default 1)\n"
                 "   patchtris <F>       = cook all bezier patches to triangle soup\n"
                 "                         at flattening error F world units\n"
-                "                         (smaller = finer; 0 = worldspawn/profile default)\n"
+                "                         (smaller = finer; 0 = worldspawn/profile default).\n"
+                "                         The cook is also enabled by the game profile\n"
+                "                         'patchtris' flag or the worldspawn 'patchtris' key\n"
                 "   map2obj             = compile the map and export the result as\n"
                 "                         OBJ/MTL instead of writing the BSP\n"
                 "                         (patchtris cooking is always enabled)\n"

@@ -3,7 +3,7 @@
   "template": "",
   "rootDir": ".",
   "userDir": "",
-  "gameDir": "basewf",
+  "gameDir": "",
   "bspIdent": "FBSP",
   "bspVersion": 1,
   "lumpCount": 18,
@@ -50,8 +50,8 @@
   "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "attenuation": "standard",  /* [ standard, soft, linear ] */
-  "cutoff": 0.100000, /* Minimum remaining light energy to apply the contribution to a surface */
-  "fadeout": 0.000000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */
+  "cutoff": 1.000000, /* Auto-scaled cutoff anchor: discard budget for a reference light 300 */
+  "fadeout": 0.050000, /* Percentage of the light's outer radius to fade linearly until reaching cutoff */
   "backSplashSpot": 0.100000, /* Default entity spotlight backsplash fraction (0.0 to 1.0) */
   "backSplashSurface": 0.000000, /* Default surface light backsplash fraction (0.0 to 1.0) */
   "deluxeMap": true,
@@ -68,6 +68,7 @@
   "chamferConcaveWidth": 0.00,
   "decalExtrusion": 0.00,
   "defaultTrisoupSubdivisions": 6.00,
+  "patchtris": false,
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",

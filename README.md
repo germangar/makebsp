@@ -71,7 +71,7 @@ Makebsp is a high-performance idTech 3 BSP compiler modernization based on the o
 ### 1. High-Performance Ray Tracing (Intel Embree)
 The legacy BSP-traversal ray caster has been replaced with the industry-standard **Intel Embree 4.4.0** BVH builder and intersection kernels.
 - **Unified Data Cache:** To maximize performance, the toolchain pre-calculates and caches the world-space origin and normal of every lightmap texel and volumetric voxel. This cached geometry is shared across all lighting stages (Direct, Radiosity, and Ambient), eliminating redundant coordinate reconstruction.
-- **Intelligent Light Culling:** The tool uses an advanced culling system that calculates a light's physical "reach" based on energy intensity and a configurable `cutoff` threshold. This allows the ray tracer to ignore surfaces outside a light's influence radius with zero overhead.
+- **Intelligent Light Culling:** The tool uses an advanced culling system that calculates a light's physical "reach" based on energy intensity and a configurable `cutoff` threshold. The cutoff is auto-scaled with light intensity (`max(0.1, anchor * sqrt(intensity/300))`), so a single value serves both dim and powerful lights. This allows the ray tracer to ignore surfaces outside a light's influence radius with zero overhead.
 - **Performance Gain:** The combination of Intel's highly optimized BVH kernels and our internal geometric caching results in a 10x performance gain during the ray tracing phase compared to traditional tools.
 
 ### 2. 32-bit Floating Point Pipeline
@@ -228,8 +228,9 @@ List of additions and modifications made to shader parsing and features compared
 - **q3map_vertexcolor <R G B>**: Overrides the vertex color for the surface (supports floating-point `0.0..1.0`, integer `0..255`, or `#RRGGBB` hex).
 - **q3map_vertexalpha <value>**: Overrides the vertex alpha (transparency/opacity) for the surface (supports `0.0..1.0` float or `0..255` integer ranges).
 - **q3map_surfacelight_glow <value>**: Sets the backface glow fraction for surface lights (enabled by default in CONTENTS_LAVA and CONTENTS_SLIME).
-- **q3map_surfacelight_cutoff <value>**: Minimum energy threshold before the surface light is completely culled.
-- **q3map_surfacelight_fadeout <value>**: Percentage of the surface light's reach to use for a softness fade at the cutoff (0.0 to 1.0).
+- **q3map_surfacelight_cutoff <value>**: Auto-scaled cutoff anchor for the surface light family: the discard budget applied to a reference light 300, scaled by the family's total emission.
+- **q3map_surfacelight_energycutoff <value>**: Absolute energy threshold before the surface light is completely culled (legacy behavior, overrides the anchor).
+- **q3map_surfacelight_fadeout <value>**: Percentage of the surface light's reach to use for a softness fade at the cutoff (0.0 to 1.0). Values above 0 override the game profile default; 0 falls back to it.
 - **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality. Instead it will only contribute color/energy (to prevent bumpmap distortions caused by trim lights).
 - **q3map_backsplash_nodeluxe**: Prevents the surface light's backsplash from influencing the deluxe map's directionality.
 - **q3map_deluxe_minangle <value>**: Alias: `q3map_deluxeminangle`. Overrides the minimum incidence angle threshold (in degrees, 0.0 to 89.0) for deluxemap directionality on this material. Useful for softening or clamping deluxemap angles on specific surfaces without changing global defaults.
@@ -274,8 +275,9 @@ List of additions and modifications made to shader parsing and features compared
 - **exposurefilter**: Global tonemapping exposure filter. Valid modes are: softknee, reinhard, filmic, linear (or off). Default reinhard.
 - **saturation**: Global lightmap saturation multiplier (1.0 = normal, 1.5 = +50%, 0.0 = greyscale).
 - **saturationramp**: Saturation contrast curve (prevents clipping in highlights/shadows). Valid modes are: filmic, power, halfpower, midtone, off.
-- **cutoff**: Minimum energy threshold before any light is completely culled. Defaults to the global game.json minLightAdd value.
-- **fadeout**: Percentage of a light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
+- **cutoff**: Auto-scaled cutoff anchor (the discard budget for a reference light 300). Lights dimmer than the knee `300*(0.1/cutoff)^2` keep full default fidelity. Defaults to the game profile cutoff value (1.0).
+- **energycutoff**: Absolute energy threshold before any light is completely culled (legacy behavior, overrides auto scaling globally).
+- **fadeout**: Percentage of a light's reach to use for a softness fade (0.0 to 1.0). Defaults to the game profile fadeout value (0.05).
 - **backsplashspot**: Default entity spotlight backsplash fraction (0.0 to 1.0).
 - **backsplashsurface**: Default surface light backsplash fraction (0.0 to 1.0).
 - **haloshader**: Global default shader to use for light halos. Set to "none" or "0" to disable them.
@@ -311,6 +313,7 @@ List of additions and modifications made to shader parsing and features compared
 **Geometry & BSP**
 - **blocksize**: Global size of BSP map splitting blocks (e.g., 1024).
 - **enforcesamplesize**: Forces makebsp to subdivide brushes to match the requested lightmap sample size. Integer boolean (1 or 0). Default 1.
+- **patchtris**: Enables the global patch cooking: every world bezier patch is converted to triangle soup as if wrapped in a `func_trisoup` (0/1). Tolerance comes from the worldspawn `trisoup_subdivide` key or the game profile default. Equivalent to the `-patchtris` CLI switch, which still wins over this key. Defaults to the game profile `patchtris` flag (off).
 - **chamfer_convexwidth**: Global override for the width of the convex chamfer strips on worldspawn brushes.
 - **chamfer_concavewidth**: Global override for the width of the concave chamfer strips on worldspawn brushes.
 
@@ -417,8 +420,9 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **nodeluxe**: If set to 1, the light will not influence the deluxe map's directionality.
 - **backsplash_nodeluxe**: If set to 1, the backsplash generated by this light will not influence the deluxe map's directionality.
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
-- **cutoff**: Minimum energy threshold before the light is completely culled. Defaults to the global game.json minLightAdd value.
-- **fadeout**: Percentage of the light's reach to use for a softness fade at the cutoff (0.0 to 1.0). Defaults to 0.0 (hard cut).
+- **cutoff**: Auto-scaled cutoff anchor (discard budget for a reference light 300, scaled by this light's intensity). Defaults to the game profile cutoff value (1.0).
+- **energycutoff**: Absolute energy threshold before the light is completely culled (legacy behavior, overrides the anchor).
+- **fadeout**: Percentage of the light's reach to use for a softness fade at the cutoff (0.0 to 1.0). Defaults to the game profile fadeout value (0.05).
 - **prestep**: (Aliases: `rampoffset`, `extradist`). Distance offset applied to the core of the light to prevent infinite brightness at the origin. Defaults to 16.0. (Ignored for surface lights).
 
 **Surfacelights**
@@ -457,8 +461,9 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **nodeluxe**: If set to 1, the light will not influence the deluxe map's directionality.
 - **backsplash_nodeluxe**: If set to 1, the backsplash generated by this light will not influence the deluxe map's directionality.
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
-- **cutoff**: Minimum energy threshold before the light is completely culled. Defaults to the global game minLightAdd value (0.1).
-- **fadeout**: Percentage of the light's reach to use for a softness fade (0.0 to 1.0). Defaults to 0.0 (hard cut).
+- **cutoff**: Auto-scaled cutoff anchor (discard budget for a reference light 300, scaled by this light's intensity). Defaults to the game profile cutoff value (1.0).
+- **energycutoff**: Absolute energy threshold before the light is completely culled (legacy behavior, overrides the anchor).
+- **fadeout**: Percentage of the light's reach to use for a softness fade (0.0 to 1.0). Defaults to the game profile fadeout value (0.05).
 - **prestep**: (Aliases: `rampoffset`, `extradist`). Distance offset applied to the core of the light to prevent infinite brightness at the origin. Defaults to 16.0.
 - **style**: [currently broken] Light style index for dynamic lighting (e.g. flickering, pulsing).
 - **lightimage**: If color is not specified, uses the average color of this shader.
@@ -546,7 +551,7 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-externallightmaps`: Forces pure external lightmap mode (lightmaps stored as external files on disk; zeroes out the internal BSP lump).
 - `-enforceSampleSize <0|1>`: If enabled (1), strictly follows the sample size defined in shaders or globally, forcing subdivision if necessary.
 - `-guessuvs`: [Experimental] Automatically calculates optimal UV packing resolution for triangle soup (models) before repacking.
-- `-patchtris <F>`: Converts every world bezier patch into a continuous triangle soup, as if each patch had been individually wrapped in a `func_trisoup` entity. Cooked patches receive unique lightmap UVs (xatlas) and weld with adjacent triangle soups; solid patches keep their collision through an invisible clip surface. Wrapped patches (cylinders) get their seam closed: coincident end columns/rows are detected, position-snapped to their midpoint, and their normals averaged, removing the classic patch shading seam and hairline cracks. Texture UVs are untouched (a wrapped surface inherently requires a texture seam), and `misc_model` geometry is never affected. `<F>` is the flattening error tolerance in world units (smaller = finer; `0` = use the worldspawn `trisoup_subdivide` key or the game profile default). Patches inside explicit `func_trisoup` entities are left alone and keep their own per-entity settings. Patches with invisible (`nodraw`) or sky shaders stay native; all visible patches are cooked — including lightmap-less materials such as environment-mapped chrome.
+- `-patchtris <F>`: Converts every world bezier patch into a continuous triangle soup, as if each patch had been individually wrapped in a `func_trisoup` entity. Cooked patches receive unique lightmap UVs (xatlas) and weld with adjacent triangle soups; solid patches keep their collision through an invisible clip surface. Wrapped patches (cylinders) get their seam closed: coincident end columns/rows are detected, position-snapped to their midpoint, and their normals averaged, removing the classic patch shading seam and hairline cracks. Texture UVs are untouched (a wrapped surface inherently requires a texture seam), and `misc_model` geometry is never affected. `<F>` is the flattening error tolerance in world units (smaller = finer; `0` = use the worldspawn `trisoup_subdivide` key or the game profile default). The cook can also be enabled without the CLI via the game profile `patchtris` flag or the worldspawn `patchtris` key (the CLI switch wins over both). Patches inside explicit `func_trisoup` entities are left alone and keep their own per-entity settings. Patches with invisible (`nodraw`) or sky shaders stay native; all visible patches are cooked — including lightmap-less materials such as environment-mapped chrome.
 - `-map2obj`: Compile mode that runs the full BSP compilation (all standard switches compose as usual) but writes the result as a Wavefront `.obj`/`.mtl` model next to the map instead of the `.bsp` file. Bezier patches are always cooked to triangle soup (`-patchtris` semantics are forced; an explicit `-patchtris <F>` overrides the tolerance, otherwise the worldspawn/profile default of 6.0 world units applies) and the resulting soups weld with adjacent trisoups for seamless curve/brush unions. Only visible geometry is exported — the cooked patches' invisible collision twins, shader-skipped patches, and `surfaceparm nodraw` surfaces are not included. Inline visibility is skipped and no `.bsp`/`.srf` files are written. Produces identical geometry to compiling with `-patchtris` and running `-bsp2obj` on the result.
 - `-noautocaulk`: Disables early automatic face caulking (by default, makebsp automatically strips and caulks redundant coplanar, contained, or fully submerged faces before BSP construction).
 - `-rootdir / -basepath / -fs_basepath <P>`: Set the engine root directory path. Can be specified multiple times to build layered search paths.

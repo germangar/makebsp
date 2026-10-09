@@ -834,6 +834,16 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
                 continue;
             }
 
+            // q3map_surfacelight_energycutoff <value>
+            if (!Q_stricmp(token, "q3map_surfacelight_energycutoff"))
+            {
+                GetToken(qfalse);
+                si->energyCutoff = atof(token);
+                if (si->energyCutoff > 0.0f && si->energyCutoff < 0.001f)
+                    si->energyCutoff = 0.001f;
+                continue;
+            }
+
             // q3map_surfacelight_fadeout <value>
             if (!Q_stricmp(token, "q3map_surfacelight_fadeout"))
             {

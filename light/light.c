@@ -170,7 +170,7 @@ near edges
 ===============
 */
 void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
-                        float areaSubdivide, qboolean backsplash)
+                        float areaSubdivide, qboolean backsplash, float familyCutoff)
 {
     float area, value, intensity;
     light_t *dl, *dl2;
@@ -196,8 +196,8 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
             planeNormal[axis] = 1;
             planeDist = (maxs[axis] + mins[axis]) * 0.5;
             ClipWindingEpsilon(w, planeNormal, planeDist, ON_EPSILON, &front, &back);
-            SubdivideAreaLight(ls, front, normal, areaSubdivide, qfalse);
-            SubdivideAreaLight(ls, back, normal, areaSubdivide, qfalse);
+            SubdivideAreaLight(ls, front, normal, areaSubdivide, qfalse, familyCutoff);
+            SubdivideAreaLight(ls, back, normal, areaSubdivide, qfalse, familyCutoff);
             FreeWinding(w);
             return;
         }
@@ -298,15 +298,12 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 #endif
     }
 
-    if (ls->cutoff > 0.0f)
-        dl->min_light_add = ls->cutoff;
-    else
-        dl->min_light_add = game->minLightAdd;
+    dl->min_light_add = familyCutoff;
 
     if (ls->fadeout > 0.0f)
         dl->fadeout = ls->fadeout;
     else
-        dl->fadeout = 0.0f;
+        dl->fadeout = game->fadeout;
 
     if (ls->hasAttenuationOverride)
         dl->attenuationModel = ls->attenuationModel;
@@ -385,6 +382,70 @@ void CreateSurfaceLights(void)
             continue;
         }
 
+        // resolve the cutoff once per surface family so all subdivided
+        // pieces share a uniform edge
+        float familyCutoff;
+        if (ls->energyCutoff > 0.0f)
+        {
+            familyCutoff = ls->energyCutoff;
+        }
+        else if (game->energyCutoff > 0.0f)
+        {
+            familyCutoff = game->energyCutoff;
+        }
+        else
+        {
+            float cutoffAnchor = (ls->cutoff > 0.0f) ? ls->cutoff : game->cutoffAnchor;
+            float totalArea = 0.0f;
+
+            if (ds->surfaceType == MST_PATCH)
+            {
+                // approximate family area from the patch control mesh
+                for (int px = 0; px < ds->patchWidth - 1; px++)
+                {
+                    for (int py = 0; py < ds->patchHeight - 1; py++)
+                    {
+                        vec3_t e1, e2, cross;
+                        drawVert_t *vA = &drawVerts[ds->firstVert + py * ds->patchWidth + px];
+                        drawVert_t *vB = vA + 1;
+                        drawVert_t *vC = &drawVerts[ds->firstVert + (py + 1) * ds->patchWidth + px];
+                        drawVert_t *vD = vC + 1;
+
+                        VectorSubtract(vB->xyz, vA->xyz, e1);
+                        VectorSubtract(vC->xyz, vA->xyz, e2);
+                        CrossProduct(e1, e2, cross);
+                        totalArea += 0.5f * VectorLength(cross);
+
+                        VectorSubtract(vD->xyz, vB->xyz, e1);
+                        VectorSubtract(vD->xyz, vC->xyz, e2);
+                        CrossProduct(e1, e2, cross);
+                        totalArea += 0.5f * VectorLength(cross);
+                    }
+                }
+            }
+            else
+            {
+                for (j = 0; j + 2 < ds->numIndexes; j += 3)
+                {
+                    vec3_t e1, e2, cross;
+                    drawVert_t *vA = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
+                    drawVert_t *vB = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 1]];
+                    drawVert_t *vC = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 2]];
+
+                    VectorSubtract(vB->xyz, vA->xyz, e1);
+                    VectorSubtract(vC->xyz, vA->xyz, e2);
+                    CrossProduct(e1, e2, cross);
+                    totalArea += 0.5f * VectorLength(cross);
+                }
+            }
+
+            // family emission referenced against a point light 300 (300 * POINTSCALE)
+            float familyPhotons = ls->value * totalArea * areaScale;
+            familyCutoff = cutoffAnchor * (float)sqrt(familyPhotons / (300.0f * POINTSCALE));
+            if (familyCutoff < game->minLightAdd)
+                familyCutoff = game->minLightAdd;
+        }
+
         light_t *startList = lights;
 
         // possibly create for both sides of the polygon
@@ -443,7 +504,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
                         }
                         else
                         {
@@ -462,7 +523,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
 
                             // tri 2
                             w = AllocWinding(3);
@@ -479,7 +540,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
                         }
                     }
                 }
@@ -518,7 +579,7 @@ void CreateSurfaceLights(void)
                         FreeWinding(t);
                         VectorSubtract(vec3_origin, normal, normal);
                     }
-                    SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue);
+                    SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
                 }
             }
         }
@@ -753,14 +814,21 @@ void CreateEntityLights(void)
             dl->coneSoftness = 1.0f; // Default if key missing
 
         const char *cutoffStr = ValueForKey(e, "cutoff");
+        const char *energyCutoffStr = ValueForKey(e, "energycutoff");
+        float entityCutoffAnchor = 0.0f;
+        float entityEnergyCutoff = 0.0f;
         if (cutoffStr[0])
         {
-            dl->min_light_add = atof(cutoffStr);
-            if (dl->min_light_add < 0.001f)
-                dl->min_light_add = 0.001f;
+            entityCutoffAnchor = (float)atof(cutoffStr);
+            if (entityCutoffAnchor < 0.001f)
+                entityCutoffAnchor = 0.001f;
         }
-        else
-            dl->min_light_add = game->minLightAdd;
+        if (energyCutoffStr[0])
+        {
+            entityEnergyCutoff = (float)atof(energyCutoffStr);
+            if (entityEnergyCutoff > 0.0f && entityEnergyCutoff < 0.001f)
+                entityEnergyCutoff = 0.001f;
+        }
 
         const char *fadeoutStr = ValueForKey(e, "fadeout");
         if (fadeoutStr[0])
@@ -874,8 +942,7 @@ void CreateEntityLights(void)
                 bl->photons = rawIntensity * bsFraction * POINTSCALE_SOFT;
                 
                 // Configure specific cutoff and fadeout for backsplash
-                if (bl->min_light_add < 0.3f)
-                    bl->min_light_add = 0.3f;
+                bl->min_light_add = 0.3f;
                 bl->fadeout = 0.3f;
 
                 float scaled_cutoff = sqrt(bl->photons) * 0.1f; // Reach = sqrt(intensity) * 10
@@ -900,8 +967,33 @@ void CreateEntityLights(void)
         if (dl->prestep < 0.0f)
             dl->prestep = 0.0f;
 
+        // resolve the cutoff mode: explicit energy > explicit anchor > global energy > global anchor
+        if (entityEnergyCutoff > 0.0f)
+        {
+            dl->min_light_add = entityEnergyCutoff;
+        }
+        else if (game->energyCutoff > 0.0f)
+        {
+            dl->min_light_add = game->energyCutoff;
+        }
+        else
+        {
+            float cutoffAnchor = (entityCutoffAnchor > 0.0f) ? entityCutoffAnchor : game->cutoffAnchor;
+            dl->min_light_add = cutoffAnchor * (float)sqrt(rawIntensity / 300.0f);
+            if (dl->min_light_add < game->minLightAdd)
+                dl->min_light_add = game->minLightAdd;
+        }
+
         dl->reach = CalculateLightReach(0, dl->photons, dl->min_light_add, dl->prestep, dl->attenuationModel);
         dl->attnSoftnessRange = dl->reach * dl->fadeout;
+
+        // warn when the resolved cutoff deletes the light entirely
+        if (dl->photons > 0 && dl->reach <= 0.0f &&
+            CalculateLightReach(0, dl->photons, game->minLightAdd, dl->prestep, dl->attenuationModel) > 0.0f)
+        {
+            _printf("WARNING: light at (%i %i %i) contributes nothing: cutoff %.3f exceeds its peak energy\n",
+                    (int)dl->origin[0], (int)dl->origin[1], (int)dl->origin[2], dl->min_light_add);
+        }
     }
 }
 

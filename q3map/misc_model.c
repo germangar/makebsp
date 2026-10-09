@@ -913,6 +913,8 @@ Initial pass to load and transform all misc_model entities.
 */
 void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
 {
+    _printf("--- Loading models ---\n");
+
     int entity_num;
     entity_t *entity;
     const char *model;

@@ -92,9 +92,16 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     // map keys
     val = ValueForKey(ent, "cutoff");
     if (val[0] && !HasArg("-cutoff", argc, argv)) {
-        game->minLightAdd = (float)atof(val);
-        if (game->minLightAdd < 0.001f)
-            game->minLightAdd = 0.001f;
+        game->cutoffAnchor = (float)atof(val);
+        if (game->cutoffAnchor < 0.001f)
+            game->cutoffAnchor = 0.001f;
+    }
+
+    val = ValueForKey(ent, "energycutoff");
+    if (val[0] && !HasArg("-energycutoff", argc, argv)) {
+        game->energyCutoff = (float)atof(val);
+        if (game->energyCutoff > 0.0f && game->energyCutoff < 0.001f)
+            game->energyCutoff = 0.001f;
     }
 
     val = ValueForKey(ent, "fadeout");
