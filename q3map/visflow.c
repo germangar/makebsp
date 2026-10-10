@@ -455,14 +455,15 @@ void RecursiveLeafFlow (int leafnum, threaddata_t *thread, pstack_t *prevstack)
 			continue;	// can't possibly see it
 		}
 
-		// Prune against the portal's SimpleFlood bound. Deliberately NOT
-		// the stock q3map "if done, use the exact portalvis" fast path:
-		// whether another thread's portal finished mid-flight changed the
-		// pruning, making threaded vis non-reproducible run to run.
-		// portalflood is a stable upper bound (superset of portalvis), so
-		// this can only prune less - never lose visibility - and the flow
-		// is deterministic across thread counts and schedules.
-		test = (long *)p->portalflood;
+		// if the portal can't see anything we haven't allready seen, skip it
+		if (p->status == stat_done)
+		{
+			test = (long *)p->portalvis;
+		}
+		else
+		{
+			test = (long *)p->portalflood;
+		}
 
 		more = 0;
 		prevmight = (long *)prevstack->mightsee;
@@ -710,9 +711,10 @@ void RecursivePassageFlow (vportal_t *portal, threaddata_t *thread, pstack_t *pr
 		cansee = (long *)passage->cansee;
 		might = (long *)stack.mightsee;
 		memcpy(might, prevmight, portalbytes);
-		// deterministic upper bound (see note in RecursiveLeafFlow):
-		// never read the timing-dependent portalvis of in-flight portals
-		portalvis = (long *) p->portalflood;
+		if (p->status == stat_done)
+			portalvis = (long *) p->portalvis;
+		else
+			portalvis = (long *) p->portalflood;
 		more = 0;
 		for (j = 0; j < portallongs; j++)
 		{
@@ -844,9 +846,10 @@ void RecursivePassagePortalFlow (vportal_t *portal, threaddata_t *thread, pstack
 		cansee = (long *)passage->cansee;
 		might = (long *)stack.mightsee;
 		memcpy(might, prevmight, portalbytes);
-		// deterministic upper bound (see note in RecursiveLeafFlow):
-		// never read the timing-dependent portalvis of in-flight portals
-		portalvis = (long *) p->portalflood;
+		if (p->status == stat_done)
+			portalvis = (long *) p->portalvis;
+		else
+			portalvis = (long *) p->portalflood;
 		more = 0;
 		for (j = 0; j < portallongs; j++)
 		{

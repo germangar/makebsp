@@ -746,33 +746,6 @@ void WriteBSPFile(const char *filename)
     header->ident = LittleLong(*(int *)game->bspIdent);
     header->version = LittleLong(game->bspVersion);
 
-    // Zero the unused lightmap/vertex-color style channels (1..3). The
-    // pipeline only fills style 0; the rest carried uninitialized heap
-    // bytes into the BSP. The engine never samples unused styles, but the
-    // garbage broke reproducible builds (byte-diffs between identical
-    // compiles) and leaked heap memory into distributed files.
-    for (i = 0; i < numDrawVerts; i++)
-    {
-        memset(&drawVerts[i].lightmap[1][0], 0,
-               sizeof(drawVerts[i].lightmap) - sizeof(drawVerts[i].lightmap[0]));
-        memset(&drawVerts[i].color[1][0], 0,
-               sizeof(drawVerts[i].color) - sizeof(drawVerts[i].color[0]));
-    }
-
-    // Zero the lightmap UVs of surfaces without a lightmap atlas
-    // (lightmapNum[0] < 0, e.g. q3map_nolightmap decal patches): their
-    // lm[0] was never assigned, so uninitialized heap bytes rode into the
-    // BSP. The engine never samples lm coords for such surfaces, but the
-    // garbage broke build reproducibility.
-    for (i = 0; i < numDrawSurfaces; i++)
-    {
-        if (drawSurfaces[i].lightmapNum[0] >= 0)
-            continue;
-        for (j = drawSurfaces[i].firstVert;
-             j < drawSurfaces[i].firstVert + drawSurfaces[i].numVerts; j++)
-            memset(&drawVerts[j].lightmap[0][0], 0, sizeof(drawVerts[j].lightmap[0]));
-    }
-
     // merge byte-identical PVS rows and renumber clusters (exact, no-op
     // when there are no duplicates)
     CompactVisData();

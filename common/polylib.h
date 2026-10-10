@@ -35,7 +35,7 @@ typedef struct
     vec3_t points[MAX_POINTS_ON_FIXED_WINDING];
 } fixedWinding_t;
 
-#define MAX_POINTS_ON_WINDING 512
+#define MAX_POINTS_ON_WINDING 64
 
 // you can define on_epsilon in the makefile as tighter
 #ifndef ON_EPSILON

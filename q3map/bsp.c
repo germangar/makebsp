@@ -84,25 +84,6 @@ void ProcessWorldModel(void)
     e = &entities[0];
     e->firstDrawSurf = 0; // numMapDrawSurfs;
 
-    // Set default block size. This MUST happen before any FaceBSP call:
-    // SelectSplitPlaneNum's forced block-boundary splits read blockSize
-    // while the tree is built (facebsp.c). The old placement after the
-    // tree rebuild was dead code - the key was parsed and echoed but
-    // never consumed.
-    VectorSet(blockSize, 1024, 1024, 1024);
-    {
-        const char *value = ValueForKey(&entities[0], "blocksize");
-        if (value && value[0])
-        {
-            int s = sscanf(value, "%f %f %f", &blockSize[0], &blockSize[1], &blockSize[2]);
-            if (s == 1)
-            {
-                blockSize[1] = blockSize[2] = blockSize[0];
-            }
-        }
-    }
-    _printf("block size = { %1.0f %1.0f %1.0f }\n", blockSize[0], blockSize[1], blockSize[2]);
-
     // check for patches with adjacent edges that need to LOD together
     PatchMapDrawSurfs(e);
 
@@ -217,13 +198,12 @@ void ProcessWorldModel(void)
             // 0. Explicitly set healthy defaults for VIS engine switches
             extern qboolean noPassageVis, passageVisOnly, mergevis, nosort;
             extern int testlevel;
-
+            
             noPassageVis = qfalse;
             passageVisOnly = qfalse;
+            mergevis = qfalse; // Default is no merging
             nosort = qfalse;
             testlevel = 2;     // Default test level
-            // mergevis is user-controlled via -vismerge (default qfalse);
-            // do not stomp it here so the inline vis honors the switch.
 
             void FreeVisibility(void);
 
@@ -253,6 +233,19 @@ void ProcessWorldModel(void)
 
     // create drawsurfs for triangle models
     AddTriangleModels(tree);
+
+    // Set default block size
+    VectorSet(blockSize, 1024, 1024, 1024);
+    const char *value = ValueForKey(&entities[0], "blocksize");
+    if (value && value[0])
+    {
+        int s = sscanf(value, "%f %f %f", &blockSize[0], &blockSize[1], &blockSize[2]);
+        if (s == 1)
+        {
+            blockSize[1] = blockSize[2] = blockSize[0];
+        }
+        _printf("block size = { %1.0f %1.0f %1.0f }\n", blockSize[0], blockSize[1], blockSize[2]);
+    }
 
     // drawsurfs that cross fog boundaries will need to
     // be split along the bound
@@ -1005,8 +998,6 @@ int main(int argc, char **argv)
     // do a bsp if nothing else was specified
     tempsource[0] = '\0';
 
-    extern qboolean mergevis; // vis.c global, user-settable via -vismerge
-
     for (i = 1; i < argc; i++)
     {
         if (!strcmp(argv[i], "-tempname"))
@@ -1069,11 +1060,6 @@ int main(int argc, char **argv)
         {
             _printf("leaktest = true\n");
             leaktest = qtrue;
-        }
-        else if (!strcmp(argv[i], "-vismerge") || !strcmp(argv[i], "-mergevis"))
-        {
-            _printf("vismerge = true (merge visibility-equivalent clusters)\n");
-            mergevis = qtrue;
         }
         else if (!strcmp(argv[i], "-verboseentities"))
         {
@@ -1332,10 +1318,8 @@ int main(int argc, char **argv)
                 "   expand         = write out an expanded map (debugging)\n"
                 "   showseams      = show seams on terrain surfaces\n"
                 "   guessuvs       = figure out optimal texture resolution for trisoup before xatlas repacking\n");
-        _printf(                "   visonly        = run visibility calculation only (requires .prt file)\n"
+        _printf("   visonly        = run visibility calculation only (requires .prt file)\n"
                 "   novis          = skip inline visibility calculation\n"
-                "   vismerge       = merge visibility-equivalent clusters during vis\n"
-                "                    (faster vis on over-split maps, slightly coarser PVS)\n"
                 "   tmpout         = write output files to /tmp\n"
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
