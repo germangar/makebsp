@@ -568,6 +568,7 @@ Used to compile a `.map` file into a `.bsp` file.
 - `-nofill`: Skip the outside-filling stage (can be used for "leaky" maps during development).
 - `-nofog`: Skip processing of fog volumes.
 - `-novis`: Skip inline visibility calculation.
+- `-vismerge`: Merge visibility-equivalent clusters during the vis pass. Faster vis on over-split maps at the cost of a slightly coarser PVS. Notice: It doesn't optimize the output.
 - `-nosubdivide`: Disable subdivision of large surfaces.
 - `-nocurves`: Ignore all curved surfaces (patches).
 - `-notjunc`: Skip T-junction narrowing and fixing.

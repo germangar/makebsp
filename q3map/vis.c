@@ -84,6 +84,80 @@ void PlaneFromWinding(winding_t *w, plane_t *plane)
 
 /*
 ==================
+CheckPortalWinding
+
+Sanity validation for a portal winding loaded from the .prt. Catches
+malformed portal geometry (chop drift off the portal plane, duplicate
+points, degenerate plane basis, near-zero area) that would silently
+narrow the PVS instead of erroring out.
+==================
+*/
+#define PORTAL_PLANARITY_EPSILON 0.5
+#define PORTAL_DUPLICATE_EPSILON 0.05
+#define PORTAL_MIN_AREA 0.1
+
+static void CheckPortalWinding(int portalnum, winding_t *w, plane_t *plane)
+{
+    static int c_warned = 0;
+    vec_t maxdist = 0.0;
+    vec_t area = 0.0;
+    vec3_t v1, v2, cross;
+    int i, j;
+
+    if (VectorLength(plane->normal) < 0.5)
+    {
+        if (++c_warned <= 32)
+            _printf("WARNING: portal %i has a degenerate plane basis (colinear basis points)\n", portalnum);
+        return;
+    }
+
+    // planarity: every point must lie on the portal plane
+    for (i = 0; i < w->numpoints; i++)
+    {
+        vec_t d = fabs(DotProduct(w->points[i], plane->normal) - plane->dist);
+        if (d > maxdist)
+            maxdist = d;
+    }
+    if (maxdist > PORTAL_PLANARITY_EPSILON)
+    {
+        if (++c_warned <= 32)
+            _printf("WARNING: portal %i deviates from its own plane by %.3f units\n", portalnum, maxdist);
+    }
+
+    // duplicate/near-duplicate consecutive points (incl. wraparound)
+    for (i = 0; i < w->numpoints; i++)
+    {
+        j = (i + 1) % w->numpoints;
+        VectorSubtract(w->points[i], w->points[j], v1);
+        if (VectorLength(v1) < PORTAL_DUPLICATE_EPSILON)
+        {
+            if (++c_warned <= 32)
+                _printf("WARNING: portal %i has duplicate consecutive points %i/%i (%.4f apart)\n",
+                        portalnum, i, j, VectorLength(v1));
+            break;
+        }
+    }
+
+    // fan area around point 0
+    for (i = 1; i < w->numpoints - 1; i++)
+    {
+        VectorSubtract(w->points[i], w->points[0], v1);
+        VectorSubtract(w->points[i + 1], w->points[0], v2);
+        CrossProduct(v1, v2, cross);
+        area += 0.5 * VectorLength(cross);
+    }
+    if (area < PORTAL_MIN_AREA)
+    {
+        if (++c_warned <= 32)
+            _printf("WARNING: portal %i has a degenerate area (%.4f)\n", portalnum, area);
+    }
+
+    if (c_warned == 33)
+        _printf("WARNING: further portal winding warnings suppressed\n");
+}
+
+/*
+==================
 NewWinding
 ==================
 */
@@ -921,6 +995,7 @@ void LoadPortals(char *name)
 
         // calc plane
         PlaneFromWinding(w, &plane);
+        CheckPortalWinding(i, w, &plane);
 
         // create forward portal
         l = &v_leafs[leafnums[0]];
@@ -1223,6 +1298,11 @@ int VisMain(int argc, char **argv)
         {
             _printf("nosort = true\n");
             nosort = qtrue;
+        }
+        else if (!strcmp(argv[i], "-vismerge") || !strcmp(argv[i], "-mergevis"))
+        {
+            _printf("vismerge = true\n");
+            mergevis = qtrue;
         }
         else if (!strcmp(argv[i], "-saveprt"))
         {

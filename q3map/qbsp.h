@@ -655,11 +655,14 @@ extern qboolean saveprt;
 // decals.c
 
 #define MAX_DECAL_PROJECTORS 4096
+// Decoupled from MAX_POINTS_ON_WINDING (historically 64+2) so raising the
+// winding limit does not inflate per-projector structs.
+#define MAX_DECAL_PLANES 66
 typedef struct {
     vec3_t center;
     float radius;
     vec3_t mins, maxs;
-    plane_t planes[MAX_POINTS_ON_WINDING + 2]; // 0=front, 1=back, 2..N=side planes
+    plane_t planes[MAX_DECAL_PLANES]; // 0=front, 1=back, 2..N=side planes
     int numPlanes;
     float texMat[2][4];  // S and T rows of the 3D->2D texture matrix
     shaderInfo_t *si;
