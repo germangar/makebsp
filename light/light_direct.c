@@ -660,8 +660,10 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     out->irradiance[2] = trace.filter[2] * sunLight[2];
     out->isGlow = qfalse;
     out->ambientClampScale = 1.0f;
-    out->gridAmbientScale = 1.0f;
-    out->gridDirectScale = 1.0f;
+    out->ambientAbsMax = sunGridMaxAmbient;
+    out->directAbsMax = sunGridMaxDirect;
+    out->gridAmbientScale = sunGridAmbientScale;
+    out->gridDirectScale = sunGridDirectScale;
     out->familyCount = 1;
 
     return qtrue;
@@ -1064,6 +1066,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         int fCount = light->familyCount;
         if (fCount <= 0) fCount = 1;
         out->ambientClampScale = 1.0f / (float)fCount;
+        out->ambientAbsMax = light->gridMaxAmbient;
+        out->directAbsMax = light->gridMaxDirect;
         out->gridAmbientScale = light->gridAmbientScale;
         out->gridDirectScale = light->gridDirectScale;
         out->familyCount = fCount;
@@ -1180,6 +1184,8 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     int fCount = light->familyCount;
     if (fCount <= 0) fCount = 1;
     out->ambientClampScale = 1.0f / (float)fCount;
+    out->ambientAbsMax = light->gridMaxAmbient;
+    out->directAbsMax = light->gridMaxDirect;
     out->gridAmbientScale = light->gridAmbientScale;
     out->gridDirectScale = light->gridDirectScale;
     out->familyCount = fCount;
@@ -2328,9 +2334,10 @@ void TraceLights(int num)
 
 float lightgridMaxDisplayIntensity = 0.0f;
 
-#define LIGHTGRID_AMBIENT_TRANSFER_FRACTION 0.20f
 #define LIGHTGRID_AMBIENT_MAX_LUMA 0.10f
 #define LIGHTGRID_MAO_GATHER_FRACTION 0.40f
+#define LIGHTGRID_MAO_MAX_SATURATION 0.25f
+#define LIGHTGRID_MAO_CALIBRATION 17.0f // Raw MAO values are tiny; this calibration lifts them to grid-scale energy. The profile/worldspawn knob is a relative multiplier to make it more user intuitive
 
 void TraceGrid(int num)
 {
@@ -2364,41 +2371,24 @@ void TraceGrid(int num)
     origin[1] = gridMins[1] + y * gridSize[1];
     origin[2] = gridMins[2] + z * gridSize[2];
 
-    if (PointInSolid(origin))
+    if (gridInvalidMask[num] & GRID_FLAG_INVALID)
     {
-        vec3_t baseOrigin;
-        int step;
-        VectorCopy(origin, baseOrigin);
-        for (step = 9; step <= 18; step += 9)
-        {
-            for (i = 0; i < 8; i++)
-            {
-                VectorCopy(baseOrigin, origin);
-                if (i & 1)
-                    origin[0] += step;
-                else
-                    origin[0] -= step;
-                if (i & 2)
-                    origin[1] += step;
-                else
-                    origin[1] -= step;
-                if (i & 4)
-                    origin[2] += step;
-                else
-                    origin[2] -= step;
-                if (!PointInSolid(origin))
-                    break;
-            }
-            if (i != 8)
-                break;
-        }
-        if (step > 18)
-        {
-            if (gridData32)
-                memset(&gridData32[num], 0, sizeof(gridData32[num]));
-            free(tw);
-            return;
-        }
+        // Fully buried: the classification pass found no open point within
+        // the nudge radius; the cell carries no light and stays zeroed.
+        // CompressGrid writes the engine sentinel for it when writing FBSP
+        // version 2 (see bsp_extended_capabilities.md).
+        if (gridData32)
+            memset(&gridData32[num], 0, sizeof(gridData32[num]));
+        free(tw);
+        return;
+    }
+
+    if (gridInvalidMask[num] & GRID_FLAG_SOLID)
+    {
+        // Lattice point sits inside solid geometry: sample at the open point
+        // resolved once by the classification pass, so direct light, MAO
+        // ambient and radiosity all describe the same location.
+        VectorCopy(&gridResolvedOrigins[num * 3], origin);
     }
 
     float maxAddSize = 0.0f;
@@ -2416,13 +2406,17 @@ void TraceGrid(int num)
             {
                 vec3_t tempColor;
                 VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
-                float addSize = VectorLength(tempColor);
-                totalAddSize += addSize;
-                VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
-                if (addSize > maxAddSize)
+                if (contributions[numCon].gridAmbientScale > 0.0001f ||
+                    contributions[numCon].gridDirectScale > 0.0001f)
                 {
-                    maxAddSize = addSize;
-                    VectorCopy(contributions[numCon].dir, dominantDir);
+                    float addSize = VectorLength(tempColor);
+                    totalAddSize += addSize;
+                    VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
+                    if (addSize > maxAddSize)
+                    {
+                        maxAddSize = addSize;
+                        VectorCopy(contributions[numCon].dir, dominantDir);
+                    }
                 }
                 numCon++;
                 if (numCon >= MAX_CONTRIBUTIONS)
@@ -2435,13 +2429,17 @@ void TraceGrid(int num)
             contributions[numCon].angle = 1.0f; // SunToPoint doesn't set angle, default to 1
             vec3_t tempColor;
             VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
-            float addSize = VectorLength(tempColor);
-            totalAddSize += addSize;
-            VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
-            if (addSize > maxAddSize)
+            if (contributions[numCon].gridAmbientScale > 0.0001f ||
+                contributions[numCon].gridDirectScale > 0.0001f)
             {
-                maxAddSize = addSize;
-                VectorCopy(contributions[numCon].dir, dominantDir);
+                float addSize = VectorLength(tempColor);
+                totalAddSize += addSize;
+                VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
+                if (addSize > maxAddSize)
+                {
+                    maxAddSize = addSize;
+                    VectorCopy(contributions[numCon].dir, dominantDir);
+                }
             }
             numCon++;
         }
@@ -2472,6 +2470,18 @@ void TraceGrid(int num)
 
         vec3_t scaledDirect;
         VectorScale(tempColor, contributions[i].gridDirectScale, scaledDirect);
+
+        if (contributions[i].directAbsMax > 0.0f)
+        {
+            vec3_t dContrib;
+            VectorScale(scaledDirect, d, dContrib);
+            float dLuma = dContrib[0] * 0.299f + dContrib[1] * 0.587f + dContrib[2] * 0.114f;
+            if (dLuma > contributions[i].directAbsMax)
+            {
+                VectorScale(scaledDirect, contributions[i].directAbsMax / dLuma, scaledDirect);
+            }
+        }
+
         VectorMA(directedColor, d, scaledDirect, directedColor);
 
         if (contributions[i].gridAmbientScale > 0.0001f)
@@ -2497,10 +2507,18 @@ void TraceGrid(int num)
             }
 
             vec3_t ambContrib;
-            float finalAmbientFraction = LIGHTGRID_AMBIENT_TRANSFER_FRACTION * contributions[i].gridAmbientScale * distanceScale;
+            float finalAmbientFraction = game->lightgridAmbientTransferFraction * contributions[i].gridAmbientScale * distanceScale;
             VectorScale(tempColor, finalAmbientFraction, ambContrib);
-            
-            float clampLuma = lightgridMaxDisplayIntensity * LIGHTGRID_AMBIENT_MAX_LUMA * contributions[i].ambientClampScale;
+
+            float clampLuma;
+            if (contributions[i].ambientAbsMax > 0.0f)
+            {
+                clampLuma = contributions[i].ambientAbsMax;
+            }
+            else
+            {
+                clampLuma = lightgridMaxDisplayIntensity * LIGHTGRID_AMBIENT_MAX_LUMA * contributions[i].ambientClampScale;
+            }
             float luma = ambContrib[0] * 0.299f + ambContrib[1] * 0.587f + ambContrib[2] * 0.114f;
             
             if (luma > clampLuma)
@@ -2526,8 +2544,8 @@ void TraceGrid(int num)
 
         if (maoAmbient)
         {
-            float dirRatio = 0.35f;
-            float ambRatio = 0.80f;
+            float dirRatio = 1.5f;
+            float ambRatio = 1.5f;
             vec3_t moveDir;
             vec3_t moveAmb;
             
@@ -2552,6 +2570,34 @@ void TraceGrid(int num)
                     moveAmb[2] = moveAmb[2] * localMix + envAmb[2] * gatherMix;
                 }
             }
+
+            // Saturation cap (chroma/luma ratio clamp): saturation is a ratio, so the
+            // ambient/directional split and ambientGridScale (all uniform
+            // multiplies of this one color) can never change it. A very saturated
+            // worldspawn ambient enters with a huge relative chroma (pure blue ~14),
+            // so a fixed multiplier could not bound it. Clamping the ratio caps the
+            // color regardless of input while preserving luma, leaving the calibrated
+            // brightness untouched. Mild ambient colors pass through unmodified.
+            {
+                float lum = moveAmb[0] * 0.2126f + moveAmb[1] * 0.7152f + moveAmb[2] * 0.0722f;
+                if (lum > 0.0001f)
+                {
+                    float mx = moveAmb[0], mn = moveAmb[0];
+                    if (moveAmb[1] > mx) mx = moveAmb[1];
+                    if (moveAmb[2] > mx) mx = moveAmb[2];
+                    if (moveAmb[1] < mn) mn = moveAmb[1];
+                    if (moveAmb[2] < mn) mn = moveAmb[2];
+                    float ratio = (mx - mn) / lum;
+                    if (ratio > LIGHTGRID_MAO_MAX_SATURATION)
+                    {
+                        float t = LIGHTGRID_MAO_MAX_SATURATION / ratio;
+                        for (int i = 0; i < 3; i++)
+                            moveAmb[i] = lum + t * (moveAmb[i] - lum);
+                    }
+                }
+            }
+
+            VectorScale(moveAmb, LIGHTGRID_MAO_CALIBRATION * game->ambientGridScale, moveAmb);
 
             VectorCopy(moveAmb, moveDir);
             VectorScale(moveAmb, ambRatio, moveAmb);

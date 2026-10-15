@@ -321,14 +321,39 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         lightgridSmoothDirectPasses = atoi(val);
     }
 
-    val = ValueForKey(ent, "grid_minambient");
-    if (val[0] && !HasArg("-grid_minambient", argc, argv)) {
-        lightgridMinAmbient = (float)atof(val);
+    val = ValueForKey(ent, "grid_ambientclamp_min");
+    if (val[0] && !HasArg("-grid_ambientclamp_min", argc, argv)) {
+        lightgridAmbientClampMin = (float)atof(val);
     }
 
-    val = ValueForKey(ent, "grid_maxambient");
-    if (val[0] && !HasArg("-grid_maxambient", argc, argv)) {
-        lightgridMaxAmbient = (float)atof(val);
+    val = ValueForKey(ent, "grid_ambientclamp_max");
+    if (val[0] && !HasArg("-grid_ambientclamp_max", argc, argv)) {
+        lightgridAmbientClampMax = (float)atof(val);
+    }
+
+    val = ValueForKey(ent, "ambient_gridscale");
+    if (val[0] && !HasArg("-ambient_gridscale", argc, argv)) {
+        game->ambientGridScale = (float)atof(val);
+        if (game->ambientGridScale < 0.0f) game->ambientGridScale = 0.0f;
+    }
+
+    val = ValueForKey(ent, "rad_gridscale");
+    if (val[0] && !HasArg("-rad_gridscale", argc, argv)) {
+        game->rad_gridscale = (float)atof(val);
+        if (game->rad_gridscale < 0.0f) game->rad_gridscale = 0.0f;
+    }
+
+    // Map-wide defaults for the per-light grid scales (no CLI; per-light entity keys win)
+    val = ValueForKey(ent, "grid_ambientscale");
+    if (val[0]) {
+        game->lightgridAmbientScale = (float)atof(val);
+        if (game->lightgridAmbientScale < 0.0f) game->lightgridAmbientScale = 0.0f;
+    }
+
+    val = ValueForKey(ent, "grid_directscale");
+    if (val[0]) {
+        game->lightgridDirectScale = (float)atof(val);
+        if (game->lightgridDirectScale < 0.0f) game->lightgridDirectScale = 0.0f;
     }
 
 }
@@ -355,8 +380,8 @@ int main(int argc, char **argv) {
     lightgridSmoothAmbientPasses = game->lightgridSmoothAmbientPasses;
     lightgridSmoothDirect = game->lightgridSmoothDirect;
     lightgridSmoothDirectPasses = game->lightgridSmoothDirectPasses;
-    lightgridMinAmbient = game->lightgridMinAmbient;
-    lightgridMaxAmbient = game->lightgridMaxAmbient;
+    lightgridAmbientClampMin = game->lightgridAmbientClampMin;
+    lightgridAmbientClampMax = game->lightgridAmbientClampMax;
     
     ambient_testradius = game->ambientTestRadius;
     ambient_gatheradius = game->ambientGatherRadius;
@@ -494,9 +519,9 @@ int main(int argc, char **argv) {
             lightgridDirectBias = atof(argv[i + 1]);
             _printf("grid_directbias = %f\n", lightgridDirectBias);
             i++;
-        } else if (!strcmp(argv[i], "-grid_minambient")) {
-            lightgridMinAmbient = atof(argv[i + 1]);
-            _printf("grid_minambient = %f\n", lightgridMinAmbient);
+        } else if (!strcmp(argv[i], "-grid_ambientclamp_min")) {
+            lightgridAmbientClampMin = atof(argv[i + 1]);
+            _printf("grid_ambientclamp_min = %f\n", lightgridAmbientClampMin);
             i++;
         } else if (!strcmp(argv[i], "-grid_smoothambient")) {
             lightgridSmoothAmbient = atof(argv[i + 1]);
@@ -514,9 +539,19 @@ int main(int argc, char **argv) {
             lightgridSmoothDirectPasses = atoi(argv[i + 1]);
             _printf("grid_smoothdirect_passes = %d\n", lightgridSmoothDirectPasses);
             i++;
-        } else if (!strcmp(argv[i], "-grid_maxambient")) {
-            lightgridMaxAmbient = atof(argv[i + 1]);
-            _printf("grid_maxambient = %f\n", lightgridMaxAmbient);
+        } else if (!strcmp(argv[i], "-grid_ambientclamp_max")) {
+            lightgridAmbientClampMax = atof(argv[i + 1]);
+            _printf("grid_ambientclamp_max = %f\n", lightgridAmbientClampMax);
+            i++;
+        } else if (!strcmp(argv[i], "-ambient_gridscale")) {
+            game->ambientGridScale = atof(argv[i + 1]);
+            if (game->ambientGridScale < 0.0f) game->ambientGridScale = 0.0f;
+            _printf("ambient_gridscale = %f\n", game->ambientGridScale);
+            i++;
+        } else if (!strcmp(argv[i], "-rad_gridscale")) {
+            game->rad_gridscale = atof(argv[i + 1]);
+            if (game->rad_gridscale < 0.0f) game->rad_gridscale = 0.0f;
+            _printf("rad_gridscale = %f\n", game->rad_gridscale);
             i++;
         } else if (!strcmp(argv[i], "-border")) {
             lightmapBorder = qtrue;

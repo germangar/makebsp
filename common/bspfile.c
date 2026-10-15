@@ -108,6 +108,22 @@ bspGridPoint_t *gridData = NULL;
 int numLightArray;
 unsigned short *lightArray = NULL;
 
+byte *gridInvalidMask = NULL;
+
+/*
+================
+IsFBSPVersion
+
+FBSP family versions (1 and the WIP 2) share the lump layout. Version 2
+adds the mandatory lightgrid invalid-cell sentinel; version 1 never
+carries it.
+================
+*/
+qboolean IsFBSPVersion(int version)
+{
+    return (version == 1 || version == FBSP_VERSION_2) ? qtrue : qfalse;
+}
+
 int numVisBytes;
 byte visBytes[MAX_MAP_VISIBILITY];
 
@@ -206,6 +222,15 @@ void LoadBSPFile(const char *filename)
 
     if (!game)
     {
+        // The FBSP family check refines the diagnostic: a FBSP file of an
+        // unknown version must NOT silently bind to a known-version template,
+        // since a rewrite would demote the file's format (e.g. a version 2
+        // file re-emitted as version 1, losing the invalid-cell sentinel).
+        int fbspIdent = *(int *)gameTemplates[0].bspIdent;
+        if (ident == fbspIdent && !IsFBSPVersion(version))
+        {
+            Error("%s is an unsupported FBSP version %d (known: 1, %d)", filename, version, FBSP_VERSION_2);
+        }
         Error("%s is an unknown BSP format (ident: %c%c%c%c, version: %d)", filename,
               ident & 0xFF, (ident >> 8) & 0xFF, (ident >> 16) & 0xFF,
               (ident >> 24) & 0xFF, version);
@@ -265,9 +290,27 @@ void LoadBSPFile(const char *filename)
             bspGridPoint_t *expanded = malloc(numLightArray * sizeof(bspGridPoint_t));
             if (!expanded)
                 Error("LoadBSPFile: lightgrid expansion failed");
+
+            // Preserve the invalid-cell sentinel across loads: 0xFFFF entries
+            // expand to zeroed (black) cells and are recorded in gridInvalidMask
+            // so a plain rewrite (-onlyents, -vis, -light re-bake) re-emits them
+            // faithfully instead of dragging them into the palette dedup.
+            if (gridInvalidMask)
+                free(gridInvalidMask);
+            gridInvalidMask = malloc(numLightArray * sizeof(byte));
+            if (!gridInvalidMask)
+                Error("LoadBSPFile: gridInvalidMask alloc failed");
+            memset(gridInvalidMask, 0, numLightArray * sizeof(byte));
+
             for (i = 0; i < numLightArray; i++)
             {
                 int idx = lightArray[i];
+                if (idx == LIGHTGRID_INVALID_INDEX)
+                {
+                    memset(&expanded[i], 0, sizeof(expanded[i]));
+                    gridInvalidMask[i] |= GRID_FLAG_INVALID;
+                    continue;
+                }
                 if (idx < 0 || idx >= numGridPoints)
                     idx = 0; // corrupt index guard
                 expanded[i] = gridData[idx];
@@ -455,13 +498,29 @@ void CompressGrid(void)
     int i, j;
     bspGridPoint_t *palette;
     int numPalette = 0;
+    int maxPalette;
+    qboolean flagInvalid;
 
-    if (game->bspVersion != 1)
+    if (!IsFBSPVersion(game->bspVersion))
         return;
     if (numGridPoints == 0)
         return;
 
     _printf("--- CompressGrid ---\n");
+
+    // Extended capability: invalid-cell marking. In FBSP version 2 the
+    // sentinel is part of the format: fully buried lattice positions carry
+    // the LIGHTGRID_INVALID_INDEX sentinel in LIGHTARRAY instead of a
+    // palette entry (see bsp_extended_capabilities.md). Version 1 files
+    // never carry it. The _lightgridFlagInvalid worldspawn key injected at
+    // write time is informational; the BSP version is authoritative.
+    flagInvalid = (game->bspVersion == FBSP_VERSION_2) ? qtrue : qfalse;
+
+    // With the feature on, 0xFFFF is reserved so palette indices must stay
+    // below it; without it the full unsigned short range is available.
+    // Either way, fail with a clean error instead of silently wrapping the
+    // index (the old code truncated and corrupted the lightArray).
+    maxPalette = flagInvalid ? 0xFFFF : 0x10000;
 
     numLightArray = numGridPoints; // Store original grid count
     palette = malloc(numGridPoints * sizeof(bspGridPoint_t));
@@ -472,6 +531,12 @@ void CompressGrid(void)
 
     for (i = 0; i < numGridPoints; i++)
     {
+        if (flagInvalid && gridInvalidMask && (gridInvalidMask[i] & GRID_FLAG_INVALID))
+        {
+            lightArray[i] = LIGHTGRID_INVALID_INDEX;
+            continue;
+        }
+
         for (j = 0; j < numPalette; j++)
         {
             if (GridPointEqual(&gridData[i], &palette[j]))
@@ -481,6 +546,9 @@ void CompressGrid(void)
         }
         if (j == numPalette)
         {
+            if (numPalette >= maxPalette)
+                Error("CompressGrid: lightgrid palette exhausted (%i unique cells). "
+                      "Increase the gridsize to reduce the cell count.", numPalette);
             j = numPalette++;
             palette[j] = gridData[i];
         }
@@ -777,6 +845,19 @@ void WriteBSPFile(const char *filename)
     // when there are no duplicates)
     CompactVisData();
 
+    // Extended capability: the invalid-cell sentinel convention (LIGHTARRAY
+    // 0xFFFF) is structural to FBSP version 2. The _lightgridFlagInvalid key
+    // is injected informationally there (the BSP version is authoritative);
+    // version 1 rewrites strip stale keys from earlier experimental builds
+    // since they no longer carry the sentinel.
+    if (IsFBSPVersion(game->bspVersion))
+    {
+        if (game->bspVersion == FBSP_VERSION_2)
+            SetKeyValue(&entities[0], "_lightgridFlagInvalid", "1");
+        else
+            RemoveKeyValue(&entities[0], "_lightgridFlagInvalid");
+    }
+
     // swap everything in place (internal format)
 
     bspfile = SafeOpenWrite(filename);
@@ -792,7 +873,7 @@ void WriteBSPFile(const char *filename)
     AddLump(bspfile, header, LUMP_NODES, dnodes, numnodes * sizeof(dnode_t));
     AddLump(bspfile, header, LUMP_BRUSHES, dbrushes, numbrushes * sizeof(dbrush_t));
 
-    if (game->bspVersion == 1)
+    if (IsFBSPVersion(game->bspVersion))
     {
         // FBSP: engine expects dbrushside_t (12 bytes: planeNum, shaderNum, surfaceNum)
         AddLump(bspfile, header, LUMP_BRUSHSIDES, dbrushsides, numbrushsides * sizeof(dbrushside_t));
@@ -817,9 +898,9 @@ void WriteBSPFile(const char *filename)
     AddLump(bspfile, header, LUMP_LIGHTMAPS, lightBytes, numLightBytes);
     AddLump(bspfile, header, LUMP_FOGS, dfogs, numFogs * sizeof(dfog_t));
 
-    if (game->bspVersion == 1)
+    if (IsFBSPVersion(game->bspVersion))
     {
-        // FBSP v1
+        // FBSP (v1 and v2 share the lump layout)
         CompressGrid();
         AddLump(bspfile, header, LUMP_DRAWVERTS, drawVerts, numDrawVerts * sizeof(drawVert_t));
         AddLump(bspfile, header, LUMP_SURFACES, drawSurfaces, numDrawSurfaces * sizeof(dsurface_t));

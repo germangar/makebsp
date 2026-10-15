@@ -2,16 +2,17 @@
   "game": "warfork",
   "template": "qfusion", /* qfusion is not really needed here because it's the default values but I type it to serve as example of template usage */
   "gameDir": "basewf",
-  "lightmapSize": 1024,
+  "lightmapSize": 2048,
   "ambientTestRadius": 400.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 1000.00, /* Distance at which a lightmap pixel gathers light from probes */
-  "lightgridSmoothAmbient": 256.00, /* Radius in world units for smoothing the ambient component of the light grid */
+  "lightgridSmoothAmbient": 320.00, /* Radius in world units for smoothing the ambient component of the light grid */
   "lightgridSmoothAmbientPasses": 4,
   "lightgridSmoothDirect": 128.00, /* Radius in world units for smoothing the direct component of the light grid */
   "lightgridSmoothDirectPasses": 3,
+  "lightgridDilation": true, /* if true, buried boundary cells are filled with averaged neighbor light so legacy engines blend meaningful values */
   "shading": "halflambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
-  "saturation": 1.25, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
+  "saturation": 1.5, /* Multiplier (1.0 = normal, 0.0 = grayscale) */
   "flareShader": "",
   "haloShader": "halo",
   "customSurfaceParms": [

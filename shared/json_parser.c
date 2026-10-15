@@ -420,13 +420,40 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lightgridDirectBias = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "lightgridMinAmbient") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lightgridAmbientClampMin") && val->type == json_type_number)
         {
-            game->lightgridMinAmbient = (float)atof(json_value_as_number(val)->number);
+            game->lightgridAmbientClampMin = (float)atof(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "lightgridMaxAmbient") && val->type == json_type_number)
+        else if (!Q_stricmp(key, "lightgridAmbientClampMax") && val->type == json_type_number)
         {
-            game->lightgridMaxAmbient = (float)atof(json_value_as_number(val)->number);
+            game->lightgridAmbientClampMax = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridAmbientTransferFraction") && val->type == json_type_number)
+        {
+            game->lightgridAmbientTransferFraction = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridAmbientScale") && val->type == json_type_number)
+        {
+            game->lightgridAmbientScale = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridDirectScale") && val->type == json_type_number)
+        {
+            game->lightgridDirectScale = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "ambientGridScale") && val->type == json_type_number)
+        {
+            game->ambientGridScale = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "rad_gridscale") && val->type == json_type_number)
+        {
+            game->rad_gridscale = (float)atof(json_value_as_number(val)->number);
+        }
+        else if (!Q_stricmp(key, "lightgridDilation"))
+        {
+            if (val->type == json_type_true)
+                game->lightgridDilation = qtrue;
+            else if (val->type == json_type_false)
+                game->lightgridDilation = qfalse;
         }
         else if (!Q_stricmp(key, "texturesRGB"))
         {
@@ -811,8 +838,12 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"lightgridSmoothAmbientPasses\": %d,\n"
             "  \"lightgridSmoothDirect\": %.2f, /* Radius in world units for smoothing the direct component of the light grid */\n"
             "  \"lightgridSmoothDirectPasses\": %d,\n"
-            "  \"lightgridMinAmbient\": %.2f,\n"
-            "  \"lightgridMaxAmbient\": %.2f,\n"
+            "  \"lightgridAmbientClampMin\": %.2f,\n"
+            "  \"lightgridAmbientClampMax\": %.2f,\n"
+            "  \"lightgridAmbientTransferFraction\": %.3f, /* Fraction of direct light energy transferred into the grid ambient */\n"
+            "  \"lightgridAmbientScale\": %.2f, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */\n"
+            "  \"lightgridDirectScale\": %.2f, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */\n"
+            "  \"lightgridDilation\": %s, /* if true, buried boundary cells are filled with averaged neighbor light so legacy engines blend meaningful values */\n"
             "  \"texturesRGB\": %s,\n"
             "  \"colorsRGB\": %s,\n"
             "  \"radiosityPasses\": %d, /* Number of times the light bounces */\n"
@@ -822,8 +853,10 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"rad_ao_intensity\": %.2f, /* Intensity of ambient occlusion shadowing */\n"
             "  \"rad_ao_min\": %.2f, /* Minimum distance for ambient occlusion shadowing */\n"
             "  \"rad_ao_max\": %.2f, /* Maximum distance for ambient occlusion shadowing */\n"
+            "  \"rad_gridscale\": %.2f, /* Scale the radiosity added to the lightgrid */\n"
             "  \"ambientTestRadius\": %.2f, /* Radius at which a light probe tests for being occluded */\n"
             "  \"ambientGatherRadius\": %.2f, /* Distance at which a lightmap pixel gathers light from probes */\n"
+            "  \"ambientGridScale\": %.2f, /* Scale the macro ambient occlusion added to the lightgrid */\n"
             "  \"shading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunShading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
@@ -868,8 +901,12 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lightgridSmoothAmbientPasses,
             game->lightgridSmoothDirect,
             game->lightgridSmoothDirectPasses,
-            game->lightgridMinAmbient,
-            game->lightgridMaxAmbient,
+            game->lightgridAmbientClampMin,
+            game->lightgridAmbientClampMax,
+            game->lightgridAmbientTransferFraction,
+            game->lightgridAmbientScale,
+            game->lightgridDirectScale,
+            game->lightgridDilation ? "true" : "false",
             game->texturesRGB ? "true" : "false",
             game->colorsRGB ? "true" : "false",
             game->radiosityPasses,
@@ -879,8 +916,10 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->rad_ao_intensity,
             game->rad_ao_min,
             game->rad_ao_max,
+            game->rad_gridscale,
             game->ambientTestRadius,
             game->ambientGatherRadius,
+            game->ambientGridScale,
             shadingModelStr,
             sunShadingModelStr,
             attenuationModelStr,

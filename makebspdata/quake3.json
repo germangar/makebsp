@@ -28,14 +28,17 @@
   "hdr8BitScale": 1.00,
   "lightmapsRGB": false,
   "lightgridRGB": false,
-  "lightgridAmbientBias": 1.50,
-  "lightgridDirectBias": 1.50,
+  "lightgridAmbientBias": 1.00,
+  "lightgridDirectBias": 1.00,
   "lightgridSmoothAmbient": 128.00, /* Radius in world units for smoothing the ambient component of the light grid */
   "lightgridSmoothAmbientPasses": 1,
   "lightgridSmoothDirect": 0.00, /* Radius in world units for smoothing the direct component of the light grid */
   "lightgridSmoothDirectPasses": 1,
-  "lightgridMinAmbient": 0.00,
-  "lightgridMaxAmbient": 0.00,
+  "lightgridAmbientClampMin": 0.00,
+  "lightgridAmbientClampMax": 0.00,
+  "lightgridAmbientTransferFraction": 0.20, /* Fraction of direct light energy transferred into the grid ambient */
+  "lightgridAmbientScale": 1.00, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */
+  "lightgridDirectScale": 0.2, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */
   "texturesRGB": false,
   "colorsRGB": false,
   "radiosityPasses": 4, /* Number of times the light bounces */
@@ -45,8 +48,10 @@
   "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
   "rad_ao_min": 0.00, /* Minimum distance for ambient occlusion shadowing */
   "rad_ao_max": 32.00, /* Maximum distance for ambient occlusion shadowing */
+  "rad_gridscale": 1.50, /* Multiplier on radiosity (bounced light) added to the grid ambient */
   "ambientTestRadius": 512.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 256.00, /* Distance at which a lightmap pixel gathers light from probes */
+  "ambientGridScale": 1.00, /* Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default) */
   "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "attenuation": "standard",  /* [ standard, soft, linear ] */

@@ -247,6 +247,8 @@ typedef struct light_s
 	qboolean noDeluxeInfluence;
 	float gridAmbientScale; // scales light contribution to grid ambient component
 	float gridDirectScale; // scales light contribution to grid direct component
+	float gridMaxAmbient; // absolute luma ceiling on grid ambient contribution (0 = derived family budget)
+	float gridMaxDirect; // absolute luma ceiling on grid direct contribution (0 = uncapped)
 
 	winding_t *w;
 	float area;		  // pre-calculated winding area (for seam fix)
@@ -338,11 +340,15 @@ static inline float CalculateAttenuation(const light_t *light, float dist, atten
     return (energy > 0.0f) ? energy : 0.0f;
 }
 
+#define LIGHTGRID_SUN_AMBIENT_MAX_LUMA 40.0f
 extern vec3_t sunDirection, sunLight, ambientColor;
 extern qboolean hasSun;
+extern float sunGridAmbientScale, sunGridDirectScale;
+extern float sunGridMaxAmbient, sunGridMaxDirect;
 extern vec3_t skyColor, groundColor;    // hemisphere ambient colors
 extern float  *maoAmbient;             // [numGridPoints*3] pre-baked ambient RGB
 extern float  *maoDir;                 // [numGridPoints*3] pre-baked ambient direction
+extern float  *gridResolvedOrigins;    // [numGridPoints*3] per-cell sampling origin (lattice point, or the relocated open point for solid cells)
 extern int     ambient_grid_samples;    // rays per grid point (default 48)
 extern int     ambient_samples;         // rays per lightmap texel (default 32)
 extern float   ambient_testradius;      // max ray length in world units (default 512)

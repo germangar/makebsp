@@ -110,3 +110,42 @@ Because the lightgrid is always stored as 8-bit integer bytes, **it is always no
    - **Mode 8 (`_lightmapbits "8"`)**: Both lightmaps and lightgrid are 8-bit and share the `_lightingIntensity` scalar for expansion.
    - **Modes 16 & 32 (`_lightmapbits "16" | "32"`)**: Lightmaps are stored as raw, unscaled floating-point data (`float16` or `float32`). However, `_lightingIntensity` **is still injected into worldspawn** specifically so the engine can reconstruct the 8-bit lightgrid up to the exact same physical scale as the unscaled 16/32-bit lightmaps.
 
+---
+
+## 3. Lightgrid Invalid Cell Marking (`_lightgridFlagInvalid`)
+
+The two-lump lightgrid storage (palette in `LUMP_LIGHTGRID` + dense 16-bit index map in `LUMP_LIGHTARRAY`, as written for FBSP-flavoured output) allows lattice positions that hold no real light — cells buried inside solid geometry — to be **explicitly marked as invalid** instead of storing a black cell. This lets engines exclude wall-embedded cells from the trilinear light blend, which otherwise drags sampled light toward black when an entity stands near a wall or the floor.
+
+### Identification
+
+The authoritative gate is the **BSP version field in the file header**: the sentinel convention is structural to **FBSP version 2** — every version 2 BSP carries it, and no version 1 BSP ever does.
+
+- **FBSP version 2**: the `LIGHTARRAY` always uses the `0xFFFF` sentinel for buried cells, and the `_lightgridFlagInvalid` worldspawn key (value `"1"`, compiler-injected, **not** a mapper key) is written informationally for loaders that prefer checking entities over the header. Either check is sufficient.
+- **FBSP version 1**: never carries the sentinel; re-writes of older experimental files that contained it strip the key. The supported alternative for version 1 is lightgrid dilation (below).
+- **IBSP (Q3-style)**: unaffected in every way — dense grid, no index map, no marker, no key.
+
+### The Sentinel Contract
+
+- **`0xFFFF` is reserved**: a `LUMP_LIGHTARRAY` entry of `0xFFFF` means *"no cell here — this lattice position is invalid"* (unreachable / inside solid geometry). It is not a palette index.
+- **The map stays dense**: every lattice position of the map bounding box always has exactly one `LIGHTARRAY` entry. Invalid positions are marked, never omitted.
+- Valid entries therefore use palette indices `0..65534`, capping the palette at 65535 unique cells (the compiler fails with a clean error instead of overflowing).
+- Cells whose lattice point merely touches geometry but were successfully relocated by the compiler's nudge search keep their sampled light and are **not** marked — thin-wall regions do not lose valid light.
+
+### Engine Implementation Guidance
+
+- **Loader**: when `_lightgridFlagInvalid` is `"1"`, turn `0xFFFF` entries into NULL slots instead of dereferencing the palette. Without the key, no `0xFFFF` entry ever exists in the file.
+- **Sampler**: skip NULL corners of the trilinear blend and renormalize the weights over the remaining valid corners.
+- **Fallback**: when all surrounding grid sites are invalid, the engine reports the same result as a map with no light grid (average directional vector, zero world ambient/diffuse).
+
+> [!WARNING]
+> **Compatibility**: the version gate is the protection. An engine that only knows FBSP version 1 rejects a version 2 file cleanly at load time (version mismatch) and never reaches the palette dereference. An engine with version 2 support loading a version 1 BSP simply never sees a sentinel. Engines must never treat `0xFFFF` as a palette index.
+
+### Legacy-Compatibility Alternative: Lightgrid Dilation (`lightgridDilation`)
+
+For engines that cannot be updated to the sentinel convention, the compiler can instead **fill** fully buried cells with the average light of their valid neighbors (a single-layer dilation over the 26-cell neighborhood), so legacy trilinear sampling near walls blends meaningful light instead of black.
+
+- **Identification**: none. The output is a plain legacy grid — no worldspawn key, no marker, no engine support required. Enabled per game profile (`"lightgridDilation": true`); it is a tool-side decision.
+- **Semantics**: runs last, after all other lightgrid filters, copying final `ambient`/`directed` values and an averaged direction from the valid neighbors. Dilated cells are never used as donors (single fill layer). Cells with no valid neighbor (deep interior) stay black — they are never sampled by a legitimate probe anyway.
+- **Version interplay**: dilation is the version 1 mechanism. The FBSP version 2 writer skips the pass entirely, since the sentinel owns those cells and the filled data would never be written. Version 1 profiles enable it via `"lightgridDilation": true` in the game profile.
+- **Trade-off**: dilation fabricates data, so borrowed light can bleed across thin walls at grid resolution (a buried cell shared between a bright and a dark room brightens the dark side's probe). The sentinel has no such artifact — it discards corners and renormalizes over real samples — and remains the exact mechanism for engines that support it.
+

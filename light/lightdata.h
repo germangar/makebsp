@@ -12,6 +12,8 @@ typedef struct {
   vec3_t irradiance;
   float angle;
   float ambientClampScale;
+  float ambientAbsMax; /* > 0 = absolute luma ceiling overriding the derived clamp */
+  float directAbsMax; /* > 0 = absolute luma ceiling on the grid direct contribution */
   qboolean isGlow;
   float gridAmbientScale;
   float gridDirectScale;
@@ -83,6 +85,7 @@ extern float maxLightIntensity;
 // Up-conversion: Standard 8-bit data -> Internal 32-bit float buffers
 void UpConvertLightingData(void);
 void CheckGridData32(void);
+void BuildGridSolidMask(void);
 
 // Down-conversion: Internal 32-bit float buffers -> Standard 8-bit data
 void DownConvertLightingData(void);

@@ -13,14 +13,14 @@ char name[1024];
 int numGames = 2;
 float shadingModelSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
 float sunSoftBias = SHADING_MODEL_LAMBERT_SOFTBIAS;
-float lightgridAmbientBias = 1.5f;
-float lightgridDirectBias = 1.5f;
+float lightgridAmbientBias = 1.0f;
+float lightgridDirectBias = 1.0f;
 float lightgridSmoothAmbient = 0.0f;
 int lightgridSmoothAmbientPasses = 1;
 float lightgridSmoothDirect = 0.0f;
 int lightgridSmoothDirectPasses = 1;
-float lightgridMinAmbient = 0.0f;
-float lightgridMaxAmbient = 0.0f;
+float lightgridAmbientClampMin = 0.0f;
+float lightgridAmbientClampMax = 0.0f;
 
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
@@ -73,14 +73,18 @@ game_t gameTemplates[MAX_GAMES] = {
 		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
 		qfalse,     // lightgridRGB
-		1.5f,       // lightgridAmbientBias
-		1.5f,       // lightgridDirectBias
+		1.0f,       // lightgridAmbientBias (1.0 = disabled)
+		1.0f,       // lightgridDirectBias (1.0 = disabled)
 		256.0f,     // lightgridSmoothAmbient
 		4,          // lightgridSmoothAmbientPasses
 		128.0f,     // lightgridSmoothDirect
 		3,          // lightgridSmoothDirectPasses
-		0.0f,       // lightgridMinAmbient
-		0.0f,       // lightgridMaxAmbient
+		0.0f,       // lightgridAmbientClampMin
+		0.0f,       // lightgridAmbientClampMax
+		0.2f,       // lightgridAmbientTransferFraction: fraction of direct light energy transferred into the grid ambient
+		1.0f,       // lightgridAmbientScale: default per-light multiplier on the grid ambient contribution
+		1.75f,      // lightgridDirectScale: default per-light multiplier on the grid direct contribution
+		qtrue,      // lightgridDilation: fill buried boundary cells with neighbor light (legacy-engine compat)
 		qtrue,      // texturesRGB
 		qtrue,      // colorsRGB
 		4,          // radiosityPasses
@@ -90,8 +94,10 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
+        1.5f,       // rad_gridscale: multiplier on radiosity bounced light added to grid ambient
         512.0f,     // ambientTestRadius
         256.0f,     // ambientGatherRadius
+        1.0f,       // ambientGridScale: relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default)
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
@@ -157,14 +163,18 @@ game_t gameTemplates[MAX_GAMES] = {
 		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
 		qfalse,     // lightgridRGB
-		1.5f,       // lightgridAmbientBias
-		1.5f,       // lightgridDirectBias
+		1.0f,       // lightgridAmbientBias (1.0 = disabled)
+		1.0f,       // lightgridDirectBias (1.0 = disabled)
 		128.0f,     // lightgridSmoothAmbient
 		1,          // lightgridSmoothAmbientPasses
 		0.0f,       // lightgridSmoothDirect
 		1,          // lightgridSmoothDirectPasses
-		0.0f,       // lightgridMinAmbient
-		0.0f,       // lightgridMaxAmbient
+		0.0f,       // lightgridAmbientClampMin
+		0.0f,       // lightgridAmbientClampMax
+		0.20f,      // lightgridAmbientTransferFraction: fraction of direct light energy transferred into the grid ambient
+		1.0f,       // lightgridAmbientScale: default per-light multiplier on the grid ambient contribution
+		0.2f,       // lightgridDirectScale: default per-light multiplier on the grid direct contribution
+		qtrue,      // lightgridDilation: fill buried boundary cells with neighbor light (legacy-engine compat)
 		qfalse,     // texturesRGB
 		qfalse,     // colorsRGB
 		4,          // radiosityPasses
@@ -174,8 +184,10 @@ game_t gameTemplates[MAX_GAMES] = {
         0.5f,       // rad_ao_intensity
         0.0f,       // rad_ao_min
         32.0f,      // rad_ao_max
+        1.5f,       // rad_gridscale: multiplier on radiosity bounced light added to grid ambient
         512.0f,     // ambientTestRadius
         256.0f,     // ambientGatherRadius
+        1.0f,       // ambientGridScale: relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default)
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel

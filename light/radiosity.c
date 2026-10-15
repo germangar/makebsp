@@ -1057,8 +1057,16 @@ static void RadiosityIntegrateGridThread(int num) {
     origin[1] = gridMins[1] + y * gridSize[1];
     origin[2] = gridMins[2] + z * gridSize[2];
 
-    if (PointInSolid(origin)) {
-        return; 
+    if (gridInvalidMask[num] & GRID_FLAG_INVALID) {
+        return;
+    }
+
+    if (gridInvalidMask[num] & GRID_FLAG_SOLID) {
+        // Lattice point sits inside solid geometry: gather the bounce at the
+        // open point resolved by the grid classification pass (the same
+        // origin TraceGrid and the MAO pass use), so solid-but-reachable
+        // cells receive radiosity too.
+        VectorCopy(&gridResolvedOrigins[num * 3], origin);
     }
 
     int numSamples = 64; 
@@ -1376,9 +1384,9 @@ static void RadiosityMerge(const float *srcBuffer) {
     // Merge Grid
     if (radiosityGridColors && gridData32 && numGridPoints > 0) {
         for (int i = 0; i < numGridPoints; i++) {
-            gridData32[i].ambient[0][0] += radiosityGridColors[i * 3 + 0];
-            gridData32[i].ambient[0][1] += radiosityGridColors[i * 3 + 1];
-            gridData32[i].ambient[0][2] += radiosityGridColors[i * 3 + 2];
+            gridData32[i].ambient[0][0] += radiosityGridColors[i * 3 + 0] * game->rad_gridscale;
+            gridData32[i].ambient[0][1] += radiosityGridColors[i * 3 + 1] * game->rad_gridscale;
+            gridData32[i].ambient[0][2] += radiosityGridColors[i * 3 + 2] * game->rad_gridscale;
             // Note: Since we gather isotropically from a sphere, all accumulated light is ambient
         }
     }

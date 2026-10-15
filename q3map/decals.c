@@ -1989,7 +1989,9 @@ void MakeEntityDecals(entity_t *e)
     GetVectorForKey(e, "origin", entityOrigin);
     
     initialSurfs = numMapDrawSurfs; 
-    
+
+    if (!verbose && entity_num == 0) _printf("Generating decal surfaces\n");
+
     // Group projectors by their parent decal entity
     for (d = 0; d < num_entities; d++)
     {
@@ -2163,4 +2165,6 @@ void MakeEntityDecals(entity_t *e)
         FreeDecalMesh(&decalTrisoup);
         FreeDecalMesh(&decalPatch);
     }
+
+    if (!verbose && entity_num == 0) _printf("%i decal surfaces generated\n", numMapDrawSurfs - initialSurfs);
 }

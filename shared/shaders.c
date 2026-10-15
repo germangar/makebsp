@@ -491,8 +491,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->forceSunLight = qfalse;
     si->noDeluxeInfluence = qfalse;
     si->noDeluxeInfluenceBacksplash = qfalse;
-    si->gridAmbientScale = 1.0f;
-    si->gridDirectScale = 1.0f;
+    si->gridAmbientScale = -1.0f; // negative = unset; surface lights then inherit the map-wide default
+    si->gridDirectScale = -1.0f;
     si->deluxeMinAngle = -1.0f;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;

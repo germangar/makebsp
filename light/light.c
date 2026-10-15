@@ -115,6 +115,10 @@ qboolean *brushCastsShadow;
 vec3_t sunDirection = {0.45, 0.3, 0.9};
 vec3_t sunLight = {0, 0, 0};
 qboolean hasSun = qfalse;
+float sunGridAmbientScale = 1.0f;
+float sunGridDirectScale = 1.0f;
+float sunGridMaxAmbient = LIGHTGRID_SUN_AMBIENT_MAX_LUMA;
+float sunGridMaxDirect = 0.0f;
 
 int numSkyBrushes;
 
@@ -243,8 +247,9 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
 
     dl->si = ls;
     dl->noDeluxeInfluence = ls->noDeluxeInfluence;
-    dl->gridAmbientScale = ls->gridAmbientScale;
-    dl->gridDirectScale = ls->gridDirectScale;
+    // negative means "unset": inherit the map-wide default; explicit shader/sidecar values win
+    dl->gridAmbientScale = (ls->gridAmbientScale >= 0.0f) ? ls->gridAmbientScale : game->lightgridAmbientScale;
+    dl->gridDirectScale = (ls->gridDirectScale >= 0.0f) ? ls->gridDirectScale : game->lightgridDirectScale;
 
     if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER))
     {
@@ -717,6 +722,26 @@ void CreateEntityLights(void)
 
             VectorScale(sunLight, directScale, sunLight);
             hasSun = qtrue;
+
+            // inherit the map-wide default, then let the sun entity keys override
+            sunGridAmbientScale = game->lightgridAmbientScale;
+            const char *sunGridAmbientScaleStr = ValueForKey(e, "grid_ambientscale");
+            if (sunGridAmbientScaleStr[0])
+                sunGridAmbientScale = atof(sunGridAmbientScaleStr);
+
+            sunGridDirectScale = game->lightgridDirectScale;
+            const char *sunGridDirectScaleStr = ValueForKey(e, "grid_directscale");
+            if (sunGridDirectScaleStr[0])
+                sunGridDirectScale = atof(sunGridDirectScaleStr);
+
+            const char *sunGridMaxAmbientStr = ValueForKey(e, "grid_maxambient");
+            if (sunGridMaxAmbientStr[0])
+                sunGridMaxAmbient = atof(sunGridMaxAmbientStr);
+
+            const char *sunGridMaxDirectStr = ValueForKey(e, "grid_maxdirect");
+            if (sunGridMaxDirectStr[0])
+                sunGridMaxDirect = atof(sunGridMaxDirectStr);
+
             continue;
         }
 
@@ -725,8 +750,8 @@ void CreateEntityLights(void)
         memset(dl, 0, sizeof(*dl));
         dl->next = lights;
         lights = dl;
-        dl->gridAmbientScale = 1.0f;
-        dl->gridDirectScale = 1.0f;
+        dl->gridAmbientScale = game->lightgridAmbientScale;
+        dl->gridDirectScale = game->lightgridDirectScale;
         dl->coneSoftness = 1.0f;
 
         dl->attenuationModel = game->attenuationModel;
@@ -853,6 +878,14 @@ void CreateEntityLights(void)
         const char *gridDirectScaleStr = ValueForKey(e, "grid_directscale");
         if (gridDirectScaleStr[0])
             dl->gridDirectScale = atof(gridDirectScaleStr);
+
+        const char *gridMaxAmbientStr = ValueForKey(e, "grid_maxambient");
+        if (gridMaxAmbientStr[0])
+            dl->gridMaxAmbient = atof(gridMaxAmbientStr);
+
+        const char *gridMaxDirectStr = ValueForKey(e, "grid_maxdirect");
+        if (gridMaxDirectStr[0])
+            dl->gridMaxDirect = atof(gridMaxDirectStr);
 
         dl->type = emit_point;
 
@@ -2024,6 +2057,7 @@ void LightMain(void)
             numGridPoints = gridBounds[0] * gridBounds[1] * gridBounds[2];
         }
         CheckGridData32();
+        BuildGridSolidMask();
         qprintf("%5i gridPoints\n", numGridPoints);
 
         // Allocate per-grid-point MAO ambient array now that numGridPoints is known

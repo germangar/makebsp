@@ -32,6 +32,7 @@ vec3_t *texelOrigins = NULL;
 vec3_t *texelNormals = NULL;
 int *texelSurfaceDebug = NULL;
 bspGridPoint32_t *gridData32 = NULL;
+float *gridResolvedOrigins = NULL;
 
 float maxLightIntensity = 0.0f;
 static tonemap_t tonemapMode;
@@ -353,7 +354,23 @@ void CheckGridData32(void)
 {
     if (gridData32)
         Q_Free(gridData32);
-    
+
+    // Grid classification rides the same lifecycle: rebuilt from scratch on
+    // every (re)allocation. GRID_FLAG_SOLID/INVALID flags and the per-cell
+    // resolved sampling origins are filled by BuildGridSolidMask() (or the
+    // FBSP load path for re-bakes).
+    if (gridInvalidMask)
+    {
+        free(gridInvalidMask);
+        gridInvalidMask = NULL;
+    }
+
+    if (gridResolvedOrigins)
+    {
+        free(gridResolvedOrigins);
+        gridResolvedOrigins = NULL;
+    }
+
     if (numGridPoints <= 0)
     {
         gridData32 = NULL;
@@ -364,6 +381,113 @@ void CheckGridData32(void)
     if (!gridData32)
         Error("CheckGridData32: malloc failed");
     memset(gridData32, 0, numGridPoints * sizeof(bspGridPoint32_t));
+
+    gridInvalidMask = malloc(numGridPoints * sizeof(byte));
+    if (!gridInvalidMask)
+        Error("CheckGridData32: malloc failed for gridInvalidMask");
+    memset(gridInvalidMask, 0, numGridPoints * sizeof(byte));
+
+    gridResolvedOrigins = malloc(numGridPoints * 3 * sizeof(float));
+    if (!gridResolvedOrigins)
+        Error("CheckGridData32: malloc failed for gridResolvedOrigins");
+    memset(gridResolvedOrigins, 0, numGridPoints * 3 * sizeof(float));
+}
+
+/*
+================
+ResolveOpenGridOrigin
+
+Exact parity with the legacy TraceGrid nudge search: probe the 8 diagonal
+directions at steps 9 and 18 around a solid lattice point, returning the
+first open point found. Returns qfalse when the cell is fully buried.
+================
+*/
+static qboolean ResolveOpenGridOrigin(const vec3_t base, vec3_t out)
+{
+    vec3_t probe;
+    int step, i;
+
+    for (step = 9; step <= 18; step += 9)
+    {
+        for (i = 0; i < 8; i++)
+        {
+            VectorCopy(base, probe);
+            if (i & 1)
+                probe[0] += step;
+            else
+                probe[0] -= step;
+            if (i & 2)
+                probe[1] += step;
+            else
+                probe[1] -= step;
+            if (i & 4)
+                probe[2] += step;
+            else
+                probe[2] -= step;
+            if (!PointInSolid(probe))
+            {
+                VectorCopy(probe, out);
+                return qtrue;
+            }
+        }
+    }
+    return qfalse;
+}
+
+/*
+================
+BuildGridSolidMask
+
+One parallel pass over every lattice position that classifies the cell and
+resolves its sampling origin:
+
+- GRID_FLAG_SOLID: the lattice point sits inside solid geometry. The cell
+  stays valid but every stage (TraceGrid, MAO, radiosity) must sample at
+  the relocated open point stored in gridResolvedOrigins instead of
+  re-walking the BSP tree per cell.
+- GRID_FLAG_INVALID: fully buried, no open point within the nudge radius.
+  The cell carries no light and is zeroed; CompressGrid writes the engine
+  sentinel for it when writing FBSP version 2 (the sentinel is structural
+  to that format, see bsp_extended_capabilities.md).
+
+Run once at grid setup, before any tracing stage.
+================
+*/
+void BuildGridSolidMask(void)
+{
+    int i;
+
+    if (!gridInvalidMask || numGridPoints <= 0)
+        return;
+
+    _printf("--- BuildGridSolidMask ---\n");
+
+    #pragma omp parallel for schedule(static)
+    for (i = 0; i < numGridPoints; i++)
+    {
+        int mod = i;
+        int z = mod / (gridBounds[0] * gridBounds[1]);
+        mod -= z * (gridBounds[0] * gridBounds[1]);
+        int y = mod / gridBounds[0];
+        int x = mod - y * gridBounds[0];
+
+        vec3_t origin;
+        origin[0] = gridMins[0] + x * gridSize[0];
+        origin[1] = gridMins[1] + y * gridSize[1];
+        origin[2] = gridMins[2] + z * gridSize[2];
+
+        if (PointInSolid(origin))
+        {
+            gridInvalidMask[i] |= GRID_FLAG_SOLID;
+
+            // Resolve the relocated sampling point once, shared by every
+            // stage; fully buried cells have no origin to sample at.
+            if (!ResolveOpenGridOrigin(origin, origin))
+                gridInvalidMask[i] |= GRID_FLAG_INVALID;
+        }
+
+        VectorCopy(origin, &gridResolvedOrigins[i * 3]);
+    }
 }
 
 /*

@@ -2096,6 +2096,7 @@ void GenerateHalos(entity_t *e)
     if (!game->haloShader || !game->haloShader[0]) return;
 
     qprintf("----- GenerateHalos -----\n");
+    if (!verbose && entity_num == 0) _printf("Generating Halo surfaces\n");
 
     for (i = 0; i < num_entities; i++) {
         light = &entities[i];

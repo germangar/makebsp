@@ -1277,12 +1277,10 @@ static void SmoothGridAmbient(void) {
             int x = mod - y * gridBounds[0];
             
             vec3_t origin;
-            origin[0] = gridMins[0] + x * gridSize[0];
-            origin[1] = gridMins[1] + y * gridSize[1];
-            origin[2] = gridMins[2] + z * gridSize[2];
-            
-            if (PointInSolid(origin)) {
-                // skip solid
+            VectorCopy(&gridResolvedOrigins[i * 3], origin);
+
+            if (gridInvalidMask[i] & GRID_FLAG_INVALID) {
+                // fully buried: no light to smooth (sentinel/dilation own it)
                 VectorCopy(gridData32[i].ambient[0], smoothed[i]);
                 continue;
             }
@@ -1309,17 +1307,15 @@ static void SmoothGridAmbient(void) {
                         int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
                         
                         vec3_t n_origin;
-                        n_origin[0] = gridMins[0] + nx * gridSize[0];
-                        n_origin[1] = gridMins[1] + ny * gridSize[1];
-                        n_origin[2] = gridMins[2] + nz * gridSize[2];
-                        
+                        VectorCopy(&gridResolvedOrigins[ni * 3], n_origin);
+
                         vec3_t diff;
                         VectorSubtract(origin, n_origin, diff);
                         float dist = VectorLength(diff);
                         if (dist > effectiveRadius) continue;
-                        
-                        if (PointInSolid(n_origin)) continue;
-                        
+
+                        if (gridInvalidMask[ni] & GRID_FLAG_INVALID) continue;
+
                         qboolean visible = qfalse;
                         if (i == ni) {
                             visible = qtrue;
@@ -1400,12 +1396,10 @@ static void SmoothGridDirect(void) {
             int x = mod - y * gridBounds[0];
             
             vec3_t origin;
-            origin[0] = gridMins[0] + x * gridSize[0];
-            origin[1] = gridMins[1] + y * gridSize[1];
-            origin[2] = gridMins[2] + z * gridSize[2];
-            
-            if (PointInSolid(origin)) {
-                // skip solid
+            VectorCopy(&gridResolvedOrigins[i * 3], origin);
+
+            if (gridInvalidMask[i] & GRID_FLAG_INVALID) {
+                // fully buried: no light to smooth (sentinel/dilation own it)
                 VectorCopy(gridData32[i].directed[0], smoothedDirColor[i]);
                 VectorCopy(gridData32[i].dir, smoothedDirVector[i]);
                 continue;
@@ -1438,27 +1432,25 @@ static void SmoothGridDirect(void) {
                         if (lum < 0.001f) continue;
                         
                         vec3_t n_origin;
-                        n_origin[0] = gridMins[0] + nx * gridSize[0];
-                        n_origin[1] = gridMins[1] + ny * gridSize[1];
-                        n_origin[2] = gridMins[2] + nz * gridSize[2];
-                        
+                        VectorCopy(&gridResolvedOrigins[ni * 3], n_origin);
+
                         vec3_t diff;
                         VectorSubtract(origin, n_origin, diff);
-                        
+
                         vec3_t n_dir;
                         VectorCopy(gridData32[ni].dir, n_dir);
                         VectorNormalize(n_dir, n_dir);
-                        
+
                         float depth = DotProduct(diff, n_dir);
                         if (fabs(depth) > disc_thickness) continue;
-                        
+
                         vec3_t lateral_vec;
                         VectorMA(diff, -depth, n_dir, lateral_vec);
                         float lateral_dist = VectorLength(lateral_vec);
-                        
+
                         if (lateral_dist > effectiveRadius) continue;
-                        
-                        if (PointInSolid(n_origin)) continue;
+
+                        if (gridInvalidMask[ni] & GRID_FLAG_INVALID) continue;
                         
                         qboolean visible = qfalse;
                         if (i == ni) {
@@ -1525,9 +1517,9 @@ static void SmoothGridDirect(void) {
     Q_Free(smoothedDirVector);
 }
 
-static void ApplyGridMinAmbient(void) {
-    if (lightgridMinAmbient <= 0.0f) return;
-    float targetMinAmbient = (lightgridMinAmbient / 100.0f) * lightgridMaxDisplayIntensity;
+static void ApplyGridAmbientClampMin(void) {
+    if (lightgridAmbientClampMin <= 0.0f) return;
+    float targetMinAmbient = (lightgridAmbientClampMin / 100.0f) * lightgridMaxDisplayIntensity;
     _printf("  Applying lightgrid min ambient (target %f)...\n", targetMinAmbient);
 
     vec3_t local_ambient_hue;
@@ -1562,9 +1554,9 @@ static void ApplyGridMinAmbient(void) {
     }
 }
 
-static void ApplyGridMaxAmbient(void) {
-    if (lightgridMaxAmbient <= 0.0f) return;
-    float maxAmbientAllowed = (lightgridMaxAmbient / 100.0f) * lightgridMaxDisplayIntensity;
+static void ApplyGridAmbientClampMax(void) {
+    if (lightgridAmbientClampMax <= 0.0f) return;
+    float maxAmbientAllowed = (lightgridAmbientClampMax / 100.0f) * lightgridMaxDisplayIntensity;
     _printf("  Applying lightgrid max ambient (max allowed %f)...\n", maxAmbientAllowed);
     
     #pragma omp parallel for schedule(static)
@@ -1574,6 +1566,93 @@ static void ApplyGridMaxAmbient(void) {
             float scale = maxAmbientAllowed / lumAmb;
             VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
         }
+    }
+}
+
+/*
+================
+DilateGridInvalidCells
+
+Legacy-engine compatibility mode: fill fully buried lightgrid cells (the
+ones engines would otherwise blend as black) with the average of their
+valid neighbors, so trilinear sampling near walls pulls in meaningful
+light instead of darkness. Runs last, after every other grid filter, so
+the borrowed values match the final neighboring ones.
+
+The GRID_FLAG_INVALID bit is deliberately NOT cleared. Dilated cells stay
+flagged, which guarantees a single fill layer (a filled cell never becomes
+a donor). In FBSP version 2 the sentinel is structural, so the pass is
+skipped entirely (CompressGrid writes 0xFFFF for those cells and the
+filled data is never written); in version 1 the filled values become
+ordinary palette entries. Profile-gated only.
+================
+*/
+static void DilateGridInvalidCells(void) {
+    if (!game->lightgridDilation)
+        return;
+    if (game->bspVersion == FBSP_VERSION_2)
+        return; // v2: the sentinel owns buried cells; filled data is never written
+    if (!gridData32 || !gridInvalidMask || numGridPoints <= 0)
+        return;
+
+    _printf("  Dilating invalid lightgrid cells with neighbor light...\n");
+
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        if (!(gridInvalidMask[i] & GRID_FLAG_INVALID))
+            continue;
+
+        int z = i / (gridBounds[0] * gridBounds[1]);
+        int mod = i - z * (gridBounds[0] * gridBounds[1]);
+        int y = mod / gridBounds[0];
+        int x = mod - y * gridBounds[0];
+
+        vec3_t ambSum = {0, 0, 0};
+        vec3_t directedSum = {0, 0, 0};
+        vec3_t dirVecSum = {0, 0, 0};
+        int donors = 0;
+
+        for (int dz = -1; dz <= 1; dz++) {
+            int nz = z + dz;
+            if (nz < 0 || nz >= gridBounds[2]) continue;
+            for (int dy = -1; dy <= 1; dy++) {
+                int ny = y + dy;
+                if (ny < 0 || ny >= gridBounds[1]) continue;
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx;
+                    if (nx < 0 || nx >= gridBounds[0]) continue;
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+
+                    int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
+                    if (gridInvalidMask[ni] & GRID_FLAG_INVALID)
+                        continue; // dilated cells never donate
+
+                    VectorAdd(ambSum, gridData32[ni].ambient[0], ambSum);
+                    VectorAdd(directedSum, gridData32[ni].directed[0], directedSum);
+                    VectorAdd(dirVecSum, gridData32[ni].dir, dirVecSum);
+                    donors++;
+                }
+            }
+        }
+
+        if (donors == 0)
+            continue; // deep interior: never sampled by a legitimate probe
+
+        float inv = 1.0f / (float)donors;
+        VectorScale(ambSum, inv, gridData32[i].ambient[0]);
+        VectorScale(directedSum, inv, gridData32[i].directed[0]);
+
+        // Average the donor directions; fall back to straight-down if the
+        // vectors cancel out (matching the TraceGrid seed direction).
+        VectorScale(dirVecSum, inv, gridData32[i].dir);
+        if (VectorNormalize(gridData32[i].dir, gridData32[i].dir) == 0.0f)
+            VectorSet(gridData32[i].dir, 0.0f, 0.0f, -1.0f);
+
+        // Canonical single-style set so legacy engines see a well-formed cell.
+        gridData32[i].styles[0] = 0;
+        gridData32[i].styles[1] = 0xff;
+        gridData32[i].styles[2] = 0xff;
+        gridData32[i].styles[3] = 0xff;
     }
 }
 
@@ -1701,10 +1780,11 @@ void PostProcessLightmaps(void) {
     if (gridData32) {
         ApplyGridAmbientBias();
         ApplyGridDirectBias();
-        ApplyGridMinAmbient();
+        ApplyGridAmbientClampMin();
         SmoothGridAmbient();
         SmoothGridDirect();
-        ApplyGridMaxAmbient();
+        ApplyGridAmbientClampMax();
+        DilateGridInvalidCells();
     }
 
     if (game->saturation != 1.0f) {
@@ -1738,10 +1818,11 @@ void PostProcessLightmaps(void) {
         
         // 3. Volumetric Lightgrid
         if (gridData32) {
+            #define GRID_SATURATION_FRAC 0.35f
             // The grid's ambient component lives in a lower value range than the
             // lightmaps, so it holds its color much better; a full-strength
             // saturation boost oversaturates it.
-            float gridAmbSat = (sat > 1.0f) ? 1.0f + (sat - 1.0f) * 0.5f : sat;
+            float gridAmbSat = (sat > 1.0f) ? 1.0f + (sat - 1.0f) * GRID_SATURATION_FRAC : sat;
             #pragma omp parallel for schedule(static)
             for (int i = 0; i < numGridPoints; i++) {
                 for (int j = 0; j < 4; j++) {

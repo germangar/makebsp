@@ -51,8 +51,18 @@ void ComputeMAOPoint(int num)
     origin[1] = gridMins[1] + y * gridSize[1];
     origin[2] = gridMins[2] + z * gridSize[2];
 
-    if (PointInSolid(origin))
+    if (gridInvalidMask[num] & GRID_FLAG_INVALID)
         return;
+
+    if (gridInvalidMask[num] & GRID_FLAG_SOLID)
+    {
+        // Lattice point sits inside solid geometry: compute the macro
+        // ambient at the open point resolved by the grid classification
+        // pass (the same origin TraceGrid and the radiosity grid sample
+        // at), so solid-but-reachable cells carry a full ambient term
+        // instead of collapsing to zero.
+        VectorCopy(&gridResolvedOrigins[num * 3], origin);
+    }
 
     tw = Q_Alloc(sizeof(traceWork_t));
     if (!tw) return;

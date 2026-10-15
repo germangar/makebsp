@@ -68,6 +68,18 @@ extern bspGridPoint_t *gridData;
 extern int numLightArray;
 extern unsigned short *lightArray;
 
+// FBSP family versions share the lump layout. Version 2 adds the mandatory
+// lightgrid invalid-cell sentinel (0xFFFF in LIGHTARRAY, see
+// bsp_extended_capabilities.md); version 1 files never carry it.
+#define FBSP_VERSION_2  2
+qboolean IsFBSPVersion(int version);
+
+// Lightgrid invalid-cell marking (extended capability, see bsp_extended_capabilities.md)
+#define LIGHTGRID_INVALID_INDEX  0xFFFF  // LIGHTARRAY entry meaning "no cell here / invalid"
+#define GRID_FLAG_SOLID          0x01    // lattice point sits inside solid geometry (internal)
+#define GRID_FLAG_INVALID        0x02    // fully buried cell: the engine must skip it
+extern byte *gridInvalidMask;            // one byte per lattice cell (GRID_FLAG_* bits), NULL when unavailable
+
 extern int numVisBytes;
 extern byte visBytes[MAX_MAP_VISIBILITY];
 

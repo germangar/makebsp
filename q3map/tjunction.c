@@ -1280,6 +1280,7 @@ void ChamferSurfaceEdges(entity_t *e)
     memset(globalInsets, 0, game->maxMapDrawSurfs * sizeof(drawVert_t*));
     
     qprintf("----- ChamferSurfaceEdges (V3: Normal Bending) -----\n");
+    if (!verbose && entity_num == 0) _printf("ChamferSurfaceEdges\n");
     InsertCollinearVertices(e, -0.866f, 0.866f, -1);
     BuildSurfaceAdjacencyGraph(e);
     numBaseDrawSurfs = numMapDrawSurfs;
@@ -1495,6 +1496,7 @@ void ChamferSurfaceEdges(entity_t *e)
     }
     
     free(globalInsets);
+    if (!verbose && entity_num == 0) _printf("Done\n");
 }
 
 
@@ -1774,6 +1776,7 @@ void MergeParentedTrisoups(entity_t *e)
     memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
 
     qprintf("----- MergeParentedTrisoups -----\n");
+    if (!verbose && entity_num == 0) _printf("Merging trisoups\n");
 
     for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
     {
@@ -2001,6 +2004,7 @@ void MergeAdjacentTrisoups(entity_t *e)
     int i, j;
     int numSurfsAtStart = numMapDrawSurfs;
     int numMergedGroups = 0;
+    int numMergedSurfs = 0;
     qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
     memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
 
@@ -2184,12 +2188,14 @@ void MergeAdjacentTrisoups(entity_t *e)
 
             dsA->isPlanar = allPlanar;
             numMergedGroups++;
+            numMergedSurfs += groupSize;
         }
     }
 
     free(group);
     free(visited);
     qprintf("%6i adjacent trisoup groups merged\n", numMergedGroups);
+    if (!verbose && entity_num == 0) _printf("%i trisoups merged\n", numMergedSurfs);
 }
 
 /*
@@ -2993,6 +2999,7 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
     int totalTrisRemoved = 0;
 
     qprintf("----- DecimateAllTrisoups -----\n");
+    if (!verbose && entity_num == 0) _printf("Decimating trisoups\n");
 
     int totalP1Verts = 0, totalP2Verts = 0;
     int totalP1Tris = 0, totalP2Tris = 0;
@@ -3037,6 +3044,7 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
     qprintf("%6i trisoups decimated\n",    numDecimated);
     qprintf("%6i vertices removed (%i in Phase 1 / %i in Phase 2)\n",      totalVertsRemoved, totalP1Verts, totalP2Verts);
     qprintf("%6i triangles removed (%i in Phase 1 / %i in Phase 2)\n",     totalTrisRemoved, totalP1Tris, totalP2Tris);
+    if (!verbose && entity_num == 0) _printf("%i trisoups decimated\n", numDecimated);
 }
 
 #ifdef DECIMATE_PLANAR_WITH_MESHLIB
@@ -3209,10 +3217,12 @@ GenerateTrisoupUVs
 void GenerateTrisoupUVs(entity_t *e)
 {
     qprintf("----- GenerateTrisoupUVs -----\n");
+    if (!verbose && entity_num == 0) _printf("GenerateTrisoupUVs\n");
     for (int i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
         mapDrawSurface_t *ds = &mapDrawSurfs[i];
         if (!ds->miscModel || ds->numVerts <= 0 || ds->numIndexes <= 0)
             continue;
         GenerateAtomicUVsWithXAtlas(ds);
     }
+    if (!verbose && entity_num == 0) _printf("Done\n");
 }

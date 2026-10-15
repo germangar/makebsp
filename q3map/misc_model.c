@@ -923,6 +923,7 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
     float scale;
     vec3_t scale_vec;
     float rotationMatrix[3][3];
+    int modelsLoaded = 0;
 
     *outStartInst = numModelInstances;
 
@@ -1028,6 +1029,9 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
             {
                 continue;
             }
+
+            _printf(".");
+            modelsLoaded++;
 
             if (numModelInstances == MAX_MODEL_INSTANCES)
             {
@@ -1268,6 +1272,9 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
         }
     }
 
+    if (modelsLoaded)
+        _printf("Done\n");
+
     *outEndInst = numModelInstances;
 }
 
@@ -1284,6 +1291,9 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
     const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
     if (world_forceuv_str[0])
         forceUVGen = atoi(world_forceuv_str);
+
+    if (endInst > startInst)
+        _printf("--- Integrating models ---\n");
 
     for (int i = startInst; i < endInst; i++) {
         modelInstance_t *inst = &modelInstances[i];
@@ -1536,7 +1546,11 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
             inst->meshes[j] = NULL;
         }
         inst->numMeshes = 0;
+        _printf(".");
     }
+
+    if (endInst > startInst)
+        _printf("Done\n");
 }
 
 /*

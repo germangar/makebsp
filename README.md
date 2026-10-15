@@ -232,6 +232,8 @@ List of additions and modifications made to shader parsing and features compared
 - **q3map_surfacelight_energycutoff <value>**: Absolute energy threshold before the surface light is completely culled (legacy behavior, overrides the anchor).
 - **q3map_surfacelight_fadeout <value>**: Percentage of the surface light's reach to use for a softness fade at the cutoff (0.0 to 1.0). Values above 0 override the game profile default; 0 falls back to it.
 - **q3map_surfacelight_nodeluxe**: Prevents the surface light from influencing the deluxe map's directionality. Instead it will only contribute color/energy (to prevent bumpmap distortions caused by trim lights).
+- **q3map_surfacelight_grid_ambientscale <value>**: Overrides this surface light's multiplier on its grid ambient contribution, beating the map-wide default (worldspawn `grid_ambientscale` / profile `lightgridAmbientScale`). Unset surfaces inherit the map default.
+- **q3map_surfacelight_grid_directscale <value>**: Overrides this surface light's multiplier on its grid direct contribution, beating the map-wide default (worldspawn `grid_directscale` / profile `lightgridDirectScale`). Unset surfaces inherit the map default.
 - **q3map_backsplash_nodeluxe**: Prevents the surface light's backsplash from influencing the deluxe map's directionality.
 - **q3map_deluxe_minangle <value>**: Alias: `q3map_deluxeminangle`. Overrides the minimum incidence angle threshold (in degrees, 0.0 to 89.0) for deluxemap directionality on this material. Useful for softening or clamping deluxemap angles on specific surfaces without changing global defaults.
 - **q3map_lightColor <R G B>**: Alias for `q3map_lightRGB`. Sets the light emission color for the surface.
@@ -283,14 +285,17 @@ List of additions and modifications made to shader parsing and features compared
 - **haloshader**: Global default shader to use for light halos. Set to "none" or "0" to disable them.
 - **ambient_testradius**: Radius in world units to test for solid in macro-ambient occlusion (default: 512).
 - **ambient_gatheradius**: Gather radius of light probes for spherical interpolation (default: 256).
-- **grid_ambientbias**: Non-linear gamma bias applied to the ambient component of the light grid. Default 1.5.
-- **grid_directbias**: Non-linear gamma bias applied per-light to the directional component of the light grid. Default 1.5.
+- **ambient_gridscale**: Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = the calibrated default; the raw-to-grid magnitude calibration is built in), scaling its ambient and directional splits as a unit. Defaults to the game profile value (`ambientGridScale`, qfusion default 1.0).
+- **grid_ambientbias**: Non-linear gamma bias applied to the ambient component of the light grid. Default 1.0 (disabled; any value other than 1.0 applies the curve, values > 1.0 boost).
+- **grid_directbias**: Non-linear gamma bias applied per-light to the directional component of the light grid. Default 1.0 (disabled).
 - **grid_smoothambient**: Radius in world units for smoothing the ambient component of the light grid. Set to 0 to disable. Default 256.0.
 - **grid_smoothambient_passes**: Number of iterative smoothing passes to apply to the ambient light grid. Default 4.
 - **grid_smoothdirect**: Radius in world units for smoothing the directional component of the light grid. Default 128.0 (qfusion only) or 0.0 (disabled).
 - **grid_smoothdirect_passes**: Number of iterative smoothing passes to apply to the directional light grid. Default 3.
-- **grid_minambient**: Minimum hard light floor applied to the ambient light grid (in 8-bit scale). Set to 0 to disable.
-- **grid_maxambient**: Hard clamp applied to the maximum ambient light the grid can accumulate, preserving color luminance. Set to 0 to disable.
+- **grid_ambientclamp_min**: Minimum hard light floor applied to the ambient light grid (in 8-bit scale). Set to 0 to disable.
+- **grid_ambientclamp_max**: Hard clamp applied to the maximum ambient light the grid can accumulate, preserving color luminance. Set to 0 to disable.
+- **grid_ambientscale**: Map-wide default multiplier on the grid ambient contribution for all lights that don't carry their own `grid_ambientscale`. Defaults to the game profile value (`lightgridAmbientScale`, default 1.0). Per-light entity keys, surface shader keys (`q3map_surfacelight_grid_ambientscale`), and sidecar overrides win over it.
+- **grid_directscale**: Map-wide default multiplier on the grid direct contribution for all lights that don't carry their own `grid_directscale`. Defaults to the game profile value (`lightgridDirectScale`, qfusion default 1.75; quake3 profile 0.2). Per-light entity keys and shader/sidecar overrides win over it.
 - **_lightingIntensity**: [qfusion engine key] Custom fixed normalization scale for 8-bit LDR lightmap output.Defaults to 3.0
 
 **Lightmaps & Rendering Passes**
@@ -309,6 +314,7 @@ List of additions and modifications made to shader parsing and features compared
 - **rad_ao_intensity**: Ambient Occlusion intensity multiplier (0.0 to 1.0) applied during the first radiosity pass. This is the small scale occlusion shading visible on corners and holes. The bigger value, the darker the occlusion shadows. Default 0.5.
 - **rad_ao_min**: Minimum ambient occlusion fade distance. Default 0 world units. The ambient occlusion will fade from rad_ao_intensity at rad_ao_min to 0.0 at rad_ao_max.
 - **rad_ao_max**: Maximum ambient occlusion fade distance. Default 24 world units.
+- **rad_gridscale**: Multiplier on the radiosity (bounced light) contribution to the light grid's ambient component. Defaults to the game profile value (`rad_gridscale`, qfusion default 1.5).
 
 **Geometry & BSP**
 - **blocksize**: Global size of BSP map splitting blocks (e.g., 1024).
@@ -417,6 +423,8 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **backsplash**: Backsplash percentage for surface lights and spotlights (how much light bounces back). Default: surface 0.0/spot 0.1.
 - **grid_ambientscale**: Multiplier for this light's contribution to the volumetric ambient light grid. Default 1.0. Set to 0 to skip grid ambient contribution.
 - **grid_directscale**: Multiplier for this light's contribution to the volumetric direct light grid. Default 1.0. Set to 0 to skip grid direct contribution.
+- **grid_maxambient**: Absolute luma ceiling on this light's contribution to the volumetric ambient light grid, overriding the shared derived ambient budget. Default 0 (use the shared budget; sun entities default to 40.0).
+- **grid_maxdirect**: Absolute luma ceiling on this light's contribution to the volumetric direct light grid. Default 0 (uncapped).
 - **nodeluxe**: If set to 1, the light will not influence the deluxe map's directionality.
 - **backsplash_nodeluxe**: If set to 1, the backsplash generated by this light will not influence the deluxe map's directionality.
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
@@ -456,8 +464,10 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 **Light set up**
 - **light**: The emission strength or intensity of the light.
 - **color**: The color of the light.
-- **grid_ambientscale**: Multiplier for this light's contribution to the volumetric ambient light grid. Default 1.0. Set to 0 to skip grid ambient contribution.
-- **grid_directscale**: Multiplier for this light's contribution to the volumetric direct light grid. Default 1.0. Set to 0 to skip grid direct contribution.
+- **grid_ambientscale**: Multiplier for this light's contribution to the volumetric ambient light grid. Defaults to the map-wide default (worldspawn `grid_ambientscale`, itself defaulting to the game profile `lightgridAmbientScale`). Set to 0 to skip grid ambient contribution. On sun light entities this scales the sun's ambient transfer (applied before its absolute cap).
+- **grid_directscale**: Multiplier for this light's contribution to the volumetric direct light grid. Defaults to the map-wide default (worldspawn `grid_directscale`, itself defaulting to the game profile `lightgridDirectScale`). Set to 0 to skip grid direct contribution.
+- **grid_maxambient**: Absolute luma ceiling on this light's contribution to the volumetric ambient light grid, overriding the shared derived ambient budget. Default 0 (use the shared budget; sun entities default to 40.0).
+- **grid_maxdirect**: Absolute luma ceiling on this light's contribution to the volumetric direct light grid. Default 0 (uncapped).
 - **nodeluxe**: If set to 1, the light will not influence the deluxe map's directionality.
 - **backsplash_nodeluxe**: If set to 1, the backsplash generated by this light will not influence the deluxe map's directionality.
 - **attenuation**: Distance falloff model. Valid modes are: standard, soft, linear, unreal, smoothstep.
@@ -612,12 +622,14 @@ These switches change the primary mode of the executable.
 - `-radiosity <F>`: Global intensity multiplier for bounced light.
 - `-rad_ao_intensity <F>`: Intensity of the crease ambient occlusion effect (0.0 to 1.0).
 - `-rad_ao_min / -rad_ao_max`: Define the distance range for the radiosity ambient occlusion effect.
+- `-rad_gridscale <F>`: Multiplier on the radiosity contribution to the light grid's ambient component.
 
 **Ambient lighting**
 - `-ambient_grid_samples <N>`: Hemisphere ray count per Light Grid point for macro ambient.
 - `-ambient_samples <N>`: Hemisphere ray count per Lightmap Texel for macro ambient.
 - `-ambient_testradius <F>`: Maximum ray length for macro-ambient occlusion in world units.
 - `-ambient_gatheradius <F>`: Gather radius for spherical interpolation in world units.
+- `-ambient_gridscale <F>`: Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default).
 
 **Attenuation (Shading is angle attenuation)**
 - `-shading <type>`: Set the shading model (lambert, halflambert, quadratic, doublequadratic, unreal).
@@ -662,5 +674,5 @@ These switches change the primary mode of the executable.
 - `-grid_smoothambient_passes <N>`: Number of iterative smoothing passes to apply to the ambient light grid.
 - `-grid_smoothdirect <F>`: Radius in world units for smoothing the directional component of the light grid.
 - `-grid_smoothdirect_passes <N>`: Number of iterative smoothing passes to apply to the directional light grid.
-- `-grid_minambient <F>`: Minimum hard light floor applied to the ambient light grid.
-- `-grid_maxambient <F>`: Hard clamp applied to the maximum ambient light the grid can accumulate.
+- `-grid_ambientclamp_min <F>`: Minimum hard light floor applied to the ambient light grid.
+- `-grid_ambientclamp_max <F>`: Hard clamp applied to the maximum ambient light the grid can accumulate.
