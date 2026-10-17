@@ -38,6 +38,8 @@ typedef struct {
     int castShadows;
     qboolean isPlanarDerived;
     float sampleSize;
+    float gridMaxAmbient;
+    float gridMaxDirect;
     char smoothgroup[32];
 } extraSurface_t;
 

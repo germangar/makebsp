@@ -841,9 +841,35 @@ void SubdivideDrawSurfs(entity_t *e, tree_t *tree)
         // 1. If shader has tessSize (subdivisions > 0), it takes precedence as per requirements
         if (si->subdivisions > 0)
         {
+            int firstNew = numMapDrawSurfs;
             w = WindingFromDrawSurf(ds);
             ds->numVerts = 0; // remove this reference
             SubdivideDrawSurf(ds, w, si->subdivisions);
+
+            // Convert subdivided child fragments into planar-derived atomic trisoups
+            // so MergeAdjacentTrisoups can merge them into unified surfaces respecting budgets
+            for (int k = firstNew; k < numMapDrawSurfs; k++)
+            {
+                mapDrawSurface_t *child = &mapDrawSurfs[k];
+                if (child->numVerts < 3)
+                    continue;
+
+                int numTris = child->numVerts - 2;
+                child->numIndexes = numTris * 3;
+                child->indexes = malloc(child->numIndexes * sizeof(int));
+                int idx = 0;
+                for (int t = 1; t <= child->numVerts - 2; t++)
+                {
+                    child->indexes[idx++] = 0;
+                    child->indexes[idx++] = t;
+                    child->indexes[idx++] = t + 1;
+                }
+                child->miscModel = qtrue;
+                child->planarDerived = qtrue;
+                child->isPlanar = qtrue;
+                if (child->side)
+                    child->planeNum = child->side->planenum;
+            }
             continue;
         }
 

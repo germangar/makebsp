@@ -493,6 +493,8 @@ static shaderInfo_t *AllocShaderInfo(void)
     si->noDeluxeInfluenceBacksplash = qfalse;
     si->gridAmbientScale = -1.0f; // negative = unset; surface lights then inherit the map-wide default
     si->gridDirectScale = -1.0f;
+    si->gridMaxAmbient = -1.0f;
+    si->gridMaxDirect = -1.0f;
     si->deluxeMinAngle = -1.0f;
     si->vertexScale = 1.0;
     si->notjunc = qfalse;
@@ -872,6 +874,22 @@ static void ParseShaderFile(const char *filename, void *buffer, int size)
             {
                 GetToken(qfalse);
                 si->gridDirectScale = atof(token);
+                continue;
+            }
+
+            // q3map_surfacelight_grid_maxambient
+            if (!Q_stricmp(token, "q3map_surfacelight_grid_maxambient"))
+            {
+                GetToken(qfalse);
+                si->gridMaxAmbient = atof(token);
+                continue;
+            }
+
+            // q3map_surfacelight_grid_maxdirect
+            if (!Q_stricmp(token, "q3map_surfacelight_grid_maxdirect"))
+            {
+                GetToken(qfalse);
+                si->gridMaxDirect = atof(token);
                 continue;
             }
 

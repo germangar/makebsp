@@ -236,7 +236,7 @@ static int EmitStoredFaces(FILE *fObj, dsurface_t *ds, int base)
     return faces;
 }
 
-static void WriteOBJModel(const char *objName, const char *base, const char *source)
+static void WriteOBJModel(const char *objName, const char *base, const char *source, float scale)
 {
     FILE *fObj;
     int m, k, runningVerts = 0;
@@ -286,7 +286,7 @@ static void WriteOBJModel(const char *objName, const char *base, const char *sou
             for (k = 0; k < ds->numVerts; k++, dv++)
             {
                 fprintf(fObj, "v %.6f %.6f %.6f\n",
-                        dv->xyz[0], dv->xyz[2], -dv->xyz[1]);
+                        dv->xyz[0] * scale, dv->xyz[2] * scale, -dv->xyz[1] * scale);
                 fprintf(fObj, "vt %.6f %.6f\n",
                         dv->st[0], 1.0f - dv->st[1]);
                 fprintf(fObj, "vn %.6f %.6f %.6f\n",
@@ -304,7 +304,7 @@ static void WriteOBJModel(const char *objName, const char *base, const char *sou
 }
 
 static qboolean RunBsp2ObjExport(const char *objName, const char *mtlName,
-                                 const char *base, const char *source)
+                                 const char *base, const char *source, float scale)
 {
     c_models = c_modelskip = 0;
     c_planar = c_soup = c_patch = 0;
@@ -329,7 +329,7 @@ static qboolean RunBsp2ObjExport(const char *objName, const char *mtlName,
 
     ClassifyAll();
     WriteMTL(mtlName);
-    WriteOBJModel(objName, base, source);
+    WriteOBJModel(objName, base, source, scale);
 
     _printf("%d models exported (%d empty skipped)\n", c_models, c_modelskip);
     _printf("%d surfaces: %d planar, %d trisoup\n",
@@ -392,7 +392,7 @@ void Bsp2Obj(int count, char **args)
             continue;
         }
 
-        RunBsp2ObjExport(objName, mtlName, base, source);
+        RunBsp2ObjExport(objName, mtlName, base, source, 1.0f);
     }
 }
 
@@ -414,7 +414,7 @@ void Bsp2ObjFromCompiledState(const char *source)
         return;
     }
 
-    if (!RunBsp2ObjExport(objName, mtlName, base, source))
+    if (!RunBsp2ObjExport(objName, mtlName, base, source, map2ModelScale))
         return;
 
     if (!saveprt)

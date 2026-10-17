@@ -46,6 +46,7 @@ qboolean chamfernosubdivide;
 qboolean mergetrisoups = qtrue;
 qboolean patchtris = qfalse;
 qboolean map2Obj = qfalse;
+float    map2ModelScale = 1.0f;
 float    patchtrisSubdivide = 0.0f;
 qboolean nosubdivide;
 qboolean testExpand;
@@ -782,6 +783,15 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         game->haloShader = copystring(val);
         _printf("Worldspawn override: haloShader = %s\n", game->haloShader);
     }
+
+    if (map2Obj) {
+        val = ValueForKey(ent, "map2model_scale");
+        if (val[0]) {
+            map2ModelScale = atof(val);
+            if (map2ModelScale <= 0.0f)
+                map2ModelScale = 1.0f;
+        }
+    }
 }
 
 static void PrintMapGeometryStatistics(void)
@@ -1326,7 +1336,8 @@ int main(int argc, char **argv)
                 "                         'patchtris' flag or the worldspawn 'patchtris' key\n"
                 "   map2obj             = compile the map and export the result as\n"
                 "                         OBJ/MTL instead of writing the BSP\n"
-                "                         (patchtris cooking is always enabled)\n"
+                "                         (patchtris cooking is always enabled;\n"
+                "                          honors worldspawn 'map2model_scale' key)\n"
                 "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"

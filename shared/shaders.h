@@ -105,6 +105,8 @@ typedef struct shaderInfo_s
     qboolean noDeluxeInfluenceBacksplash;
     float gridAmbientScale;
     float gridDirectScale;
+    float gridMaxAmbient;
+    float gridMaxDirect;
     float deluxeMinAngle;
 } shaderInfo_t;
 

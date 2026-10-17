@@ -3013,6 +3013,10 @@ void DecimateAllTrisoups(entity_t *e, qboolean onlyPlanar)
         if (onlyPlanar && !ds->isPlanar && !ds->planarDerived)
             continue;
 
+        // Never decimate surfaces subdivided by tessSize (shader subdivisions)
+        if (ds->shaderInfo && ds->shaderInfo->subdivisions > 0)
+            continue;
+
         int oldVerts = ds->numVerts;
         int oldTris  = ds->numIndexes / 3;
 

@@ -250,6 +250,9 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
     // negative means "unset": inherit the map-wide default; explicit shader/sidecar values win
     dl->gridAmbientScale = (ls->gridAmbientScale >= 0.0f) ? ls->gridAmbientScale : game->lightgridAmbientScale;
     dl->gridDirectScale = (ls->gridDirectScale >= 0.0f) ? ls->gridDirectScale : game->lightgridDirectScale;
+    // negative means "unset": 0 = no absolute ceiling (derived budget for ambient, uncapped for direct)
+    dl->gridMaxAmbient = (ls->gridMaxAmbient >= 0.0f) ? ls->gridMaxAmbient : 0.0f;
+    dl->gridMaxDirect = (ls->gridMaxDirect >= 0.0f) ? ls->gridMaxDirect : 0.0f;
 
     if (ls->contents & (CONTENTS_FOG | CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER))
     {
@@ -1258,7 +1261,7 @@ void BuildLocalSurfaces(void)
             if (extra[i].lightColor[0] >= 0.0f && extra[i].lightColor[1] >= 0.0f && extra[i].lightColor[2] >= 0.0f ) {
                 shaderOverride = qtrue;
             }
-            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1 || extra[i].gridAmbientScale >= 0.0f || extra[i].gridDirectScale >= 0.0f) {
+            if (extra[i].noDeluxeInfluence != -1 || extra[i].noDeluxeInfluenceBacksplash != -1 || extra[i].gridAmbientScale >= 0.0f || extra[i].gridDirectScale >= 0.0f || extra[i].gridMaxAmbient >= 0.0f || extra[i].gridMaxDirect >= 0.0f) {
                 shaderOverride = qtrue;
             }
 
@@ -1300,6 +1303,12 @@ void BuildLocalSurfaces(void)
                 }
                 if (extra[i].gridDirectScale >= 0.0f) {
                     localSurfaces[i].si_override->gridDirectScale = extra[i].gridDirectScale;
+                }
+                if (extra[i].gridMaxAmbient >= 0.0f) {
+                    localSurfaces[i].si_override->gridMaxAmbient = extra[i].gridMaxAmbient;
+                }
+                if (extra[i].gridMaxDirect >= 0.0f) {
+                    localSurfaces[i].si_override->gridMaxDirect = extra[i].gridMaxDirect;
                 }
             }
         }

@@ -214,6 +214,8 @@ static qboolean CookPatchIntoTrisoup(mapDrawSurface_t *ds, float subdivide,
     newDs->castShadows       = ds->castShadows;
     newDs->gridAmbientScale  = ds->gridAmbientScale;
     newDs->gridDirectScale   = ds->gridDirectScale;
+    newDs->gridMaxAmbient    = ds->gridMaxAmbient;
+    newDs->gridMaxDirect     = ds->gridMaxDirect;
     newDs->lightValue        = ds->lightValue;
     VectorCopy(ds->lightColor, newDs->lightColor);
     newDs->backsplashFraction = ds->backsplashFraction;
