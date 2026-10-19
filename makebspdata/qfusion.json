@@ -49,10 +49,10 @@
   "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
   "rad_ao_min": 0.00, /* Minimum distance for ambient occlusion shadowing */
   "rad_ao_max": 32.00, /* Maximum distance for ambient occlusion shadowing */
-  "rad_gridscale": 1.50, /* Multiplier on radiosity (bounced light) added to the grid ambient */
+  "rad_gridscale": 1.50, /* Scale the radiosity added to the lightgrid */
   "ambientTestRadius": 512.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 256.00, /* Distance at which a lightmap pixel gathers light from probes */
-  "ambientGridScale": 1.00, /* Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default) */
+  "ambientGridScale": 1.00, /* Scale the macro ambient occlusion added to the lightgrid */
   "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "attenuation": "standard",  /* [ standard, soft, linear ] */

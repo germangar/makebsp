@@ -45,7 +45,7 @@ qboolean nofog;
 qboolean chamfernosubdivide;
 qboolean mergetrisoups = qtrue;
 qboolean patchtris = qfalse;
-qboolean map2Obj = qfalse;
+modelExportFormat_t modelExportFormat = MODEL_EXPORT_NONE;
 float    map2ModelScale = 1.0f;
 float    patchtrisSubdivide = 0.0f;
 qboolean nosubdivide;
@@ -768,7 +768,7 @@ static void ParseWorldspawnKeys(int argc, char **argv)
     // resolve the global patch cook: CLI (-patchtris) > worldspawn key > game profile
     qboolean wsPatchtris = qfalse;
     val = ValueForKey(ent, "patchtris");
-    if (val[0] && !HasArg("-patchtris", argc, argv) && !map2Obj) {
+    if (val[0] && !HasArg("-patchtris", argc, argv) && modelExportFormat == MODEL_EXPORT_NONE) {
         wsPatchtris = qtrue;
         patchtris = (atoi(val) != 0 || !Q_stricmp(val, "true")) && Q_stricmp(val, "false");
         _printf("Worldspawn override: patchtris = %s\n", patchtris ? "true" : "false");
@@ -784,7 +784,7 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         _printf("Worldspawn override: haloShader = %s\n", game->haloShader);
     }
 
-    if (map2Obj) {
+    if (modelExportFormat != MODEL_EXPORT_NONE) {
         val = ValueForKey(ent, "map2model_scale");
         if (val[0]) {
             map2ModelScale = atof(val);
@@ -908,11 +908,6 @@ int main(int argc, char **argv)
         }
         if (!strcmp(argv[i], "-exportmodels")) {
             ExportModels(argc - (i + 1), argv + (i + 1));
-            Broadcast_Shutdown();
-            return 0;
-        }
-        if (!strcmp(argv[i], "-bsp2obj")) {
-            Bsp2Obj(argc - (i + 1), argv + (i + 1));
             Broadcast_Shutdown();
             return 0;
         }
@@ -1156,8 +1151,13 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "-map2obj"))
         {
-            map2Obj = qtrue;
+            modelExportFormat = MODEL_EXPORT_OBJ;
             _printf("map2obj: compiling to OBJ model instead of BSP\n");
+        }
+        else if (!strcmp(argv[i], "-map2ase"))
+        {
+            modelExportFormat = MODEL_EXPORT_ASE;
+            _printf("map2ase: compiling to ASE model instead of BSP\n");
         }
         else if (!strcmp(argv[i], "-nodecimateplanar"))
         {
@@ -1286,16 +1286,16 @@ int main(int argc, char **argv)
         }
     }
 
-    if (map2Obj)
+    if (modelExportFormat != MODEL_EXPORT_NONE)
     {
         if (!patchtris)
         {
             patchtris = qtrue;
-            _printf("map2obj: -patchtris patch cooking enabled "
+            _printf("model export: -patchtris patch cooking enabled "
                     "(tolerance from worldspawn/profile default chain)\n");
         }
         novis = qtrue;
-        _printf("map2obj: inline visibility skipped\n");
+        _printf("model export: inline visibility skipped\n");
     }
 
     if (g_fast && (game->chamferEdges))
@@ -1338,6 +1338,8 @@ int main(int argc, char **argv)
                 "                         OBJ/MTL instead of writing the BSP\n"
                 "                         (patchtris cooking is always enabled;\n"
                 "                          honors worldspawn 'map2model_scale' key)\n"
+                "   map2ase             = same as map2obj, but export an ASE model\n"
+                "                         (assimp-reader layout, single .ase file)\n"
                 "   nodecimateplanar    = disable planar trisoup decimation pass\n"
                 "   nosubdivide    = skip space subdivision\n"
                 "   expand         = write out an expanded map (debugging)\n"
@@ -1488,9 +1490,13 @@ int main(int argc, char **argv)
     
     PrintMapGeometryStatistics();
 
-    if (map2Obj)
+    if (modelExportFormat == MODEL_EXPORT_OBJ)
     {
         Bsp2ObjFromCompiledState(source);
+    }
+    else if (modelExportFormat == MODEL_EXPORT_ASE)
+    {
+        Bsp2AseFromCompiledState(source);
     }
     else
     {
