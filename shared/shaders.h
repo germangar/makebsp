@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define MAX_SURFACE_INFO 65536
 #define MAX_SHADER_FILES 8192
 
-#define MAKEBSP_VERSION "v0.5-Hardened"
+#define MAKEBSP_VERSION "v0.5"
 #define BUILD_INFO __DATE__ " " __TIME__
 
 typedef struct shaderInfo_s

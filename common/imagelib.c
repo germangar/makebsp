@@ -91,17 +91,26 @@ void Load32BitImage(const char *name, unsigned **pixels, int *width, int *height
 
 void LoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height)
 {
+    if (!TryLoadImageFromBuffer(buffer, buflen, pixels, width, height))
+    {
+        Error("Failed to load image from buffer: %s", stbi_failure_reason());
+    }
+}
+
+qboolean TryLoadImageFromBuffer(byte *buffer, int buflen, byte **pixels, int *width, int *height)
+{
     int x, y, n;
     stbi_uc *data = stbi_load_from_memory(buffer, buflen, &x, &y, &n, 4);
     if (!data)
     {
-        Error("Failed to load image from buffer: %s", stbi_failure_reason());
+        return qfalse;
     }
     if (width)
         *width = x;
     if (height)
         *height = y;
     *pixels = (byte *)data;
+    return qtrue;
 }
 
 void LoadKTXFromMemory(const char *name, byte *buffer, int buflen, byte **pixels, int *width, int *height)

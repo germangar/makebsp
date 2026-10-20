@@ -907,7 +907,6 @@ int main(int argc, char **argv)
             }
         }
         if (!strcmp(argv[i], "-exportmodels")) {
-            ExportModels(argc - (i + 1), argv + (i + 1));
             Broadcast_Shutdown();
             return 0;
         }
@@ -1004,6 +1003,22 @@ int main(int argc, char **argv)
             VisMain(argc, argv);
             Broadcast_Shutdown();
             return 0;
+        }
+        if (!Q_stricmp(argv[i], "-heightmap")) {
+            if (i + 1 < argc) {
+#ifdef _WIN32
+                {
+                    int p;
+                    for (p = 0; p < numVFSPaths; p++)
+                        InitPakFile(vfsPaths[p], NULL);
+                }
+#endif
+                ProcessHeightmap(argv[i + 1], argc - (i + 2), argv + (i + 2));
+                Broadcast_Shutdown();
+                return 0;
+            } else {
+                Error("-heightmap requires a path argument");
+            }
         }
     }
 

@@ -350,6 +350,7 @@ qboolean PlaneEqual(plane_t *p, vec3_t normal, vec_t dist);
 void ExportModels(int count, char **fileNames);
 void Bsp2ObjFromCompiledState(const char *source);
 void Bsp2AseFromCompiledState(const char *source);
+void ProcessHeightmap(const char *input, int argc, char **argv);
 
 void FilterDetailBrushesIntoTree(entity_t *e, tree_t *tree);
 void FilterStructuralBrushesIntoTree(entity_t *e, tree_t *tree);
