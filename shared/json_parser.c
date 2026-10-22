@@ -684,85 +684,234 @@ qboolean JSON_LoadGame(const char *filename, game_t *game)
     return JSON_LoadGame_Internal(filename, game, 0);
 }
 
+/*
+====================================================================
+_makebsp_profile worldspawn key
+
+The compilation configuration is transported inside worldspawn as a
+single "_makebsp_profile" key: one line of "-<field> <value>" tokens
+mirroring the JSON game profile field names (booleans as 1|0, floats
+with 2 decimals).
+
+makebsp writes it with the fully resolved game_t (profile < worldspawn
+< command line). makelight boots from it: the lightmap atlas and sample
+grid are already baked into the BSP, so lightmapSize/sampleSize (plus
+the hdr format and its 8-bit scale) are hardlocked from the key, while
+every other field stays informational and is re-resolved by makelight's
+own profile/worldspawn/CLI. The final BSP carries the last truth via
+the end-of-process re-inject, plus the two standalone engine keys
+(_lightingIntensity, _lightmapImageSize).
+====================================================================
+*/
+
+const char *ShadingModelName(shadingModel_t model)
+{
+    switch (model)
+    {
+    case SHADING_MODEL_LAMBERT:
+        return "lambert";
+    case SHADING_MODEL_HALFLAMBERT:
+        return "halflambert";
+    case SHADING_MODEL_QUADRATIC:
+        return "quadratic";
+    case SHADING_MODEL_DOUBLEQUADRATIC:
+        return "doublequadratic";
+    case SHADING_MODEL_UNREAL:
+        return "unreal";
+    default:
+        return "unknown";
+    }
+}
+
+const char *HdrFormatName(hdrFormat_t hdr)
+{
+    switch (hdr)
+    {
+    case HDR_8BIT:
+        return "rgb8";
+    case HDR_16BIT:
+        return "rgba16f";
+    case HDR_32BIT:
+        return "rgba32f";
+    default:
+        return "off";
+    }
+}
+
+const char *AttenuationModelName(attenuationModel_t model)
+{
+    switch (model)
+    {
+    case ATTENUATION_INVERSE:
+        return "soft";
+    case ATTENUATION_LINEAR:
+        return "linear";
+    default:
+        return "standard";
+    }
+}
+
+void InjectMakebspProfileKey(entity_t *worldspawn, game_t *g)
+{
+    char buf[1024];
+    int len;
+
+    len = snprintf(buf, sizeof(buf),
+        "-lightmapSize %d -externalLightmaps %d -keepLights %d -sampleSize %d "
+        "-hdr %s -hdr8BitScale %.2f -lightmapsRGB %d -lightgridRGB %d "
+        "-texturesRGB %d -colorsRGB %d -shading %s -sunShading %s "
+        "-attenuation %s -cutoff %.2f -fadeout %.2f -deluxeMap %d",
+        g->lightmapSize,
+        g->externalLightmaps ? 1 : 0,
+        g->keepLights ? 1 : 0,
+        g->defaultSampleSize,
+        HdrFormatName(g->hdr),
+        g->hdr8BitScale,
+        g->lightmapsRGB ? 1 : 0,
+        g->lightgridRGB ? 1 : 0,
+        g->texturesRGB ? 1 : 0,
+        g->colorsRGB ? 1 : 0,
+        ShadingModelName(g->shadingModel),
+        ShadingModelName(g->sunShadingModel),
+        AttenuationModelName(g->attenuationModel),
+        g->cutoffAnchor,
+        g->fadeout,
+        g->deluxeMap ? 1 : 0);
+
+    if (len < 0 || (size_t)len >= sizeof(buf))
+        Error("_makebsp_profile value does not fit in %d bytes", (int)sizeof(buf));
+
+    SetKeyValue(worldspawn, "_makebsp_profile", buf);
+}
+
+static qboolean IsInformationalProfileField(const char *name)
+{
+    static const char *names[] = {
+        "externalLightmaps", "keepLights", "lightmapsRGB", "lightgridRGB",
+        "texturesRGB", "colorsRGB", "shading", "sunShading", "attenuation",
+        "cutoff", "fadeout", "deluxeMap", NULL
+    };
+    int i;
+
+    for (i = 0; names[i]; i++)
+    {
+        if (!Q_stricmp(name, names[i]))
+            return qtrue;
+    }
+    return qfalse;
+}
+
+qboolean ApplyMakebspProfileHardlocks(const char *profileValue, game_t *g)
+{
+    const char *p = profileValue;
+    qboolean foundLightmapSize = qfalse;
+
+    if (!p)
+        return qfalse;
+
+    while (*p)
+    {
+        char name[64];
+        char val[128];
+        int n;
+
+        /* skip whitespace */
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (!*p)
+            break;
+
+        /* every field must start with '-' */
+        if (*p != '-')
+        {
+            _printf("WARNING: _makebsp_profile: unexpected token, skipping rest of value\n");
+            break;
+        }
+        p++;
+
+        /* read field name */
+        for (n = 0; *p && *p != ' ' && *p != '\t' && n < 63; n++)
+            name[n] = *p++;
+        name[n] = '\0';
+        if (n == 63 && *p && *p != ' ' && *p != '\t')
+        {
+            _printf("WARNING: _makebsp_profile: oversize field name '%.32s', ignored\n", name);
+            while (*p && *p != ' ' && *p != '\t')
+                p++;
+            continue;
+        }
+
+        /* skip whitespace before the value */
+        while (*p == ' ' || *p == '\t')
+            p++;
+
+        /* read the value token */
+        for (n = 0; *p && *p != ' ' && *p != '\t' && n < 127; n++)
+            val[n] = *p++;
+        val[n] = '\0';
+
+        if (!val[0])
+        {
+            _printf("WARNING: _makebsp_profile: field '-%s' has no value, ignored\n", name);
+            break;
+        }
+
+        /* hardlocked fields: baked into the BSP at compile time */
+        if (!Q_stricmp(name, "lightmapSize"))
+        {
+            g->lightmapSize = atoi(val);
+            if (g->lightmapSize < 1)
+                g->lightmapSize = 1;
+            foundLightmapSize = qtrue;
+        }
+        else if (!Q_stricmp(name, "sampleSize"))
+        {
+            g->defaultSampleSize = atoi(val);
+            if (g->defaultSampleSize < 1)
+                g->defaultSampleSize = 1;
+        }
+        else if (!Q_stricmp(name, "hdr"))
+        {
+            if (!Q_stricmp(val, "rgb8"))
+                g->hdr = HDR_8BIT;
+            else if (!Q_stricmp(val, "rgba16f"))
+                g->hdr = HDR_16BIT;
+            else if (!Q_stricmp(val, "rgba32f"))
+                g->hdr = HDR_32BIT;
+            else if (!Q_stricmp(val, "off"))
+                g->hdr = HDR_OFF;
+            else
+                _printf("WARNING: _makebsp_profile: unknown hdr name '%s', ignored\n", val);
+        }
+        else if (!Q_stricmp(name, "hdr8BitScale"))
+        {
+            float v = (float)atof(val);
+            /* honor the 2-decimal contract of the writer */
+            v = (int)(v * 100.0f + 0.5f) * 0.01f;
+            if (v <= 0.0f)
+                v = 1.0f;
+            g->hdr8BitScale = v;
+        }
+        else if (IsInformationalProfileField(name))
+        {
+            /* engine-facing metadata only: this tool resolves its own values */
+        }
+        else
+        {
+            _printf("WARNING: _makebsp_profile: unknown field '-%s', ignored\n", name);
+        }
+    }
+
+    return foundLightmapSize;
+}
+
 void JSON_ExportGame(const char *filename, game_t *game)
 {
     char buffer[16384];
-    const char *shadingModelStr;
-    switch (game->shadingModel)
-    {
-    case SHADING_MODEL_LAMBERT:
-        shadingModelStr = "lambert";
-        break;
-    case SHADING_MODEL_HALFLAMBERT:
-        shadingModelStr = "halflambert";
-        break;
-    case SHADING_MODEL_QUADRATIC:
-        shadingModelStr = "quadratic";
-        break;
-    case SHADING_MODEL_DOUBLEQUADRATIC:
-        shadingModelStr = "doublequadratic";
-        break;
-    case SHADING_MODEL_UNREAL:
-        shadingModelStr = "unreal";
-        break;
-    default:
-        shadingModelStr = "unknown";
-        break;
-    }
-
-    const char *sunShadingModelStr;
-    switch (game->sunShadingModel)
-    {
-    case SHADING_MODEL_LAMBERT:
-        sunShadingModelStr = "lambert";
-        break;
-    case SHADING_MODEL_HALFLAMBERT:
-        sunShadingModelStr = "halflambert";
-        break;
-    case SHADING_MODEL_QUADRATIC:
-        sunShadingModelStr = "quadratic";
-        break;
-    case SHADING_MODEL_DOUBLEQUADRATIC:
-        sunShadingModelStr = "doublequadratic";
-        break;
-    case SHADING_MODEL_UNREAL:
-        sunShadingModelStr = "unreal";
-        break;
-    default:
-        sunShadingModelStr = "unknown";
-        break;
-    }
-
-    const char *attenuationModelStr;
-    switch (game->attenuationModel)
-    {
-    case ATTENUATION_INVERSE:
-        attenuationModelStr = "soft";
-        break;
-    case ATTENUATION_LINEAR:
-        attenuationModelStr = "linear";
-        break;
-    default:
-        attenuationModelStr = "standard";
-        break;
-    }
-
-    const char *hdrStr;
-    switch (game->hdr)
-    {
-    case HDR_8BIT:
-        hdrStr = "rgb8";
-        break;
-    case HDR_16BIT:
-        hdrStr = "rgba16f";
-        break;
-    case HDR_32BIT:
-        hdrStr = "rgba32f";
-        break;
-    default:
-        hdrStr = "off";
-        break;
-    }
+    const char *shadingModelStr = ShadingModelName(game->shadingModel);
+    const char *sunShadingModelStr = ShadingModelName(game->sunShadingModel);
+    const char *attenuationModelStr = AttenuationModelName(game->attenuationModel);
+    const char *hdrStr = HdrFormatName(game->hdr);
 
     const char *filterStr;
     switch (game->exposureFilter)

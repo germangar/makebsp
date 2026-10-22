@@ -4,7 +4,7 @@ This document outlines extended features, metadata conventions, and data packing
 
 ---
 
-## 1. Lightmap Bit-Depth (`_lightmapbits`)
+## 1. Lightmap Bit-Depth (`-hdr` in `_makebsp_profile`)
 
 The compiler supports exporting the lightmap lump (`LUMP_LIGHTMAPS`) in standard 8-bit integer, 16-bit half-precision float, or 32-bit single-precision float formats.
 
@@ -14,9 +14,25 @@ Engines should query the `worldspawn` (entity 0) epair keys upon loading the BSP
 
 | Key | Values | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `_lightmapbits` | `"8"`, `"16"`, `"32"` | `"8"` | Specifies the lightmap data depth per channel in bits. |
+| `_makebsp_profile` | see below | — | Single-line compilation configuration: `-<field> <value>` tokens (booleans as `1`/`0`, floats with 2 decimals). The `-hdr` field selects the lightmap format. |
+| `_q3map2_cmdline` | e.g. `"-samplesize 4 -lightmapsize 512 -deluxe"` | — | Legacy-compatibility provenance: a q3map2-style command line (flat switch list) simulating the compilation configuration, for engines that read the q3map2 setup. |
 | `_lightmapImageSize`| e.g. `"128"`, `"512"`, `"1024"` | `"128"` | Dimensions ($N \times N$) of each square lightmap page/atlas. |
 | `_lightingIntensity`| float string (e.g. `"1.0"`, `"2.5"`) | `"1.0"` | Peak intensity scaling factor applied during compression. |
+
+The `_makebsp_profile` value is one line of space-separated `-<field> <value>` pairs mirroring the JSON game profile field names:
+
+```
+-lightmapSize 2048 -externalLightmaps 0 -keepLights 1 -sampleSize 4
+-hdr rgb8 -hdr8BitScale 3.00 -lightmapsRGB 1 -lightgridRGB 0
+-texturesRGB 1 -colorsRGB 1 -shading halflambert -sunShading lambert
+-attenuation standard -cutoff 1.00 -fadeout 0.05 -deluxeMap 1
+```
+
+- `-hdr` selects the lightmap storage format: `rgb8`, `rgba16f`, `rgba32f`, or `off`.
+- `-hdr8BitScale` is the source value `_lightingIntensity` was derived from (identical when the lighting stage is run).
+- The RGB flags describe the compiled data's colorspace convention (`1` = sRGB data), and `-deluxeMap` reports whether deluxemaps are interleaved in the lightmap lump.
+- The rest of the fields (`shading`, `sunShading`, `attenuation`, `cutoff`, `fadeout`, ...) are informational provenance of the lighting configuration.
+- The key is written by the BSP stage with the fully resolved configuration and refreshed by the lighting stage at the end of its pass, so it always reflects what the final BSP was actually built with. Engines should ignore unknown fields for forward compatibility.
 
 ---
 
@@ -26,7 +42,7 @@ Lightmap data in `LUMP_LIGHTMAPS` is stored sequentially as square texture pages
 
 $$\text{Page Size (Bytes)} = N \times N \times 3 \times (\text{Bytes per Channel})$$
 
-#### Mode 8: Standard 8-bit RGB (`_lightmapbits` = `"8"`)
+#### Mode 8: Standard 8-bit RGB (`-hdr rgb8`)
 - **Format**: Unsigned 8-bit integer (`uint8_t` / `byte`) per channel (3 bytes/texel).
 - **Value Range**: `[0, 255]`.
 - **Scaling / Compression**:
@@ -35,13 +51,13 @@ $$\text{Page Size (Bytes)} = N \times N \times 3 \times (\text{Bytes per Channel
   - To reconstruct the original physical HDR light level, the engine multiplies the sampled color by `_lightingIntensity`:
     $$\text{LinearHDRColor} = \left(\frac{\text{SampledByte}}{255.0}\right) \times \text{\_lightingIntensity}$$
 
-#### Mode 16: 16-bit Half-Float RGB (`_lightmapbits` = `"16"`)
+#### Mode 16: 16-bit Half-Float RGB (`-hdr rgba16f`)
 - **Format**: IEEE 754 half-precision float (`float16` / `uint16_t` bit-pattern) per channel (6 bytes/texel).
 - **Value Range**: Floating-point physical irradiance values.
 - **Scaling**: **Unscaled (Raw)**. Lightmaps are written with raw floating-point values and are **not** multiplied/divided by `_lightingIntensity`.
 - **Engine Handling**: Upload directly to a GPU texture format such as `DXGI_FORMAT_R16G16B16A16_FLOAT` or `GL_RGB16F` / `GL_RGBA16F`. Sample directly without applying `_lightingIntensity`.
 
-#### Mode 32: 32-bit Single-Float RGB (`_lightmapbits` = `"32"`)
+#### Mode 32: 32-bit Single-Float RGB (`-hdr rgba32f`)
 - **Format**: IEEE 754 single-precision float (`float32` / standard C `float`) per channel (12 bytes/texel).
 - **Value Range**: Floating-point physical irradiance values.
 - **Scaling**: **Unscaled (Raw)**.
@@ -75,7 +91,7 @@ When deluxemapping is enabled:
 
 ## 2. Lightgrid Data Format & Intensity Scaling
 
-The lightgrid structure in `LUMP_LIGHTGRID` **always remains 8 bits per color channel** (`uint8_t` / `byte`), regardless of the `_lightmapbits` setting chosen for surface lightmaps. It uses the standard binary struct:
+The lightgrid structure in `LUMP_LIGHTGRID` **always remains 8 bits per color channel** (`uint8_t` / `byte`), regardless of the `-hdr` lightmap format setting chosen for surface lightmaps. It uses the standard binary struct:
 
 ```c
 typedef struct {
@@ -106,9 +122,9 @@ Because the lightgrid is always stored as 8-bit integer bytes, **it is always no
      $$\text{LinearAmbient}[c] = \left(\frac{\text{ambient}[c]}{255.0}\right) \times \text{\_lightingIntensity}$$
      $$\text{LinearDirected}[c] = \left(\frac{\text{directed}[c]}{255.0}\right) \times \text{\_lightingIntensity}$$
 
-3. **Behavior across `_lightmapbits` Modes**:
-   - **Mode 8 (`_lightmapbits "8"`)**: Both lightmaps and lightgrid are 8-bit and share the `_lightingIntensity` scalar for expansion.
-   - **Modes 16 & 32 (`_lightmapbits "16" | "32"`)**: Lightmaps are stored as raw, unscaled floating-point data (`float16` or `float32`). However, `_lightingIntensity` **is still injected into worldspawn** specifically so the engine can reconstruct the 8-bit lightgrid up to the exact same physical scale as the unscaled 16/32-bit lightmaps.
+3. **Behavior across `-hdr` Modes**:
+   - **Mode 8 (`-hdr rgb8`)**: Both lightmaps and lightgrid are 8-bit and share the `_lightingIntensity` scalar for expansion.
+   - **Modes 16 & 32 (`-hdr rgba16f | rgba32f`)**: Lightmaps are stored as raw, unscaled floating-point data (`float16` or `float32`). However, `_lightingIntensity` **is still injected into worldspawn** specifically so the engine can reconstruct the 8-bit lightgrid up to the exact same physical scale as the unscaled 16/32-bit lightmaps.
 
 ---
 

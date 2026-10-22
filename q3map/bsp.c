@@ -577,6 +577,10 @@ void OnlyEnts(void)
             if (!Q_stricmp(ep->key, "_lightingIntensity") ||
                 !Q_stricmp(ep->key, "_lightmapImageSize") ||
                 !Q_stricmp(ep->key, "_lightmapbits") ||
+                !Q_stricmp(ep->key, "_q3map2_cmdline") ||
+                !Q_stricmp(ep->key, "_q3map2_version") ||
+                !Q_stricmp(ep->key, "_makebsp_version") ||
+                !Q_stricmp(ep->key, "_makebsp_profile") ||
                 (ep->key[0] == '_' && ep->key[1] == '_'))
             {
                 epair_t *newep = malloc(sizeof(epair_t));
@@ -1485,20 +1489,13 @@ int main(int argc, char **argv)
 
     ProcessModels();
 
-    // Store the lightmap texel resolution in worldspawn for makelight.exe
+    // Store the resolved compilation configuration in worldspawn for
+    // makelight.exe and the engine. The standalone engine keys
+    // (_lightingIntensity, _lightmapImageSize) are written by makelight
+    // at the end of the lighting pass, when the lit BSP is produced.
     if (num_entities > 0)
     {
-        char buf[64];
-
-        sprintf(buf, "%d", game->defaultSampleSize);
-        SetKeyValue(&entities[0], "__texelsize", buf);
-        sprintf(buf, "%d", game->lightmapSize);
-        SetKeyValue(&entities[0], "_lightmapImageSize", buf);
-        sprintf(buf, "%.2f", game->hdr8BitScale);
-        SetKeyValue(&entities[0], "_lightingIntensity", buf);
-
-        const char *bitsStr = (game->hdr == HDR_32BIT) ? "32" : (game->hdr == HDR_16BIT ? "16" : "8");
-        SetKeyValue(&entities[0], "_lightmapbits", bitsStr);
+        InjectMakebspProfileKey(&entities[0], game);
     }
 
     InjectSunEntity();

@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../common/cmdlib.h"
 #include "light.h"
 #include "radiosity.h"
+#include "../shared/json_parser.h"
 
 #include <string.h>
 
@@ -54,43 +55,27 @@ static qboolean HasArg(const char *arg, int argc, char **argv) {
 static void ParseWorldspawnKeys(int argc, char **argv)
 {
     entity_t *ent = &entities[0];
-    
-    // These keys have been set by the bsp compiler
-    const char *val = ValueForKey(ent, "__texelsize");
-    if (val[0]) {
-        game->defaultSampleSize = atoi(val);
-        qprintf("Inferred lightmap sample size %dx%d from worldspawn (__texelsize)\n", game->defaultSampleSize, game->defaultSampleSize);
-    }
 
-    const char *lmSizeVal = ValueForKey(ent, "_lightmapImageSize");
-    if (!lmSizeVal[0]) {
-        Error("Worldspawn missing required key '_lightmapImageSize'.\n"
-                "This BSP was likely compiled with an old version of q3map.\n"
-                "Please re-run the BSP phase.");
+    /*
+    The BSP compiler stores the baked compilation configuration in
+    _makebsp_profile. The lightmap atlas and sample grid are frozen at
+    BSP time, so lightmapSize/sampleSize (plus the hdr format and its
+    8-bit scale) are hardlocked from the key; every other field is
+    informational and resolved by this tool's own profile, worldspawn
+    and command line.
+    */
+    const char *profileVal = ValueForKey(ent, "_makebsp_profile");
+    if (!ApplyMakebspProfileHardlocks(profileVal, game))
+    {
+        Error("Worldspawn missing required key '_makebsp_profile' (no -lightmapSize token).\n"
+              "This BSP was likely compiled with an old version of makebsp.\n"
+              "Please re-run the BSP phase.");
     }
-    int bspLmSize = atoi(lmSizeVal);
-    if (bspLmSize != game->lightmapSize) {
-        _printf("Adapting lightmap atlas size from profile default (%d) to BSP value (%d).\n",
-                game->lightmapSize, bspLmSize);
-        game->lightmapSize = bspLmSize;
-    }
-
-    val = ValueForKey(ent, "_lightingIntensity");
-    if (val[0]) {
-        game->hdr8BitScale = (float)atof(val);
-        if (game->hdr8BitScale <= 0.0f) game->hdr8BitScale = 1.0f;
-    }
-
-    val = ValueForKey(ent, "_lightmapbits");
-    if (val[0]) {
-        int bits = atoi(val);
-        if (bits == 32) game->hdr = HDR_32BIT;
-        else if (bits == 16) game->hdr = HDR_16BIT;
-        else game->hdr = HDR_8BIT;
-    }
+    _printf("Boot configuration from _makebsp_profile: lightmapSize %d, sampleSize %d, hdr %s, hdr8BitScale %.2f\n",
+            game->lightmapSize, game->defaultSampleSize, HdrFormatName(game->hdr), game->hdr8BitScale);
 
     // map keys
-    val = ValueForKey(ent, "cutoff");
+    const char *val = ValueForKey(ent, "cutoff");
     if (val[0] && !HasArg("-cutoff", argc, argv)) {
         game->cutoffAnchor = (float)atof(val);
         if (game->cutoffAnchor < 0.001f)
@@ -356,6 +341,46 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->lightgridDirectScale < 0.0f) game->lightgridDirectScale = 0.0f;
     }
 
+}
+
+/*
+==============
+InjectQ3Map2CmdlineKey
+
+Legacy-compatibility provenance: a q3map2-style command line simulating
+the compilation configuration, for engines that read the q3map2 setup.
+Only profile fields with a real q3map2 equivalent are emitted; booleans
+are presence toggles (off omits the switch). Quick injection at the
+very end of the lighting pass, after the _makebsp_profile refresh -
+never in makebsp.
+==============
+*/
+static void InjectQ3Map2CmdlineKey(entity_t *worldspawn)
+{
+    char buf[512];
+    int len;
+
+    len = snprintf(buf, sizeof(buf), "-samplesize %d", game->defaultSampleSize);
+    if (game->keepLights)
+        len += snprintf(buf + len, sizeof(buf) - len, " -keeplights");
+    if (game->texturesRGB)
+        len += snprintf(buf + len, sizeof(buf) - len, " -sRGBtex");
+    if (game->colorsRGB)
+        len += snprintf(buf + len, sizeof(buf) - len, " -sRGBcolor");
+    len += snprintf(buf + len, sizeof(buf) - len, " -lightmapsize %d", game->lightmapSize);
+    if (game->externalLightmaps)
+        len += snprintf(buf + len, sizeof(buf) - len, " -external");
+    if (game->lightmapsRGB)
+        len += snprintf(buf + len, sizeof(buf) - len, " -sRGBlight");
+    if (game->shadingModel == SHADING_MODEL_HALFLAMBERT)
+        len += snprintf(buf + len, sizeof(buf) - len, " -lightanglehl 1");
+    if (game->deluxeMap)
+        len += snprintf(buf + len, sizeof(buf) - len, " -deluxe");
+
+    if (len < 0 || (size_t)len >= sizeof(buf))
+        Error("_q3map2_cmdline value does not fit in %d bytes", (int)sizeof(buf));
+
+    SetKeyValue(worldspawn, "_q3map2_cmdline", buf);
 }
 
 int main(int argc, char **argv) {
@@ -956,6 +981,23 @@ int main(int argc, char **argv) {
     LightMain();
 
     DownConvertLightingData();
+
+    /*
+    Refresh the compilation configuration key with the values this
+    lighting pass actually used (command line/worldspawn overrides
+    included) and write the engine-facing standalone atlas size key.
+    _lightingIntensity is written by DownConvertLightingData.
+    */
+    if (num_entities > 0)
+    {
+        char buf[64];
+
+        InjectMakebspProfileKey(&entities[0], game);
+        InjectQ3Map2CmdlineKey(&entities[0]);
+        sprintf(buf, "%d", game->lightmapSize);
+        SetKeyValue(&entities[0], "_lightmapImageSize", buf);
+    }
+
     WriteBSPFile(source);
 
     ClearCacheDirectory();
