@@ -833,7 +833,7 @@ static void ExportExternalLightmaps(void)
     int pixelsPerImage = size * size;
     int totalBytesPerImage = pixelsPerImage * bytesPerTexel;
     int numImages = (pixelsPerImage > 0) ? (numLightBytes / 3) / pixelsPerImage : 0;
-    const char *ext = (game->hdr == HDR_8BIT) ? "png" : "hdr";
+    const char *ext = HdrUsesByteLayout(game->hdr) ? "png" : "hdr";
 
     GetMapOutputDir(source, outDir);
 
@@ -862,7 +862,7 @@ static void ExportExternalLightmaps(void)
     // Write the new lightmaps (this safely overwrites existing ones)
     for (int i = 0; i < numImages; i++) {
         snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
-        if (game->hdr == HDR_8BIT) {
+        if (HdrUsesByteLayout(game->hdr)) {
             if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
                 Error("ExportExternalLightmaps: Failed to write %s", filename);
             }
@@ -934,10 +934,25 @@ void DownConvertLightingData(void)
         }
     }
 
-    if (game->hdr == HDR_8BIT)
+    // qboolean lightmapRange selects the scaled vs unscaled byte encoder.
+    //  - HDR_8BIT : byte layout + intensity normalization (scaled).
+    //  - HDR_OFF  : byte layout, NO scaling (values clamped directly to [0,255]).
+    //  - 16/32-bit: float layout, unscaled, but still inject _lightingIntensity
+    //               so the 8-bit lightgrid shares the same physical scale.
+    qboolean lightmapRange;
+    if (game->hdr == HDR_OFF)
+    {
+        maxLightIntensity = 255.0f;
+        scale = 1.0f;
+        lightmapRange = qfalse;
+        _printf("Lightmap scaling disabled (hdr off): raw byte range, _lightingIntensity 1.0\n");
+        SetKeyValue(&entities[0], "_lightingIntensity", "1.000000");
+    }
+    else if (game->hdr == HDR_8BIT)
     {
         maxLightIntensity = 255.0f * game->hdr8BitScale;
         scale = 255.0f / maxLightIntensity;
+        lightmapRange = qtrue;
         float engineIntensity = maxLightIntensity / 255.0f;
 
         _printf("LightingIntensity Fixed Normalization: Scale %f (_lightingIntensity %f)\n", scale, engineIntensity);
@@ -949,6 +964,7 @@ void DownConvertLightingData(void)
         // using hdr8BitScale, so we still calculate and inject _lightingIntensity.
         maxLightIntensity = 255.0f * game->hdr8BitScale;
         scale = 255.0f / maxLightIntensity;
+        lightmapRange = qfalse;
         float engineIntensity = maxLightIntensity / 255.0f;
         SetKeyValue(&entities[0], "_lightingIntensity", va("%f", engineIntensity));
     }
@@ -969,7 +985,7 @@ void DownConvertLightingData(void)
         }
     }
 
-    DownConvertDrawVerts(scale, (game->hdr == HDR_8BIT));
+    DownConvertDrawVerts(scale, lightmapRange);
 
     // Apply q3map_vertexcolor & q3map_vertexalpha overrides
     for (int s = 0; s < numDrawSurfaces; s++)
@@ -980,7 +996,7 @@ void DownConvertLightingData(void)
             byte c[3];
             for (int k = 0; k < 3; k++)
             {
-                float applyScale = (game->hdr == HDR_8BIT) ? scale : 1.0f;
+                float applyScale = lightmapRange ? scale : 1.0f;
                 int val = (int)(localSurfaces[s].vertexColor[k] * 255.0f * applyScale + 0.5f);
                 if (val < 0) val = 0;
                 else if (val > 255) val = 255;
@@ -1012,9 +1028,9 @@ void DownConvertLightingData(void)
         }
     }
 
-    DownConvertLightmaps(scale, (game->hdr == HDR_8BIT));
+    DownConvertLightmaps(scale, lightmapRange);
 
-    if (game->hdr == HDR_8BIT) {
+    if (HdrUsesByteLayout(game->hdr)) {
         if (g_debugMagentaTrisoups || g_debugCyanPatches || g_debugGreenPlanar) {
             _printf("Coloring debug lightmaps based on surface types...\n");
             int totalPixels = numLightBytes / 3;
@@ -1039,7 +1055,7 @@ void DownConvertLightingData(void)
     }
 
     DownConvertDeluxeMaps();
-    DownConvertGrid(scale, (game->hdr == HDR_8BIT));
+    DownConvertGrid(scale, lightmapRange);
 
     if (game->externalLightmaps || g_debugExportLightmaps) {
         ExportExternalLightmaps();

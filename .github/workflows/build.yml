@@ -43,6 +43,7 @@ jobs:
             tbbmalloc.dll
             makebspdata/warfork.json
             makebspdata/xonotic.json
+            makebspdata/unvanquished.json
 
   build-linux:
     runs-on: ubuntu-latest
@@ -75,3 +76,4 @@ jobs:
             libtbb*.so*
             makebspdata/warfork.json
             makebspdata/xonotic.json
+            makebspdata/unvanquished.json

@@ -58,6 +58,20 @@ typedef enum {
     HDR_32BIT = 3
 } hdrFormat_t;
 
+/*
+HdrUsesByteLayout
+
+HDR_OFF stores lightmaps exactly like HDR_8BIT (3 bytes/texel, PNG
+external export) but WITHOUT the intensity normalization/scaling that
+HDR_8BIT applies. Every layout-format decision (byte count, external
+extension, byte write branches) must therefore accept both values; only
+the scaling logic distinguishes them.
+*/
+static inline qboolean HdrUsesByteLayout(hdrFormat_t hdr)
+{
+    return (hdr == HDR_8BIT || hdr == HDR_OFF) ? qtrue : qfalse;
+}
+
 
 typedef enum { TONEMAP_LINEAR, TONEMAP_SOFTKNEE, TONEMAP_REINHARD, TONEMAP_FILMIC } tonemap_t;
 typedef enum {

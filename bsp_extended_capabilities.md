@@ -51,6 +51,12 @@ $$\text{Page Size (Bytes)} = N \times N \times 3 \times (\text{Bytes per Channel
   - To reconstruct the original physical HDR light level, the engine multiplies the sampled color by `_lightingIntensity`:
     $$\text{LinearHDRColor} = \left(\frac{\text{SampledByte}}{255.0}\right) \times \text{\_lightingIntensity}$$
 
+#### Mode 8 (Unscaled): 8-bit RGB, No Normalization (`-hdr off`)
+- **Format**: Identical to Mode 8 — Unsigned 8-bit integer (`uint8_t` / `byte`) per channel (3 bytes/texel).
+- **Value Range**: `[0, 255]`.
+- **Scaling / Compression**: **Unscaled**. Unlike `rgb8`, the light intensities are **not** normalized by `1/\text{maxIntensity}`. Values are clamped/luminance-preserving-normalized directly into `[0, 255]` and `_lightingIntensity` is written as `1.0`. Reconstruct with `LinearHDRColor = SampledByte / 255.0` (no engine-side multiplier).
+  - This is the legacy "plain 8-bit lightmaps" convention: it matches the default output most engines (and older q3map2 workflows) expect when no explicit bit-depth is requested.
+
 #### Mode 16: 16-bit Half-Float RGB (`-hdr rgba16f`)
 - **Format**: IEEE 754 half-precision float (`float16` / `uint16_t` bit-pattern) per channel (6 bytes/texel).
 - **Value Range**: Floating-point physical irradiance values.
