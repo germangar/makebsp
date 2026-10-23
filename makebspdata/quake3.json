@@ -27,9 +27,7 @@
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 1.00,
   "lightmapsRGB": false,
-  "lightgridRGB": false,
-  "lightgridAmbientBias": 1.00,
-  "lightgridDirectBias": 1.00,
+  "lightgridsRGB": false,
   "lightgridSmoothAmbient": 128.00, /* Radius in world units for smoothing the ambient component of the light grid */
   "lightgridSmoothAmbientPasses": 1,
   "lightgridSmoothDirect": 0.00, /* Radius in world units for smoothing the direct component of the light grid */

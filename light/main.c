@@ -278,16 +278,6 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (ambient_gatheradius < 32.0f) ambient_gatheradius = 32.0f;
     }
 
-    val = ValueForKey(ent, "grid_ambientbias");
-    if (val[0] && !HasArg("-grid_ambientbias", argc, argv)) {
-        lightgridAmbientBias = (float)atof(val);
-    }
-    
-    val = ValueForKey(ent, "grid_directbias");
-    if (val[0] && !HasArg("-grid_directbias", argc, argv)) {
-        lightgridDirectBias = (float)atof(val);
-    }
-
     val = ValueForKey(ent, "grid_smoothambient");
     if (val[0] && !HasArg("-grid_smoothambient", argc, argv)) {
         lightgridSmoothAmbient = (float)atof(val);
@@ -399,8 +389,6 @@ int main(int argc, char **argv) {
 
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
-    lightgridAmbientBias = game->lightgridAmbientBias;
-    lightgridDirectBias = game->lightgridDirectBias;
     lightgridSmoothAmbient = game->lightgridSmoothAmbient;
     lightgridSmoothAmbientPasses = game->lightgridSmoothAmbientPasses;
     lightgridSmoothDirect = game->lightgridSmoothDirect;

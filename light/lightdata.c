@@ -807,13 +807,13 @@ static void DownConvertGrid(float scale, qboolean lightmapRange)
         {
             if (lightmapRange)
             {
-                InternalColorToBytesScaled(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], scale, game->lightgridRGB);
-                InternalColorToBytesScaled(gridData32[i].directed[j], (byte *)gridData[i].directed[j], scale, game->lightgridRGB);
+                InternalColorToBytesScaled(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], scale, game->lightgridsRGB);
+                InternalColorToBytesScaled(gridData32[i].directed[j], (byte *)gridData[i].directed[j], scale, game->lightgridsRGB);
             }
             else
             {
-                InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], game->lightgridRGB);
-                InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], game->lightgridRGB);
+                InternalColorToBytes(gridData32[i].ambient[j], (byte *)gridData[i].ambient[j], game->lightgridsRGB);
+                InternalColorToBytes(gridData32[i].directed[j], (byte *)gridData[i].directed[j], game->lightgridsRGB);
             }
         }
         NormalToLatLong(gridData32[i].dir, gridData[i].latLong);

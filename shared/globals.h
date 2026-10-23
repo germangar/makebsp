@@ -136,9 +136,7 @@ typedef struct {
     hdrFormat_t hdr;
     float       hdr8BitScale;
 	qboolean	lightmapsRGB;
-	qboolean	lightgridRGB;
-	float       lightgridAmbientBias;
-	float       lightgridDirectBias;
+	qboolean	lightgridsRGB;
 	float       lightgridSmoothAmbient;
 	int         lightgridSmoothAmbientPasses;
 	float       lightgridSmoothDirect;

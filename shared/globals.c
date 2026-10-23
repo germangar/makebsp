@@ -72,9 +72,7 @@ game_t gameTemplates[MAX_GAMES] = {
         HDR_8BIT,   // hdr
 		3.0f,       // hdr8BitScale
 		qtrue,      // lightmapsRGB
-		qfalse,     // lightgridRGB
-		1.0f,       // lightgridAmbientBias (1.0 = disabled)
-		1.0f,       // lightgridDirectBias (1.0 = disabled)
+		qfalse,     // lightgridsRGB
 		256.0f,     // lightgridSmoothAmbient
 		4,          // lightgridSmoothAmbientPasses
 		128.0f,     // lightgridSmoothDirect
@@ -162,9 +160,7 @@ game_t gameTemplates[MAX_GAMES] = {
         HDR_OFF,    // hdr
 		1.0f,       // hdr8BitScale
 		qfalse,     // lightmapsRGB
-		qfalse,     // lightgridRGB
-		1.0f,       // lightgridAmbientBias (1.0 = disabled)
-		1.0f,       // lightgridDirectBias (1.0 = disabled)
+		qfalse,     // lightgridsRGB
 		128.0f,     // lightgridSmoothAmbient
 		1,          // lightgridSmoothAmbientPasses
 		0.0f,       // lightgridSmoothDirect

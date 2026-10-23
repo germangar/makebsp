@@ -23,7 +23,7 @@ The `_makebsp_profile` value is one line of space-separated `-<field> <value>` p
 
 ```
 -lightmapSize 2048 -externalLightmaps 0 -keepLights 1 -sampleSize 4
--hdr rgb8 -hdr8BitScale 3.00 -lightmapsRGB 1 -lightgridRGB 0
+-hdr rgb8 -hdr8BitScale 3.00 -lightmapsRGB 1 -lightgridsRGB 0
 -texturesRGB 1 -colorsRGB 1 -shading halflambert -sunShading lambert
 -attenuation standard -cutoff 1.00 -fadeout 0.05 -deluxeMap 1
 ```

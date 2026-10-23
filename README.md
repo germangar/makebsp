@@ -288,8 +288,6 @@ List of additions and modifications made to shader parsing and features compared
 - **ambient_testradius**: Radius in world units to test for solid in macro-ambient occlusion (default: 512).
 - **ambient_gatheradius**: Gather radius of light probes for spherical interpolation (default: 256).
 - **ambient_gridscale**: Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = the calibrated default; the raw-to-grid magnitude calibration is built in), scaling its ambient and directional splits as a unit. Defaults to the game profile value (`ambientGridScale`, qfusion default 1.0).
-- **grid_ambientbias**: Non-linear gamma bias applied to the ambient component of the light grid. Default 1.0 (disabled; any value other than 1.0 applies the curve, values > 1.0 boost).
-- **grid_directbias**: Non-linear gamma bias applied per-light to the directional component of the light grid. Default 1.0 (disabled).
 - **grid_smoothambient**: Radius in world units for smoothing the ambient component of the light grid. Set to 0 to disable. Default 256.0.
 - **grid_smoothambient_passes**: Number of iterative smoothing passes to apply to the ambient light grid. Default 4.
 - **grid_smoothdirect**: Radius in world units for smoothing the directional component of the light grid. Default 128.0 (qfusion only) or 0.0 (disabled).

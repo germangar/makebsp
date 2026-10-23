@@ -18,9 +18,7 @@
   "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 1.00,
   "lightmapsRGB": true,
-  "lightgridRGB": false,
-  "lightgridAmbientBias": 1.00,
-  "lightgridDirectBias": 1.00,
+  "lightgridsRGB": false,
   "lightgridAmbientScale": 1.00, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */
   "lightgridSmoothAmbient": 256.00,
   "lightgridSmoothAmbientPasses": 4,

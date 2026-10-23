@@ -389,16 +389,12 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
             else if (val->type == json_type_false)
                 game->lightmapsRGB = qfalse;
         }
-        else if (!Q_stricmp(key, "lightgridRGB"))
+        else if (!Q_stricmp(key, "lightgridsRGB") || !Q_stricmp(key, "lightgridRGB"))
         {
             if (val->type == json_type_true)
-                game->lightgridRGB = qtrue;
+                game->lightgridsRGB = qtrue;
             else if (val->type == json_type_false)
-                game->lightgridRGB = qfalse;
-        }
-        else if (!Q_stricmp(key, "lightgridAmbientBias") && val->type == json_type_number)
-        {
-            game->lightgridAmbientBias = (float)atof(json_value_as_number(val)->number);
+                game->lightgridsRGB = qfalse;
         }
         else if (!Q_stricmp(key, "lightgridSmoothAmbient") && val->type == json_type_number)
         {
@@ -415,10 +411,6 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         else if (!Q_stricmp(key, "lightgridSmoothDirectPasses") && val->type == json_type_number)
         {
             game->lightgridSmoothDirectPasses = atoi(json_value_as_number(val)->number);
-        }
-        else if (!Q_stricmp(key, "lightgridDirectBias") && val->type == json_type_number)
-        {
-            game->lightgridDirectBias = (float)atof(json_value_as_number(val)->number);
         }
         else if (!Q_stricmp(key, "lightgridAmbientClampMin") && val->type == json_type_number)
         {
@@ -758,7 +750,7 @@ void InjectMakebspProfileKey(entity_t *worldspawn, game_t *g)
 
     len = snprintf(buf, sizeof(buf),
         "-lightmapSize %d -externalLightmaps %d -keepLights %d -sampleSize %d "
-        "-hdr %s -hdr8BitScale %.2f -lightmapsRGB %d -lightgridRGB %d "
+        "-hdr %s -hdr8BitScale %.2f -lightmapsRGB %d -lightgridsRGB %d "
         "-texturesRGB %d -colorsRGB %d -shading %s -sunShading %s "
         "-attenuation %s -cutoff %.2f -fadeout %.2f -deluxeMap %d",
         g->lightmapSize,
@@ -768,7 +760,7 @@ void InjectMakebspProfileKey(entity_t *worldspawn, game_t *g)
         HdrFormatName(g->hdr),
         g->hdr8BitScale,
         g->lightmapsRGB ? 1 : 0,
-        g->lightgridRGB ? 1 : 0,
+        g->lightgridsRGB ? 1 : 0,
         g->texturesRGB ? 1 : 0,
         g->colorsRGB ? 1 : 0,
         ShadingModelName(g->shadingModel),
@@ -787,7 +779,7 @@ void InjectMakebspProfileKey(entity_t *worldspawn, game_t *g)
 static qboolean IsInformationalProfileField(const char *name)
 {
     static const char *names[] = {
-        "externalLightmaps", "keepLights", "lightmapsRGB", "lightgridRGB",
+        "externalLightmaps", "keepLights", "lightmapsRGB", "lightgridsRGB", "lightgridRGB",
         "texturesRGB", "colorsRGB", "shading", "sunShading", "attenuation",
         "cutoff", "fadeout", "deluxeMap", NULL
     };
@@ -980,9 +972,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"hdr\": \"%s\", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */\n"
             "  \"hdr8BitScale\": %.2f,\n"
             "  \"lightmapsRGB\": %s,\n"
-            "  \"lightgridRGB\": %s,\n"
-            "  \"lightgridAmbientBias\": %.2f,\n"
-            "  \"lightgridDirectBias\": %.2f,\n"
+            "  \"lightgridsRGB\": %s,\n"
             "  \"lightgridSmoothAmbient\": %.2f, /* Radius in world units for smoothing the ambient component of the light grid */\n"
             "  \"lightgridSmoothAmbientPasses\": %d,\n"
             "  \"lightgridSmoothDirect\": %.2f, /* Radius in world units for smoothing the direct component of the light grid */\n"
@@ -1043,9 +1033,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->keepLights ? "true" : "false",
             game->defaultSampleSize, game->defaultGridSize[0], game->defaultGridSize[1], game->defaultGridSize[2], hdrStr, game->hdr8BitScale,
             game->lightmapsRGB ? "true" : "false",
-            game->lightgridRGB ? "true" : "false",
-            game->lightgridAmbientBias,
-            game->lightgridDirectBias,
+            game->lightgridsRGB ? "true" : "false",
             game->lightgridSmoothAmbient,
             game->lightgridSmoothAmbientPasses,
             game->lightgridSmoothDirect,
