@@ -15,7 +15,7 @@
   "keepLights": true, /* if true, light entities are not stripped from the BSP */
   "sampleSize": 4,
   "defaultGridSize": [64.00, 64.00, 64.00],
-  "hdr": "off", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
+  "hdr": "rgb8", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
   "hdr8BitScale": 1.00,
   "lightmapsRGB": true,
   "lightgridRGB": false,
