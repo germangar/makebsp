@@ -288,7 +288,7 @@ List of additions and modifications made to shader parsing and features compared
 - **ambient_testradius**: Radius in world units to test for solid in macro-ambient occlusion (default: 512).
 - **ambient_gatheradius**: Gather radius of light probes for spherical interpolation (default: 256).
 - **ambient_gridscale**: Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = the calibrated default; the raw-to-grid magnitude calibration is built in), scaling its ambient and directional splits as a unit. Defaults to the game profile value (`ambientGridScale`, qfusion default 1.0).
-- **grid_mao_maxluma**: Absolute per-component luma ceiling applied to the MAO grid contribution after scaling, preventing open, sky-lit cells from flooding the grid. Defaults to the game profile value (`lightgridMaoMaxLuma`, 72.0). Set to 0 to disable the cap.
+- **ambient_gridmaxluma**: Absolute per-component luma ceiling applied to the MAO grid contribution after scaling, preventing open, sky-lit cells from flooding the grid. Defaults to the game profile value (`lightgridMaoMaxLuma`, 72.0). Set to 0 to disable the cap.
 - **grid_smoothambient**: Radius in world units for smoothing the ambient component of the light grid. Set to 0 to disable. Default 256.0.
 - **grid_smoothambient_passes**: Number of iterative smoothing passes to apply to the ambient light grid. Default 4.
 - **grid_smoothdirect**: Radius in world units for smoothing the directional component of the light grid. Default 128.0 (qfusion only) or 0.0 (disabled).
