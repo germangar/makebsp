@@ -50,6 +50,7 @@
   "ambientTestRadius": 512.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 256.00, /* Distance at which a lightmap pixel gathers light from probes */
   "ambientGridScale": 1.00, /* Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default) */
+  "lightgridMaoMaxLuma": 72.00, /* Absolute luma ceiling on the MAO grid contribution (0 = uncapped) */
   "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "attenuation": "standard",  /* [ standard, soft, linear ] */

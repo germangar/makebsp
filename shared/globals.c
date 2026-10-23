@@ -96,6 +96,7 @@ game_t gameTemplates[MAX_GAMES] = {
         512.0f,     // ambientTestRadius
         256.0f,     // ambientGatherRadius
         1.0f,       // ambientGridScale: relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default)
+        72.0f,      // lightgridMaoMaxLuma: absolute luma ceiling on the MAO grid contribution (0 = uncapped)
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel
@@ -184,6 +185,7 @@ game_t gameTemplates[MAX_GAMES] = {
         512.0f,     // ambientTestRadius
         256.0f,     // ambientGatherRadius
         1.0f,       // ambientGridScale: relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default)
+        72.0f,      // lightgridMaoMaxLuma: absolute luma ceiling on the MAO grid contribution (0 = uncapped)
 		SHADING_MODEL_LAMBERT, // shading
 		SHADING_MODEL_LAMBERT, // sunShading
 		ATTENUATION_INVERSE_SQUARE, // attenuationModel

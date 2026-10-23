@@ -312,6 +312,12 @@ static void ParseWorldspawnKeys(int argc, char **argv)
         if (game->ambientGridScale < 0.0f) game->ambientGridScale = 0.0f;
     }
 
+    val = ValueForKey(ent, "grid_mao_maxluma");
+    if (val[0]) {
+        game->lightgridMaoMaxLuma = (float)atof(val);
+        if (game->lightgridMaoMaxLuma < 0.0f) game->lightgridMaoMaxLuma = 0.0f;
+    }
+
     val = ValueForKey(ent, "rad_gridscale");
     if (val[0] && !HasArg("-rad_gridscale", argc, argv)) {
         game->rad_gridscale = (float)atof(val);

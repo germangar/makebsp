@@ -436,6 +436,10 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->ambientGridScale = (float)atof(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "lightgridMaoMaxLuma") && val->type == json_type_number)
+        {
+            game->lightgridMaoMaxLuma = (float)atof(json_value_as_number(val)->number);
+        }
         else if (!Q_stricmp(key, "rad_gridscale") && val->type == json_type_number)
         {
             game->rad_gridscale = (float)atof(json_value_as_number(val)->number);
@@ -996,6 +1000,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"ambientTestRadius\": %.2f, /* Radius at which a light probe tests for being occluded */\n"
             "  \"ambientGatherRadius\": %.2f, /* Distance at which a lightmap pixel gathers light from probes */\n"
             "  \"ambientGridScale\": %.2f, /* Scale the macro ambient occlusion added to the lightgrid */\n"
+            "  \"lightgridMaoMaxLuma\": %.2f, /* Absolute luma ceiling on the MAO grid contribution (0 = uncapped) */\n"
             "  \"shading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"sunShading\": \"%s\",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */\n"
             "  \"attenuation\": \"%s\",  /* [ standard, soft, linear ] */\n"
@@ -1057,6 +1062,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->ambientTestRadius,
             game->ambientGatherRadius,
             game->ambientGridScale,
+            game->lightgridMaoMaxLuma,
             shadingModelStr,
             sunShadingModelStr,
             attenuationModelStr,

@@ -2338,7 +2338,6 @@ float lightgridMaxDisplayIntensity = 0.0f;
 #define LIGHTGRID_MAO_GATHER_FRACTION 0.40f
 #define LIGHTGRID_MAO_MAX_SATURATION 0.25f
 #define LIGHTGRID_MAO_CALIBRATION 17.0f // Raw MAO values are tiny; this calibration lifts them to grid-scale energy. The profile/worldspawn knob is a relative multiplier to make it more user intuitive
-#define LIGHTGRID_MAO_MAX_LUMA 72.0f // Absolute luma ceiling applied per component after scaling. Open, fully sky-lit cells otherwise scale to MAO_CALIBRATION * ratio * (sky+ground) and flood the grid disproportionately. Roughly half of LIGHTGRID_SUN_AMBIENT_MAX_LUMA since it is applied to the ambient and directed components separately.
 
 void TraceGrid(int num)
 {
@@ -2606,15 +2605,18 @@ void TraceGrid(int num)
 
             // Absolute per-component luma cap (applied after scaling): prevents
             // wide-open, well-lit cells from contributing disproportionately to
-            // the grid ambient/directed terms.
+            // the grid ambient/directed terms. Open, fully sky-lit cells
+            // otherwise scale to MAO_CALIBRATION * ratio * (sky+ground) and
+            // flood the grid. 0 disables the cap.
+            if (game->lightgridMaoMaxLuma > 0.0f)
             {
                 float ambLum = moveAmb[0] * 0.299f + moveAmb[1] * 0.587f + moveAmb[2] * 0.114f;
-                if (ambLum > LIGHTGRID_MAO_MAX_LUMA)
-                    VectorScale(moveAmb, LIGHTGRID_MAO_MAX_LUMA / ambLum, moveAmb);
+                if (ambLum > game->lightgridMaoMaxLuma)
+                    VectorScale(moveAmb, game->lightgridMaoMaxLuma / ambLum, moveAmb);
 
                 float dirLum = moveDir[0] * 0.299f + moveDir[1] * 0.587f + moveDir[2] * 0.114f;
-                if (dirLum > LIGHTGRID_MAO_MAX_LUMA)
-                    VectorScale(moveDir, LIGHTGRID_MAO_MAX_LUMA / dirLum, moveDir);
+                if (dirLum > game->lightgridMaoMaxLuma)
+                    VectorScale(moveDir, game->lightgridMaoMaxLuma / dirLum, moveDir);
             }
 
             gridData32[num].ambient[0][0] += moveAmb[0];

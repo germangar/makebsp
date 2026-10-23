@@ -160,6 +160,7 @@ typedef struct {
     float       ambientTestRadius;
     float       ambientGatherRadius;
     float       ambientGridScale;
+    float       lightgridMaoMaxLuma;
 	shadingModel_t   shadingModel;
 	shadingModel_t   sunShadingModel;
 	attenuationModel_t attenuationModel;
