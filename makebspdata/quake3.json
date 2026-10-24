@@ -32,8 +32,6 @@
   "lightgridSmoothAmbientPasses": 1,
   "lightgridSmoothDirect": 0.00, /* Radius in world units for smoothing the direct component of the light grid */
   "lightgridSmoothDirectPasses": 1,
-  "lightgridAmbientClampMin": 0.00,
-  "lightgridAmbientClampMax": 0.00,
   "lightgridAmbientTransferFraction": 0.20, /* Fraction of direct light energy transferred into the grid ambient */
   "lightgridAmbientScale": 1.00, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */
   "lightgridDirectScale": 0.2, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */

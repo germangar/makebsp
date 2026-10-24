@@ -412,14 +412,6 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lightgridSmoothDirectPasses = atoi(json_value_as_number(val)->number);
         }
-        else if (!Q_stricmp(key, "lightgridAmbientClampMin") && val->type == json_type_number)
-        {
-            game->lightgridAmbientClampMin = (float)atof(json_value_as_number(val)->number);
-        }
-        else if (!Q_stricmp(key, "lightgridAmbientClampMax") && val->type == json_type_number)
-        {
-            game->lightgridAmbientClampMax = (float)atof(json_value_as_number(val)->number);
-        }
         else if (!Q_stricmp(key, "lightgridAmbientTransferFraction") && val->type == json_type_number)
         {
             game->lightgridAmbientTransferFraction = (float)atof(json_value_as_number(val)->number);
@@ -981,8 +973,6 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"lightgridSmoothAmbientPasses\": %d,\n"
             "  \"lightgridSmoothDirect\": %.2f, /* Radius in world units for smoothing the direct component of the light grid */\n"
             "  \"lightgridSmoothDirectPasses\": %d,\n"
-            "  \"lightgridAmbientClampMin\": %.2f,\n"
-            "  \"lightgridAmbientClampMax\": %.2f,\n"
             "  \"lightgridAmbientTransferFraction\": %.3f, /* Fraction of direct light energy transferred into the grid ambient */\n"
             "  \"lightgridAmbientScale\": %.2f, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */\n"
             "  \"lightgridDirectScale\": %.2f, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */\n"
@@ -1043,8 +1033,6 @@ void JSON_ExportGame(const char *filename, game_t *game)
             game->lightgridSmoothAmbientPasses,
             game->lightgridSmoothDirect,
             game->lightgridSmoothDirectPasses,
-            game->lightgridAmbientClampMin,
-            game->lightgridAmbientClampMax,
             game->lightgridAmbientTransferFraction,
             game->lightgridAmbientScale,
             game->lightgridDirectScale,

@@ -19,8 +19,9 @@ float lightgridSmoothAmbient = 0.0f;
 int lightgridSmoothAmbientPasses = 1;
 float lightgridSmoothDirect = 0.0f;
 int lightgridSmoothDirectPasses = 1;
-float lightgridAmbientClampMin = 0.0f;
-float lightgridAmbientClampMax = 0.0f;
+float lightgridClampMinAmbient = 0.0f;
+float lightgridClampMaxAmbient = 0.0f;
+float lightgridClampMaxDirect = 0.0f;
 
 vec3_t blockSize = {1024, 1024, 1024};
 qboolean g_lowmem = qfalse;
@@ -77,8 +78,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		4,          // lightgridSmoothAmbientPasses
 		128.0f,     // lightgridSmoothDirect
 		3,          // lightgridSmoothDirectPasses
-		0.0f,       // lightgridAmbientClampMin
-		0.0f,       // lightgridAmbientClampMax
 		0.2f,       // lightgridAmbientTransferFraction: fraction of direct light energy transferred into the grid ambient
 		1.0f,       // lightgridAmbientScale: default per-light multiplier on the grid ambient contribution
 		1.75f,      // lightgridDirectScale: default per-light multiplier on the grid direct contribution
@@ -166,8 +165,6 @@ game_t gameTemplates[MAX_GAMES] = {
 		1,          // lightgridSmoothAmbientPasses
 		0.0f,       // lightgridSmoothDirect
 		1,          // lightgridSmoothDirectPasses
-		0.0f,       // lightgridAmbientClampMin
-		0.0f,       // lightgridAmbientClampMax
 		0.20f,      // lightgridAmbientTransferFraction: fraction of direct light energy transferred into the grid ambient
 		1.0f,       // lightgridAmbientScale: default per-light multiplier on the grid ambient contribution
 		0.2f,       // lightgridDirectScale: default per-light multiplier on the grid direct contribution

@@ -1517,9 +1517,9 @@ static void SmoothGridDirect(void) {
     Q_Free(smoothedDirVector);
 }
 
-static void ApplyGridAmbientClampMin(void) {
-    if (lightgridAmbientClampMin <= 0.0f) return;
-    float targetMinAmbient = (lightgridAmbientClampMin / 100.0f) * lightgridMaxDisplayIntensity;
+static void ApplyGridClampMinAmbient(void) {
+    if (lightgridClampMinAmbient <= 0.0f) return;
+    float targetMinAmbient = (lightgridClampMinAmbient / 100.0f) * lightgridMaxDisplayIntensity;
     _printf("  Applying lightgrid min ambient (target %f)...\n", targetMinAmbient);
 
     vec3_t local_ambient_hue;
@@ -1554,9 +1554,9 @@ static void ApplyGridAmbientClampMin(void) {
     }
 }
 
-static void ApplyGridAmbientClampMax(void) {
-    if (lightgridAmbientClampMax <= 0.0f) return;
-    float maxAmbientAllowed = (lightgridAmbientClampMax / 100.0f) * lightgridMaxDisplayIntensity;
+static void ApplyGridClampMaxAmbient(void) {
+    if (lightgridClampMaxAmbient <= 0.0f) return;
+    float maxAmbientAllowed = (lightgridClampMaxAmbient / 100.0f) * lightgridMaxDisplayIntensity;
     _printf("  Applying lightgrid max ambient (max allowed %f)...\n", maxAmbientAllowed);
     
     #pragma omp parallel for schedule(static)
@@ -1565,6 +1565,21 @@ static void ApplyGridAmbientClampMax(void) {
         if (lumAmb > maxAmbientAllowed) {
             float scale = maxAmbientAllowed / lumAmb;
             VectorScale(gridData32[i].ambient[0], scale, gridData32[i].ambient[0]);
+        }
+    }
+}
+
+static void ApplyGridClampMaxDirect(void) {
+    if (lightgridClampMaxDirect <= 0.0f) return;
+    float maxDirectAllowed = (lightgridClampMaxDirect / 100.0f) * lightgridMaxDisplayIntensity;
+    _printf("  Applying lightgrid max direct (max allowed %f)...\n", maxDirectAllowed);
+
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < numGridPoints; i++) {
+        float lumDir = gridData32[i].directed[0][0] * 0.299f + gridData32[i].directed[0][1] * 0.587f + gridData32[i].directed[0][2] * 0.114f;
+        if (lumDir > maxDirectAllowed) {
+            float scale = maxDirectAllowed / lumDir;
+            VectorScale(gridData32[i].directed[0], scale, gridData32[i].directed[0]);
         }
     }
 }
@@ -1780,10 +1795,11 @@ void PostProcessLightmaps(void) {
     if (gridData32) {
         ApplyGridAmbientBias();
         ApplyGridDirectBias();
-        ApplyGridAmbientClampMin();
+        ApplyGridClampMinAmbient();
         SmoothGridAmbient();
         SmoothGridDirect();
-        ApplyGridAmbientClampMax();
+        ApplyGridClampMaxAmbient();
+        ApplyGridClampMaxDirect();
         DilateGridInvalidCells();
     }
 

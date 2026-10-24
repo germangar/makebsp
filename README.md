@@ -293,8 +293,9 @@ List of additions and modifications made to shader parsing and features compared
 - **grid_smoothambient_passes**: Number of iterative smoothing passes to apply to the ambient light grid. Default 4.
 - **grid_smoothdirect**: Radius in world units for smoothing the directional component of the light grid. Default 128.0 (qfusion only) or 0.0 (disabled).
 - **grid_smoothdirect_passes**: Number of iterative smoothing passes to apply to the directional light grid. Default 3.
-- **grid_ambientclamp_min**: Minimum hard light floor applied to the ambient light grid (in 8-bit scale). Set to 0 to disable.
-- **grid_ambientclamp_max**: Hard clamp applied to the maximum ambient light the grid can accumulate, preserving color luminance. Set to 0 to disable.
+- **grid_clamp_minambient**: Minimum luma floor applied to the final processed ambient light grid, as a percentage of the 8-bit display range (`255 * hdr8BitScale`). Cells below it are lifted toward the map ambient hue. Set to 0 to disable.
+- **grid_clamp_maxambient**: Luma ceiling applied to the final processed ambient light grid, preserving its color. Set to 0 to disable.
+- **grid_clamp_maxdirect**: Luma ceiling applied to the final processed direct light grid, preserving its color. Set to 0 to disable.
 - **grid_ambientscale**: Map-wide default multiplier on the grid ambient contribution for all lights that don't carry their own `grid_ambientscale`. Defaults to the game profile value (`lightgridAmbientScale`, default 1.0). Per-light entity keys, surface shader keys (`q3map_surfacelight_grid_ambientscale`), and sidecar overrides win over it.
 - **grid_directscale**: Map-wide default multiplier on the grid direct contribution for all lights that don't carry their own `grid_directscale`. Defaults to the game profile value (`lightgridDirectScale`, qfusion default 1.75; quake3 profile 0.2). Per-light entity keys and shader/sidecar overrides win over it.
 - **_lightingIntensity**: [qfusion engine key] Custom fixed normalization scale for 8-bit LDR lightmap output.Defaults to 3.0
@@ -674,5 +675,6 @@ These switches change the primary mode of the executable.
 - `-grid_smoothambient_passes <N>`: Number of iterative smoothing passes to apply to the ambient light grid.
 - `-grid_smoothdirect <F>`: Radius in world units for smoothing the directional component of the light grid.
 - `-grid_smoothdirect_passes <N>`: Number of iterative smoothing passes to apply to the directional light grid.
-- `-grid_ambientclamp_min <F>`: Minimum hard light floor applied to the ambient light grid.
-- `-grid_ambientclamp_max <F>`: Hard clamp applied to the maximum ambient light the grid can accumulate.
+- `-grid_clamp_minambient <F>`: Minimum luma floor applied to the final processed ambient light grid (percentage of the 8-bit display range).
+- `-grid_clamp_maxambient <F>`: Luma ceiling applied to the final processed ambient light grid.
+- `-grid_clamp_maxdirect <F>`: Luma ceiling applied to the final processed direct light grid.

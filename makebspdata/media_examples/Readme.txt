@@ -1,0 +1,1 @@
+This directory contains examples of media used by makebsp for some extra features.
