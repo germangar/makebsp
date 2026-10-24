@@ -1,30 +1,30 @@
 q3map.exe
 /obj/
-scripts/
-maps/
-textures/
-models/
-env/
-NetradianC/
-cache/
-studies/
+/NetradianC/
+/cache/
+/studies/
 q3map2_reference
 testmapbuild.bat
-libs/assimp_src/
 libs/embree
 libs/radeonrays
 build_assimp_static.bat
 .vscode/c_cpp_properties.json
+.vscode/settings.json
 .antigravitycli
+.agents/
 yesterday_plan
 
 AGENTS.md
-.vscode/settings.json
-.antigravitycli
+
+# Quake content dirs (root-anchored so vendored library trees and makebspdata are never swallowed)
+/maps/
+/models/
+/env/
+/scripts/
+/textures/
 
 *.bmp
-*.bsp 
-wfdm6_models
+*.bsp
 
 # MeshLib binaries and temporary files
 libs/MeshLib/build/
@@ -32,7 +32,6 @@ libs/MeshLib/build_minimal/
 libs/MeshLib/tmp_cmake_test/
 libs/MeshLib/cmake_trace.txt
 libs/MeshLib/thirdparty/
-q3map2_reference
 
 libs/opencl/loader/build
 
@@ -47,11 +46,9 @@ libMRMeshC.dll
 # General build artifacts
 *.o
 *.a
-!libs/coacd/build/libcoacd.a
 !libs/opencl/lib/libOpenCL.a
 *.dll
 !libs/embree/prebuilt/windows/bin/*.dll
-libMRMesh.dll
 light.exe
 makelight.exe
 q3light.exe
@@ -71,7 +68,6 @@ changes.diff
 smooth-fix#1.txt
 smooth-fix#2.txt
 deluxemapping_spec.txt
-studies/smooth-displacement-fix.txt
 
 exportmodels.bat
 daily_status_report_2026-05-15.txt
@@ -82,12 +78,8 @@ q3map/entities.txt
 makebsp.exe
 entities.txt
 q3map2_directories.txt
-shaders.txt
-studies/custominfoparms_implementation.txt
 CLI.txt
 description.txt
-ammobox.shader
-concrete.shader
 inline_vis_specs.txt
 compile.log
 testvfs.bat
@@ -95,8 +87,6 @@ compile_userdir.log
 testvfs_fast.bat
 bomb_gfx.shader
 DM1_user.bat
-killer_shaders/prong_dm12.shader
-killer_shaders/prong_dm23.shader
 patches_in_q3map2_specs.txt
 patches_improvement_plan.txt
 q3map2_export_lightmaps.txt
