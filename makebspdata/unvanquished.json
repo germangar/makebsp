@@ -16,7 +16,7 @@
   "sampleSize": 4,
   "defaultGridSize": [64.00, 64.00, 64.00],
   "hdr": "rgb8", /* [ off, rgb8, rgb16, rgb32 ] More than 8 bit requires a bsp version change */
-  "hdr8BitScale": 1.00,
+  "hdr8BitScale": 2.00,
   "lightmapsRGB": true,
   "lightgridsRGB": false,
   "lightgridAmbientScale": 1.00, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */
