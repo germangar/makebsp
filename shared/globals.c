@@ -274,7 +274,7 @@ game_t *InitGame(int argc, char **argv) {
         strncpy(game->pakExtension, ".pk3", sizeof(game->pakExtension) - 1);
     else if (game->pakExtension[0] != '.')
     {
-        char tmp[16];
+        char tmp[24];
         snprintf(tmp, sizeof(tmp), ".%s", game->pakExtension);
         strncpy(game->pakExtension, tmp, sizeof(game->pakExtension) - 1);
         game->pakExtension[sizeof(game->pakExtension) - 1] = '\0';

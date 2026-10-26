@@ -921,7 +921,10 @@ int main(int argc, char **argv)
 
     // Configure the VFS package scanner for the profile's primary package
     // extension (".pk3" always remains enabled as fallback inside the scanner).
+    // Gated like the pakstuff.h include above: archive scanning is Windows-only.
+#ifdef _WIN32
     SetPakExtension(game->pakExtension);
+#endif
 
     // Pre-scan CLI for VFS path construction
     const char *cliPakPaths[MAX_VFS_PATHS];
