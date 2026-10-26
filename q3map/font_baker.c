@@ -128,8 +128,8 @@ qboolean BakeFontAtlas(const char *fontPath, int atlasSize, int customFontSize)
     strcpy(outBasePath, fontPath);
     StripExtension(outBasePath);
     
-    sprintf(outTgaPath, "%s.tga", outBasePath);
-    sprintf(outJsonPath, "%s.font", outBasePath);
+    snprintf(outTgaPath, sizeof(outTgaPath), "%s.tga", outBasePath);
+    snprintf(outJsonPath, sizeof(outJsonPath), "%s.font", outBasePath);
 
     // Convert to RGBA
     _printf("Converting to 32-bit RGBA and writing TGA...\n");

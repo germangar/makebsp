@@ -282,20 +282,20 @@ static void PrepareClipEntityGroups(void)
 
         if (!Q_stricmp(cls, "func_static"))
         {
-            sprintf(value, "*%i", models++);
+            snprintf(value, sizeof(value), "*%i", models++);
             SetKeyValue(g->entity, "model", value);
         }
 
         // Add metadata
         if (!Q_stricmp(cls, "func_static"))
         {
-            sprintf(value, "%.8f", g->brush_density);
+            snprintf(value, sizeof(value), "%.8f", g->brush_density);
             SetKeyValue(g->entity, "density", value);
         }
 
         if (!Q_stricmp(cls, "func_static") || !Q_stricmp(cls, "func_group"))
         {
-            sprintf(value, "%i", g->numBrushes);
+            snprintf(value, sizeof(value), "%i", g->numBrushes);
             SetKeyValue(g->entity, "brushcount", value);
         }
     }
@@ -1072,10 +1072,10 @@ void CreateCollisionTris(modelInstance_t *inst)
         char objPath[1024];
         char coltrisDir[1024];
         GetMapOutputDir(source, baseDir);
-        sprintf(coltrisDir, "%scoltris/", baseDir);
+        snprintf(coltrisDir, sizeof(coltrisDir), "%scoltris/", baseDir);
         CreatePath(coltrisDir);
 
-        sprintf(objPath, "%s%s_coltris.obj", coltrisDir, inst->modelName);
+        snprintf(objPath, sizeof(objPath), "%s%s_coltris.obj", coltrisDir, inst->modelName);
         CreatePath(objPath);
         WriteCollisionOBJ(inst->collision_meshes, inst->num_collision_meshes, objPath);
     }
@@ -1222,7 +1222,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
         SetKeyValue(ent, "misc_model", inst->modelName);
         {
             char triangle_density_str[32];
-            sprintf(triangle_density_str, "%.8f", inst->triangle_density);
+            snprintf(triangle_density_str, sizeof(triangle_density_str), "%.8f", inst->triangle_density);
             SetKeyValue(ent, "triangle_density", triangle_density_str);
         }
         ent->brushes = hulls_list;
@@ -1370,7 +1370,7 @@ void CreateTriangleModelCollision(entity_t *parent)
         char baseDir[1024];
         char debugName[1024];
         GetMapOutputDir(source, baseDir);
-        sprintf(debugName, "%scollision.map", baseDir);
+        snprintf(debugName, sizeof(debugName), "%scollision.map", baseDir);
         WriteCollisionMap(debugName);
     }
 

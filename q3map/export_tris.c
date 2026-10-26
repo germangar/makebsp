@@ -118,8 +118,8 @@ void ExportModels(int count, char **args)
                 continue;
             }
 
-            sprintf(objName, "%s/%s_surf%04d.obj", outDir, base, j);
-            sprintf(mtlName, "%s/%s_surf%04d.mtl", outDir, base, j);
+            snprintf(objName, sizeof(objName), "%s/%s_surf%04d.obj", outDir, base, j);
+            snprintf(mtlName, sizeof(mtlName), "%s/%s_surf%04d.mtl", outDir, base, j);
             
             // Create MTL for THIS surface
             fMtl = fopen(mtlName, "w");

@@ -71,11 +71,11 @@ shaderInfo_t *ShaderForLayer(int minlayer, int maxlayer,
 
     if (minlayer == maxlayer)
     {
-        sprintf(shader, "textures/%s_%d", shadername, maxlayer);
+        snprintf(shader, sizeof(shader), "textures/%s_%d", shadername, maxlayer);
     }
     else
     {
-        sprintf(shader, "textures/%s_%dto%d", shadername, minlayer, maxlayer);
+        snprintf(shader, sizeof(shader), "textures/%s_%dto%d", shadername, minlayer, maxlayer);
     }
 
     return ShaderInfoForShader(shader);
@@ -1142,7 +1142,7 @@ void Terrain_ParseFace(terrainFace_t *face)
     scale[1] = atof(token);
 
     // find default flags and values
-    sprintf(shader, "textures/%s", name);
+    snprintf(shader, sizeof(shader), "textures/%s", name);
     si = ShaderInfoForShader(shader);
     face->shaderInfo = si;
     // face->texdef = si->texdef;

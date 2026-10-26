@@ -995,7 +995,7 @@ int main(int argc, char **argv) {
 
         InjectMakebspProfileKey(&entities[0], game);
         InjectQ3Map2CmdlineKey(&entities[0]);
-        sprintf(buf, "%d", game->lightmapSize);
+        snprintf(buf, sizeof(buf), "%d", game->lightmapSize);
         SetKeyValue(&entities[0], "_lightmapImageSize", buf);
     }
 

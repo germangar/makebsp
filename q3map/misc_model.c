@@ -93,7 +93,7 @@ static struct aiFile* VFS_Open(struct aiFileIO* io, const char* filename, const 
         if (blen > 0 && base[blen-1] != '/' && base[blen-1] != '\\') {
             strcat(base, "/");
         }
-        sprintf(relPath, "%s%s", base, filename);
+        snprintf(relPath, sizeof(relPath), "%s%s", base, filename);
         len = vfsLoadFile(relPath, &buffer);
     }
     

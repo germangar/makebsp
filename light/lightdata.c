@@ -1212,7 +1212,7 @@ void VoxelCache_BakeAll(void)
     char baseDir[1024];
     char cacheDir[1024];
     GetMapOutputDir(source, baseDir);
-    sprintf(cacheDir, "%scache/", baseDir);
+    snprintf(cacheDir, sizeof(cacheDir), "%scache/", baseDir);
     CreatePath(cacheDir);
 
     int numBaked = 0;
@@ -1240,7 +1240,7 @@ void VoxelCache_BakeAll(void)
         }
 
         char path[1024];
-        sprintf(path, "%ssurf_%d.vxl", cacheDir, i);
+        snprintf(path, sizeof(path), "%ssurf_%d.vxl", cacheDir, i);
         FILE *f_test = fopen(path, "rb");
         if (f_test)
         {
@@ -1438,7 +1438,7 @@ voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
     char baseDir[1024];
     char path[1024];
     GetMapOutputDir(source, baseDir);
-    sprintf(path, "%scache/surf_%d.vxl", baseDir, surfIdx);
+    snprintf(path, sizeof(path), "%scache/surf_%d.vxl", baseDir, surfIdx);
 
     FILE *f = fopen(path, "rb");
     if (!f)

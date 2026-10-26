@@ -1413,7 +1413,7 @@ int VisMain(int argc, char **argv)
 #endif
 
     // load the bsp
-    sprintf(name, "%s%s", inbase, ExpandArg(argv[i]));
+    snprintf(name, sizeof(name), "%s%s", inbase, ExpandArg(argv[i]));
     StripExtension(name);
     strcat(name, ".bsp");
     _printf("reading %s\n", name);
@@ -1421,7 +1421,7 @@ int VisMain(int argc, char **argv)
     ParseEntities();
 
     // load the portal file
-    sprintf(portalfile, "%s%s", inbase, ExpandArg(argv[i]));
+    snprintf(portalfile, sizeof(portalfile), "%s%s", inbase, ExpandArg(argv[i]));
     StripExtension(portalfile);
     strcat(portalfile, ".prt");
     _printf("reading %s\n", portalfile);

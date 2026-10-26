@@ -94,7 +94,7 @@ static int TryLoadFontBuffer(const char *fontPath, void **buffer)
     ExtractFileBase(fontPath, base);
 
     // 2. textures/decals/fonts/<basename>.font
-    sprintf(path, "textures/decals/fonts/%s.font", base);
+    snprintf(path, sizeof(path), "textures/decals/fonts/%s.font", base);
     len = vfsLoadFile(path, buffer);
     if (len > 0) return len;
 
@@ -102,7 +102,7 @@ static int TryLoadFontBuffer(const char *fontPath, void **buffer)
     if (len > 0) return len;
 
     // 3. fonts/<basename>.font
-    sprintf(path, "fonts/%s.font", base);
+    snprintf(path, sizeof(path), "fonts/%s.font", base);
     len = vfsLoadFile(path, buffer);
     if (len > 0) return len;
 

@@ -1101,7 +1101,7 @@ static extraSurface_t *LoadSurfaceExtraFile(const char *path, int *numSurfaces)
 
     ExtractFileBase(path, baseName);
     GetMapOutputDir(path, baseDir);
-    sprintf(srfPath, "%scache/%s.srf", baseDir, baseName);
+    snprintf(srfPath, sizeof(srfPath), "%scache/%s.srf", baseDir, baseName);
 
     f = fopen(srfPath, "rb");
     if (!f)
@@ -1710,12 +1710,12 @@ void ExportAlphaMask(const char *filenamePrefix)
     char baseDir[1024];
     char outDir[1024];
     GetMapOutputDir(source, baseDir);
-    sprintf(outDir, "%slightmaps/", baseDir);
+    snprintf(outDir, sizeof(outDir), "%slightmaps/", baseDir);
     CreatePath(outDir);
 
     for (i = 0; i < numPages; i++)
     {
-        sprintf(filename, "%s%s%d.bmp", outDir, filenamePrefix, i);
+        snprintf(filename, sizeof(filename), "%s%s%d.bmp", outDir, filenamePrefix, i);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }
@@ -1899,12 +1899,12 @@ void ExportUVmaps(const char *filenamePrefix)
     char baseDir[1024];
     char outDir[1024];
     GetMapOutputDir(source, baseDir);
-    sprintf(outDir, "%slightmaps/", baseDir);
+    snprintf(outDir, sizeof(outDir), "%slightmaps/", baseDir);
     CreatePath(outDir);
 
     for (i = 0; i < numPages; i++)
     {
-        sprintf(filename, "%s%s%d.bmp", outDir, filenamePrefix, i);
+        snprintf(filename, sizeof(filename), "%s%s%d.bmp", outDir, filenamePrefix, i);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }
@@ -2052,7 +2052,7 @@ void LightMain(void)
             // Force gridsize into worldspawn so the engine uses the exact same size bounds
             {
                 char gridsizeStr[32];
-                sprintf(gridsizeStr, "%.0f %.0f %.0f", gridSize[0], gridSize[1], gridSize[2]);
+                snprintf(gridsizeStr, sizeof(gridsizeStr), "%.0f %.0f %.0f", gridSize[0], gridSize[1], gridSize[2]);
                 SetKeyValue(&entities[0], "gridsize", gridsizeStr);
             }
 

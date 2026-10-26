@@ -208,7 +208,7 @@ void SetModelNumbers (void)
 	models = 1;
 	for ( i=1 ; i<num_entities ; i++ ) {
 		if ( entities[i].brushes || entities[i].patches ) {
-			sprintf ( value, "*%i", models );
+			snprintf ( value, sizeof(value), "*%i", models );
 			models++;
 			SetKeyValue (&entities[i], "model", value);
 		}
@@ -258,7 +258,7 @@ void SetLightStyles (void)
 			strcpy (lighttargets[j], t);
 			stylenum++;
 		}
-		sprintf (value, "%i", 32 + j);
+		snprintf (value, sizeof(value), "%i", 32 + j);
 		SetKeyValue (e, "style", value);
 	}
 
@@ -401,7 +401,7 @@ void NudgeLightEntities(void) {
 		// Write the nudged origin back to the entity as a float string
 		{
 			char buf[64];
-			sprintf(buf, "%f %f %f", origin[0], origin[1], origin[2]);
+			snprintf(buf, sizeof(buf), "%f %f %f", origin[0], origin[1], origin[2]);
 			SetKeyValue(e, "origin", buf);
 		}
 	}
@@ -425,7 +425,7 @@ void EndBSPFile( void ) {
 	UnparseEntities ();
 
 	// write the map
-	sprintf (path, "%s.bsp", source);
+	snprintf (path, sizeof(path), "%s.bsp", source);
 	_printf ("Writing %s\n", path);
 	WriteBSPFile (path);
 }

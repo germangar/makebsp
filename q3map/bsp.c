@@ -212,7 +212,7 @@ void ProcessWorldModel(void)
         if (!novis)
         {
             char portalfile[1024];
-            sprintf(portalfile, "%s.prt", source);
+            snprintf(portalfile, sizeof(portalfile), "%s.prt", source);
             _printf("--- Inline VIS ---\n");
 
             // 0. Explicitly set healthy defaults for VIS engine switches
@@ -560,7 +560,7 @@ void OnlyEnts(void)
     epair_t *preservedEpairs = NULL;
     epair_t *ep;
 
-    sprintf(out, "%s.bsp", source);
+    snprintf(out, sizeof(out), "%s.bsp", source);
     LoadBSPFile(out);
 
     // LoadBSPFile only copies the raw entity lump bytes; parse them into
@@ -671,15 +671,15 @@ void InjectSunEntity(void)
             SetKeyValue(e, "sun", "1");
 
             // Store the normalized direction vector to avoid precision loss
-            sprintf(buf, "%f %f %f", si->sunDirection[0], si->sunDirection[1],
+            snprintf(buf, sizeof(buf), "%f %f %f", si->sunDirection[0], si->sunDirection[1],
                     si->sunDirection[2]);
             SetKeyValue(e, "sun_dir", buf);
 
             // Store the color and intensity
-            sprintf(buf, "%f %f %f", si->sunLight[0], si->sunLight[1], si->sunLight[2]);
+            snprintf(buf, sizeof(buf), "%f %f %f", si->sunLight[0], si->sunLight[1], si->sunLight[2]);
             SetKeyValue(e, "color", buf);
 
-            sprintf(buf, "%f", si->sunLightIntensity);
+            snprintf(buf, sizeof(buf), "%f", si->sunLightIntensity);
             SetKeyValue(e, "light", buf);
 
             // We only ever support ONE global sun direction in our engine
@@ -719,10 +719,10 @@ static void WriteSurfaceExtraFile(const char *path)
     ExtractFileBase(path, baseName);
     GetMapOutputDir(path, baseDir);
     
-    sprintf(cacheDir, "%scache/", baseDir);
+    snprintf(cacheDir, sizeof(cacheDir), "%scache/", baseDir);
     CreatePath(cacheDir);
 
-    sprintf(srfPath, "%s%s.srf", cacheDir, baseName);
+    snprintf(srfPath, sizeof(srfPath), "%s%s.srf", cacheDir, baseName);
 
     f = fopen(srfPath, "wb");
     if (!f)
@@ -1436,9 +1436,9 @@ int main(int argc, char **argv)
         ClearCacheDirectory();
 
         // delete portal and line files
-        sprintf(path, "%s.prt", source);
+        snprintf(path, sizeof(path), "%s.prt", source);
         remove(path);
-        sprintf(path, "%s.lin", source);
+        snprintf(path, sizeof(path), "%s.lin", source);
         remove(path);
     }
 
@@ -1446,7 +1446,7 @@ int main(int argc, char **argv)
     if (strcmp(name + strlen(name) - 4, ".reg"))
     {
         // if we are doing a full map, delete the last saved region map
-        sprintf(path, "%s.reg", source);
+        snprintf(path, sizeof(path), "%s.reg", source);
         remove(path);
 
         DefaultExtension(name, ".map"); // might be .reg

@@ -646,7 +646,7 @@ bspbrush_t *FinishBrush(void)
         VectorAdd(buildBrush->mins, buildBrush->maxs, origin);
         VectorScale(origin, 0.5, origin);
 
-        sprintf(string, "%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]);
+        snprintf(string, sizeof(string), "%i %i %i", (int)origin[0], (int)origin[1], (int)origin[2]);
         SetKeyValue(&entities[num_entities - 1], "origin", string);
 
         VectorCopy(origin, entities[num_entities - 1].origin);
@@ -928,7 +928,7 @@ void ParseRawBrush(void)
         }
 
         // find default flags and values
-        sprintf(shader, "textures/%s", name);
+        snprintf(shader, sizeof(shader), "textures/%s", name);
         si = ShaderInfoForShader(shader);
         side->shaderInfo = si;
         side->surfaceFlags = si->surfaceFlags;
@@ -1219,13 +1219,13 @@ void SpawnLightEntity(vec3_t origin, vec3_t normal, qboolean isPoint, entity_t *
 
     SetKeyValue(le, "classname", "light");
     char buf[128];
-    sprintf(buf, "%f %f %f", origin[0], origin[1], origin[2]);
+    snprintf(buf, sizeof(buf), "%f %f %f", origin[0], origin[1], origin[2]);
     SetKeyValue(le, "origin", buf);
 
     // Spotlights get a direction, point lights don't
     if (!isPoint)
     {
-        sprintf(buf, "%f %f %f", normal[0], normal[1], normal[2]);
+        snprintf(buf, sizeof(buf), "%f %f %f", normal[0], normal[1], normal[2]);
         SetKeyValue(le, "dir", buf);
     }
 

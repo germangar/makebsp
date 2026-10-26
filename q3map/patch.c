@@ -167,7 +167,7 @@ void ParsePatch(void)
     pm = malloc(sizeof(*pm));
     memset(pm, 0, sizeof(*pm));
 
-    sprintf(shader, "textures/%s", texture);
+    snprintf(shader, sizeof(shader), "textures/%s", texture);
     pm->shaderInfo = ShaderInfoForShader(shader);
     pm->mesh = m;
     pm->entitynum = num_entities - 1;

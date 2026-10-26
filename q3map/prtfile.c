@@ -289,7 +289,7 @@ void WritePortalFile (tree_t *tree)
 	qprintf ("--- WritePortalFile ---\n");
 	
 	// write the file
-	sprintf (filename, "%s.prt", source);
+	snprintf (filename, sizeof(filename), "%s.prt", source);
 	_printf ("writing %s\n", filename);
 	pf = fopen (filename, "w");
 	if (!pf)
