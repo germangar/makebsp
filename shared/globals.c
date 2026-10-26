@@ -267,6 +267,20 @@ game_t *InitGame(int argc, char **argv) {
     // 5. Point the global game to our local struct
     game = &activeGame;
 
+    // 5.5 Normalize the package extension: default .pk3, ensure leading dot, lowercase.
+    // (JSON override happens in step 4, so a template/profile that never mentions
+    // pakExtension still gets the .pk3 default.)
+    if (game->pakExtension[0] == '\0')
+        strncpy(game->pakExtension, ".pk3", sizeof(game->pakExtension) - 1);
+    else if (game->pakExtension[0] != '.')
+    {
+        char tmp[16];
+        snprintf(tmp, sizeof(tmp), ".%s", game->pakExtension);
+        strncpy(game->pakExtension, tmp, sizeof(game->pakExtension) - 1);
+        game->pakExtension[sizeof(game->pakExtension) - 1] = '\0';
+    }
+    strlower(game->pakExtension);
+
     // 6. Register default game gamedir as active
     AddActiveGamedir(game->gameDir);
 

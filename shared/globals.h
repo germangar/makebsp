@@ -130,7 +130,7 @@ typedef struct {
 	float       chamferConcaveWidth;
 	float       decalExtrusion;
 	float       defaultTrisoupSubdivisions;
-	qboolean    patchtris;
+	qboolean	patchtris;
     qboolean    enforceSampleSize;
     qboolean    forceUVGen;
     hdrFormat_t hdr;
@@ -184,6 +184,11 @@ typedef struct {
 
 	customSurfaceParm_t customSurfaceParms[MAX_CUSTOM_SURFACEPARMS];
 	int                 numCustomSurfaceParms;
+
+	/* VFS: primary package extension (with dot, lowercase). ".pk3" is always
+	   scanned as a fallback regardless of this value. Zero-initialized in the
+	   templates; InitGame normalizes empty to ".pk3". */
+	char		pakExtension[16];
 } game_t;
 
 extern float shadingModelSoftBias;

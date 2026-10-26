@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "qbsp.h"
+#include <omp.h>
 
 mapDrawSurface_t *mapDrawSurfs;
 int numMapDrawSurfs;
@@ -526,12 +527,16 @@ void MergeDrawSurfs(entity_t *e)
     int mergedCount = 0;
     qboolean changed;
     int numBaseDrawSurfs;
+    int scanRestarts = 0;
+    double startTime;
 
     qprintf("----- MergeDrawSurfs -----\n");
+    startTime = omp_get_wtime();
 
     do
     {
         changed = qfalse;
+        scanRestarts++;
         numBaseDrawSurfs = numMapDrawSurfs;
         for (i = e->firstDrawSurf; i < numBaseDrawSurfs; i++)
         {
@@ -692,10 +697,8 @@ void MergeDrawSurfs(entity_t *e)
         }
     } while (changed);
 
-    if (mergedCount > 0)
-    {
-        _printf("%5i surfaces merged\n", mergedCount);
-    }
+    _printf("%5i surfaces merged (%i scan restarts) in %.0f msec\n",
+            mergedCount, scanRestarts, (omp_get_wtime() - startTime) * 1000.0);
 }
 
 /*

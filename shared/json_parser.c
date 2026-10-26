@@ -195,6 +195,11 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
         {
             game->lumpCount = atoi(json_value_as_number(val)->number);
         }
+        else if (!Q_stricmp(key, "pakExtension") && val->type == json_type_string)
+        {
+            strncpy(game->pakExtension, json_value_as_string(val)->string, sizeof(game->pakExtension) - 1);
+            game->pakExtension[sizeof(game->pakExtension) - 1] = '\0';
+        }
         else if (!Q_stricmp(key, "maxLMSurfaceVerts") && val->type == json_type_number)
         {
             game->maxLMSurfaceVerts = atoi(json_value_as_number(val)->number);
@@ -948,6 +953,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"bspIdent\": \"%s\",\n"
             "  \"bspVersion\": %d,\n"
             "  \"lumpCount\": %d,\n"
+            "  \"pakExtension\": \"%s\", /* primary package extension (.pk3 is always scanned as fallback) */\n"
             "  \"maxLMSurfaceVerts\": %d,\n"
             "  \"maxSurfaceVerts\": %d,\n"
             "  \"maxSurfaceIndexes\": %d,\n"
@@ -1018,7 +1024,7 @@ void JSON_ExportGame(const char *filename, game_t *game)
             "  \"flareShader\": \"%s\",\n"
             "  \"haloShader\": \"%s\"",
             game->arg, game->rootDir, game->userDir ? game->userDir : "", game->gameDir, game->bspIdent, game->bspVersion,
-            game->lumpCount, game->maxLMSurfaceVerts, game->maxSurfaceVerts,
+            game->lumpCount, game->pakExtension[0] ? game->pakExtension : ".pk3", game->maxLMSurfaceVerts, game->maxSurfaceVerts,
             game->maxSurfaceIndexes, 
             game->maxMapDrawVerts, game->maxMapDrawIndexes, game->maxMapDrawSurfs,
             game->maxMapPlanes, game->maxMapNodes, game->maxMapLeafs,

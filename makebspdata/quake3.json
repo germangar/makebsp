@@ -7,6 +7,7 @@
   "bspIdent": "IBSP",
   "bspVersion": 46,
   "lumpCount": 17,
+  "pakExtension": ".pk3", /* primary package extension (.pk3 is always scanned as fallback) */
   "maxLMSurfaceVerts": 64,
   "maxSurfaceVerts": 999,
   "maxSurfaceIndexes": 6000,
@@ -32,9 +33,10 @@
   "lightgridSmoothAmbientPasses": 1,
   "lightgridSmoothDirect": 0.00, /* Radius in world units for smoothing the direct component of the light grid */
   "lightgridSmoothDirectPasses": 1,
-  "lightgridAmbientTransferFraction": 0.20, /* Fraction of direct light energy transferred into the grid ambient */
+  "lightgridAmbientTransferFraction": 0.200, /* Fraction of direct light energy transferred into the grid ambient */
   "lightgridAmbientScale": 1.00, /* Default per-light multiplier on the grid ambient contribution (worldspawn grid_ambientscale overrides) */
-  "lightgridDirectScale": 0.2, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */
+  "lightgridDirectScale": 0.20, /* Default per-light multiplier on the grid direct contribution (worldspawn grid_directscale overrides) */
+  "lightgridDilation": true, /* if true, buried boundary cells are filled with averaged neighbor light so legacy engines blend meaningful values */
   "texturesRGB": false,
   "colorsRGB": false,
   "radiosityPasses": 4, /* Number of times the light bounces */
@@ -44,10 +46,10 @@
   "rad_ao_intensity": 0.50, /* Intensity of ambient occlusion shadowing */
   "rad_ao_min": 0.00, /* Minimum distance for ambient occlusion shadowing */
   "rad_ao_max": 32.00, /* Maximum distance for ambient occlusion shadowing */
-  "rad_gridscale": 1.50, /* Multiplier on radiosity (bounced light) added to the grid ambient */
+  "rad_gridscale": 1.50, /* Scale the radiosity added to the lightgrid */
   "ambientTestRadius": 512.00, /* Radius at which a light probe tests for being occluded */
   "ambientGatherRadius": 256.00, /* Distance at which a lightmap pixel gathers light from probes */
-  "ambientGridScale": 1.00, /* Relative multiplier on the macro-ambient (MAO) contribution to the light grid (1.0 = calibrated default) */
+  "ambientGridScale": 1.00, /* Scale the macro ambient occlusion added to the lightgrid */
   "lightgridMaoMaxLuma": 72.00, /* Absolute luma ceiling on the MAO grid contribution (0 = uncapped) */
   "shading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
   "sunShading": "lambert",  /* [ lambert, halflambert, quadratic, doublequadratic, unreal ] */
@@ -69,6 +71,8 @@
   "chamferConvexWidth": 1.25,
   "chamferConcaveWidth": 0.00,
   "decalExtrusion": 0.00,
+  "defaultTrisoupSubdivisions": 6.00,
+  "patchtris": false,
   "enforceSampleSize": true,
   "forceUVGen": true,
   "flareShader": "",

@@ -7,6 +7,7 @@
   "bspIdent": "FBSP",
   "bspVersion": 1,
   "lumpCount": 18,
+  "pakExtension": ".pk3", /* primary package extension (.pk3 is always scanned as fallback) */
   "maxLMSurfaceVerts": 65535,
   "maxSurfaceVerts": 65535,
   "maxSurfaceIndexes": 393210,

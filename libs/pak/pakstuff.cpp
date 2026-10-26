@@ -71,6 +71,10 @@ UInt32 PakColormapOffset;
 UInt32 PakColormapSize;
 DIRECTORY *dirhead = NULL;
 boolean g_bPK3 = false;
+
+/* Primary package extension (lowercase, leading dot). ".pk3" is always scanned
+   as a fallback even when the game profile uses another extension (e.g. ".dpk"). */
+static char g_pakExtPrimary[16] = ".pk3";
 char g_strBasePath[1024];
 
 struct PK3FileInfo {
@@ -948,6 +952,39 @@ boolean OpenPK3(const char *filename) {
 
 void closePK3(unzFile zf) { unzClose(zf); }
 
+void SetPakExtension(const char *ext) {
+  if (ext == NULL || ext[0] == '\0') {
+    strcpy(g_pakExtPrimary, ".pk3");
+    return;
+  }
+  char tmp[32];
+  if (ext[0] == '.')
+    snprintf(tmp, sizeof(tmp), "%s", ext);
+  else
+    snprintf(tmp, sizeof(tmp), ".%s", ext);
+  for (char *p = tmp; *p; p++) {
+    if (*p >= 'A' && *p <= 'Z')
+      *p += 32;
+  }
+  strncpy(g_pakExtPrimary, tmp, sizeof(g_pakExtPrimary) - 1);
+  g_pakExtPrimary[sizeof(g_pakExtPrimary) - 1] = '\0';
+}
+
+static bool HasPakExtensionCI(const char *name, const char *ext) {
+  size_t nlen = strlen(name), elen = strlen(ext);
+  if (elen == 0 || nlen < elen)
+    return false;
+  const char *suf = name + nlen - elen;
+  for (size_t i = 0; i < elen; i++) {
+    char c = suf[i];
+    if (c >= 'A' && c <= 'Z')
+      c += 32;
+    if (c != ext[i])
+      return false;
+  }
+  return true;
+}
+
 void OpenPakFile(const char *filename) {
   int i;
   char *str1, *str2;
@@ -960,7 +997,7 @@ void OpenPakFile(const char *filename) {
 
   Str strTest(filename);
   strTest.MakeLower();
-  if (strTest.Find("pk3") >= 0 || strTest.Find("zip") >= 0) {
+  if (strTest.Find("pk3") >= 0 || strTest.Find("zip") >= 0 || strTest.Find(g_pakExtPrimary + 1) >= 0) {
     pakopen = g_bPK3 = OpenPK3(filename);
     return;
   }
@@ -1062,23 +1099,29 @@ void InitPakFile(const char *pBasePath, const char *pName) {
     _printf("  Scanning for archives in: %s\n", normalizedBasePath);
 
 #ifdef _WIN32
-    Str strPath(normalizedBasePath);
-    AddSlash(strPath);
-    strPath += "*.pk3";
+    char *pk3Files[1024];
+    int numPk3s = 0;
+    const char *scanExts[2] = { g_pakExtPrimary, ".pk3" };
+    int numScanExts = (strcmp(g_pakExtPrimary, ".pk3") != 0) ? 2 : 1;
 
-    // Create a working copy for _findfirst with backslashes
-    char winPath[WORK_LEN];
-    strncpy(winPath, strPath.GetBuffer(), sizeof(winPath) - 1);
-    winPath[sizeof(winPath) - 1] = '\0';
-    for (int i = 0; winPath[i]; i++) {
+    for (int pat = 0; pat < numScanExts; pat++) {
+      Str strPath(normalizedBasePath);
+      AddSlash(strPath);
+      strPath += "*";
+      strPath += scanExts[pat];
+
+      // Create a working copy for _findfirst with backslashes
+      char winPath[WORK_LEN];
+      strncpy(winPath, strPath.GetBuffer(), sizeof(winPath) - 1);
+      winPath[sizeof(winPath) - 1] = '\0';
+      for (int i = 0; winPath[i]; i++) {
         if (winPath[i] == '/') winPath[i] = '\\';
-    }
+      }
 
-    struct _finddata_t fileinfo;
-    intptr_t handle = _findfirst(winPath, &fileinfo);
-    if (handle != -1) {
-      char *pk3Files[1024];
-      int numPk3s = 0;
+      struct _finddata_t fileinfo;
+      intptr_t handle = _findfirst(winPath, &fileinfo);
+      if (handle == -1)
+        continue;
       do {
         if (numPk3s < 1024) {
           pk3Files[numPk3s] = (char *)malloc(strlen(fileinfo.name) + 1);
@@ -1087,6 +1130,9 @@ void InitPakFile(const char *pBasePath, const char *pName) {
         }
       } while (_findnext(handle, &fileinfo) != -1);
       _findclose(handle);
+    }
+
+    if (numPk3s > 0) {
 
       // Sort alphabetically A to Z
       for (int i = 0; i < numPk3s - 1; i++) {
@@ -1114,7 +1160,7 @@ void InitPakFile(const char *pBasePath, const char *pName) {
       char *pk3Files[1024];
       int numPk3s = 0;
       while ((entry = readdir(dir)) != NULL) {
-        if (strstr(entry->d_name, ".pk3") || strstr(entry->d_name, ".PK3")) {
+        if (HasPakExtensionCI(entry->d_name, g_pakExtPrimary) || HasPakExtensionCI(entry->d_name, ".pk3")) {
           if (numPk3s < 1024) {
             pk3Files[numPk3s] = strdup(entry->d_name);
             numPk3s++;

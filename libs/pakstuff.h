@@ -136,6 +136,7 @@ void OpenPakFile(const char *);
 void ClosePakFile(void);
 int PakLoadAnyFile(const char *filename, void **bufferptr);
 void WINAPI InitPakFile(const char *pBasePath, const char *pName);
+void SetPakExtension(const char *ext);
 void ClearPakFiles(void);
 void ScanPakFiles(const char *basePath, void (*callback)(const char *filename));
 

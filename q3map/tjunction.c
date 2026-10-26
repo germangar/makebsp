@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "qbsp.h"
 #include "xatlas_c.h"
 #include <stdint.h>
+#include <omp.h>
 
 #ifdef DECIMATE_PLANAR_WITH_MESHLIB
 #include "../libs/MeshLib-Lite/MRMeshC/MRMeshC.h"
@@ -2005,12 +2006,33 @@ void MergeAdjacentTrisoups(entity_t *e)
     int numSurfsAtStart = numMapDrawSurfs;
     int numMergedGroups = 0;
     int numMergedSurfs = 0;
+    long pairTests = 0;
+    long touchTests = 0;
+    double startTime;
     qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
     memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
 
     int *group = malloc(numSurfsAtStart * sizeof(int));
 
     qprintf("----- MergeAdjacentTrisoups -----\n");
+    startTime = omp_get_wtime();
+
+    // Precompute per-surface bounds and areas once: grouping only ever reads
+    // unvisited (hence unmerged) surfaces, so these stay valid for the whole pass.
+    vec3_t *surfMins = malloc(numSurfsAtStart * sizeof(vec3_t));
+    vec3_t *surfMaxs = malloc(numSurfsAtStart * sizeof(vec3_t));
+    float *surfArea = malloc(numSurfsAtStart * sizeof(float));
+    for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
+    {
+        mapDrawSurface_t *ds = &mapDrawSurfs[i];
+        ClearBounds(surfMins[i], surfMaxs[i]);
+        surfArea[i] = 0.0f;
+        if (!ds->miscModel || ds->numVerts <= 0 || ds->numIndexes <= 0)
+            continue;
+        for (int v = 0; v < ds->numVerts; v++)
+            AddPointToBounds(ds->verts[v].xyz, surfMins[i], surfMaxs[i]);
+        surfArea[i] = ComputeSurfaceArea3D(ds);
+    }
 
     for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
     {
@@ -2024,11 +2046,10 @@ void MergeAdjacentTrisoups(entity_t *e)
         int groupSize = 0;
         group[groupSize++] = i;
 
-        float groupArea = ComputeSurfaceArea3D(dsA);
+        float groupArea = surfArea[i];
         vec3_t groupMins, groupMaxs;
-        ClearBounds(groupMins, groupMaxs);
-        for (int v = 0; v < dsA->numVerts; v++)
-            AddPointToBounds(dsA->verts[v].xyz, groupMins, groupMaxs);
+        VectorCopy(surfMins[i], groupMins);
+        VectorCopy(surfMaxs[i], groupMaxs);
 
         qboolean allPlanar = dsA->isPlanar;
 
@@ -2044,6 +2065,8 @@ void MergeAdjacentTrisoups(entity_t *e)
                 mapDrawSurface_t *dsB = &mapDrawSurfs[j];
                 if (!dsB->miscModel || dsB->numVerts <= 0 || dsB->numIndexes <= 0)
                     continue;
+
+                pairTests++;
 
                 if (currDs->shaderInfo != dsB->shaderInfo)
                     continue;
@@ -2098,10 +2121,21 @@ void MergeAdjacentTrisoups(entity_t *e)
                         continue;
                 }
 
+                // Conservative AABB prefilter: skip the expensive vertex-on-edge
+                // tests when the bounds cannot overlap. The margin is twice the
+                // SurfacesTouchLoosely epsilon below: PointOnSegment's t-window
+                // extends an edge by epsilon, and the distance check adds another.
+                int h = group[head];
+                if (surfMins[h][0] - 0.2f > surfMaxs[j][0] || surfMaxs[h][0] + 0.2f < surfMins[j][0] ||
+                    surfMins[h][1] - 0.2f > surfMaxs[j][1] || surfMaxs[h][1] + 0.2f < surfMins[j][1] ||
+                    surfMins[h][2] - 0.2f > surfMaxs[j][2] || surfMaxs[h][2] + 0.2f < surfMins[j][2])
+                    continue;
+
+                touchTests++;
                 if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
                     continue;
 
-                float candidateArea = groupArea + ComputeSurfaceArea3D(dsB);
+                float candidateArea = groupArea + surfArea[j];
                 float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
                 float scaleVal      = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
                 float texelsPerUnit = scaleVal / sampleSizeVal;
@@ -2117,8 +2151,11 @@ void MergeAdjacentTrisoups(entity_t *e)
                 vec3_t candidateMins, candidateMaxs;
                 VectorCopy(groupMins, candidateMins);
                 VectorCopy(groupMaxs, candidateMaxs);
-                for (int v = 0; v < dsB->numVerts; v++)
-                    AddPointToBounds(dsB->verts[v].xyz, candidateMins, candidateMaxs);
+                for (int n = 0; n < 3; n++)
+                {
+                    if (surfMins[j][n] < candidateMins[n]) candidateMins[n] = surfMins[j][n];
+                    if (surfMaxs[j][n] > candidateMaxs[n]) candidateMaxs[n] = surfMaxs[j][n];
+                }
 
                 vec3_t size;
                 VectorSubtract(candidateMaxs, candidateMins, size);
@@ -2194,8 +2231,13 @@ void MergeAdjacentTrisoups(entity_t *e)
 
     free(group);
     free(visited);
+    free(surfMins);
+    free(surfMaxs);
+    free(surfArea);
     qprintf("%6i adjacent trisoup groups merged\n", numMergedGroups);
-    if (!verbose && entity_num == 0) _printf("%i trisoups merged\n", numMergedSurfs);
+    _printf("%6i trisoups merged into %i groups (%li pair tests, %li touch tests) in %.0f msec\n",
+            numMergedSurfs, numMergedGroups, pairTests, touchTests,
+            (omp_get_wtime() - startTime) * 1000.0);
 }
 
 /*
@@ -2269,6 +2311,7 @@ void CleanupAllTrisoups(entity_t *e)
 {
     int beforeTris = 0;
     int afterTris = 0;
+    double startTime = omp_get_wtime();
 
     for (int i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
         mapDrawSurface_t *ds = &mapDrawSurfs[i];
@@ -2279,9 +2322,8 @@ void CleanupAllTrisoups(entity_t *e)
         afterTris += ds->numIndexes / 3;
     }
     
-    if (beforeTris > afterTris) {
-        qprintf("%6i duplicate/degenerate triangles purged\n", beforeTris - afterTris);
-    }
+    _printf("%6i duplicate/degenerate triangles purged in %.0f msec\n",
+            beforeTris - afterTris, (omp_get_wtime() - startTime) * 1000.0);
 }
 
 /*

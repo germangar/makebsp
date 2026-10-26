@@ -919,6 +919,10 @@ int main(int argc, char **argv)
     // Initialize game profile from JSON and CLI
     game = InitGame(argc, argv);
 
+    // Configure the VFS package scanner for the profile's primary package
+    // extension (".pk3" always remains enabled as fallback inside the scanner).
+    SetPakExtension(game->pakExtension);
+
     // Pre-scan CLI for VFS path construction
     const char *cliPakPaths[MAX_VFS_PATHS];
     int numCliPakPaths = 0;
@@ -1251,7 +1255,8 @@ int main(int argc, char **argv)
         {
             g_fast = qtrue;
             game->chamferEdges = qfalse;
-            _printf("fast compilation mode enabled (disabling edge chamfering)\n");
+            mergetrisoups = qfalse;
+            _printf("fast compilation mode enabled (disabling edge chamfering and trisoup merging)\n");
         }
         else if (!strcmp(argv[i], "-samplesize"))
         {
@@ -1323,6 +1328,12 @@ int main(int argc, char **argv)
         game->chamferEdges = qfalse;
     }
 
+    if (g_fast && mergetrisoups)
+    {
+        _printf("Note: -fast mode enabled, disabling trisoup merging.\n");
+        mergetrisoups = qfalse;
+    }
+
     if (i != argc - 1)
     {
         _printf("usage: q3map [-<switch> [-<switch> ...]] <mapname>\n"
@@ -1372,7 +1383,7 @@ int main(int argc, char **argv)
                 "   basepath <P>   = set the base filesystem path to P\n"
                 "   game <G>       = set the active game profile to G\n"
                 "   fakemap        = generate a fakemap.map after processing\n"
-                "   fast           = fast compile (ignores q3map_maxsamplesize and disables chamfering)\n");
+                "   fast           = fast compile (ignores q3map_maxsamplesize, disables chamfering and trisoup merging)\n");
         _printf("   saveprt        = do not delete the .prt file after processing\n"
                 "   samplesize <N> = set the default lightmap sample size to NxN\n"
                 "\n"
