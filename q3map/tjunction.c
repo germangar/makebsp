@@ -2000,28 +2000,42 @@ the same shader and compatible properties, respecting lightmap size budgets.
 Finally generates lightmap UVs for all surviving trisoups.
 ==================
 */
+static int MergeShardCmp(const void *a, const void *b)
+{
+    int ia = *(const int *)a;
+    int ib = *(const int *)b;
+    shaderInfo_t *sa = mapDrawSurfs[ia].shaderInfo;
+    shaderInfo_t *sb = mapDrawSurfs[ib].shaderInfo;
+    if (sa < sb) return -1;
+    if (sa > sb) return 1;
+    return ia - ib;
+}
+
 void MergeAdjacentTrisoups(entity_t *e)
 {
-    int i, j;
+    int i;
     int numSurfsAtStart = numMapDrawSurfs;
     int numMergedGroups = 0;
     int numMergedSurfs = 0;
     long pairTests = 0;
     long touchTests = 0;
     double startTime;
-    qboolean *visited = malloc(numSurfsAtStart * sizeof(qboolean));
-    memset(visited, 0, numSurfsAtStart * sizeof(qboolean));
-
-    int *group = malloc(numSurfsAtStart * sizeof(int));
 
     qprintf("----- MergeAdjacentTrisoups -----\n");
     startTime = omp_get_wtime();
 
-    // Precompute per-surface bounds and areas once: grouping only ever reads
-    // unvisited (hence unmerged) surfaces, so these stay valid for the whole pass.
+    // Stage A (serial): collect valid trisoups, precompute per-surface bounds and
+    // areas (grouping only ever reads unvisited, hence unmerged, surfaces), and
+    // sort the candidates into shader shards. Merge groups are shader-homogeneous
+    // (every accepted pair must match the group's shader), so the shards are an
+    // exact partition and can be processed fully in parallel with no locks. The
+    // sort preserves ascending original index order inside each shard, so every
+    // BFS follows the exact serial trajectory.
     vec3_t *surfMins = malloc(numSurfsAtStart * sizeof(vec3_t));
     vec3_t *surfMaxs = malloc(numSurfsAtStart * sizeof(vec3_t));
     float *surfArea = malloc(numSurfsAtStart * sizeof(float));
+    int *shardIdx = malloc(numSurfsAtStart * sizeof(int));
+    int numCandidates = 0;
     for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
     {
         mapDrawSurface_t *ds = &mapDrawSurfs[i];
@@ -2032,211 +2046,241 @@ void MergeAdjacentTrisoups(entity_t *e)
         for (int v = 0; v < ds->numVerts; v++)
             AddPointToBounds(ds->verts[v].xyz, surfMins[i], surfMaxs[i]);
         surfArea[i] = ComputeSurfaceArea3D(ds);
+        shardIdx[numCandidates++] = i;
     }
 
-    for (i = e->firstDrawSurf; i < numSurfsAtStart; i++)
+    qsort(shardIdx, numCandidates, sizeof(int), MergeShardCmp);
+
+    int *shardStart = malloc((numCandidates > 0 ? numCandidates : 1) * sizeof(int));
+    int numShards = 0;
+    int largestShard = 0;
+    for (int s = 0; s < numCandidates; )
     {
-        mapDrawSurface_t *dsA = &mapDrawSurfs[i];
-        if (visited[i])
-            continue;
-        if (!dsA->miscModel || dsA->numVerts <= 0 || dsA->numIndexes <= 0)
-            continue;
-
-        visited[i] = qtrue;
-        int groupSize = 0;
-        group[groupSize++] = i;
-
-        float groupArea = surfArea[i];
-        vec3_t groupMins, groupMaxs;
-        VectorCopy(surfMins[i], groupMins);
-        VectorCopy(surfMaxs[i], groupMaxs);
-
-        qboolean allPlanar = dsA->isPlanar;
-
-        for (int head = 0; head < groupSize; head++)
-        {
-            mapDrawSurface_t *currDs = &mapDrawSurfs[group[head]];
-
-            for (j = e->firstDrawSurf; j < numSurfsAtStart; j++)
-            {
-                if (visited[j])
-                    continue;
-
-                mapDrawSurface_t *dsB = &mapDrawSurfs[j];
-                if (!dsB->miscModel || dsB->numVerts <= 0 || dsB->numIndexes <= 0)
-                    continue;
-
-                pairTests++;
-
-                if (currDs->shaderInfo != dsB->shaderInfo)
-                    continue;
-                if (currDs->fogNum != dsB->fogNum)
-                    continue;
-
-                if (currDs->smoothgroup[0] || dsB->smoothgroup[0])
-                {
-                    if (Q_stricmp(currDs->smoothgroup, dsB->smoothgroup) != 0)
-                        continue;
-                }
-                
-                if (currDs->decalgroup[0] && dsB->decalgroup[0])
-                {
-                    if (Q_stricmp(currDs->decalgroup, dsB->decalgroup) != 0)
-                        continue;
-                }
-                
-                float sampleSizeA = currDs->samplesize > 0.0f ? currDs->samplesize : (float)game->defaultSampleSize;
-                float sampleSizeB = dsB->samplesize > 0.0f ? dsB->samplesize : (float)game->defaultSampleSize;
-                if (fabs(sampleSizeA - sampleSizeB) > 0.001f)
-                    continue;
-                
-                float scaleA = currDs->lightmapScale > 0.0f ? currDs->lightmapScale : 1.0f;
-                float scaleB = dsB->lightmapScale > 0.0f ? dsB->lightmapScale : 1.0f;
-                if (fabs(scaleA - scaleB) > 0.001f)
-                    continue;
-
-                if (currDs->overrideVertexColor != dsB->overrideVertexColor)
-                    continue;
-                if (currDs->overrideVertexColor && !VectorCompare(currDs->vertexColor, dsB->vertexColor))
-                    continue;
-                if (currDs->overrideVertexAlpha != dsB->overrideVertexAlpha)
-                    continue;
-                if (currDs->overrideVertexAlpha && fabs(currDs->vertexAlpha - dsB->vertexAlpha) > 0.001f)
-                    continue;
-
-                // Block merges where surfaces have antiparallel U-tangents.
-                // This happens with intentional texture mirrors (e.g. two halves of an arrow
-                // made from the same diagonal texture, one flipped). Merging them would weld
-                // their shared seam vertices, causing the engine to compute degenerate tangents
-                // (adjacent triangles pulling in opposite directions) and corrupt normal mapping.
-                // We only block the antiparallel case (dot < -0.5); surfaces with orthogonal
-                // or similar UV projections are still merged freely.
-                if (currDs->side && dsB->side) {
-                    vec3_t tanA, tanB;
-                    VectorCopy(currDs->side->vecs[0], tanA);
-                    VectorCopy(dsB->side->vecs[0],   tanB);
-                    VectorNormalize(tanA, tanA);
-                    VectorNormalize(tanB, tanB);
-                    if (DotProduct(tanA, tanB) < -0.5f)
-                        continue;
-                }
-
-                // Conservative AABB prefilter: skip the expensive vertex-on-edge
-                // tests when the bounds cannot overlap. The margin is twice the
-                // SurfacesTouchLoosely epsilon below: PointOnSegment's t-window
-                // extends an edge by epsilon, and the distance check adds another.
-                int h = group[head];
-                if (surfMins[h][0] - 0.2f > surfMaxs[j][0] || surfMaxs[h][0] + 0.2f < surfMins[j][0] ||
-                    surfMins[h][1] - 0.2f > surfMaxs[j][1] || surfMaxs[h][1] + 0.2f < surfMins[j][1] ||
-                    surfMins[h][2] - 0.2f > surfMaxs[j][2] || surfMaxs[h][2] + 0.2f < surfMins[j][2])
-                    continue;
-
-                touchTests++;
-                if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
-                    continue;
-
-                float candidateArea = groupArea + surfArea[j];
-                float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
-                float scaleVal      = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
-                float texelsPerUnit = scaleVal / sampleSizeVal;
-                int   limit         = LIGHTMAP_WIDTH - 2;
-
-                // 1. Conservative Area Rule (50% of page area accounts for packing efficiency + padding)
-                float maxAreaTexels   = (float)(limit * limit) * 0.50f;
-                float candidateTexels = candidateArea * (texelsPerUnit * texelsPerUnit);
-                if (candidateTexels > maxAreaTexels)
-                    continue;
-
-                // 2. Diagonal Linear Rule (worst-case chart length for rotated/diagonal geometry)
-                vec3_t candidateMins, candidateMaxs;
-                VectorCopy(groupMins, candidateMins);
-                VectorCopy(groupMaxs, candidateMaxs);
-                for (int n = 0; n < 3; n++)
-                {
-                    if (surfMins[j][n] < candidateMins[n]) candidateMins[n] = surfMins[j][n];
-                    if (surfMaxs[j][n] > candidateMaxs[n]) candidateMaxs[n] = surfMaxs[j][n];
-                }
-
-                vec3_t size;
-                VectorSubtract(candidateMaxs, candidateMins, size);
-                float diagLength = VectorLength(size);
-                if ((diagLength * texelsPerUnit) > (float)limit * 0.85f)
-                    continue;
-
-                visited[j] = qtrue;
-                group[groupSize++] = j;
-                groupArea = candidateArea;
-                VectorCopy(candidateMins, groupMins);
-                VectorCopy(candidateMaxs, groupMaxs);
-
-                if (!dsB->isPlanar || dsB->planeNum != dsA->planeNum)
-                    allPlanar = qfalse;
-            }
-        }
-
-        if (groupSize > 1)
-        {
-            int totalVerts = 0;
-            int totalIndexes = 0;
-            for (int g = 0; g < groupSize; g++)
-            {
-                totalVerts += mapDrawSurfs[group[g]].numVerts;
-                totalIndexes += mapDrawSurfs[group[g]].numIndexes;
-            }
-
-            weldBuf_t welded;
-            welded.numVerts = 0;
-            welded.verts = malloc(totalVerts * sizeof(drawVert_t));
-
-            int *outIndexes = malloc(totalIndexes * sizeof(int));
-            int numOutIndexes = 0;
-
-            for (int g = 0; g < groupSize; g++)
-            {
-                mapDrawSurface_t *ds = &mapDrawSurfs[group[g]];
-                for (int idx = 0; idx < ds->numIndexes; idx++)
-                {
-                    outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, totalVerts, &ds->verts[ds->indexes[idx]]);
-                }
-
-                if (g > 0)
-                {
-                    if (!dsA->decalgroup[0] && ds->decalgroup[0])
-                        strcpy(dsA->decalgroup, ds->decalgroup);
-                    if (!dsA->smoothgroup[0] && ds->smoothgroup[0])
-                        strcpy(dsA->smoothgroup, ds->smoothgroup);
-
-                    if (ds->verts) free(ds->verts);
-                    if (ds->indexes) free(ds->indexes);
-                    ds->verts = NULL;
-                    ds->indexes = NULL;
-                    ds->numVerts = 0;
-                    ds->numIndexes = 0;
-                }
-            }
-
-            if (dsA->verts) free(dsA->verts);
-            if (dsA->indexes) free(dsA->indexes);
-
-            dsA->verts = welded.verts;
-            dsA->numVerts = welded.numVerts;
-            dsA->indexes = outIndexes;
-            dsA->numIndexes = numOutIndexes;
-
-            dsA->isPlanar = allPlanar;
-            numMergedGroups++;
-            numMergedSurfs += groupSize;
-        }
+        int end = s + 1;
+        shaderInfo_t *si = mapDrawSurfs[shardIdx[s]].shaderInfo;
+        while (end < numCandidates && mapDrawSurfs[shardIdx[end]].shaderInfo == si)
+            end++;
+        shardStart[numShards++] = s;
+        if (end - s > largestShard)
+            largestShard = end - s;
+        s = end;
     }
 
-    free(group);
-    free(visited);
+    // Stage B (parallel over shards): zero locks, zero atomics. All mutations
+    // (welds, frees, tombstones) touch only shard members; the counters are
+    // integer reductions, identical to the serial run.
+    #pragma omp parallel for reduction(+: pairTests, touchTests, numMergedGroups, numMergedSurfs) schedule(dynamic)
+    for (int s = 0; s < numShards; s++)
+    {
+        int start = shardStart[s];
+        int n = (s + 1 < numShards ? shardStart[s + 1] : numCandidates) - start;
+        qboolean *visited = calloc(n, sizeof(qboolean));
+        int *group = malloc(n * sizeof(int));
+
+        for (int li = 0; li < n; li++)
+        {
+            if (visited[li])
+                continue;
+            int idx = shardIdx[start + li];
+            mapDrawSurface_t *dsA = &mapDrawSurfs[idx];
+
+            visited[li] = qtrue;
+            int groupSize = 0;
+            group[groupSize++] = li;
+
+            float groupArea = surfArea[idx];
+            vec3_t groupMins, groupMaxs;
+            VectorCopy(surfMins[idx], groupMins);
+            VectorCopy(surfMaxs[idx], groupMaxs);
+
+            qboolean allPlanar = dsA->isPlanar;
+
+            for (int head = 0; head < groupSize; head++)
+            {
+                int h = shardIdx[start + group[head]];
+                mapDrawSurface_t *currDs = &mapDrawSurfs[h];
+
+                for (int lj = 0; lj < n; lj++)
+                {
+                    if (visited[lj])
+                        continue;
+
+                    int j = shardIdx[start + lj];
+                    mapDrawSurface_t *dsB = &mapDrawSurfs[j];
+
+                    pairTests++;
+
+                    // Shader gate is implicit: shard membership == same shaderInfo.
+                    if (currDs->fogNum != dsB->fogNum)
+                        continue;
+
+                    if (currDs->smoothgroup[0] || dsB->smoothgroup[0])
+                    {
+                        if (Q_stricmp(currDs->smoothgroup, dsB->smoothgroup) != 0)
+                            continue;
+                    }
+
+                    if (currDs->decalgroup[0] && dsB->decalgroup[0])
+                    {
+                        if (Q_stricmp(currDs->decalgroup, dsB->decalgroup) != 0)
+                            continue;
+                    }
+
+                    float sampleSizeA = currDs->samplesize > 0.0f ? currDs->samplesize : (float)game->defaultSampleSize;
+                    float sampleSizeB = dsB->samplesize > 0.0f ? dsB->samplesize : (float)game->defaultSampleSize;
+                    if (fabs(sampleSizeA - sampleSizeB) > 0.001f)
+                        continue;
+
+                    float scaleA = currDs->lightmapScale > 0.0f ? currDs->lightmapScale : 1.0f;
+                    float scaleB = dsB->lightmapScale > 0.0f ? dsB->lightmapScale : 1.0f;
+                    if (fabs(scaleA - scaleB) > 0.001f)
+                        continue;
+
+                    if (currDs->overrideVertexColor != dsB->overrideVertexColor)
+                        continue;
+                    if (currDs->overrideVertexColor && !VectorCompare(currDs->vertexColor, dsB->vertexColor))
+                        continue;
+                    if (currDs->overrideVertexAlpha != dsB->overrideVertexAlpha)
+                        continue;
+                    if (currDs->overrideVertexAlpha && fabs(currDs->vertexAlpha - dsB->vertexAlpha) > 0.001f)
+                        continue;
+
+                    // Block merges where surfaces have antiparallel U-tangents.
+                    // This happens with intentional texture mirrors (e.g. two halves of an arrow
+                    // made from the same diagonal texture, one flipped). Merging them would weld
+                    // their shared seam vertices, causing the engine to compute degenerate tangents
+                    // (adjacent triangles pulling in opposite directions) and corrupt normal mapping.
+                    // We only block the antiparallel case (dot < -0.5); surfaces with orthogonal
+                    // or similar UV projections are still merged freely.
+                    if (currDs->side && dsB->side) {
+                        vec3_t tanA, tanB;
+                        VectorCopy(currDs->side->vecs[0], tanA);
+                        VectorCopy(dsB->side->vecs[0],   tanB);
+                        VectorNormalize(tanA, tanA);
+                        VectorNormalize(tanB, tanB);
+                        if (DotProduct(tanA, tanB) < -0.5f)
+                            continue;
+                    }
+
+                    // Conservative AABB prefilter: skip the expensive vertex-on-edge
+                    // tests when the bounds cannot overlap. The margin is twice the
+                    // SurfacesTouchLoosely epsilon below: PointOnSegment's t-window
+                    // extends an edge by epsilon, and the distance check adds another.
+                    if (surfMins[h][0] - 0.2f > surfMaxs[j][0] || surfMaxs[h][0] + 0.2f < surfMins[j][0] ||
+                        surfMins[h][1] - 0.2f > surfMaxs[j][1] || surfMaxs[h][1] + 0.2f < surfMins[j][1] ||
+                        surfMins[h][2] - 0.2f > surfMaxs[j][2] || surfMaxs[h][2] + 0.2f < surfMins[j][2])
+                        continue;
+
+                    touchTests++;
+                    if (!SurfacesTouchLoosely(currDs, dsB, 0.1f))
+                        continue;
+
+                    float candidateArea = groupArea + surfArea[j];
+                    float sampleSizeVal = dsA->samplesize > 0.0f ? dsA->samplesize : (float)game->defaultSampleSize;
+                    float scaleVal      = dsA->lightmapScale > 0.0f ? dsA->lightmapScale : 1.0f;
+                    float texelsPerUnit = scaleVal / sampleSizeVal;
+                    int   limit         = LIGHTMAP_WIDTH - 2;
+
+                    // 1. Conservative Area Rule (50% of page area accounts for packing efficiency + padding)
+                    float maxAreaTexels   = (float)(limit * limit) * 0.50f;
+                    float candidateTexels = candidateArea * (texelsPerUnit * texelsPerUnit);
+                    if (candidateTexels > maxAreaTexels)
+                        continue;
+
+                    // 2. Diagonal Linear Rule (worst-case chart length for rotated/diagonal geometry)
+                    vec3_t candidateMins, candidateMaxs;
+                    VectorCopy(groupMins, candidateMins);
+                    VectorCopy(groupMaxs, candidateMaxs);
+                    for (int axis = 0; axis < 3; axis++)
+                    {
+                        if (surfMins[j][axis] < candidateMins[axis]) candidateMins[axis] = surfMins[j][axis];
+                        if (surfMaxs[j][axis] > candidateMaxs[axis]) candidateMaxs[axis] = surfMaxs[j][axis];
+                    }
+
+                    vec3_t size;
+                    VectorSubtract(candidateMaxs, candidateMins, size);
+                    float diagLength = VectorLength(size);
+                    if ((diagLength * texelsPerUnit) > (float)limit * 0.85f)
+                        continue;
+
+                    visited[lj] = qtrue;
+                    group[groupSize++] = lj;
+                    groupArea = candidateArea;
+                    VectorCopy(candidateMins, groupMins);
+                    VectorCopy(candidateMaxs, groupMaxs);
+
+                    if (!dsB->isPlanar || dsB->planeNum != dsA->planeNum)
+                        allPlanar = qfalse;
+                }
+            }
+
+            if (groupSize > 1)
+            {
+                int totalVerts = 0;
+                int totalIndexes = 0;
+                for (int g = 0; g < groupSize; g++)
+                {
+                    totalVerts += mapDrawSurfs[shardIdx[start + group[g]]].numVerts;
+                    totalIndexes += mapDrawSurfs[shardIdx[start + group[g]]].numIndexes;
+                }
+
+                weldBuf_t welded;
+                welded.numVerts = 0;
+                welded.verts = malloc(totalVerts * sizeof(drawVert_t));
+
+                int *outIndexes = malloc(totalIndexes * sizeof(int));
+                int numOutIndexes = 0;
+
+                for (int g = 0; g < groupSize; g++)
+                {
+                    mapDrawSurface_t *ds = &mapDrawSurfs[shardIdx[start + group[g]]];
+                    for (int wi = 0; wi < ds->numIndexes; wi++)
+                    {
+                        outIndexes[numOutIndexes++] = WeldMergedVertex(&welded, totalVerts, &ds->verts[ds->indexes[wi]]);
+                    }
+
+                    if (g > 0)
+                    {
+                        if (!dsA->decalgroup[0] && ds->decalgroup[0])
+                            strcpy(dsA->decalgroup, ds->decalgroup);
+                        if (!dsA->smoothgroup[0] && ds->smoothgroup[0])
+                            strcpy(dsA->smoothgroup, ds->smoothgroup);
+
+                        if (ds->verts) free(ds->verts);
+                        if (ds->indexes) free(ds->indexes);
+                        ds->verts = NULL;
+                        ds->indexes = NULL;
+                        ds->numVerts = 0;
+                        ds->numIndexes = 0;
+                    }
+                }
+
+                if (dsA->verts) free(dsA->verts);
+                if (dsA->indexes) free(dsA->indexes);
+
+                dsA->verts = welded.verts;
+                dsA->numVerts = welded.numVerts;
+                dsA->indexes = outIndexes;
+                dsA->numIndexes = numOutIndexes;
+
+                dsA->isPlanar = allPlanar;
+                numMergedGroups++;
+                numMergedSurfs += groupSize;
+            }
+        }
+
+        free(visited);
+        free(group);
+    }
+
+    free(shardStart);
+    free(shardIdx);
     free(surfMins);
     free(surfMaxs);
     free(surfArea);
     qprintf("%6i adjacent trisoup groups merged\n", numMergedGroups);
-    _printf("%6i trisoups merged into %i groups (%li pair tests, %li touch tests) in %.0f msec\n",
-            numMergedSurfs, numMergedGroups, pairTests, touchTests,
+    _printf("%6i trisoups merged into %i groups across %i shards (largest %i) (%li pair tests, %li touch tests) in %.0f msec\n",
+            numMergedSurfs, numMergedGroups, numShards, largestShard, pairTests, touchTests,
             (omp_get_wtime() - startTime) * 1000.0);
 }
 
@@ -2313,6 +2357,9 @@ void CleanupAllTrisoups(entity_t *e)
     int afterTris = 0;
     double startTime = omp_get_wtime();
 
+    // Per-surface in-place compaction, no cross-surface state: parallelize with
+    // integer reductions (associative -> counters identical to serial).
+    #pragma omp parallel for reduction(+: beforeTris, afterTris) schedule(dynamic)
     for (int i = e->firstDrawSurf; i < numMapDrawSurfs; i++) {
         mapDrawSurface_t *ds = &mapDrawSurfs[i];
         if (!ds->miscModel || ds->numVerts < 3 || ds->numIndexes < 9)
