@@ -116,3 +116,6 @@ extern int numShaderInfo;
 void LoadShaderInfo(void);
 shaderInfo_t *ShaderInfoForShader(const char *shader);
 qboolean ShaderExists(const char *shaderName);
+extern long g_ShaderExistsCalls;
+extern long g_ShaderExistsImageProbes;
+extern long g_LoadImageFileCalls;

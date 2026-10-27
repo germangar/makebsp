@@ -14,6 +14,7 @@ This file is part of Quake III Arena source code.
 #include "qbsp.h"
 #include "model_collision.h"
 #include "xatlas_c.h"
+#include <omp.h>
 
 typedef struct
 {
@@ -38,6 +39,11 @@ typedef struct modelCache_s
 #define MAX_MODEL_CACHE 256
 static modelCache_t modelCache[MAX_MODEL_CACHE];
 static int numModelCache;
+static long s_xatlasTryCalls = 0;
+static long s_xatlasGenCalls = 0;
+static double s_xatlasCreateSec = 0;
+static double s_xatlasChartsSec = 0;
+static double s_xatlasPackSec = 0;
 
 /*
 ====================
@@ -625,6 +631,7 @@ Use xatlas library to pack existing UVs.
 static uv_t *TryXAtlasUVsFromArrays(const float *uvs2f, int numVerts, const float *positions3f, const int *indices_in, int numIndices, int ssize, float lightmapScale)
 {
     int numIslands = 0;
+    s_xatlasTryCalls++;
     int *triIsland = IdentifyIslandsFromArrays(numVerts, positions3f, numIndices, indices_in, &numIslands);
     if (!triIsland)
         return NULL;
@@ -752,7 +759,12 @@ Use xatlas library to fully generate a UV map from scratch.
 */
 static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts, const int *indices_in, int numIndices, int ssize, float lightmapScale)
 {
-    xatlasAtlas *atlas = xatlasCreate();
+    xatlasAtlas *atlas;
+    double t0;
+    s_xatlasGenCalls++;
+    t0 = omp_get_wtime();
+    atlas = xatlasCreate();
+    s_xatlasCreateSec += omp_get_wtime() - t0;
     if (!atlas)
         return NULL;
 
@@ -783,7 +795,9 @@ static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts,
 
     xatlasChartOptions chartOptions;
     xatlasChartOptionsInit(&chartOptions);
+    t0 = omp_get_wtime();
     xatlasComputeCharts(atlas, &chartOptions);
+    s_xatlasChartsSec += omp_get_wtime() - t0;
 
     xatlasPackOptions packOptions;
     xatlasPackOptionsInit(&packOptions);
@@ -825,7 +839,9 @@ static uv_t *GenerateXAtlasUVsFromArrays(const float *positions3f, int numVerts,
 
     packOptions.resolution = targetRes;
     packOptions.texelsPerUnit = 0.0f;
+    t0 = omp_get_wtime();
     xatlasPackCharts(atlas, &packOptions);
+    s_xatlasPackSec += omp_get_wtime() - t0;
 
     if (atlas->meshCount == 0 || atlas->width == 0 || atlas->height == 0)
     {
@@ -913,6 +929,12 @@ Initial pass to load and transform all misc_model entities.
 */
 void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
 {
+    double startTime = omp_get_wtime();
+    long shaderExistsBase = g_ShaderExistsCalls;
+    long shaderImageProbesBase = g_ShaderExistsImageProbes;
+    long vfsCallsBase = g_VfsLoadFileCalls;
+    int modelCacheBase = numModelCache;
+
     _printf("--- Loading models ---\n");
 
     int entity_num;
@@ -1273,7 +1295,12 @@ void LoadTriangleModels(entity_t *eparent, int *outStartInst, int *outEndInst)
     }
 
     if (modelsLoaded)
-        _printf("Done\n");
+        _printf("Done (%i instances, %i unique parses, %li ShaderExists calls, %li image probes, %li vfs probes, %.0f msec)\n",
+                modelsLoaded, numModelCache - modelCacheBase,
+                g_ShaderExistsCalls - shaderExistsBase,
+                g_ShaderExistsImageProbes - shaderImageProbesBase,
+                g_VfsLoadFileCalls - vfsCallsBase,
+                (omp_get_wtime() - startTime) * 1000.0);
 
     *outEndInst = numModelInstances;
 }
@@ -1291,6 +1318,8 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
     const char *world_forceuv_str = ValueForKey(&entities[0], "forceuvgen");
     if (world_forceuv_str[0])
         forceUVGen = atoi(world_forceuv_str);
+
+    double startTime = omp_get_wtime();
 
     if (endInst > startInst)
         _printf("--- Integrating models ---\n");
@@ -1313,8 +1342,11 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
 
             // ==========================================
             // STEP 1: Extract Raw Collision Topology
+            // (skipped for explicit collisiontype none: those instances are
+            // categorically skipped before the MeshLib heal+decimate stage)
             // ==========================================
-            if (si && (si->contents & CONTENTS_SOLID) && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
+            qboolean skipCollision = (inst->has_collision_type_override && inst->collision_type_override == MC_NONE);
+            if (si && (si->contents & CONTENTS_SOLID) && !skipCollision && inst->num_collision_meshes < MAX_MODEL_COLLISION_MESHES) {
                 colMesh_t *cm = malloc(sizeof(colMesh_t));
                 memset(cm, 0, sizeof(colMesh_t));
                 cm->shaderInfo = si;
@@ -1550,7 +1582,10 @@ void IntegrateTriangleModels(int startInst, int endInst, entity_t *eparent)
     }
 
     if (endInst > startInst)
-        _printf("Done\n");
+        _printf("Done (%i instances, %li xatlas try calls, %li xatlas gen calls, %.0f msec [create %.0f, charts %.0f, pack %.0f])\n",
+                endInst - startInst, s_xatlasTryCalls, s_xatlasGenCalls,
+                (omp_get_wtime() - startTime) * 1000.0,
+                s_xatlasCreateSec * 1000.0, s_xatlasChartsSec * 1000.0, s_xatlasPackSec * 1000.0);
 }
 
 /*

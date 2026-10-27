@@ -40,6 +40,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 shaderInfo_t defaultInfo;
 shaderInfo_t shaderInfo[MAX_SURFACE_INFO];
 int numShaderInfo;
+long g_ShaderExistsCalls = 0;
+long g_ShaderExistsImageProbes = 0;
+long g_LoadImageFileCalls = 0;
 
 typedef struct
 {
@@ -236,6 +239,8 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA, char *resolv
     byte *buffer = NULL;
     int nLen = 0;
 
+    g_LoadImageFileCalls++;
+
     // Extensions to check exactly in this order
     const char *exts[] = {".tga", ".TGA", ".jpg", ".JPG", ".png", ".PNG", ".bmp", ".BMP", ".ktx", ".KTX", NULL};
 
@@ -419,6 +424,8 @@ qboolean ShaderExists(const char *shaderName)
     char shader[MAX_QPATH];
     byte *buffer = NULL;
 
+    g_ShaderExistsCalls++;
+
     // strip off extension
     strncpy(shader, shaderName, MAX_QPATH - 1);
     shader[MAX_QPATH - 1] = '\0';
@@ -442,6 +449,7 @@ qboolean ShaderExists(const char *shaderName)
     }
 
     // 2. check for image files in VFS
+    g_ShaderExistsImageProbes++;
     if (LoadImageFile(shader, &buffer, NULL, NULL) > 0)
     {
         free(buffer);

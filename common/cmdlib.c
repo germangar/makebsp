@@ -182,6 +182,7 @@ void Error(const char *error, ...)
 
 // only printf if in verbose mode
 qboolean verbose = qfalse;
+long g_VfsLoadFileCalls = 0;
 
 void qprintf(const char *format, ...)
 {
@@ -460,6 +461,8 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     char fullPath[1024];
     int length;
     int i;
+
+    g_VfsLoadFileCalls++;
 
     *bufferptr = NULL;
 

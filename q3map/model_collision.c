@@ -10,6 +10,7 @@ This file is part of Quake III Arena source code.
 #include "../common/cmdlib.h"
 #include "qbsp.h"
 #include "model_collision.h"
+#include <omp.h>
 
 /* Mesh Lib Lite*/
 #include "../libs/MeshLib-Lite/MRMeshC/MRMesh.h"
@@ -345,27 +346,6 @@ static void CategorizeModel(modelInstance_t *inst)
         return;
     }
 
-    // Count decimated collision triangles for density
-    int totalColTriangles = 0;
-    for (int j = 0; j < inst->num_collision_meshes; j++)
-    {
-        totalColTriangles += inst->collision_meshes[j]->numTris;
-    }
-
-    // Calculate volume and normalized density per 128-unit cube
-    vec3_t size;
-    VectorSubtract(maxs, mins, size);
-    float volume = size[0] * size[1] * size[2];
-
-    if (volume > 1.0f)
-    {
-        inst->triangle_density = ((float)totalColTriangles / volume) * DENSITY_STANDARD_VOLUME;
-    }
-    else
-    {
-        inst->triangle_density = 0.0f;
-    }
-
     VectorScale(centroid, 1.0f / totalVerts, centroid);
 
     // Pass 2: Orientation and Ground heuristics
@@ -457,6 +437,51 @@ static void CategorizeModel(modelInstance_t *inst)
     inst->category = category;
 
     return;
+}
+
+/*
+====================
+ComputeCollisionDensity
+
+Density heuristic (decimated triangles per 128-unit cube) from the healed
+collision meshes. Runs after CreateCollisionTris, only for instances that
+will actually receive collision brushes; feeds the triangle_density epair
+and the [Collision] log line.
+====================
+*/
+static void ComputeCollisionDensity(modelInstance_t *inst)
+{
+    mapDrawSurface_t *ds;
+    vec3_t mins, maxs;
+    int totalColTriangles = 0;
+
+    ClearBounds(mins, maxs);
+    for (int j = 0; j < inst->numDrawSurfs; j++)
+    {
+        ds = inst->drawSurfs[j];
+        if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID))
+            continue;
+        for (int k = 0; k < ds->numVerts; k++)
+            AddPointToBounds(ds->verts[k].xyz, mins, maxs);
+    }
+
+    for (int j = 0; j < inst->num_collision_meshes; j++)
+    {
+        totalColTriangles += inst->collision_meshes[j]->numTris;
+    }
+
+    vec3_t size;
+    VectorSubtract(maxs, mins, size);
+    float volume = size[0] * size[1] * size[2];
+
+    if (volume > 1.0f)
+    {
+        inst->triangle_density = ((float)totalColTriangles / volume) * DENSITY_STANDARD_VOLUME;
+    }
+    else
+    {
+        inst->triangle_density = 0.0f;
+    }
 }
 
 /*
@@ -1268,6 +1293,9 @@ void CreateTriangleModelCollision(entity_t *parent)
     int i;
     modelInstance_t *inst;
     qboolean hasSolid = qfalse;
+    double startTime = omp_get_wtime();
+    double trisSec = 0, decomposeSec = 0;
+    int catCount[8] = {0};
 
     _printf("----- CreateTriangleModelCollision -----\n");
 
@@ -1330,9 +1358,18 @@ void CreateTriangleModelCollision(entity_t *parent)
             continue;
         }
 
-        // Abstracted unified mesh processing executes unconditionally first
-        CreateCollisionTris(inst);
+        // Category first: the explicit override and the auto heuristics are
+        // decidable from drawSurfs alone. Heal+decimate (MeshLib) only the
+        // instances that will actually receive collision brushes.
         CategorizeModel(inst);
+        catCount[inst->category]++;
+        if (inst->category == MC_NONE)
+            continue;
+
+        double t0 = omp_get_wtime();
+        CreateCollisionTris(inst);
+        trisSec += omp_get_wtime() - t0;
+        ComputeCollisionDensity(inst);
     }
 
     // Step 3: Decomposition Pass (per instance)
@@ -1350,12 +1387,21 @@ void CreateTriangleModelCollision(entity_t *parent)
 
         if (inst->category != MC_NONE)
         {
+            double t0 = omp_get_wtime();
             DecomposeModelCollision(inst, parent);
+            decomposeSec += omp_get_wtime() - t0;
         }
 
         // Free the cleanly generated triangle geometry when done with the instance
         FreeCollisionTris(inst);
     }
+
+    _printf("Collision: %i instances (none %i, terrain %i, extrude %i, object %i, wrap %i, objectdetail %i, wrapdetail %i) heal %.0f msec, decompose %.0f msec, total %.0f msec\n",
+            catCount[MC_NONE] + catCount[MC_TERRAIN] + catCount[MC_EXTRUDE] + catCount[MC_OBJECT] +
+            catCount[MC_WRAP] + catCount[MC_OBJECTDETAIL] + catCount[MC_WRAPDETAIL],
+            catCount[MC_NONE], catCount[MC_TERRAIN], catCount[MC_EXTRUDE], catCount[MC_OBJECT],
+            catCount[MC_WRAP], catCount[MC_OBJECTDETAIL], catCount[MC_WRAPDETAIL],
+            trisSec * 1000.0, decomposeSec * 1000.0, (omp_get_wtime() - startTime) * 1000.0);
 
     if (parent != &entities[0])
     {

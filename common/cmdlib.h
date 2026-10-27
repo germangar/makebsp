@@ -104,6 +104,7 @@ char *ExpandPathAndArchive(const char *path);
 // VFS: multi-path file resolution
 int vfsFindFile(const char *relativePath, char *outFullPath, int outSize);
 int vfsLoadFile(const char *relativePath, void **bufferptr);
+extern long g_VfsLoadFileCalls;
 void Sys_ListFiles(const char *directory, const char *extension,
                    void (*callback)(const char *filename));
 
