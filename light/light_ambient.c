@@ -264,6 +264,14 @@ static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambCol
                 
                 float w = NdotL * shadingModel;
 
+                // Points inside solid geometry are guaranteed to be occluded.
+                // Accumulate weight directly for ambient occlusion without casting an Embree ray.
+                if (gridInvalidMask && (gridInvalidMask[gidx] & GRID_FLAG_SOLID))
+                {
+                    totalWeight += w;
+                    continue;
+                }
+
                 // Trace ray
                 trace_t trace;
                 TraceLine(origin, gPos, &trace, qfalse, tw);
@@ -332,6 +340,7 @@ qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
                 // cull 1: Cheapest check. Skip black/solid neighbor voxels immediately.
                 float lum = gCol[0] * 0.299f + gCol[1] * 0.587f + gCol[2] * 0.114f;
                 if (lum <= 0.0001f) continue;
+                if (gridInvalidMask && (gridInvalidMask[gidx] & (GRID_FLAG_INVALID | GRID_FLAG_SOLID))) continue;
 
                 vec3_t gPos;
                 gPos[0] = gridMins[0] + gx * gridSize[0];
