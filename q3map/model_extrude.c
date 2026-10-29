@@ -13,6 +13,15 @@
 #define EXTRUSION_DISTANCE 0.5f      /* Depth (in world units) to extrude collision prisms */
 #define EXTRUDE_DEFLATE_OFFSET 0.125f /* Inward vertex deflation along smoothed normals */
 
+/* Terrain axis-aligned extrusion (MC_TERRAIN):
+   prisms sweep along the world axis closest to the model's dominant surface
+   direction, slightly deeper than the per-face shell, so adjacent prisms share
+   their edges. Faces closer to perpendicular to the axis than
+   TERRAIN_PERP_DOT_THRESHOLD (|dot| < cos(75 deg)) would produce degenerately
+   thin slabs (thickness = dist * |dot|), so they keep the per-face extrusion. */
+#define EXTRUSION_DISTANCE_TERRAIN 2.0f
+#define TERRAIN_PERP_DOT_THRESHOLD 0.2588f
+
 /* A triangle ready for merging */
 typedef struct
 {
@@ -173,15 +182,43 @@ static qboolean TryMergeTriIntoPoly(clipPoly_t *poly, clipTri_t *tri, float *ver
 
 /*
 ====================
+EffectiveExtrudeDir
+
+Per-face extrusion direction: the snapped axis when terrain mode is active
+(axis != NULL) and the face is not near-perpendicular to it, otherwise the
+face's own normal. Also used for the neighbor's direction when mitering.
+====================
+*/
+static void EffectiveExtrudeDir(const vec3_t normal, const vec3_t axis,
+                                float perpThreshold, vec3_t out)
+{
+    if (axis && fabsf(DotProduct(normal, axis)) >= perpThreshold)
+    {
+        VectorCopy(axis, out);
+    }
+    else
+    {
+        VectorCopy(normal, out);
+    }
+}
+
+/*
+====================
 ExtrudePolygonToBrush
 
 Takes a convex polygon (N vertices) and extrudes it into a brush.
 Uses axial-snapped extrusion direction for side planes (Garux clipModel_default).
+
+Terrain mode (axis != NULL): the sweep direction is the snapped axis for every
+face not near-perpendicular to it, so all prisms sweep the same way and adjacent
+prisms share their edges. Near-perpendicular faces (|dot| < perpThreshold) keep
+the per-face extrusion to avoid degenerately thin slabs.
 ====================
 */
 static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
                                          float extrudeDist, shaderInfo_t *si,
-                                         vec3_t *neighborNormals)
+                                         vec3_t *neighborNormals,
+                                         const vec3_t axis, float perpThreshold)
 {
     si = GetCollisionShaderInfo(si);
     int N = poly->numVerts;
@@ -204,9 +241,9 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
         pts[i][2] = verts[poly->verts[i] * 3 + 2];
     }
 
-    /* Use actual face normal for extrusion direction */
+    /* Extrusion direction: snapped axis (terrain mode) or the face normal */
     vec3_t extrudeDir;
-    VectorCopy(poly->normal, extrudeDir);
+    EffectiveExtrudeDir(poly->normal, axis, perpThreshold, extrudeDir);
 
     /* Front face plane: use first 3 points of the polygon */
     /* We already have the normal from merging, but recompute from the actual
@@ -214,7 +251,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     int frontPlane = MapPlaneFromPoints(pts[0], pts[1], pts[2]);
     if (frontPlane == -1)
     {
-        // _printf("    WARNING: ExtrudePolygon failed (front plane degenerate, %d verts)\n", N);
+        qprintf("    WARNING: ExtrudePolygon failed (front plane degenerate, %d verts)\n", N);
         free(pts);
         return NULL;
     }
@@ -230,7 +267,7 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
     int backPlane = MapPlaneFromPoints(bpts[0], bpts[N - 1], bpts[1]);
     if (backPlane == -1)
     {
-        // _printf("    WARNING: ExtrudePolygon failed (back plane degenerate, %d verts)\n", N);
+        qprintf("    WARNING: ExtrudePolygon failed (back plane degenerate, %d verts)\n", N);
         free(pts);
         free(bpts);
         return NULL;
@@ -264,15 +301,21 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 
         if (hasNeighbor)
         {
-            VectorAdd(poly->normal, neighborNormals[i], bisect);
+            /* Miter between the two effective extrusion directions so
+               prisms extruded differently (axis vs per-face exception)
+               still close the gap along their shared edge. */
+            vec3_t neighborDir;
+            EffectiveExtrudeDir(neighborNormals[i], axis, perpThreshold, neighborDir);
+
+            VectorAdd(extrudeDir, neighborDir, bisect);
             if (VectorNormalize(bisect, bisect) < 0.1f)
             {
-                VectorCopy(poly->normal, bisect);
+                VectorCopy(extrudeDir, bisect);
             }
         }
         else
         {
-            VectorCopy(poly->normal, bisect);
+            VectorCopy(extrudeDir, bisect);
         }
 
         VectorMA(edgeMid, -extrudeDist, bisect, miterBackPt);
@@ -299,21 +342,21 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 
     if (!planesOk || frontPlane == -1 || backPlane == -1)
     {
-        // _printf("    WARNING: ExtrudePolygon failed (edge plane degenerate, %d verts)\n", N);
+        qprintf("    WARNING: ExtrudePolygon failed (edge plane degenerate, %d verts)\n", N);
         FreeBrush(b);
         return NULL;
     }
 
     if (!CreateBrushWindings(b))
     {
-        // _printf("    WARNING: ExtrudePolygon failed (CreateBrushWindings, %d verts)\n", N);
+        qprintf("    WARNING: ExtrudePolygon failed (CreateBrushWindings, %d verts)\n", N);
         FreeBrush(b);
         return NULL;
     }
 
     if (!BoundBrush(b))
     {
-        // _printf("    WARNING: ExtrudePolygon failed (BoundBrush, %d verts)\n", N);
+        qprintf("    WARNING: ExtrudePolygon failed (BoundBrush, %d verts)\n", N);
         FreeBrush(b);
         return NULL;
     }
@@ -325,14 +368,21 @@ static bspbrush_t *ExtrudePolygonToBrush(clipPoly_t *poly, float *verts,
 
 /*
 ====================
-ExtrudeTrianglesToBrushes
+ExtrudeTrianglesToBrushesCore
 
 Optimized version:
 1. Coplanar merging — adjacent coplanar triangles are merged into convex polygons
 2. Individual extrusion — polygons and remaining triangles are extruded into prisms
+
+axis == NULL: per-face extrusion (MC_EXTRUDE behavior).
+axis != NULL: terrain mode — prisms sweep along the snapped axis; faces
+near-perpendicular to it (|dot| < perpThreshold) keep per-face extrusion
+(counted in *outExceptions).
 ====================
 */
-bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
+static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *si,
+                                                 const vec3_t axis, float perpThreshold,
+                                                 float extrudeDist, int *outExceptions)
 {
     si = GetCollisionShaderInfo(si);
     bspbrush_t *hulls_list = NULL;
@@ -343,6 +393,11 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     vec3_t *vertNormals = NULL;
     clipTri_t *tris = NULL;
     int validTris = 0;
+    int exceptionCount = 0;
+    int fallbackCount = 0;
+
+    if (outExceptions)
+        *outExceptions = 0;
 
     if (numTris <= 0 || numVerts <= 0)
         return NULL;
@@ -507,12 +562,8 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
         if (polys[i].numVerts > 3)
             mergedCount++;
     }
-    /*
-    if (mergedCount > 0) {
-      _printf("  Coplanar merge: %d remaining -> %d polygons (%d merged)\n",
-              remaining, numPolys, mergedCount);
-    }
-    */
+    qprintf("  Coplanar merge: %d remaining -> %d polygons (%d merged)\n",
+            remaining, numPolys, mergedCount);
 
     /* 3. Build neighbor normal table for dihedral edge mitering */
     {
@@ -557,7 +608,21 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
         /* 4. Extrude each remaining polygon into a brush */
         for (i = 0; i < numPolys; i++)
         {
-            bspbrush_t *b = ExtrudePolygonToBrush(&polys[i], verts, EXTRUSION_DISTANCE, si, neighborNormals[i]);
+            qboolean isException = (axis && fabsf(DotProduct(polys[i].normal, axis)) < perpThreshold);
+            if (isException)
+                exceptionCount++;
+
+            bspbrush_t *b = ExtrudePolygonToBrush(&polys[i], verts, extrudeDist, si, neighborNormals[i], axis, perpThreshold);
+            if (!b && axis && !isException)
+            {
+                /* The axis-swept prism degenerated (near-threshold faces
+                   produce slabs too thin for valid brush planes). Fall back
+                   to the per-face extrusion so terrain never loses collision
+                   coverage versus the per-face path. */
+                b = ExtrudePolygonToBrush(&polys[i], verts, EXTRUSION_DISTANCE, si, neighborNormals[i], NULL, 0.0f);
+                if (b)
+                    fallbackCount++;
+            }
             if (b)
             {
                 b->next = hulls_list;
@@ -569,6 +634,10 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
             }
         }
 
+        if (axis && fallbackCount > 0)
+            qprintf("  Terrain axis extrusion: %i of %i prisms fell back to per-face extrusion\n",
+                    fallbackCount, numPolys);
+
         free(neighborNormals);
     }
 
@@ -576,7 +645,48 @@ bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
     free(tris);
     free(polys);
 
+    if (outExceptions)
+        *outExceptions = exceptionCount;
+
     return hulls_list;
+}
+
+/*
+====================
+ExtrudeTrianglesToBrushes
+
+Per-face extrusion (MC_EXTRUDE behavior). See ExtrudeTrianglesToBrushesCore.
+====================
+*/
+bspbrush_t *ExtrudeTrianglesToBrushes(colMesh_t *mesh, shaderInfo_t *si)
+{
+    return ExtrudeTrianglesToBrushesCore(mesh, si, NULL, 0.0f, EXTRUSION_DISTANCE, NULL);
+}
+
+/*
+====================
+ExtrudeTrianglesToBrushesAxis
+
+Terrain mode: snaps the dominant direction to the closest signed world axis
+and sweeps every prism along it (deeper than the per-face shell). Faces
+near-perpendicular to the axis keep per-face extrusion; their count is
+reported through outExceptions.
+====================
+*/
+bspbrush_t *ExtrudeTrianglesToBrushesAxis(colMesh_t *mesh, shaderInfo_t *si,
+                                          const vec3_t dominantDir, int *outExceptions)
+{
+    vec3_t axis;
+    int a = 0;
+    if (fabsf(dominantDir[1]) > fabsf(dominantDir[a]))
+        a = 1;
+    if (fabsf(dominantDir[2]) > fabsf(dominantDir[a]))
+        a = 2;
+    VectorClear(axis);
+    axis[a] = (dominantDir[a] >= 0.0f) ? 1.0f : -1.0f;
+
+    return ExtrudeTrianglesToBrushesCore(mesh, si, axis, TERRAIN_PERP_DOT_THRESHOLD,
+                                         EXTRUSION_DISTANCE_TERRAIN, outExceptions);
 }
 
 /*
@@ -620,18 +730,62 @@ bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shad
         if (!colMesh || colMesh->numTris == 0)
             continue;
 
-        _printf("Mesh #%d\n", j);
-
         /* 3. Extrude using the shared function */
         shaderInfo_t *si = (shader != NULL) ? shader : NULL; // Uses caulk if shader passed, otherwise wait for fix below
 
         // We lost per-surface shader info by pre-extracting them generically.
         // For now we will just use the default shader passed in (usually caulk).
         bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushes(colMesh, si);
+        /* Append to main list */
+        hulls_list = CombineBrushes(hulls_list, surfBrushes);
+    }
+
+    return hulls_list;
+}
+
+/*
+====================
+GenerateTerrainExtrusionCollision
+
+Terrain variant of GenerateExtrusionCollision: extrudes the instance's
+healed/decimated collision meshes along the world axis closest to the
+instance's dominant surface direction, so prisms sweep as consistent
+axis-direction slabs instead of per-face normal shells. outExceptions
+receives the number of near-perpendicular faces that fell back to
+per-face extrusion.
+====================
+*/
+bspbrush_t *GenerateTerrainExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader, int *outExceptions)
+{
+    bspbrush_t *hulls_list = NULL;
+    int exceptions = 0;
+
+    if (outExceptions)
+        *outExceptions = 0;
+
+    if (inst->num_collision_meshes == 0)
+    {
+        return NULL;
+    }
+
+    for (int j = 0; j < inst->num_collision_meshes; j++)
+    {
+        colMesh_t *colMesh = inst->collision_meshes[j];
+        if (!colMesh || colMesh->numTris == 0)
+            continue;
+
+        shaderInfo_t *si = (shader != NULL) ? shader : NULL;
+
+        int meshExceptions = 0;
+        bspbrush_t *surfBrushes = ExtrudeTrianglesToBrushesAxis(colMesh, si, inst->dominantNormal, &meshExceptions);
+        exceptions += meshExceptions;
 
         /* Append to main list */
         hulls_list = CombineBrushes(hulls_list, surfBrushes);
     }
+
+    if (outExceptions)
+        *outExceptions = exceptions;
 
     return hulls_list;
 }

@@ -582,6 +582,13 @@ typedef struct modelInstance_s
 
     int numMeshes;
     miscModelMesh_t *meshes[MAX_MISC_MODEL_MESHES]; // intermediate load data
+
+    // Dominant surface direction (area-weighted mean face normal, world space).
+    // Computed by CategorizeModel for every instance (before the collisiontype
+    // override is applied), so explicitly forced MC_TERRAIN gets it too.
+    // Drives the terrain axis-aligned extrusion.
+    vec3_t   dominantNormal;
+    qboolean hasDominantNormal;
 } modelInstance_t;
 
 extern int c_triangleModels;
@@ -608,6 +615,7 @@ void CreateTriangleModelCollision(entity_t *parent);
 void CreateCollisionTris(modelInstance_t *inst);
 
 bspbrush_t *GenerateExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader);
+bspbrush_t *GenerateTerrainExtrusionCollision(modelInstance_t *inst, shaderInfo_t *shader, int *outExceptions);
 bspbrush_t *GenerateHACDCollision(modelInstance_t *inst, shaderInfo_t *shader);
 
 const char *CategoryString(modelCategory_t cat);

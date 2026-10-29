@@ -319,9 +319,11 @@ static void CategorizeModel(modelInstance_t *inst)
     float inwardArea = 0;
     float outwardArea = 0;
     int totalVerts = 0;
+    vec3_t dominantSum;
 
     ClearBounds(mins, maxs);
     VectorClear(centroid);
+    VectorClear(dominantSum);
 
     // Pass 1: AABB, Centroid and Vert counts
     for (int j = 0; j < inst->numDrawSurfs; j++)
@@ -373,6 +375,11 @@ static void CategorizeModel(modelInstance_t *inst)
 
             VectorNormalize(normal, normal);
 
+            // Dominant surface direction (area-weighted mean face normal).
+            // Consumed by the terrain axis-aligned extrusion; computed for
+            // every instance so an explicit collisiontype terrain gets it too.
+            VectorMA(dominantSum, area, normal, dominantSum);
+
             // Terrain and Ground detect
             if (normal[2] > 0.707f)
             { // Within 45 degrees of Up (0,0,1)
@@ -407,6 +414,19 @@ static void CategorizeModel(modelInstance_t *inst)
     {
         inst->category = MC_NONE;
         return;
+    }
+
+    /* Normalize the dominant direction; near-zero sums (closed/symmetric
+       shapes, where area-weighted normals cancel) fall back to per-face
+       extrusion via hasDominantNormal == qfalse. */
+    if (VectorNormalize(dominantSum, inst->dominantNormal) > 0.0001f)
+    {
+        inst->hasDominantNormal = qtrue;
+    }
+    else
+    {
+        VectorClear(inst->dominantNormal);
+        inst->hasDominantNormal = qfalse;
     }
 
     float upRatio = upArea / totalArea;
@@ -482,115 +502,6 @@ static void ComputeCollisionDensity(modelInstance_t *inst)
     {
         inst->triangle_density = 0.0f;
     }
-}
-
-/*
-====================
-GenerateCollisionTerrainExtrusion
-
-Specialized pipeline for terrains:
-1. Merges all draw surfaces into one mesh.
-2. Decimates the result using MeshLib-Lite.
-3. Extrudes the resulting decimated mesh into brushes.
-====================
-*/
-bspbrush_t *GenerateCollisionTerrainExtrusion(modelInstance_t *inst, shaderInfo_t *shader)
-{
-    int totalVerts = 0;
-    int totalIndexes = 0;
-    float *allVerts;
-    int *allIndexes;
-    int currentVert = 0;
-    int currentIndex = 0;
-
-    for (int j = 0; j < inst->numDrawSurfs; j++)
-    {
-        mapDrawSurface_t *ds = inst->drawSurfs[j];
-        if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID))
-            continue;
-        totalVerts += ds->numVerts;
-        totalIndexes += ds->numIndexes;
-    }
-
-    if (totalVerts == 0)
-        return NULL;
-
-    allVerts = malloc(totalVerts * 3 * sizeof(float));
-    allIndexes = malloc(totalIndexes * sizeof(int));
-
-    for (int j = 0; j < inst->numDrawSurfs; j++)
-    {
-        mapDrawSurface_t *ds = inst->drawSurfs[j];
-        if (!ds->shaderInfo || !(ds->shaderInfo->contents & CONTENTS_SOLID))
-            continue;
-        int baseVert = currentVert;
-        for (int k = 0; k < ds->numVerts; k++)
-        {
-            allVerts[currentVert * 3 + 0] = (float)ds->verts[k].xyz[0];
-            allVerts[currentVert * 3 + 1] = (float)ds->verts[k].xyz[1];
-            allVerts[currentVert * 3 + 2] = (float)ds->verts[k].xyz[2];
-            currentVert++;
-        }
-        for (int k = 0; k < ds->numIndexes; k++)
-        {
-            allIndexes[currentIndex++] = ds->indexes[k] + baseVert;
-        }
-    }
-
-    MRMesh *healed = HealAndDecimateMesh(allVerts, totalVerts, allIndexes, totalIndexes, inst->modelName);
-    free(allVerts);
-    free(allIndexes);
-
-    if (!healed)
-        return NULL;
-
-    // Convert MRMesh to colMesh_t
-    colMesh_t *colMesh = malloc(sizeof(colMesh_t));
-    memset(colMesh, 0, sizeof(colMesh_t));
-    colMesh->shaderInfo = shader; // original material
-
-    const MRVector3f *pts = mrMeshPoints(healed);
-    size_t numPts = mrMeshPointsNum(healed);
-    const MRMeshTopology *topo = mrMeshTopology(healed);
-    MRTriangulation *tri = mrMeshTopologyGetTriangulation(topo);
-
-    if (tri && tri->size > 0)
-    {
-        colMesh->numVerts = (int)numPts;
-        colMesh->verts = malloc(colMesh->numVerts * sizeof(vec3_t));
-        memcpy(colMesh->verts, pts, colMesh->numVerts * sizeof(vec3_t));
-
-        int validTriCount = 0;
-        for (size_t fi = 0; fi < tri->size; fi++)
-        {
-            if (tri->data[fi][0].id >= 0)
-                validTriCount++;
-        }
-
-        colMesh->numTris = validTriCount;
-        colMesh->tris = malloc(colMesh->numTris * sizeof(colTri_t));
-
-        int triIdx = 0;
-        for (size_t fi = 0; fi < tri->size; fi++)
-        {
-            if (tri->data[fi][0].id >= 0)
-            {
-                colMesh->tris[triIdx][0] = tri->data[fi][0].id;
-                colMesh->tris[triIdx][1] = tri->data[fi][1].id;
-                colMesh->tris[triIdx][2] = tri->data[fi][2].id;
-                triIdx++;
-            }
-        }
-    }
-    mrMeshFree(healed);
-
-    bspbrush_t *hulls = NULL;
-    if (colMesh->numTris > 0)
-    {
-        hulls = ExtrudeTrianglesToBrushes(colMesh, shader);
-    }
-    FreeCollisionMesh(colMesh);
-    return hulls;
 }
 
 /*
@@ -1162,6 +1073,25 @@ static void ApplyShaderToBrushList(bspbrush_t *list, shaderInfo_t *si)
 
 /*
 ====================
+TerrainAxisLabel
+
+Formats the snapped world axis of the dominant direction as " axis +X" etc.
+Must agree with the snapping done in ExtrudeTrianglesToBrushesAxis
+(model_extrude.c).
+====================
+*/
+static void TerrainAxisLabel(const vec3_t dominant, char *out, int outSize)
+{
+    int axis = 0;
+    if (fabsf(dominant[1]) > fabsf(dominant[axis]))
+        axis = 1;
+    if (fabsf(dominant[2]) > fabsf(dominant[axis]))
+        axis = 2;
+    snprintf(out, outSize, " axis %c%c", (dominant[axis] >= 0) ? '+' : '-', "XYZ"[axis]);
+}
+
+/*
+====================
 DecomposeModelCollision
 
 Generate collision hulls from the model's geometry.
@@ -1172,6 +1102,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     modelCategory_t category = inst->category;
     bspbrush_t *hulls_list = NULL;
     int numHulls = 0;
+    int terrainExceptions = 0;
 
     if (parent == &entities[0] && num_clip_entity_groups >= MAX_CLIP_ENTITY_GROUPS)
     {
@@ -1198,14 +1129,37 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
     {
         hulls_list = GenerateHACDCollision(inst, caulk);
     }
+    else if (category == MC_TERRAIN && inst->hasDominantNormal)
+    {
+        /* Axis-aligned terrain extrusion: every prism sweeps along the world
+           axis closest to the model's dominant surface direction, so adjacent
+           prisms share their edges and side planes stay consistent. Faces
+           near-perpendicular to the axis keep the per-face extrusion. */
+        hulls_list = GenerateTerrainExtrusionCollision(inst, caulk, &terrainExceptions);
+    }
     else if (category == MC_TERRAIN || category == MC_EXTRUDE)
     {
-        /* TODO: Eventually implement axial aligned (-Z) extrusion for terrains */
+        /* MC_EXTRUDE, and terrain instances without a usable dominant
+           direction, keep the per-face extrusion. */
         hulls_list = GenerateExtrusionCollision(inst, caulk);
     }
     else
     {
         hulls_list = GenerateHACDCollision(inst, caulk);
+    }
+
+    /* Category label, extended with the snapped axis and exception count
+       for terrain instances. */
+    char catLabel[96];
+    if (category == MC_TERRAIN && inst->hasDominantNormal)
+    {
+        char axisLabel[16];
+        TerrainAxisLabel(inst->dominantNormal, axisLabel, sizeof(axisLabel));
+        snprintf(catLabel, sizeof(catLabel), "%s%s (exc %i)", CategoryString(category), axisLabel, terrainExceptions);
+    }
+    else
+    {
+        snprintf(catLabel, sizeof(catLabel), "%s", CategoryString(category));
     }
 
     for (bspbrush_t *b = hulls_list; b; b = b->next)
@@ -1234,7 +1188,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
             }
 
             _printf("[Collision] %s: %s -> %i Brushes appended to modelgroup brushmodel\n",
-                    inst->modelName, CategoryString(category), numHulls);
+                    inst->modelName, catLabel, numHulls);
             return;
         }
 
@@ -1277,7 +1231,7 @@ static void DecomposeModelCollision(modelInstance_t *inst, entity_t *parent)
         }
 
         _printf("[Collision] %s: %s (TriDensity:%.1f) -> %i Brushes (Density:%.1f)\n",
-                inst->modelName, CategoryString(category), inst->triangle_density, numHulls, group->brush_density);
+                inst->modelName, catLabel, inst->triangle_density, numHulls, group->brush_density);
     }
 }
 
