@@ -165,16 +165,55 @@ void FindSkyBrushes(void)
 }
 
 /*
+====================
+SurfaceLightAttenScale
+
+Resolves a surface light's attenuation model (shader override or game default)
+and the photons scale factor that goes with it. Shared by CreateSurfaceLights
+(family reach) and SubdivideAreaLight (per-piece photons) so the two can never
+diverge.
+====================
+*/
+static float SurfaceLightAttenScale(const shaderInfo_t *ls, attenuationModel_t *modelOut)
+{
+    attenuationModel_t model;
+    if (ls->hasAttenuationOverride)
+        model = ls->attenuationModel;
+    else
+        model = game->attenuationModel;
+
+    float attenScale = 1.0f;
+    if (model == ATTENUATION_SMOOTHSTEP)
+    {
+        attenScale = POINTSCALE_SMOOTHSTEP / POINTSCALE;
+    }
+    else if (model == ATTENUATION_INVERSE)
+    {
+        attenScale = POINTSCALE_SOFT / POINTSCALE;
+    }
+
+    if (modelOut)
+        *modelOut = model;
+    return attenScale;
+}
+
+/*
 ===============
 SubdivideAreaLight
 
 Subdivide area lights that are very large
 A light that is subdivided will never backsplash, avoiding weird pools of light
 near edges
+
+totalArea and familyReach describe the WHOLE emitting surface (the family):
+totalArea drives the per-piece cutoff distribution and familyReach is the
+shared broad-phase reach, both computed once per surface in CreateSurfaceLights
+so subdivision cannot shrink the light's reach or bias its cutoff.
 ===============
 */
 void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
-                        float areaSubdivide, qboolean backsplash, float familyCutoff)
+                        float areaSubdivide, qboolean backsplash, float familyCutoff,
+                        float totalArea, float familyReach)
 {
     float area, value, intensity;
     light_t *dl, *dl2;
@@ -200,8 +239,8 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
             planeNormal[axis] = 1;
             planeDist = (maxs[axis] + mins[axis]) * 0.5;
             ClipWindingEpsilon(w, planeNormal, planeDist, ON_EPSILON, &front, &back);
-            SubdivideAreaLight(ls, front, normal, areaSubdivide, qfalse, familyCutoff);
-            SubdivideAreaLight(ls, back, normal, areaSubdivide, qfalse, familyCutoff);
+            SubdivideAreaLight(ls, front, normal, areaSubdivide, qfalse, familyCutoff, totalArea, familyReach);
+            SubdivideAreaLight(ls, back, normal, areaSubdivide, qfalse, familyCutoff, totalArea, familyReach);
             FreeWinding(w);
             return;
         }
@@ -313,26 +352,20 @@ void SubdivideAreaLight(shaderInfo_t *ls, winding_t *w, vec3_t normal,
     else
         dl->fadeout = game->fadeout;
 
-    if (ls->hasAttenuationOverride)
-        dl->attenuationModel = ls->attenuationModel;
-    else
-        dl->attenuationModel = game->attenuationModel;
-
-    float attenScale = 1.0f;
-    if (dl->attenuationModel == ATTENUATION_SMOOTHSTEP)
-    {
-        attenScale = POINTSCALE_SMOOTHSTEP / POINTSCALE;
-    }
-    else if (dl->attenuationModel == ATTENUATION_INVERSE)
-    {
-        attenScale = POINTSCALE_SOFT / POINTSCALE;
-    }
+    float attenScale = SurfaceLightAttenScale(ls, &dl->attenuationModel);
 
     dl->photons *= attenScale;
     VectorScale(dl->emitColor, attenScale, dl->emitColor);
 
-    dl->reach = CalculateLightReach(area, (value * areaScale) * attenScale, dl->min_light_add, DEFAULT_ATTN_OFFSET, dl->attenuationModel);
+    // Family reach, computed once per surface from the total area: reach scales with sqrt(area), so computing it per subdivided piece would collapse it by sqrt(N).
+    dl->reach = familyReach;
     dl->attnSoftnessRange = dl->reach * dl->fadeout;
+
+    // Distribute the family cutoff across pieces proportionally to their area: keep the family edge at familyCutoff — the piece thresholds reconstitute it: Sum(piece thresholds) == familyCutoff.
+    if (totalArea > 0.0f)
+        dl->min_light_add = familyCutoff * (area / totalArea);
+    else
+        dl->min_light_add = familyCutoff;
 }
 
 /*
@@ -390,8 +423,50 @@ void CreateSurfaceLights(void)
             continue;
         }
 
-        // resolve the cutoff once per surface family so all subdivided
-        // pieces share a uniform edge
+        // total emitting area of this surface, needed for the cutoff formula and the family reach
+        float totalArea = 0.0f;
+        if (ds->surfaceType == MST_PATCH)
+        {
+            // approximate family area from the patch control mesh
+            for (int px = 0; px < ds->patchWidth - 1; px++)
+            {
+                for (int py = 0; py < ds->patchHeight - 1; py++)
+                {
+                    vec3_t e1, e2, cross;
+                    drawVert_t *vA = &drawVerts[ds->firstVert + py * ds->patchWidth + px];
+                    drawVert_t *vB = vA + 1;
+                    drawVert_t *vC = &drawVerts[ds->firstVert + (py + 1) * ds->patchWidth + px];
+                    drawVert_t *vD = vC + 1;
+
+                    VectorSubtract(vB->xyz, vA->xyz, e1);
+                    VectorSubtract(vC->xyz, vA->xyz, e2);
+                    CrossProduct(e1, e2, cross);
+                    totalArea += 0.5f * VectorLength(cross);
+
+                    VectorSubtract(vD->xyz, vB->xyz, e1);
+                    VectorSubtract(vD->xyz, vC->xyz, e2);
+                    CrossProduct(e1, e2, cross);
+                    totalArea += 0.5f * VectorLength(cross);
+                }
+            }
+        }
+        else
+        {
+            for (j = 0; j + 2 < ds->numIndexes; j += 3)
+            {
+                vec3_t e1, e2, cross;
+                drawVert_t *vA = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
+                drawVert_t *vB = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 1]];
+                drawVert_t *vC = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 2]];
+
+                VectorSubtract(vB->xyz, vA->xyz, e1);
+                VectorSubtract(vC->xyz, vA->xyz, e2);
+                CrossProduct(e1, e2, cross);
+                totalArea += 0.5f * VectorLength(cross);
+            }
+        }
+
+        // resolve the cutoff once per surface family so all subdivided pieces share a uniform edge
         float familyCutoff;
         if (ls->energyCutoff > 0.0f)
         {
@@ -404,48 +479,6 @@ void CreateSurfaceLights(void)
         else
         {
             float cutoffAnchor = (ls->cutoff > 0.0f) ? ls->cutoff : game->cutoffAnchor;
-            float totalArea = 0.0f;
-
-            if (ds->surfaceType == MST_PATCH)
-            {
-                // approximate family area from the patch control mesh
-                for (int px = 0; px < ds->patchWidth - 1; px++)
-                {
-                    for (int py = 0; py < ds->patchHeight - 1; py++)
-                    {
-                        vec3_t e1, e2, cross;
-                        drawVert_t *vA = &drawVerts[ds->firstVert + py * ds->patchWidth + px];
-                        drawVert_t *vB = vA + 1;
-                        drawVert_t *vC = &drawVerts[ds->firstVert + (py + 1) * ds->patchWidth + px];
-                        drawVert_t *vD = vC + 1;
-
-                        VectorSubtract(vB->xyz, vA->xyz, e1);
-                        VectorSubtract(vC->xyz, vA->xyz, e2);
-                        CrossProduct(e1, e2, cross);
-                        totalArea += 0.5f * VectorLength(cross);
-
-                        VectorSubtract(vD->xyz, vB->xyz, e1);
-                        VectorSubtract(vD->xyz, vC->xyz, e2);
-                        CrossProduct(e1, e2, cross);
-                        totalArea += 0.5f * VectorLength(cross);
-                    }
-                }
-            }
-            else
-            {
-                for (j = 0; j + 2 < ds->numIndexes; j += 3)
-                {
-                    vec3_t e1, e2, cross;
-                    drawVert_t *vA = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j]];
-                    drawVert_t *vB = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 1]];
-                    drawVert_t *vC = &drawVerts[ds->firstVert + drawIndexes[ds->firstIndex + j + 2]];
-
-                    VectorSubtract(vB->xyz, vA->xyz, e1);
-                    VectorSubtract(vC->xyz, vA->xyz, e2);
-                    CrossProduct(e1, e2, cross);
-                    totalArea += 0.5f * VectorLength(cross);
-                }
-            }
 
             // family emission referenced against a point light 300 (300 * POINTSCALE)
             float familyPhotons = ls->value * totalArea * areaScale;
@@ -453,6 +486,12 @@ void CreateSurfaceLights(void)
             if (familyCutoff < game->minLightAdd)
                 familyCutoff = game->minLightAdd;
         }
+
+        // All pieces of the family share this reach: it scales with sqrt(area), so computing it per subdivided piece would collapse it by sqrt(N).
+        attenuationModel_t familyModel;
+        float familyAttenScale = SurfaceLightAttenScale(ls, &familyModel);
+        float familyReach = CalculateLightReach(totalArea, (ls->value * areaScale) * familyAttenScale,
+                                                familyCutoff, DEFAULT_ATTN_OFFSET, familyModel);
 
         light_t *startList = lights;
 
@@ -512,7 +551,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff, totalArea, familyReach);
                         }
                         else
                         {
@@ -531,7 +570,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff, totalArea, familyReach);
 
                             // tri 2
                             w = AllocWinding(3);
@@ -548,7 +587,7 @@ void CreateSurfaceLights(void)
                                 FreeWinding(t);
                                 VectorSubtract(vec3_origin, normal, normal);
                             }
-                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
+                            SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff, totalArea, familyReach);
                         }
                     }
                 }
@@ -587,7 +626,7 @@ void CreateSurfaceLights(void)
                         FreeWinding(t);
                         VectorSubtract(vec3_origin, normal, normal);
                     }
-                    SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff);
+                    SubdivideAreaLight(ls, w, normal, lightSubdivide, qtrue, familyCutoff, totalArea, familyReach);
                 }
             }
         }
@@ -602,6 +641,10 @@ void CreateSurfaceLights(void)
                 l->familyCount = familyCount;
             }
         }
+
+        qprintf("  Surface light family %s: area %.1f, photons %.1f, cutoff %.4f, reach %.1f, pieces %i\n",
+                ls->shader, totalArea, ls->value * totalArea * areaScale * familyAttenScale,
+                familyCutoff, familyReach, familyCount);
     }
 
     _printf("%5i light emitting surfaces\n", c_lightSurfaces);

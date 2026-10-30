@@ -1037,27 +1037,34 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             outAngle = 1.0f;
         }
 
+        /* Cutoff on the un-faded contribution first, then the soft fade —
+           mirrors CalculateAttenuation's documented order for point lights
+           (light.h): the cut happens unconditionally by energy, and only then
+           the fade ramps the contribution to zero at reach. Testing after the
+           fade hard-clips mid-ramp instead of fading out smoothly. */
+        out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
+        out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
+        out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
+
+        float maxAdd = out->irradiance[0];
+        if (out->irradiance[1] > maxAdd) maxAdd = out->irradiance[1];
+        if (out->irradiance[2] > maxAdd) maxAdd = out->irradiance[2];
+
+        if (maxAdd <= light->min_light_add)
+        {
+            return qfalse;
+        }
+
         if (light->attnSoftnessRange > 0.0f)
         {
             float fadeStartDist = light->reach - light->attnSoftnessRange;
             if (dist > fadeStartDist)
             {
                 float fadeScale = (light->reach - dist) / light->attnSoftnessRange;
-                formFactorBase *= fadeScale;
+                out->irradiance[0] *= fadeScale;
+                out->irradiance[1] *= fadeScale;
+                out->irradiance[2] *= fadeScale;
             }
-        }
-
-        out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
-        out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
-        out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
-        
-        float maxAdd = out->irradiance[0];
-        if (out->irradiance[1] > maxAdd) maxAdd = out->irradiance[1];
-        if (out->irradiance[2] > maxAdd) maxAdd = out->irradiance[2];
-        
-        if (maxAdd <= light->min_light_add)
-        {
-            return qfalse;
         }
         
         out->angle = outAngle;
