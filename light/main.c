@@ -39,6 +39,35 @@ extern tonemap_t tonemapMode;
 qboolean g_fast = qfalse;
 
 qboolean directonly = qfalse;
+
+/*
+====================
+ClearVoxelCache
+
+Removes the radiosity voxel caches (cache/surf_*.vxl) this light run produced.
+The .srf sidecar is deliberately PRESERVED: it is an input written by makebsp,
+and deleting it (as ClearCacheDirectory did) made every relight-only rerun
+silently lose all func_light overrides.
+====================
+*/
+static void ClearVoxelCache(void)
+{
+    char baseDir[1024];
+    char cachePath[1024];
+    GetMapOutputDir(source, baseDir);
+    snprintf(cachePath, sizeof(cachePath), "%scache", baseDir);
+#ifdef _WIN32
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd),
+             "powershell -NoProfile -Command \"if (Test-Path '%s') { Get-ChildItem '%s' -Filter 'surf_*.vxl' | Remove-Item -Force }\"",
+             cachePath, cachePath);
+    system(cmd);
+#else
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "rm -f %s/surf_*.vxl", cachePath);
+    system(cmd);
+#endif
+}
 qboolean radiosityonly = qfalse;
 qboolean ambientonly = qfalse;
 qboolean upscale = qfalse;
@@ -971,6 +1000,9 @@ int main(int argc, char **argv) {
         InitOpenCL();
     }
 
+    // Fresh voxel cache every launch: stale surf_*.vxl from previous runs caused light artifacts.
+    ClearVoxelCache();
+
     // Consolidate per-surface metadata (Bounds, Entity Origins, Sidecar)
     // Must be called AFTER samplesize is determined so Patches can tessellate
     BuildLocalSurfaces();
@@ -1001,7 +1033,8 @@ int main(int argc, char **argv) {
 
     WriteBSPFile(source);
 
-    ClearCacheDirectory();
+    // Leave no voxel caches behind after a successful run.
+    ClearVoxelCache();
 
     end = I_FloatTime();
     int totalSeconds = (int)(end - start);

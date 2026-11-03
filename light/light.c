@@ -198,6 +198,38 @@ static float SurfaceLightAttenScale(const shaderInfo_t *ls, attenuationModel_t *
 }
 
 /*
+====================
+SurfaceLightEmissionScale
+
+Converts a surface light's per-unit-area intensity into the falloff
+coefficient the receiver actually sees, so the reach formula models the REAL
+emission:
+
+  Lambertian:  irradiance ~= emitColor * (A*cos) / (2*pi*d^2)
+               emitColor   = value * POINTSCALE_AREA * areaScale * attenScale
+  Volumetric:  irradiance ~= emitColor * A / (d^2 + A)   (liquids: no 2*pi,
+               emitColor carries an extra 0.25 volumetric scale)
+
+Without this factor the reach formula overestimates the falloff by 16.75x
+(1/0.0597): the per-piece threshold test then fires at ~24% of the nominal
+reach, the fade band never engages, and the cutoff produces an invisible step
+instead of the intended smooth rim to zero.
+====================
+*/
+static float SurfaceLightEmissionScale(const shaderInfo_t *ls)
+{
+    // Lambertian: projected solid angle over the hemisphere (2*pi), as PointToPolygonFormFactor.
+    float factor = POINTSCALE_AREA / (2.0f * 3.141592657f);
+
+    if (ls->contents & (CONTENTS_LAVA | CONTENTS_SLIME | CONTENTS_WATER | CONTENTS_FOG))
+    {
+        // Volumetric (liquids): no 2*pi, and emitColor carries a 0.25 volumetric scale.
+        factor = POINTSCALE_AREA * 0.25f;
+    }
+    return factor;
+}
+
+/*
 ===============
 SubdivideAreaLight
 
@@ -487,11 +519,12 @@ void CreateSurfaceLights(void)
                 familyCutoff = game->minLightAdd;
         }
 
-        // All pieces of the family share this reach: it scales with sqrt(area), so computing it per subdivided piece would collapse it by sqrt(N).
+        // Family reach from the total area with the real emission scale: the cutoff and fade land exactly at the reach (no point-light prestep).
         attenuationModel_t familyModel;
         float familyAttenScale = SurfaceLightAttenScale(ls, &familyModel);
-        float familyReach = CalculateLightReach(totalArea, (ls->value * areaScale) * familyAttenScale,
-                                                familyCutoff, DEFAULT_ATTN_OFFSET, familyModel);
+        float familyEmissionScale = SurfaceLightEmissionScale(ls);
+        float familyReach = CalculateLightReach(totalArea, (ls->value * areaScale) * familyAttenScale * familyEmissionScale,
+                                                familyCutoff, 0.0f, familyModel);
 
         light_t *startList = lights;
 

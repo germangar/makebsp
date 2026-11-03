@@ -1037,11 +1037,7 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
             outAngle = 1.0f;
         }
 
-        /* Cutoff on the un-faded contribution first, then the soft fade —
-           mirrors CalculateAttenuation's documented order for point lights
-           (light.h): the cut happens unconditionally by energy, and only then
-           the fade ramps the contribution to zero at reach. Testing after the
-           fade hard-clips mid-ramp instead of fading out smoothly. */
+        /* Cutoff on the un-faded contribution first, then the fade: the reverse order hard-clips mid-ramp. */
         out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
         out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
         out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
