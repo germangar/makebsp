@@ -1138,6 +1138,9 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
     }
     
     if (!tempColor || (game->deluxeMap && (!tempDeluxe || !tempEnergy))) {
+        _printf("WARNING: RadiosityReconstruct: failed to allocate memory for surface %d (%dx%d, %d bytes). Surface texels will be blank.\n",
+                surfIdx, ds->lightmapWidth, ds->lightmapHeight,
+                (int)(numPixels * sizeof(vec3_t)));
         if (tempColor) Q_Free(tempColor);
         if (tempDeluxe) Q_Free(tempDeluxe);
         if (tempEnergy) Q_Free(tempEnergy);
@@ -1170,58 +1173,69 @@ static void RadiosityReconstructOneSurface(int surfIdx) {
             vec3_t *pointPos = Q_Alloc(numPixels * sizeof(vec3_t));
             vec3_t *pointNorm = Q_Alloc(numPixels * sizeof(vec3_t));
 
-            // Step 1: Exact hits via Voxel Cache
-            for (int i = 0; i < numPoints; i++) {
-                int pIdx = points[i].pixelIndex;
-                int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
-                int native_lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
-                int native_ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
-                
-                int k_temp = native_ly * ds->lightmapWidth + native_lx;
+            if (!filled || !pointPos || !pointNorm) {
+                _printf("WARNING: RadiosityReconstruct: failed to allocate point buffers for trisoup surface %d (%dx%d). Falling back to rasterization.\n",
+                        surfIdx, ds->lightmapWidth, ds->lightmapHeight);
+                if (filled) free(filled);
+                if (pointPos) Q_Free(pointPos);
+                if (pointNorm) Q_Free(pointNorm);
+                Q_Free(points);
+            } else {
+                // Step 1: Exact hits via Voxel Cache
+                for (int i = 0; i < numPoints; i++) {
+                    int pIdx = points[i].pixelIndex;
+                    int lmLocal = pIdx % (LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT);
+                    int native_lx = lmLocal % LIGHTMAP_WIDTH - ds->lightmapOffset[0][0];
+                    int native_ly = lmLocal / LIGHTMAP_WIDTH - ds->lightmapOffset[0][1];
+                    
+                    int k_temp = native_ly * ds->lightmapWidth + native_lx;
 
-                if (k_temp < 0 || k_temp >= numPixels) continue;
+                    if (k_temp < 0 || k_temp >= numPixels) continue;
 
-                VectorCopy(points[i].pos, pointPos[k_temp]);
-                VectorCopy(points[i].normal, pointNorm[k_temp]);
-                VectorAdd(pointPos[k_temp], localSurfaces[surfIdx].entityOrigin, pointPos[k_temp]);
+                    VectorCopy(points[i].pos, pointPos[k_temp]);
+                    VectorCopy(points[i].normal, pointNorm[k_temp]);
+                    VectorAdd(pointPos[k_temp], localSurfaces[surfIdx].entityOrigin, pointPos[k_temp]);
 
-                if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
-                    filled[k_temp] = 1;
-                    // Unmask if it was masked
-                    if (lightAlphaMask && lightAlphaMask[pIdx] == 0) {
-                        lightAlphaMask[pIdx] = ds->surfaceType;
+                    if (RadiosityVoxelSample(pointPos[k_temp], pointNorm[k_temp], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
+                        filled[k_temp] = 1;
+                        // Unmask if it was masked
+                        if (lightAlphaMask && lightAlphaMask[pIdx] == 0) {
+                            lightAlphaMask[pIdx] = ds->surfaceType;
+                        }
                     }
                 }
-            }
 
-            // Step 2: Inclusive Dilation (Near-miss pixels)
-            for (int ly = 0; ly < ds->lightmapHeight; ly++) {
-                for (int lx = 0; lx < ds->lightmapWidth; lx++) {
-                    int k_temp = ly * ds->lightmapWidth + lx;
-                    if (filled[k_temp]) continue;
+                // Step 2: Inclusive Dilation (Near-miss pixels)
+                for (int ly = 0; ly < ds->lightmapHeight; ly++) {
+                    for (int lx = 0; lx < ds->lightmapWidth; lx++) {
+                        int k_temp = ly * ds->lightmapWidth + lx;
+                        if (filled[k_temp]) continue;
 
-                    for (int dy = -1; dy <= 1; dy++) {
-                        for (int dx = -1; dx <= 1; dx++) {
-                            if (dx == 0 && dy == 0) continue;
-                            int nx = lx + dx, ny = ly + dy;
-                            if (nx < 0 || nx >= ds->lightmapWidth || ny < 0 || ny >= ds->lightmapHeight) continue;
-                            int kn = ny * ds->lightmapWidth + nx;
-                            if (filled[kn] == 1) { // Borrow from original geometric hits
-                                if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
-                                    filled[k_temp] = 2; // Dilated
-                                    // Unmask if it was masked
-                                    // Note: We no longer modify lightAlphaMask here, as PrecacheTexelGeometry handles all geometry evaluation.
-                                    goto next_p;
+                        for (int dy = -1; dy <= 1; dy++) {
+                            for (int dx = -1; dx <= 1; dx++) {
+                                if (dx == 0 && dy == 0) continue;
+                                int nx = lx + dx, ny = ly + dy;
+                                if (nx < 0 || nx >= ds->lightmapWidth || ny < 0 || ny >= ds->lightmapHeight) continue;
+                                int kn = ny * ds->lightmapWidth + nx;
+                                if (filled[kn] == 1) { // Borrow from original geometric hits
+                                    if (RadiosityVoxelSample(pointPos[kn], pointNorm[kn], tempColor[k_temp], game->deluxeMap ? tempDeluxe[k_temp] : NULL, game->deluxeMap ? tempEnergy[k_temp] : NULL)) {
+                                        filled[k_temp] = 2; // Dilated
+                                        // Unmask if it was masked
+                                        // Note: We no longer modify lightAlphaMask here, as PrecacheTexelGeometry handles all geometry evaluation.
+                                        goto next_p;
+                                    }
                                 }
                             }
                         }
+                        next_p:;
                     }
-                    next_p:;
                 }
-            }
 
-            Q_Free(filled); Q_Free(pointPos); Q_Free(pointNorm); Q_Free(points);
-            goto flush; // Skip manual rasterization loop
+                free(filled); Q_Free(pointPos); Q_Free(pointNorm); Q_Free(points);
+                goto flush; // Skip manual rasterization loop
+            }
+        } else {
+            _printf("WARNING: RadiosityReconstruct: VoxelCache_Load returned NULL for trisoup surface %d. Falling back to rasterization.\n", surfIdx);
         }
     }
 
