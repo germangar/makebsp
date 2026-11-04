@@ -144,7 +144,6 @@ WIN32
 
 int numthreads = -1;
 CRITICAL_SECTION crit;
-static int enter;
 
 void ThreadSetDefault(void)
 {
@@ -166,18 +165,12 @@ void ThreadLock(void)
     if (!threaded)
         return;
     EnterCriticalSection(&crit);
-    if (enter)
-        Error("Recursive ThreadLock\n");
-    enter = 1;
 }
 
 void ThreadUnlock(void)
 {
     if (!threaded)
         return;
-    if (!enter)
-        Error("ThreadUnlock without lock\n");
-    enter = 0;
     LeaveCriticalSection(&crit);
 }
 
