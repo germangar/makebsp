@@ -115,6 +115,19 @@ void ThreadWorkerFunction(int threadnum)
     }
 }
 
+void ThreadWorkerFunctionWeighted(int threadnum)
+{
+    int work;
+
+    while (1)
+    {
+        work = GetThreadWork();
+        if (work == -1)
+            break;
+        workfunction(work);
+    }
+}
+
 void RunThreadsOnIndividual(int workcnt, qboolean showpacifier,
                             void (*func)(int))
 {
@@ -132,7 +145,7 @@ void RunThreadsOnWeighted(int workcnt, long long total_w, qboolean showpacifier,
         ThreadSetDefault();
     workfunction = func;
     total_work = total_w;
-    RunThreadsOn(workcnt, showpacifier, ThreadWorkerFunction);
+    RunThreadsOn(workcnt, showpacifier, ThreadWorkerFunctionWeighted);
 }
 
 /*
