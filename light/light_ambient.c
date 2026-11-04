@@ -579,9 +579,7 @@ void TraceAmbient(int num)
 
             if ((j & 31) == 0)
             {
-                ThreadLock();
                 Broadcast_KeepAlive();
-                ThreadUnlock();
             }
         }
     }

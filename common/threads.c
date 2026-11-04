@@ -58,6 +58,7 @@ int GetThreadWork(void)
 void ThreadCompletedWeighted(int weight)
 {
     int f;
+    qboolean do_keepalive = qfalse;
 
     ThreadLock();
     completed++;
@@ -82,9 +83,14 @@ void ThreadCompletedWeighted(int weight)
     }
     else
     {
-        Broadcast_KeepAlive();
+        do_keepalive = qtrue;
     }
     ThreadUnlock();
+
+    if (do_keepalive)
+    {
+        Broadcast_KeepAlive();
+    }
 }
 
 void ThreadCompleted(void)
