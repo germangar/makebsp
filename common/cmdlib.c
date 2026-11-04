@@ -584,7 +584,24 @@ typedef struct {
 #define MAX_MEMMAPS 1024
 static memmap_t memmaps[MAX_MEMMAPS];
 static int numMemmaps = 0;
+static CRITICAL_SECTION g_memmapCS;
+static INIT_ONCE g_memmapInitOnce = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK InitMemmapCS(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context) {
+    InitializeCriticalSection(&g_memmapCS);
+    return TRUE;
+}
+
+static void MemmapLock(void) {
+    InitOnceExecuteOnce(&g_memmapInitOnce, InitMemmapCS, NULL, NULL);
+    EnterCriticalSection(&g_memmapCS);
+}
+
+static void MemmapUnlock(void) {
+    LeaveCriticalSection(&g_memmapCS);
+}
 #else
+#include <pthread.h>
 typedef struct {
     void *ptr;
     size_t size;
@@ -594,6 +611,9 @@ typedef struct {
 #define MAX_MEMMAPS 1024
 static memmap_t memmaps[MAX_MEMMAPS];
 static int numMemmaps = 0;
+static pthread_mutex_t g_memmapMutex = PTHREAD_MUTEX_INITIALIZER;
+#define MemmapLock()   pthread_mutex_lock(&g_memmapMutex)
+#define MemmapUnlock() pthread_mutex_unlock(&g_memmapMutex)
 #endif
 
 void *Q_Alloc(size_t size) {
@@ -601,9 +621,12 @@ void *Q_Alloc(size_t size) {
 
 #ifdef _WIN32
     if (g_lowmem) {
+        MemmapLock();
         if (numMemmaps >= MAX_MEMMAPS) {
+            MemmapUnlock();
             Error("Q_Alloc: MAX_MEMMAPS exceeded");
         }
+        MemmapUnlock();
 
         // Create a temporary file for the mapping
         char tempPath[MAX_PATH];
@@ -641,18 +664,30 @@ void *Q_Alloc(size_t size) {
             _printf("Q_Alloc: Memory-mapped %zu bytes to %s\n", size, tempFile);
         }
 
+        MemmapLock();
+        if (numMemmaps >= MAX_MEMMAPS) {
+            MemmapUnlock();
+            UnmapViewOfFile(ptr);
+            CloseHandle(hMap);
+            CloseHandle(hFile);
+            Error("Q_Alloc: MAX_MEMMAPS exceeded");
+        }
         memmaps[numMemmaps].ptr = ptr;
         memmaps[numMemmaps].hFile = hFile;
         memmaps[numMemmaps].hMap = hMap;
         numMemmaps++;
+        MemmapUnlock();
 
         return ptr;
     }
 #else
     if (g_lowmem) {
+        MemmapLock();
         if (numMemmaps >= MAX_MEMMAPS) {
+            MemmapUnlock();
             Error("Q_Alloc: MAX_MEMMAPS exceeded");
         }
+        MemmapUnlock();
 
         char tempFile[] = "/tmp/makebspXXXXXX";
         int fd = mkstemp(tempFile);
@@ -672,10 +707,18 @@ void *Q_Alloc(size_t size) {
             Error("Q_Alloc: mmap failed");
         }
 
+        MemmapLock();
+        if (numMemmaps >= MAX_MEMMAPS) {
+            MemmapUnlock();
+            munmap(ptr, size);
+            close(fd);
+            Error("Q_Alloc: MAX_MEMMAPS exceeded");
+        }
         memmaps[numMemmaps].ptr = ptr;
         memmaps[numMemmaps].size = size;
         memmaps[numMemmaps].fd = fd;
         numMemmaps++;
+        MemmapUnlock();
 
         return ptr;
     }
@@ -692,29 +735,55 @@ void Q_Free(void *ptr) {
     if (ptr == NULL) return;
 
 #ifdef _WIN32
+    HANDLE hFileToClose = NULL;
+    HANDLE hMapToClose = NULL;
+    qboolean found = qfalse;
+
+    MemmapLock();
     for (int i = 0; i < numMemmaps; i++) {
         if (memmaps[i].ptr == ptr) {
-            UnmapViewOfFile(ptr);
-            CloseHandle(memmaps[i].hMap);
-            CloseHandle(memmaps[i].hFile);
+            hFileToClose = memmaps[i].hFile;
+            hMapToClose = memmaps[i].hMap;
             
             // Swap with last element to keep array dense
             memmaps[i] = memmaps[numMemmaps - 1];
             numMemmaps--;
-            return;
+            found = qtrue;
+            break;
         }
     }
+    MemmapUnlock();
+
+    if (found) {
+        UnmapViewOfFile(ptr);
+        CloseHandle(hMapToClose);
+        CloseHandle(hFileToClose);
+        return;
+    }
 #else
+    int fdToClose = -1;
+    size_t sizeToUnmap = 0;
+    qboolean found = qfalse;
+
+    MemmapLock();
     for (int i = 0; i < numMemmaps; i++) {
         if (memmaps[i].ptr == ptr) {
-            munmap(ptr, memmaps[i].size);
-            close(memmaps[i].fd);
+            fdToClose = memmaps[i].fd;
+            sizeToUnmap = memmaps[i].size;
             
             // Swap with last element to keep array dense
             memmaps[i] = memmaps[numMemmaps - 1];
             numMemmaps--;
-            return;
+            found = qtrue;
+            break;
         }
+    }
+    MemmapUnlock();
+
+    if (found) {
+        munmap(ptr, sizeToUnmap);
+        close(fdToClose);
+        return;
     }
 #endif
 
@@ -729,15 +798,40 @@ void *Q_Realloc(void *ptr, size_t oldSize, size_t newSize) {
     }
 
 #ifdef _WIN32
-    // Check if this was a mapped pointer
+    qboolean isMapped = qfalse;
+    MemmapLock();
     for (int i = 0; i < numMemmaps; i++) {
         if (memmaps[i].ptr == ptr) {
-            void *newPtr = Q_Alloc(newSize);
-            size_t copySize = (oldSize < newSize) ? oldSize : newSize;
-            memcpy(newPtr, ptr, copySize);
-            Q_Free(ptr);
-            return newPtr;
+            isMapped = qtrue;
+            break;
         }
+    }
+    MemmapUnlock();
+
+    if (isMapped) {
+        void *newPtr = Q_Alloc(newSize);
+        size_t copySize = (oldSize < newSize) ? oldSize : newSize;
+        memcpy(newPtr, ptr, copySize);
+        Q_Free(ptr);
+        return newPtr;
+    }
+#else
+    qboolean isMapped = qfalse;
+    MemmapLock();
+    for (int i = 0; i < numMemmaps; i++) {
+        if (memmaps[i].ptr == ptr) {
+            isMapped = qtrue;
+            break;
+        }
+    }
+    MemmapUnlock();
+
+    if (isMapped) {
+        void *newPtr = Q_Alloc(newSize);
+        size_t copySize = (oldSize < newSize) ? oldSize : newSize;
+        memcpy(newPtr, ptr, copySize);
+        Q_Free(ptr);
+        return newPtr;
     }
 #endif
 
