@@ -1448,16 +1448,19 @@ qboolean ParseMapEntity(void)
         pm->epairs = CopyEpairs(mapent->epairs);
     }
 
-    // func_trisoup / func_group "nosolid"/"nonsolid"/"collisiontype none":
-    // stamp brushes as render-only (no collision, no tree role). Scoped to
-    // these classnames for now; func_trisoup patch collision twins are
-    // suppressed separately in the cook (PromotePatchesToTrisoups reads the
-    // live entity key), func_group patch twins via the entity index snapshot
-    // in ProcessMapEntities (their entity dies in Phase 2).
+    // func_trisoup / func_group / func_light "nosolid"/"nonsolid"/
+    // "collisiontype none": stamp brushes as render-only (no collision, no
+    // tree role). func_trisoup patch collision twins are suppressed
+    // separately in the cook (PromotePatchesToTrisoups reads the live
+    // entity key), func_group and func_light patch twins via the entity
+    // index snapshot in ProcessMapEntities (func_group entities die in
+    // Phase 2 and func_light surface entities free their epairs, so the
+    // snapshot is the uniform path for both).
     // Structural = solid by definition, so nosolid forces detail.
     {
         const char *stampClass = ValueForKey(mapent, "classname");
-        if ((!strcmp(stampClass, "func_trisoup") || !strcmp(stampClass, "func_group")) &&
+        if ((!strcmp(stampClass, "func_trisoup") || !strcmp(stampClass, "func_group") ||
+             !strcmp(stampClass, "func_light")) &&
             EntityNonsolid(mapent))
         {
             for (bspbrush_t *b = mapent->brushes; b; b = b->next)
@@ -1613,6 +1616,17 @@ void ProcessMapEntities(void)
         // 3. func_light
         if (!strcmp("func_light", classname))
         {
+            // Snapshot nosolid func_light indices for the global -patchtris
+            // cook (same mechanism as func_group): surface entities free
+            // their epairs below, so the key can't be read later. Patch
+            // drawsurfs keep the originating entity number, so the snapshot
+            // identifies them after the geometry moves to worldspawn.
+            if (EntityNonsolid(mapent))
+            {
+                if (numNonsolidGroupEntities < MAX_MAP_ENTITIES)
+                    nonsolidGroupEntities[numNonsolidGroupEntities++] = i;
+            }
+
             const char *type = ValueForKey(mapent, "type");
 
             if (!strcmp("surface", type) || !strcmp("surfacelight", type))

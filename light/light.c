@@ -98,7 +98,6 @@ vec3_t    skyColor;
 vec3_t    groundColor;
 float    *maoAmbient        = NULL;
 float    *maoDir            = NULL;
-int       ambient_grid_samples   = 48;
 int       ambient_samples = 32;
 float     ambient_testradius         = 512.0f;
 float     ambient_gatheradius  = 256.0f;

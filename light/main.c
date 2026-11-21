@@ -794,12 +794,6 @@ int main(int argc, char **argv) {
             if (game->rad_ao_intensity < 0.0f) game->rad_ao_intensity = 0.0f;
             if (game->rad_ao_intensity > 1.0f) game->rad_ao_intensity = 1.0f;
             i++;
-        } else if (!strcmp(argv[i], "-ambient_grid_samples")) {
-            if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_grid_samples requires a numeric value");
-            ambient_grid_samples = atoi(argv[i + 1]);
-            if (ambient_grid_samples < 4)   ambient_grid_samples = 4;
-            if (ambient_grid_samples > 512) ambient_grid_samples = 512;
-            i++;
         } else if (!strcmp(argv[i], "-ambient_samples")) {
             if (i + 1 >= argc || argv[i + 1][0] == '-') Error("-ambient_samples requires a numeric value");
             ambient_samples = atoi(argv[i + 1]);
@@ -932,8 +926,7 @@ int main(int argc, char **argv) {
                 "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n");
         _printf("   radiosity <F>       = set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
-                "   ambient_grid_samples <N>      = set hemisphere ray count per GRID point for macro ambient (default: 48)\n"
-                "   ambient_samples <N> = set hemisphere ray count per LIGHTMAP TEXEL for macro ambient (default: 32)\n"
+                "   ambient_samples <N>   = set hemisphere ray count per GRID point for macro ambient (default: 32)\n"
                 "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
                 "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
                 "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n");

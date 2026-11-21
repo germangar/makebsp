@@ -113,6 +113,7 @@ A new volumetric ambient occlusion pass computes spatial "openness" for both the
 The `func_light` entity allows mappers to create complex light setups directly from brush geometry without any shader scripting.
 - **Surface & Spot Lights:** Any brush surface can be instantly turned into an emissive light source or a spotlight emitter.
 - **Ease of Use:** Mappers can control light intensity, color, and attenuation directly via entity keys, making high-quality emissive lighting accessible without modifying assets.
+- **Render-Only Fixtures:** The `nosolid` key (aliases: `nonsolid`, or `collisiontype none`/`nosolid`/`nonsolid`/`0`) makes a func_light's brushes non-solid while fully preserving rendering and light emission.
 
 
 ### 8. In-Editor Configurable Surface Colors & Transparency
@@ -462,6 +463,7 @@ Converts standard map brushes into a continuous, smoothed triangle soup (mesh). 
 - **decalgroup**: Used by `_decal` entities. If the `_decal` entity specifies a `decalgroup` key, its projection will only be applied to brushes, patches, and models that share the exact same `decalgroup` name.
 - **chamfer_convexwidth**: Overrides the chamfer width for convex edges on this entity's surfaces.
 - **chamfer_concavewidth**: Overrides the chamfer width for concave edges on this entity's surfaces.
+- **nosolid**: (Aliases: `nonsolid`, or `collisiontype` with value `none`, `nosolid`, `nonsolid`, or `0`). Makes the entity render-only: its brushes produce no collision brushes in the BSP (they are forced to detail and excluded from all leafbrush references and from the brush lumps), and its solid patches no longer generate the invisible collision twin when cooked through `-patchtris`. Rendering and light emission are fully preserved. If such geometry is the only thing sealing the map, the map will leak — this is intended.
 
 ### Entity: light
 

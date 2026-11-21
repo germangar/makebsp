@@ -349,8 +349,7 @@ extern vec3_t skyColor, groundColor;    // hemisphere ambient colors
 extern float  *maoAmbient;             // [numGridPoints*3] pre-baked ambient RGB
 extern float  *maoDir;                 // [numGridPoints*3] pre-baked ambient direction
 extern float  *gridResolvedOrigins;    // [numGridPoints*3] per-cell sampling origin (lattice point, or the relocated open point for solid cells)
-extern int     ambient_grid_samples;    // rays per grid point (default 48)
-extern int     ambient_samples;         // rays per lightmap texel (default 32)
+extern int     ambient_samples;         // hemisphere rays per grid point in the MAO probe pass (default 32)
 extern float   ambient_testradius;      // max ray length in world units (default 512)
 extern float   ambient_gatheradius;   // radius for gathering from irradiance probes (default 256)
 extern qboolean ambient_enabled;         // true if sky/ground color is non-zero

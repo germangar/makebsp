@@ -189,7 +189,7 @@ void RunMAOPass(void)
     if (numGridPoints <= 0)
         return;
 
-    _printf("--- RunMAOPass (Ambient Pre-computation) ---\n");
+    _printf("--- RunMAOPass (Ambient Pre-computation, %i samples/gridpoint) ---\n", ambient_samples);
     if (!maoAmbient)
     {
         maoAmbient = Q_Alloc(numGridPoints * 3 * sizeof(float));
@@ -592,7 +592,7 @@ void LightAmbient(void)
     double start, end;
     if (!ambient_enabled)
         return;
-    _printf("--- TraceAmbient (%i samples/texel) ---\n", ambient_samples);
+    _printf("--- TraceAmbient ---\n");
     start = I_FloatTime();
     RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, TraceAmbient);
     end = I_FloatTime();

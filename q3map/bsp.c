@@ -194,8 +194,9 @@ void ProcessWorldModel(void)
     PrintFuncTrisoupSummary();
 
     // Global -patchtris cook: every remaining world patch becomes trisoup.
-    // nosolidGroupEntities carries the nosolid func_group indices (snapshotted
-    // in ProcessMapEntities) so their patches cook without collision twins.
+    // nonsolidGroupEntities carries the nosolid func_group / func_light
+    // indices (snapshotted in ProcessMapEntities) so their patches cook
+    // without collision twins.
     if (patchtris)
     {
         _printf("----- PromoteAllPatchesToTrisoups -----\n");

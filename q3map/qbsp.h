@@ -654,7 +654,7 @@ void PromoteAllPatchesToTrisoups(const int *ftEntities, int ftEntCount,
 extern qboolean patchtris;
 extern float    patchtrisSubdivide;
 
-// map.c - nosolid func_group entity index snapshot (see map.c)
+// map.c - nosolid func_group / func_light entity index snapshot (see map.c)
 extern int nonsolidGroupEntities[MAX_MAP_ENTITIES];
 extern int numNonsolidGroupEntities;
 
