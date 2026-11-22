@@ -923,13 +923,12 @@ int main(int argc, char **argv) {
                 "   rad_min_energy <F>= set min luxel energy to spawn an emitter\n"
                 "   rad_interval <I>  = set sparse grid interval (1=Every luxel, default 4=4x4 blocks)\n"
                 "   rad_color_ratio <F>= set greyscale(0.0) vs color(1.0) bleeding\n"
-                "   rad_voxelsize <F> = set the world-space size of reconstruction voxels\n");
+                "   rad_voxelsize <F> = set the world-space size of reconstruction voxels (default: sampleSize * rad_interval)\n");
         _printf("   radiosity <F>       = set final bounce energy multiplier\n"
                 "   rad_ao_intensity <F>= set crease ambient occlusion amount (0.0=none, 1.0=max crease darkness, default: 0.5)\n"
                 "   ambient_samples <N>   = set hemisphere ray count per GRID point for macro ambient (default: 32)\n"
                 "   ambient_testradius <F>       = set macro ambient occlusion ray length in world units (default: 512)\n"
-                "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n"
-                "   rad_voxelsize <F>    = set radiosity voxel size in world units (default: 256.0)\n");
+                "   ambient_gatheradius <F> = set gather radius for spherical interpolation in world units (default: 256)\n");
         _printf("                         Worldspawn: ambient_sky <R G B>\n"
                 "   exposurefilter <type>   = highlight compression (softknee, reinhard, filmic)\n"
                 "   saturation <F>   = set global light saturation multiplier (default: 1.0)\n"

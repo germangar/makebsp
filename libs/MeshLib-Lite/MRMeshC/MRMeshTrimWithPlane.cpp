@@ -87,39 +87,84 @@ void mrTrimMiscModelMesh(
     uvs.resize(mesh.points.capacity());
     colors.resize(mesh.points.capacity());
 
+    // Phase 0 instrumentation (print/check only, no behavior change):
+    // The planned attribute fix relies on MeshLib's splitEdge topology —
+    //   org(eOrig) == dest(eNew) == the newly created vertex,
+    //   org(eNew)  and dest(eOrig) == the two pre-plane endpoints.
+    // NDEBUG is always defined in this project's build, so these are runtime
+    // integer checks counted per split, not assert()s.
+    int cCallbacks = 0;
+    int cSplits = 0;
+    int cMappingWarnings = 0;
+    int vertSizeBeforePlane = 0;
+
     for (int p = 0; p < numPlanes; ++p) {
+        vertSizeBeforePlane = (int)mesh.topology.vertSize();
         MR::Plane3f plane( { planes[p].n.x, planes[p].n.y, planes[p].n.z }, planes[p].d );
         
         auto onEdgeSplit = [&]( MR::EdgeId eOrig, MR::EdgeId eNew, float w ) {
-            MR::VertId v1 = mesh.topology.org( eOrig );
-            MR::VertId v2 = mesh.topology.dest( eNew );
-            MR::VertId vNew = mesh.topology.org( eNew );
+            ++cCallbacks;
+            if ( mesh.topology.org( eOrig ) != mesh.topology.dest( eNew ) )
+                ++cMappingWarnings;   // halves disagree on the split vertex
+            if ( (int)mesh.topology.org( eOrig ).get() <  vertSizeBeforePlane )
+                ++cMappingWarnings;   // "new" vertex is not fresh this plane
+            if ( (int)mesh.topology.org( eNew ).get() >= vertSizeBeforePlane )
+                ++cMappingWarnings;   // origin endpoint is not a pre-plane vertex
+            if ( (int)mesh.topology.dest( eOrig ).get() >= vertSizeBeforePlane )
+                ++cMappingWarnings;   // dest endpoint is not a pre-plane vertex
 
-            size_t maxReq = std::max({ (size_t)v1.get(), (size_t)v2.get(), (size_t)vNew.get() }) + 1024;
+            // Phase 1 fix: after Mesh::splitEdge( eOrig ) the new vertex is at
+            // org(eOrig) == dest(eNew); the original positive-side endpoint is
+            // org(eNew) and the original negative-side endpoint is dest(eOrig).
+            // w is the interpolation fraction from the origin endpoint toward
+            // the destination endpoint (attr[N] = attr[origin]*(1-w) + attr[dest]*w).
+            // The previous code read org(eOrig)/dest(eNew) — both the new
+            // vertex — and wrote org(eNew) — the original endpoint — leaving
+            // every cut vertex zero-initialized and corrupting retained verts.
+            MR::VertId vNew = mesh.topology.org( eOrig );   // the split vertex
+            MR::VertId vA   = mesh.topology.org( eNew );    // positive-side endpoint
+            MR::VertId vB   = mesh.topology.dest( eOrig );  // negative-side endpoint
+
+            size_t maxReq = std::max({ (size_t)vNew.get(), (size_t)vA.get(), (size_t)vB.get() }) + 1024;
             if (maxReq > normals.size()) normals.resize(maxReq);
             if (maxReq > uvs.size()) uvs.resize(maxReq);
             if (maxReq > colors.size()) colors.resize(maxReq);
 
+            // With correct maxReq sizing these fallbacks are unreachable;
+            // firing one means a MeshLib split-semantics regression.
+            static bool warnedAttrFallback = false;
+            auto noteAttrFallback = [&]() {
+                if (!warnedAttrFallback) {
+                    printf("WARNING: mrTrim attribute fallback used (vertex id out of range)\n");
+                    warnedAttrFallback = true;
+                }
+            };
+
             if (inNormals) {
-                MR::Vector3f n1 = (v1.get() < (int)normals.size()) ? normals[v1.get()] : MR::Vector3f(0,0,1);
-                MR::Vector3f n2 = (v2.get() < (int)normals.size()) ? normals[v2.get()] : MR::Vector3f(0,0,1);
-                MR::Vector3f n = n1 * w + n2 * (1.0f - w);
+                MR::Vector3f n1, n2;
+                if (vA.get() < (int)normals.size()) n1 = normals[vA.get()]; else { n1 = MR::Vector3f(0,0,1); noteAttrFallback(); }
+                if (vB.get() < (int)normals.size()) n2 = normals[vB.get()]; else { n2 = MR::Vector3f(0,0,1); noteAttrFallback(); }
+                MR::Vector3f n = n1 * (1.0f - w) + n2 * w;
                 float len = n.length();
                 if (len > 1e-6f) n /= len;
                 normals[vNew.get()] = n;
             }
             if (inUVs) {
-                MR::Vector2f uv1 = (v1.get() < (int)uvs.size()) ? uvs[v1.get()] : MR::Vector2f(0,0);
-                MR::Vector2f uv2 = (v2.get() < (int)uvs.size()) ? uvs[v2.get()] : MR::Vector2f(0,0);
-                uvs[vNew.get()] = uv1 * w + uv2 * (1.0f - w);
+                MR::Vector2f uv1, uv2;
+                if (vA.get() < (int)uvs.size()) uv1 = uvs[vA.get()]; else { uv1 = MR::Vector2f(0,0); noteAttrFallback(); }
+                if (vB.get() < (int)uvs.size()) uv2 = uvs[vB.get()]; else { uv2 = MR::Vector2f(0,0); noteAttrFallback(); }
+                uvs[vNew.get()] = uv1 * (1.0f - w) + uv2 * w;
             }
             if (inColors) {
-                Rgba c1 = (v1.get() < (int)colors.size()) ? colors[v1.get()] : Rgba{255,255,255,255};
-                Rgba c2 = (v2.get() < (int)colors.size()) ? colors[v2.get()] : Rgba{255,255,255,255};
-                colors[vNew.get()].r = (unsigned char)(c1.r * w + c2.r * (1.0f - w));
-                colors[vNew.get()].g = (unsigned char)(c1.g * w + c2.g * (1.0f - w));
-                colors[vNew.get()].b = (unsigned char)(c1.b * w + c2.b * (1.0f - w));
-                colors[vNew.get()].a = (unsigned char)(c1.a * w + c2.a * (1.0f - w));
+                Rgba c1, c2;
+                if (vA.get() < (int)colors.size()) c1 = colors[vA.get()]; else { c1 = Rgba{255,255,255,255}; noteAttrFallback(); }
+                if (vB.get() < (int)colors.size()) c2 = colors[vB.get()]; else { c2 = Rgba{255,255,255,255}; noteAttrFallback(); }
+                // Round-to-nearest per component; there is no old attribute
+                // behavior worth preserving (cut vertices were simply zeroed).
+                colors[vNew.get()].r = (unsigned char)(c1.r * (1.0f - w) + c2.r * w + 0.5f);
+                colors[vNew.get()].g = (unsigned char)(c1.g * (1.0f - w) + c2.g * w + 0.5f);
+                colors[vNew.get()].b = (unsigned char)(c1.b * (1.0f - w) + c2.b * w + 0.5f);
+                colors[vNew.get()].a = (unsigned char)(c1.a * (1.0f - w) + c2.a * w + 0.5f);
             }
         };
 
@@ -127,7 +172,16 @@ void mrTrimMiscModelMesh(
         trimParams.plane = plane;
         trimParams.onEdgeSplitCallback = onEdgeSplit;
         MR::trimWithPlane(mesh, trimParams);
+        // Independent split count: vertex slots created by this plane
+        // (pack() at the end removes dead verts, so measure inside the loop).
+        cSplits += (int)mesh.topology.vertSize() - vertSizeBeforePlane;
     }
+
+    if ( cMappingWarnings > 0 )
+        printf("WARNING: mrTrim: %d split-callbacks, %d splits, %d MAPPING CHECK FAILURES\n",
+            cCallbacks, cSplits, cMappingWarnings);
+    else
+        printf("  mrTrim: mesh callbacks=%d splits=%d\n", cCallbacks, cSplits);
 
     MR::VertMap outVmap;
     mesh.pack( (MR::FaceMap*)nullptr, &outVmap );

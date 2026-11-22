@@ -13,6 +13,54 @@ void StoreFuncTrimOperator(funcTrimOperator_t *op) {
     g_csgOps[g_numCsgOps++] = *op;
 }
 
+// --- func_trim Phase 0 instrumentation (print/count only, no behavior change) ---
+
+static unsigned int trimGeomDigest(const float *positions, int numVerts, const int *indices, int numIndices)
+{
+    unsigned int h = 2166136261u; // FNV-1a 32-bit
+    const unsigned char *b;
+    size_t n, i;
+
+    b = (const unsigned char *)positions;
+    n = (size_t)numVerts * 3 * sizeof(float);
+    for (i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+
+    b = (const unsigned char *)indices;
+    n = (size_t)numIndices * sizeof(int);
+    for (i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+
+    return h;
+}
+
+static int c_trimNoChange, c_trimApplied, c_trimTrimmedAway;
+static int c_trimZeroNormals, c_trimZeroColors, c_trimZeroUVs;
+
+static void TrimLogMesh(modelInstance_t *inst, int j, miscModelMesh_t *mm, const char *path)
+{
+    unsigned int digest = 0;
+    int zn = 0, zc = 0, zu = 0;
+    int v;
+
+    if (mm->numVerts > 0 && mm->numIndices > 0 && mm->positions && mm->indices)
+        digest = trimGeomDigest(mm->positions, mm->numVerts, mm->indices, mm->numIndices);
+
+    for (v = 0; v < mm->numVerts; v++) {
+        if (mm->normals && mm->normals[v*3+0] == 0.0f && mm->normals[v*3+1] == 0.0f && mm->normals[v*3+2] == 0.0f)
+            zn++;
+        if (mm->colors && mm->colors[v*4+0] == 0 && mm->colors[v*4+1] == 0 && mm->colors[v*4+2] == 0 && mm->colors[v*4+3] == 0)
+            zc++;
+        if (mm->st && mm->st[v*2+0] == 0.0f && mm->st[v*2+1] == 0.0f)
+            zu++;
+    }
+
+    c_trimZeroNormals += zn;
+    c_trimZeroColors  += zc;
+    c_trimZeroUVs     += zu;
+
+    _printf("  func_trim[%s]: mesh %d/%d of %s geom-digest=%08x verts=%d idx=%d zero(nrm/rgba/uv)=%d/%d/%d\n",
+        path, j+1, inst->numMeshes, inst->modelName, digest, mm->numVerts, mm->numIndices, zn, zc, zu);
+}
+
 void FreeFuncTrimOperators(void) {
     // funcTrimOperator_t contains only plain plane_t structs — no heap resources.
     g_numCsgOps = 0;
@@ -23,6 +71,10 @@ void PerformMeshCSG(int startInst, int endInst) {
         return;
 
     _printf("--- PerformMeshCSG ---\n");
+
+    // Phase 0 instrumentation counters (per call)
+    c_trimNoChange = c_trimApplied = c_trimTrimmedAway = 0;
+    c_trimZeroNormals = c_trimZeroColors = c_trimZeroUVs = 0;
 
     for (int i = startInst; i < endInst; i++) {
         modelInstance_t *inst = &modelInstances[i];
@@ -123,21 +175,45 @@ void PerformMeshCSG(int startInst, int endInst) {
                 mm->numIndices     = 0;
                 mm->wasCut         = qtrue;
                 mm->hasOriginalUVs = qfalse;
+                c_trimTrimmedAway++;
+                TrimLogMesh(inst, j, mm, "trimmed-away");
                 _printf("  func_trim: mesh %d of %s completely trimmed away\n", j, inst->modelName);
                 continue;
             }
 
+            // Phase 2 fix: exact equivalence decides "no change". The old
+            // check compared vertex counts only, which silently discards real
+            // trims whenever dropped verts happen to equal added splits (e.g.
+            // an equatorial cut of a box: drops 4, adds 4). If positions and
+            // indices are bit-identical, nothing downstream can observe a
+            // difference, so the fast path is safe by construction.
             int oldNumIndices = mm->numIndices;
-            if (newNumVerts == mm->numVerts) {
+            int oldNumVerts = mm->numVerts;
+            qboolean trimNoChange =
+                (newNumVerts == mm->numVerts) &&
+                (newNumIndices == mm->numIndices) &&
+                (newNumVerts == 0 ||
+                 memcmp(newPositions, mm->positions,
+                        (size_t)newNumVerts * 3 * sizeof(float)) == 0) &&
+                (newNumIndices == 0 ||
+                 memcmp(newIndices, mm->indices,
+                        (size_t)newNumIndices * sizeof(int)) == 0);
+
+            if (trimNoChange) {
                 // No change
                 free(newPositions);
                 free(newNormals);
                 free(newSt);
                 free(newColors);
                 free(newIndices);
+                c_trimNoChange++;
+                TrimLogMesh(inst, j, mm, "no-change");
                 continue;
             }
-            
+
+            if (newNumVerts == mm->numVerts)
+                _printf("  func_trim: mesh %d/%d of %s changed with equal vertex counts (was silently discarded before)\n",
+                    j+1, inst->numMeshes, inst->modelName);
             // Step 10: Recompute AABB for updated mesh
             vec3_t newMins, newMaxs;
             ClearBounds(newMins, newMaxs);
@@ -159,13 +235,21 @@ void PerformMeshCSG(int startInst, int endInst) {
             mm->wasCut         = qtrue;
             mm->hasOriginalUVs = qfalse;  // Force xatlas lightmap regeneration
 
-            if (mm->numIndices != newNumIndices || mm->numVerts != newNumVerts) {
+            if (newNumVerts != oldNumVerts || newNumIndices != oldNumIndices) {
             _printf("  func_trim: mesh %d/%d of %s (%d tris -> %d tris)\n",
                 j+1, inst->numMeshes, inst->modelName,
                 oldNumIndices / 3, newNumIndices / 3);
             }
+            c_trimApplied++;
+            TrimLogMesh(inst, j, mm, "applied");
         }
     }
+
+    // Phase 0 instrumentation summary (print-only; deterministic across runs)
+    _printf("func_trim summary: applied=%d no-change=%d trimmed-away=%d\n",
+        c_trimApplied, c_trimNoChange, c_trimTrimmedAway);
+    _printf("func_trim zero-attribute KPIs: normals=%d colors=%d uvs=%d\n",
+        c_trimZeroNormals, c_trimZeroColors, c_trimZeroUVs);
 }
 
 void PerformMeshDecimation(int startInst, int endInst)

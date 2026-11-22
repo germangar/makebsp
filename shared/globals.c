@@ -36,11 +36,12 @@ game_t gameTemplates[MAX_GAMES] = {
 		"qfusion",
 		".",        // rootDir
         "",         // userDir
-#ifdef RELEASE_BUILD
-        "basewf",   // gameDir
-#else
+        // gameDir: intentionally identical in both build flavors. This profile
+        // is re-exported to makebspdata/qfusion.json on every run (by design),
+        // and branching the value on RELEASE_BUILD made the tracked file
+        // oscillate with whichever flavor compiled last. Game-specific dirs
+        // live in their own profiles (e.g. warfork.json gameDir "basewf").
         "",         // gameDir
-#endif
 		"FBSP",
 		1,
 		18,
