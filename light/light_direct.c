@@ -9,6 +9,23 @@
 int *surfaceWorkOrder;
 extern int *texelSurfaceDebug;
 
+// ---------------------------------------------------------------------------
+// Ticket wavefront instrumentation (Phase 0 — print/count only).
+// Filled by the ticket-wavefront conversion in later phases; see
+// studies/wavefront_ticket_embree_plan.md §5.1. Integer event counts only:
+// updates use #pragma omp atomic, so totals are exact regardless of order and
+// output determinism is unaffected. No float sums ever use these.
+// ---------------------------------------------------------------------------
+
+static int c_ticketsGenerated;
+static int c_ticketsSubmitted;
+static int c_ticketsBlocked;
+static int c_ticketsContributed;
+static int c_ticketsRejected;
+static int c_ticketGroups;
+static int c_ticketFlushes;
+static int c_groupOverflowGrow;
+
 // 8-point Rotated Grid (tilted ~26.6 degrees)
 static const float ssPattern8[][2] = {
     {0.000f, 0.000f}, // center
@@ -2661,6 +2678,12 @@ void LightWorld(void)
     double start, end;
     int i;
 
+    // Reset ticket instrumentation for this run (Phase 0: counters stay zero
+    // until the ticket-wavefront conversion fills them in a later phase).
+    c_ticketsGenerated = c_ticketsSubmitted = c_ticketsBlocked = 0;
+    c_ticketsContributed = c_ticketsRejected = c_ticketGroups = 0;
+    c_ticketFlushes = c_groupOverflowGrow = 0;
+
     surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
     {
@@ -2694,6 +2717,11 @@ void LightWorld(void)
     end = I_FloatTime();
     _printf("\n");
     _printf("%5.0f seconds elapsed in TraceLights\n", end - start);
+
+    // Phase 0 instrumentation: ticket counters summary (print-only).
+    _printf("TraceLights tickets: generated=%d submitted=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
+            c_ticketsGenerated, c_ticketsSubmitted, c_ticketGroups, c_ticketFlushes,
+            c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
 }
 
 void DilateDeluxeDirections(void)

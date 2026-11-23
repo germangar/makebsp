@@ -905,6 +905,14 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
                              trace_t *trace, qboolean testAll, traceWork_t *tw)
 {
     int i;
+
+    // Phase 0 instrumentation: golden total ray count. Incremented from many
+    // worker threads, hence the atomic; integer event count, so the total is
+    // exact regardless of order. The ticket-wavefront phases gate on this
+    // number staying identical (see studies/wavefront_ticket_embree_plan.md).
+    #pragma omp atomic
+    c_totalTrace++;
+
     struct RTCRayHit rayhit;
     memset(&rayhit, 0, sizeof(rayhit));
     struct MyRayQueryContext context;

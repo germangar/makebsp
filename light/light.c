@@ -1993,6 +1993,62 @@ LightMain
 
 ========
 */
+// ---------------------------------------------------------------------------
+// Phase 0 instrumentation (print-only): digest of the direct-lighting output,
+// captured immediately after LightWorld() and before LightRadiosity() /
+// LightAmbient() / DownConvert mutate the buffers. See
+// studies/wavefront_ticket_embree_plan.md §5.3.
+// ---------------------------------------------------------------------------
+
+static unsigned int LightDigestAddFNV1a(unsigned int h, const void *data, size_t bytes)
+{
+    const unsigned char *b = (const unsigned char *)data;
+    size_t i;
+
+    for (i = 0; i < bytes; i++) {
+        h ^= b[i];
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static void PrintLightDigest(void)
+{
+    unsigned int digest = 2166136261u; // FNV-1a offset basis
+    unsigned int maskDigest = 2166136261u;
+    unsigned int unreachDigest = 2166136261u;
+    int numTex = numLightBytes / 3;
+    size_t texBytes = (size_t)numTex * sizeof(vec3_t);
+
+    if (numTex > 0 && lightFloats)
+        digest = LightDigestAddFNV1a(digest, lightFloats, texBytes);
+    // deluxe/energy/normal are allocated together (deluxeMap only) and have
+    // the same texel layout as lightFloats.
+    if (numTex > 0 && deluxeFloats)
+        digest = LightDigestAddFNV1a(digest, deluxeFloats, texBytes);
+    if (numTex > 0 && energyFloats)
+        digest = LightDigestAddFNV1a(digest, energyFloats, texBytes);
+    if (numTex > 0 && normalFloats)
+        digest = LightDigestAddFNV1a(digest, normalFloats, texBytes);
+
+    // Phase 0 addendum: the per-texel masks are also part of the state the
+    // radiosity/ambient passes consume, and they are mutated concurrently
+    // during the direct pass. Digest them separately so run-to-run mask
+    // drift is visible even when the float digest is stable.
+    if (numTex > 0 && lightAlphaMask)
+        maskDigest = LightDigestAddFNV1a(maskDigest, lightAlphaMask, (size_t)numTex);
+    if (unreachableMask)
+        unreachDigest = LightDigestAddFNV1a(unreachDigest, unreachableMask,
+                                            (size_t)((numTex + 7) / 8));
+
+    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x\n",
+            digest,
+            deluxeFloats ? "" : " (no deluxe buffers)",
+            c_totalTrace,
+            lightAlphaMask ? maskDigest : 0,
+            unreachableMask ? unreachDigest : 0);
+}
+
 void LightMain(void)
 {
     float f;
@@ -2178,6 +2234,13 @@ void LightMain(void)
     
     if (!ambientonly) {
         LightWorld();
+    }
+
+    // Phase 0 instrumentation: per-stage digest of the direct-lighting state.
+    // Captured here (before LightRadiosity/LightAmbient change anything) so it
+    // gates exactly on the TraceLights/TraceGrid conversion work.
+    if (!ambientonly) {
+        PrintLightDigest();
     }
 
     if (!ambientonly && !directonly) {

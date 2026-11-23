@@ -439,6 +439,7 @@ qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
+extern int c_totalTrace; // light_trace.c: golden total of TraceLine_Embree calls (Phase 0 instrumentation)
 qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);
