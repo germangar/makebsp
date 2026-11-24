@@ -9,24 +9,23 @@
 int *surfaceWorkOrder;
 extern int *texelSurfaceDebug;
 
-// ---------------------------------------------------------------------------
-// Ticket wavefront instrumentation (Phase 0 — print/count only).
-// Filled by the ticket-wavefront conversion in later phases; see
-// studies/wavefront_ticket_embree_plan.md §5.1. Integer event counts only:
-// updates use #pragma omp atomic, so totals are exact regardless of order and
-// output determinism is unaffected. No float sums ever use these.
-// ---------------------------------------------------------------------------
-
-static int c_ticketsGenerated;
-static int c_ticketsSubmitted;
-static int c_ticketsBlocked;
-static int c_ticketsContributed;
-static int c_ticketsRejected;
-static int c_ticketGroups;
-static int c_ticketFlushes;
-static int c_groupOverflowGrow;
-static int c_ticketStrandWarnings;  // TEMP guard: batch non-empty at texel start
-static int c_ticketAppendWarnings;  // TEMP guard: Append returned NULL (reserve failed)
+// Ticket wavefront instrumentation (Phase 0 — print/count only; Phase 4:
+// shared with the grid-point families in light_ambient.c, hence non-static).
+// Integer event counts only: updates use #pragma omp atomic, so totals are
+// exact regardless of order and output determinism is unaffected. No float
+// sums ever use these.
+int c_ticketsGenerated;
+int c_ticketsSubmitted;
+int c_ticketsBlocked;
+int c_ticketsContributed;
+int c_ticketsRejected;
+int c_ticketGroups;
+int c_ticketFlushes;
+int c_groupOverflowGrow;
+int c_ticketStrandWarnings;  // guard: batch non-empty at texel start
+int c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
+int c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
+int c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
 
 // ---------------------------------------------------------------------------
 // Ticket batch helpers (Phase 1). Declared in light.h, unused until the
@@ -80,6 +79,27 @@ int TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
     c_ticketFlushes++;
 
     return n;
+}
+
+// Phase 4a: trace a SUBSET of the buffered tickets [first, first+count)
+// without touching batch->count — the caller manages the indices (adaptive
+// flushing around the grid contribution cap) and drops the remainder by
+// resetting count itself. Trace order = ticket order.
+int TicketBatch_FlushTracesRange(lightTicketBatch_t *batch, int first, int count, traceWork_t *tw)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        lightTicket_t *t = &batch->tickets[first + i];
+        TraceLine(t->origin, t->end, &t->trace, t->testAll, tw);
+        #pragma omp atomic
+        c_ticketsSubmitted++;
+    }
+
+    #pragma omp atomic
+    c_ticketFlushes++;
+
+    return count;
 }
 
 void TicketBatch_Free(lightTicketBatch_t *batch)
@@ -779,6 +799,7 @@ static qboolean TicketPrepare_SunPlane(const vec3_t origin, const vec3_t normal,
     }
     t->angle = angle;
     VectorCopy(normal, t->normal);
+    t->normalValid = qtrue;
 
     return qtrue;
 }
@@ -1093,6 +1114,7 @@ static qboolean TicketPrepare_Light(const light_t *light, const vec3_t origin,
         t->dist = dist;
         VectorCopy(n, t->dir);
         if (normal) VectorCopy(normal, t->normal); // NULL on the grid path (no consume there)
+        t->normalValid = (normal != NULL);
         t->add = 0.0f;
         t->angle = 0.0f;
         t->applyColorFilter = qfalse;
@@ -1200,6 +1222,7 @@ static qboolean TicketPrepare_Light(const light_t *light, const vec3_t origin,
         t->add = add;
         t->angle = surfaceAngle;
         if (normal) VectorCopy(normal, t->normal); // NULL on the grid path (no consume there)
+        t->normalValid = (normal != NULL);
         t->applyColorFilter = qfalse;
         t->testAll = qfalse;
 
@@ -2822,6 +2845,103 @@ float lightgridMaxDisplayIntensity = 0.0f;
 #define LIGHTGRID_MAO_MAX_SATURATION 0.25f
 #define LIGHTGRID_MAO_CALIBRATION 17.0f // Raw MAO values are tiny; this calibration lifts them to grid-scale energy. The profile/worldspawn knob is a relative multiplier to make it more user intuitive
 
+/*
+================
+TicketConsumeGridLightTickets
+
+Ticket wavefront (Phase 4a, Stage 3): consume grid direct tickets — finish
+each one into the caller's contributions[] slot (in order), then apply the
+selection fold exactly as the old inline loop did (tempColor/addSize/
+totalAddSize/averageDir/maxAddSize/dominantDir). Returns the number of
+tickets consumed; stops early when numCon reaches MAX_CONTRIBUTIONS (the
+caller drops the rest — ToDo W4 documents the old code's sun-at-cap
+overflow that this deliberately avoids).
+
+Parity notes:
+- Grid sun: cont.angle = 1.0f (TraceGrid always set it explicitly, :2912),
+  NOT the sun-plane falloff.
+- Grid lights have no receiver normal: pass NULL when !t->normalValid so
+  TicketFinish_Light's pointer branches behave exactly as the old
+  normal == NULL calls did.
+- contributions[] is written ONLY on success; failed slots stay stale,
+  which the old code also produced (its wrapper wrote partial fields into
+  the slot, but the slot is either overwritten by the next success or
+  never read — the folds iterate i < numCon).
+================
+*/
+static int TicketConsumeGridLightTickets(lightTicket_t *tickets, int n,
+                                         contribution_t *contributions, int *numCon,
+                                         float *maxAddSize, float *totalAddSize,
+                                         vec3_t averageDir, vec3_t dominantDir)
+{
+    contribution_t cont;
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+        qboolean ok;
+
+        if (t->light == NULL)
+        {
+            ok = TicketFinish_Sun(t, &cont);
+            if (ok)
+            {
+                cont.angle = 1.0f; // grid semantics: SunToPoint never set angle
+            }
+        }
+        else
+        {
+            ok = TicketFinish_Light(t, t->origin, t->normalValid ? t->normal : NULL, &cont);
+        }
+
+        if (ok)
+        {
+            vec3_t tempColor;
+
+            #pragma omp atomic
+            c_ticketsContributed++;
+
+            contributions[*numCon] = cont;
+
+            VectorScale(contributions[*numCon].irradiance, contributions[*numCon].angle, tempColor);
+            if (contributions[*numCon].gridAmbientScale > 0.0001f ||
+                contributions[*numCon].gridDirectScale > 0.0001f)
+            {
+                float addSize = VectorLength(tempColor);
+                *totalAddSize += addSize;
+                VectorMA(averageDir, addSize, contributions[*numCon].dir, averageDir);
+                if (addSize > *maxAddSize)
+                {
+                    *maxAddSize = addSize;
+                    VectorCopy(contributions[*numCon].dir, dominantDir);
+                }
+            }
+            (*numCon)++;
+
+            if (*numCon >= MAX_CONTRIBUTIONS)
+            {
+                return i + 1; // cap full: caller drops the rest (ToDo W4)
+            }
+        }
+        else
+        {
+            if (t->trace.passSolid)
+            {
+                #pragma omp atomic
+                c_ticketsBlocked++;
+            }
+            else
+            {
+                #pragma omp atomic
+                c_ticketsRejected++;
+            }
+        }
+    }
+
+    return n;
+}
+
 void TraceGrid(int num)
 {
     int x, y, z;
@@ -2883,49 +3003,104 @@ void TraceGrid(int num)
     numCon = 0;
     if (!nodirect)
     {
+        // Ticket wavefront (Phase 4a): grid direct via tickets. Same
+        // iteration order as today — the raw `lights` list (the grid uses
+        // the UNSORTED list, no deluxeSort here), then the sun.
+        // One group per grid point (plan §4.3).
+        #pragma omp atomic
+        c_ticketGroups++;
+        lightTicketBatch_t batch;
+        int batchCapacity = TICKET_BATCH;
+        if (batchCapacity < numLights + 2)
+        {
+            batchCapacity = numLights + 2;
+            #pragma omp atomic
+            c_groupOverflowGrow++;
+        }
+        TicketBatch_Init(&batch, batchCapacity);
+
         for (light = lights; light; light = light->next)
         {
-            if (LightContributionToPoint(light, origin, NULL, &contributions[numCon], tw))
+            lightTicket_t t;
+            memset(&t, 0, sizeof(t));
+            if (TicketPrepare_Light(light, origin, NULL, &t))
             {
-                vec3_t tempColor;
-                VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
-                if (contributions[numCon].gridAmbientScale > 0.0001f ||
-                    contributions[numCon].gridDirectScale > 0.0001f)
+                lightTicket_t *slot = TicketBatch_Append(&batch);
+                if (slot)
                 {
-                    float addSize = VectorLength(tempColor);
-                    totalAddSize += addSize;
-                    VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
-                    if (addSize > maxAddSize)
-                    {
-                        maxAddSize = addSize;
-                        VectorCopy(contributions[numCon].dir, dominantDir);
-                    }
+                    t.texelIdx = num;
+                    t.ssIdx = 0;
+                    *slot = t;
                 }
-                numCon++;
-                if (numCon >= MAX_CONTRIBUTIONS)
-                    break;
+                else
+                {
+                    #pragma omp atomic
+                    c_ticketAppendWarnings++;
+                }
+            }
+        }
+        {
+            lightTicket_t t;
+            memset(&t, 0, sizeof(t));
+            if (TicketPrepare_Sun(origin, &t, qtrue))
+            {
+                lightTicket_t *slot = TicketBatch_Append(&batch);
+                if (slot)
+                {
+                    t.texelIdx = num;
+                    t.ssIdx = 0;
+                    *slot = t;
+                }
+                else
+                {
+                    #pragma omp atomic
+                    c_ticketAppendWarnings++;
+                }
             }
         }
 
-        if (SunToPoint(origin, tw, &contributions[numCon], qtrue))
+        // Stage 2+3: adaptive flush+consume (plan §6 Phase 4, section 4.0b).
+        // 64-ticket chunks while the cap cannot be crossed inside a chunk
+        // (numCon < 1024-64), then single tickets so the stop lands exactly
+        // after the 1024th success — the old loop's trace set, exactly.
         {
-            contributions[numCon].angle = 1.0f; // SunToPoint doesn't set angle, default to 1
-            vec3_t tempColor;
-            VectorScale(contributions[numCon].irradiance, contributions[numCon].angle, tempColor);
-            if (contributions[numCon].gridAmbientScale > 0.0001f ||
-                contributions[numCon].gridDirectScale > 0.0001f)
+            int consumed = 0;
+            int total = batch.count;
+            while (consumed < total)
             {
-                float addSize = VectorLength(tempColor);
-                totalAddSize += addSize;
-                VectorMA(averageDir, addSize, contributions[numCon].dir, averageDir);
-                if (addSize > maxAddSize)
+                int want;
+                if (numCon >= MAX_CONTRIBUTIONS)
+                    break; // cap full: remaining tickets (incl. the sun) dropped
+                if (numCon >= MAX_CONTRIBUTIONS - 64)
+                    want = 1;
+                else
                 {
-                    maxAddSize = addSize;
-                    VectorCopy(contributions[numCon].dir, dominantDir);
+                    want = 64;
+                    if (want > total - consumed)
+                        want = total - consumed;
+                }
+                TicketBatch_FlushTracesRange(&batch, consumed, want, tw);
+                consumed += TicketConsumeGridLightTickets(&batch.tickets[consumed], want,
+                                                          contributions, &numCon,
+                                                          &maxAddSize, &totalAddSize,
+                                                          averageDir, dominantDir);
+            }
+            if (consumed < total)
+            {
+                #pragma omp atomic
+                c_ticketsDropped += (total - consumed);
+                if (numCon >= MAX_CONTRIBUTIONS)
+                {
+                    // The sun ticket was among the dropped ones. The old code
+                    // traced the sun ray here and then wrote contributions[1024]
+                    // (stack overflow, ToDo W4) — this skips both, counted.
+                    #pragma omp atomic
+                    c_gridCapSkips++;
                 }
             }
-            numCon++;
+            batch.count = 0;
         }
+        TicketBatch_Free(&batch);
     }
 
     if (totalAddSize > 0.00001f)
@@ -3182,23 +3357,24 @@ void LightWorld(void)
     _printf("%5.0f seconds elapsed in TraceLights\n", end - start);
 
     // Phase 0 instrumentation: ticket counters summary (print-only), with
-    // the Phase 3b invariant checks (exact global atomic totals, so the
-    // comparison is valid after all worker threads have completed).
-    _printf("TraceLights tickets: generated=%d submitted=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
-            c_ticketsGenerated, c_ticketsSubmitted, c_ticketGroups, c_ticketFlushes,
+    // the invariant checks (exact global atomic totals, so the comparison
+    // is valid after all worker threads have completed). `dropped` covers
+    // the Phase 4 grid-cap tickets that were generated but never traced.
+    _printf("TraceLights tickets: generated=%d submitted=%d dropped=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
+            c_ticketsGenerated, c_ticketsSubmitted, c_ticketsDropped, c_ticketGroups, c_ticketFlushes,
             c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
-    if (c_ticketsSubmitted != c_ticketsGenerated ||
+    if (c_ticketsSubmitted + c_ticketsDropped != c_ticketsGenerated ||
         c_ticketsBlocked + c_ticketsContributed + c_ticketsRejected != c_ticketsSubmitted)
     {
         _printf("WARNING: TraceLights ticket invariants violated "
-                "(submitted=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
-                c_ticketsSubmitted, c_ticketsGenerated,
+                "(submitted=%d dropped=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
+                c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
                 c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
     }
-    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow)
+    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips)
     {
-        _printf("TraceLights ticket guards: strand=%d appendNULL=%d overflowGrow=%d\n",
-                c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow);
+        _printf("TraceLights ticket guards: strand=%d appendNULL=%d overflowGrow=%d capSkips=%d\n",
+                c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips);
     }
 }
 

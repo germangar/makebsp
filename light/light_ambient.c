@@ -23,6 +23,92 @@ static void StratifiedUniformDir(int i, int N, float randU, float randV, vec3_t 
 ComputeMAOPoint
 ================
 */
+/*
+================
+TicketConsumeMAOProbes
+
+Ticket wavefront (Phase 4b, Stage 3): consume MAO hemisphere probes in
+generation order. Weight accumulation stays in the generation stage (it is
+trace-independent and the per-probe order is identical), so this applies
+only the trace outcome: clear → sky/ground color + direction accumulation,
+blocked → nothing. Hemisphere via ssIdx (0 = sky, 1 = ground).
+================
+*/
+static void TicketConsumeMAOProbes(lightTicket_t *tickets, int n,
+                                   float *skyAccum, float *groundAccum,
+                                   vec3_t dirAccum, float *skyWeight, float *groundWeight,
+                                   float skyLum, float groundLum)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (!t->trace.passSolid)
+        {
+            #pragma omp atomic
+            c_ticketsContributed++;
+
+            if (t->ssIdx == 0)
+            {
+                skyAccum[0] += t->angle * skyColor[0];
+                skyAccum[1] += t->angle * skyColor[1];
+                skyAccum[2] += t->angle * skyColor[2];
+                VectorMA(dirAccum, t->angle * skyLum, t->dir, dirAccum);
+            }
+            else
+            {
+                groundAccum[0] += t->angle * groundColor[0];
+                groundAccum[1] += t->angle * groundColor[1];
+                groundAccum[2] += t->angle * groundColor[2];
+                VectorMA(dirAccum, t->angle * groundLum, t->dir, dirAccum);
+            }
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsBlocked++;
+        }
+    }
+}
+
+/*
+================
+TicketConsumeBleedTickets
+
+Ticket wavefront (Phase 4b, Stage 3): consume grid ambient-bleed tickets in
+generation order. Bleed semantics (different from MAO!): blocked rays are
+skipped ENTIRELY — they add neither color nor weight.
+================
+*/
+static void TicketConsumeBleedTickets(lightTicket_t *tickets, int n,
+                                      vec3_t envColor, float *totalWeight)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (!t->trace.passSolid)
+        {
+            envColor[0] += t->dir[0] * t->angle;
+            envColor[1] += t->dir[1] * t->angle;
+            envColor[2] += t->dir[2] * t->angle;
+            *totalWeight += t->angle;
+
+            #pragma omp atomic
+            c_ticketsContributed++;
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsBlocked++;
+        }
+    }
+}
+
 void ComputeMAOPoint(int num)
 {
     int mod, x, y, z, i;
@@ -32,7 +118,8 @@ void ComputeMAOPoint(int num)
     float groundAccum[3] = {0, 0, 0};
     float skyWeight = 0.0f, groundWeight = 0.0f;
     int samples;
-    
+    lightTicketBatch_t batch;   // Ticket wavefront (Phase 4b)
+
     vec3_t dirAccum = {0, 0, 0};
     float skyLum = skyColor[0] * 0.299f + skyColor[1] * 0.587f + skyColor[2] * 0.114f;
     float groundLum = groundColor[0] * 0.299f + groundColor[1] * 0.587f + groundColor[2] * 0.114f;
@@ -71,6 +158,15 @@ void ComputeMAOPoint(int num)
 
     samples = ambient_samples;
 
+    // Ticket wavefront (Phase 4b): one group per grid point; the probe batch
+    // holds every hemisphere probe (capacity = sample count exactly).
+    #pragma omp atomic
+    c_ticketGroups++;
+    {
+        int batchCap = samples > 0 ? samples : 1;
+        TicketBatch_Init(&batch, batchCap);
+    }
+
     // Per-point random seed for jitter — uses the grid index hashed with
     // a large prime so neighbouring grid points get uncorrelated jitter.
     unsigned int seed = (unsigned int)num * 2654435761u;
@@ -82,7 +178,6 @@ void ComputeMAOPoint(int num)
     for (i = 0; i < skyN; i++)
     {
         vec3_t dir, end;
-        trace_t trace;
         float jU = fmodf(randU + (float)i * 0.618034f, 1.0f);  // golden ratio shuffle
         float jV = fmodf(randV + (float)i * 0.381966f, 1.0f);
 
@@ -96,15 +191,33 @@ void ComputeMAOPoint(int num)
         float NdotL = dir[2];
         float w = (NdotL * 0.5f + 0.5f);
         w = w * w;
-        
+
         skyWeight += w;
-        TraceLine(origin, end, &trace, qfalse, tw);
-        if (!trace.passSolid)
+
+        // Ticket wavefront: generate the probe; the consume applies the
+        // clear/blocked outcome (TicketConsumeMAOProbes below).
         {
-            skyAccum[0] += w * skyColor[0];
-            skyAccum[1] += w * skyColor[1];
-            skyAccum[2] += w * skyColor[2];
-            VectorMA(dirAccum, w * skyLum, dir, dirAccum);
+            lightTicket_t t;
+            lightTicket_t *slot;
+            memset(&t, 0, sizeof(t));
+            t.light = NULL;
+            VectorCopy(origin, t.origin);
+            VectorCopy(end, t.end);
+            VectorCopy(dir, t.dir);          // probe direction (consume uses it)
+            t.angle = w;                     // probe weight
+            t.testAll = qfalse;
+            t.applyColorFilter = qfalse;
+            t.normalValid = qtrue;
+            t.texelIdx = num;
+            t.ssIdx = 0;                     // sky hemisphere
+            slot = TicketBatch_Append(&batch);
+            if (slot)
+                *slot = t;
+            else
+            {
+                #pragma omp atomic
+                c_ticketAppendWarnings++;
+            }
         }
     }
 
@@ -113,7 +226,6 @@ void ComputeMAOPoint(int num)
     for (i = 0; i < groundN; i++)
     {
         vec3_t dir, end;
-        trace_t trace;
         float jU = fmodf(randU + (float)i * 0.618034f + 0.5f, 1.0f);
         float jV = fmodf(randV + (float)i * 0.381966f + 0.5f, 1.0f);
 
@@ -128,17 +240,42 @@ void ComputeMAOPoint(int num)
         float NdotL = -dir[2]; // Normal is down (0, 0, -1), dir is down
         float w = (NdotL * 0.5f + 0.5f);
         w = w * w;
-        
+
         groundWeight += w;
-        TraceLine(origin, end, &trace, qfalse, tw);
-        if (!trace.passSolid)
+
         {
-            groundAccum[0] += w * groundColor[0];
-            groundAccum[1] += w * groundColor[1];
-            groundAccum[2] += w * groundColor[2];
-            VectorMA(dirAccum, w * groundLum, dir, dirAccum);
+            lightTicket_t t;
+            lightTicket_t *slot;
+            memset(&t, 0, sizeof(t));
+            t.light = NULL;
+            VectorCopy(origin, t.origin);
+            VectorCopy(end, t.end);
+            VectorCopy(dir, t.dir);
+            t.angle = w;
+            t.testAll = qfalse;
+            t.applyColorFilter = qfalse;
+            t.normalValid = qtrue;
+            t.texelIdx = num;
+            t.ssIdx = 1;                     // ground hemisphere
+            slot = TicketBatch_Append(&batch);
+            if (slot)
+                *slot = t;
+            else
+            {
+                #pragma omp atomic
+                c_ticketAppendWarnings++;
+            }
         }
     }
+
+    // Stage 2+3: flush all probes, consume in generation order (sky probes
+    // first, then ground — the old interleave order per hemisphere).
+    {
+        int n = TicketBatch_FlushTraces(&batch, tw);
+        TicketConsumeMAOProbes(batch.tickets, n, skyAccum, groundAccum, dirAccum,
+                               &skyWeight, &groundWeight, skyLum, groundLum);
+    }
+    TicketBatch_Free(&batch);
 
     free(tw);
 
@@ -330,7 +467,15 @@ qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
 
     VectorClear(envColor);
     float totalWeight = 0.0f;
-    
+
+    // Ticket wavefront (Phase 4b): one group per call. Fixed modest capacity
+    // with flush-on-full — the fold is a straight accumulation (no group
+    // sub-state), so chunked flushing is bit-identical to the old interleave.
+    lightTicketBatch_t batch;
+    #pragma omp atomic
+    c_ticketGroups++;
+    TicketBatch_Init(&batch, 256);
+
     for (int gz = iz_min; gz <= iz_max; gz++) {
         for (int gy = iy_min; gy <= iy_max; gy++) {
             for (int gx = ix_min; gx <= ix_max; gx++) {
@@ -359,18 +504,45 @@ qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw)
 
                 float w = 1.0f - (distSq / gatherRadiusSq);
 
-                // cull 4: Trace (most expensive).
-                trace_t trace;
-                TraceLine(origin, gPos, &trace, qfalse, tw);
-                if (trace.passSolid) continue; // Skip blocked; do NOT add to totalWeight.
-                
-                envColor[0] += gCol[0] * w;
-                envColor[1] += gCol[1] * w;
-                envColor[2] += gCol[2] * w;
-                totalWeight += w;
+                // cull 4 (the trace) becomes a ticket; the consume applies the
+                // clear/blocked outcome. Flush-on-full keeps the batch small.
+                if (batch.count >= batch.capacity)
+                {
+                    int fn = TicketBatch_FlushTraces(&batch, tw);
+                    TicketConsumeBleedTickets(batch.tickets, fn, envColor, &totalWeight);
+                }
+                {
+                    lightTicket_t t;
+                    lightTicket_t *slot;
+                    memset(&t, 0, sizeof(t));
+                    t.light = NULL;
+                    VectorCopy(origin, t.origin);
+                    VectorCopy(gPos, t.end);
+                    VectorCopy(gCol, t.dir);         // neighbor color (consume uses it)
+                    t.angle = w;                     // weight
+                    t.testAll = qfalse;
+                    t.applyColorFilter = qfalse;
+                    t.normalValid = qtrue;
+                    t.texelIdx = gidx;
+                    t.ssIdx = 0;
+                    slot = TicketBatch_Append(&batch);
+                    if (slot)
+                        *slot = t;
+                    else
+                    {
+                        #pragma omp atomic
+                        c_ticketAppendWarnings++;
+                    }
+                }
             }
         }
     }
+
+    {
+        int n = TicketBatch_FlushTraces(&batch, tw);
+        TicketConsumeBleedTickets(batch.tickets, n, envColor, &totalWeight);
+    }
+    TicketBatch_Free(&batch);
 
     if (totalWeight > 0.0001f) {
         envColor[0] /= totalWeight;

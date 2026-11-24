@@ -456,6 +456,7 @@ typedef struct lightTicket_s {
 	float          angle;          // sun: SunToPlane falloff; point/spot: surfaceAngle
 	qboolean       applyColorFilter; // sun only (direct path: always qtrue)
 	qboolean       testAll;        // sun traces with qtrue (SunToPoint); lights qfalse
+	qboolean       normalValid;    // qfalse when the receiver had no normal (grid path)
 
 	// outputs
 	trace_t        trace;          // filled by the flush stage
@@ -473,7 +474,15 @@ typedef struct lightTicketBatch_s {
 void            TicketBatch_Init(lightTicketBatch_t *batch, int capacity);
 lightTicket_t  *TicketBatch_Append(lightTicketBatch_t *batch); // NULL when full
 int             TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw); // returns count traced
+int             TicketBatch_FlushTracesRange(lightTicketBatch_t *batch, int first, int count, traceWork_t *tw); // no count reset
 void            TicketBatch_Free(lightTicketBatch_t *batch);
+
+// Ticket wavefront counters (defined in light_direct.c; incremented from
+// light_ambient.c too since Phase 4). Integer event counts — atomics only.
+extern int c_ticketsGenerated, c_ticketsSubmitted, c_ticketsBlocked;
+extern int c_ticketsContributed, c_ticketsRejected, c_ticketGroups;
+extern int c_ticketFlushes, c_groupOverflowGrow, c_ticketsDropped;
+extern int c_gridCapSkips, c_ticketStrandWarnings, c_ticketAppendWarnings;
 
 void InitTrace(void);
 void InitTracingGeometry(void);

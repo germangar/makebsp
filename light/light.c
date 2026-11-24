@@ -2041,12 +2041,24 @@ static void PrintLightDigest(void)
         unreachDigest = LightDigestAddFNV1a(unreachDigest, unreachableMask,
                                             (size_t)((numTex + 7) / 8));
 
-    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x\n",
+    // Phase 4 step 4.0: the lightgrid (gridData32) is part of the direct
+    // state TraceGrid produces (MAO ambient + radiosity add to it LATER, so
+    // this digest point captures exactly the direct-grid state). The array
+    // is zeroed at alloc and fully written before here.
+    if (gridData32 && numGridPoints > 0)
+        digest = LightDigestAddFNV1a(digest, gridData32,
+                                     (size_t)numGridPoints * sizeof(*gridData32));
+
+    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x grid=%08x\n",
             digest,
             deluxeFloats ? "" : " (no deluxe buffers)",
             c_totalTrace,
             lightAlphaMask ? maskDigest : 0,
-            unreachableMask ? unreachDigest : 0);
+            unreachableMask ? unreachDigest : 0,
+            (gridData32 && numGridPoints > 0)
+                ? LightDigestAddFNV1a(2166136261u, gridData32,
+                                      (size_t)numGridPoints * sizeof(*gridData32))
+                : 0);
 }
 
 void LightMain(void)
