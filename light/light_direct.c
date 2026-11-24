@@ -26,6 +26,66 @@ static int c_ticketGroups;
 static int c_ticketFlushes;
 static int c_groupOverflowGrow;
 
+// ---------------------------------------------------------------------------
+// Ticket batch helpers (Phase 1). Declared in light.h, unused until the
+// Phase 3 conversion of TraceLights(). The trace loop below is the exact
+// call TraceLine() will make per ticket; consumption (finish/accumulate)
+// is added in Phases 2/3 between the trace loop and count reset.
+// ---------------------------------------------------------------------------
+
+void TicketBatch_Init(lightTicketBatch_t *batch, int capacity)
+{
+    batch->tickets = Q_Alloc((size_t)capacity * sizeof(lightTicket_t));
+    if (!batch->tickets) {
+        Error("TicketBatch_Init: failed to allocate %d tickets", capacity);
+    }
+    batch->count = 0;
+    batch->capacity = capacity;
+}
+
+lightTicket_t *TicketBatch_Append(lightTicketBatch_t *batch)
+{
+    if (batch->count >= batch->capacity) {
+        return NULL;
+    }
+    // Phase 0 instrumentation: integer event count, atomic (worker threads).
+    #pragma omp atomic
+    c_ticketsGenerated++;
+    return &batch->tickets[batch->count++];
+}
+
+void TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
+{
+    int i;
+
+    for (i = 0; i < batch->count; i++) {
+        lightTicket_t *t = &batch->tickets[i];
+        // Exact same call the direct path makes today; testAll comes from the
+        // ticket (sun qtrue, lights qfalse) so the flush loop matches both.
+        TraceLine(t->origin, t->end, &t->trace, t->testAll, tw);
+        #pragma omp atomic
+        c_ticketsSubmitted++;
+    }
+
+    // NOTE: consume/finish step will be inserted here in Phases 2/3
+    // (TicketBatch consume loop) BEFORE the count reset.
+    batch->count = 0;
+
+    #pragma omp atomic
+    c_ticketFlushes++;
+}
+
+void TicketBatch_Free(lightTicketBatch_t *batch)
+{
+    // Existing per-surface code frees Q_Alloc'd memory with plain free()
+    // (e.g. light_direct.c frees localLights/tw) — same discipline, no new
+    // allocation rules introduced in this phase.
+    free(batch->tickets);
+    batch->tickets = NULL;
+    batch->count = 0;
+    batch->capacity = 0;
+}
+
 // 8-point Rotated Grid (tilted ~26.6 degrees)
 static const float ssPattern8[][2] = {
     {0.000f, 0.000f}, // center
@@ -640,41 +700,52 @@ float PointToPolygonFormFactor(const vec3_t point, const vec3_t normal,
 SunToPoint
 
 Returns an amount of light to add at the point (grid)
+
+Ticket wavefront (Phase 2): split into prepare/finish at the TraceLine() call.
+The wrapper keeps the exact original behavior — nothing moved across the
+trace boundary (golden trace-count invariant).
 ================
 */
-qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
-                    qboolean applyColorFilter)
+static qboolean TicketPrepare_Sun(const vec3_t origin, lightTicket_t *t,
+                                  qboolean applyColorFilter)
 {
-    trace_t trace;
-    vec3_t end;
-
     if (!numSkyBrushes || !hasSun)
     {
         return qfalse;
     }
 
-    VectorMA(origin, MAX_WORLD_COORD * 2, sunDirection, end);
+    t->light = NULL;
+    VectorCopy(origin, t->origin);
+    VectorMA(origin, MAX_WORLD_COORD * 2, sunDirection, t->end);
+    t->dist = 0.0f;
+    t->add = 0.0f;
+    t->angle = 0.0f;
+    t->applyColorFilter = applyColorFilter;
+    t->testAll = qtrue;
 
-    TraceLine(origin, end, &trace, qtrue, tw);
+    return qtrue;
+}
 
+static qboolean TicketFinish_Sun(lightTicket_t *t, contribution_t *out)
+{
     // If the ray hit a solid occluder in Embree, it cannot be the sky!
-    if (trace.passSolid)
+    if (t->trace.passSolid)
     {
         return qfalse;
     }
 
     // We reached the void/sky without being blocked by a solid wall.
     // So we add sunlight.
-    if (!applyColorFilter)
+    if (!t->applyColorFilter)
     {
-        trace.filter[0] = trace.filter[1] = trace.filter[2] = 1.0f;
+        t->trace.filter[0] = t->trace.filter[1] = t->trace.filter[2] = 1.0f;
     }
 
     VectorCopy(sunDirection, out->dir);
     out->light = NULL;
-    out->irradiance[0] = trace.filter[0] * sunLight[0];
-    out->irradiance[1] = trace.filter[1] * sunLight[1];
-    out->irradiance[2] = trace.filter[2] * sunLight[2];
+    out->irradiance[0] = t->trace.filter[0] * sunLight[0];
+    out->irradiance[1] = t->trace.filter[1] * sunLight[1];
+    out->irradiance[2] = t->trace.filter[2] * sunLight[2];
     out->isGlow = qfalse;
     out->ambientClampScale = 1.0f;
     out->ambientAbsMax = sunGridMaxAmbient;
@@ -686,16 +757,37 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
     return qtrue;
 }
 
+qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
+                    qboolean applyColorFilter)
+{
+    lightTicket_t t;
+
+    memset(&t, 0, sizeof(t));
+
+    if (!TicketPrepare_Sun(origin, &t, applyColorFilter))
+    {
+        return qfalse;
+    }
+
+    TraceLine(t.origin, t.end, &t.trace, t.testAll, tw);
+
+    return TicketFinish_Sun(&t, out);
+}
+
 /*
 ================
 SunToPlane
 Returns an amount of light to add at the texel (surface)
+
+Ticket wavefront (Phase 2): the facing culls + angle stay here (all
+pre-trace), then the same sun prepare/trace/finish as SunToPoint.
 ================
 */
 qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
                     contribution_t *out, qboolean applyColorFilter,
                     traceWork_t *tw)
 {
+    lightTicket_t t;
     float angle;
 
     if (!numSkyBrushes || !hasSun)
@@ -726,7 +818,16 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
         return qfalse; // facing away
     }
 
-    if (SunToPoint(origin, tw, out, applyColorFilter))
+    memset(&t, 0, sizeof(t));
+
+    if (!TicketPrepare_Sun(origin, &t, applyColorFilter))
+    {
+        return qfalse;
+    }
+
+    TraceLine(t.origin, t.end, &t.trace, t.testAll, tw);
+
+    if (TicketFinish_Sun(&t, out))
     {
         out->angle = angle;
         return qtrue;
@@ -900,24 +1001,25 @@ void AccumulateContribution(vec3_t color, vec3_t dir, vec3_t energy, const contr
 /*
 ========================
 LightContributionToPoint
+
+Ticket wavefront (Phase 2): split into prepare/finish at the TraceLine() call.
+Prepare = exactly the pre-trace logic of the original (area :906-941 /
+point :1083-1173); finish = exactly the post-trace logic (area :950-1077 /
+point :1177-1196). Nothing moved across the trace boundary — rejects that
+today happen post-trace (form factor, glow, min_light_add) stay in finish,
+so the golden trace count is unchanged.
 ========================
 */
-qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
-                                  const vec3_t normal, contribution_t *out,
-                                  traceWork_t *tw)
+static qboolean TicketPrepare_Light(const light_t *light, const vec3_t origin,
+                                    const vec3_t normal, lightTicket_t *t)
 {
-    trace_t trace;
-    float add = 0;
-    vec3_t dir;
+    vec3_t n;
     float dist;
-    float angle = 1.0f;
 
     // area light (Exact Point-To-Polygon Form Factor)
     if (light->type == emit_area)
     {
-        float factor;
         float d;
-        vec3_t n;
 
         // instant reach check
         VectorSubtract(light->origin, origin, n);
@@ -955,14 +1057,154 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         {
             return qfalse;
         }
-        VectorCopy(n, out->dir);
 
-        // test occlusion
-        TraceLine(origin, light->origin, &trace, qfalse, tw);
-        if (trace.passSolid)
+        t->light = light;
+        VectorCopy(origin, t->origin);
+        VectorCopy(light->origin, t->end);
+        t->dist = dist;
+        VectorCopy(n, t->dir);
+        t->add = 0.0f;
+        t->angle = 0.0f;
+        t->applyColorFilter = qfalse;
+        t->testAll = qfalse;
+
+        return qtrue;
+    }
+
+    // point or spotlight logic
+    if (light->type == emit_point || light->type == emit_spotlight)
+    {
+        float add = 0;
+        float surfaceAngle = 1.0f;
+        float coneScale = 1.0f;
+
+        VectorSubtract(light->origin, origin, n);
+        dist = VectorNormalize(n, t->dir);
+        if (dist > light->reach)
         {
             return qfalse;
         }
+        if (dist < 16)
+        {
+            dist = 16;
+        }
+
+        // surface falloff
+        if (normal)
+        {
+            surfaceAngle = CalculateShadingModel(DotProduct(normal, t->dir));
+            if (surfaceAngle <= 0)
+            {
+                return qfalse;
+            }
+        }
+
+        add = CalculateAttenuation(light, dist, light->attenuationModel, light->prestep);
+
+        // Early distance cull: skip expensive spotlight vector math if distance alone kills it
+        if (add <= MIN_LIGHT_ADD)
+        {
+            return qfalse;
+        }
+
+        if (light->type == emit_spotlight)
+        {
+            float softness;
+            float safetyFloor;
+            float distByNormal;
+            float sampleRadius;
+            vec3_t pointAtDist;
+            vec3_t distToSample;
+            float radiusAtDist;
+
+            distByNormal = -DotProduct(t->dir, light->normal) * dist;
+            if (distByNormal < 0)
+            {
+                return qfalse;
+            }
+            VectorMA(light->origin, distByNormal, light->normal, pointAtDist);
+            radiusAtDist = light->radiusByDist * distByNormal;
+            VectorSubtract(origin, pointAtDist, distToSample);
+            sampleRadius = VectorLength(distToSample);
+
+            if (sampleRadius >= radiusAtDist)
+            {
+                return qfalse;
+            }
+
+            if (light->coneSoftness > 0.0f)
+            {
+                softness = SPOTLIGHT_SOFTNESS_RANGE * light->coneSoftness;
+                if (softness < 0.01f)
+                    softness = 0.01f;
+
+                coneScale = (radiusAtDist - sampleRadius) / softness;
+
+                // Safety Floor: ensure peak intensity at center doesn't drop below 20%
+                // of what a standard linear cone would provide at that radius.
+                safetyFloor = 0.05f * (radiusAtDist - sampleRadius) / radiusAtDist;
+
+                if (coneScale < safetyFloor)
+                    coneScale = safetyFloor;
+
+                if (coneScale > 1.0f)
+                    coneScale = 1.0f;
+            }
+
+            add *= coneScale;
+        }
+
+        // Second MIN_LIGHT_ADD reject (original :1247-1250): the spotlight
+        // cone scale can drop `add` below the threshold after the first
+        // reject passed. This is a PRE-trace reject — dropping it changes
+        // the trace set (found via the Phase 2 gate bisect).
+        if (add <= MIN_LIGHT_ADD)
+        {
+            return qfalse;
+        }
+
+        t->light = light;
+        VectorCopy(origin, t->origin);
+        VectorCopy(light->origin, t->end);
+        t->dist = dist;
+        t->add = add;
+        t->angle = surfaceAngle;
+        t->applyColorFilter = qfalse;
+        t->testAll = qfalse;
+
+        return qtrue;
+    }
+
+    return qfalse;
+}
+
+static qboolean TicketFinish_Light(lightTicket_t *t, const vec3_t origin,
+                                   const vec3_t normal, contribution_t *out)
+{
+    const light_t *light = t->light;
+
+    // area light finish
+    if (light->type == emit_area)
+    {
+        // Original :1022-1025 — the area branch's occlusion reject lives
+        // immediately after its TraceLine. Without it, blocked area rays
+        // would contribute light through walls (filter stays 1,1,1).
+        if (t->trace.passSolid)
+        {
+            return qfalse;
+        }
+
+        float factor;
+        vec3_t n;
+        float angle;
+        float formFactorBase;
+        float outAngle;
+        qboolean outIsGlow = qfalse;
+
+        // The original set out->dir (== n) pre-trace and reads it below;
+        // same value, set here from the prepared ticket before any read.
+        VectorCopy(t->dir, out->dir);
+        VectorCopy(t->dir, n);
 
         // Liquid surfaces act as omnidirectional glowing volumes, not flat Lambertian emitters.
         // They emit "plain light" in all directions without cosine falloff.
@@ -996,10 +1238,6 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         {
             return qfalse;
         }
-
-        float formFactorBase;
-        float outAngle;
-        qboolean outIsGlow = qfalse;
 
         if (normal)
         {
@@ -1055,9 +1293,9 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         }
 
         /* Cutoff on the un-faded contribution first, then the fade: the reverse order hard-clips mid-ramp. */
-        out->irradiance[0] = light->emitColor[0] * formFactorBase * trace.filter[0];
-        out->irradiance[1] = light->emitColor[1] * formFactorBase * trace.filter[1];
-        out->irradiance[2] = light->emitColor[2] * formFactorBase * trace.filter[2];
+        out->irradiance[0] = light->emitColor[0] * formFactorBase * t->trace.filter[0];
+        out->irradiance[1] = light->emitColor[1] * formFactorBase * t->trace.filter[1];
+        out->irradiance[2] = light->emitColor[2] * formFactorBase * t->trace.filter[2];
 
         float maxAdd = out->irradiance[0];
         if (out->irradiance[1] > maxAdd) maxAdd = out->irradiance[1];
@@ -1071,15 +1309,15 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         if (light->attnSoftnessRange > 0.0f)
         {
             float fadeStartDist = light->reach - light->attnSoftnessRange;
-            if (dist > fadeStartDist)
+            if (t->dist > fadeStartDist)
             {
-                float fadeScale = (light->reach - dist) / light->attnSoftnessRange;
+                float fadeScale = (light->reach - t->dist) / light->attnSoftnessRange;
                 out->irradiance[0] *= fadeScale;
                 out->irradiance[1] *= fadeScale;
                 out->irradiance[2] *= fadeScale;
             }
         }
-        
+
         out->angle = outAngle;
         out->isGlow = outIsGlow;
         out->light = light;
@@ -1094,111 +1332,18 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
         return qtrue;
     }
 
-    // point or spotlight logic
-    if (light->type == emit_point || light->type == emit_spotlight)
-    {
-        VectorSubtract(light->origin, origin, dir);
-        dist = VectorNormalize(dir, out->dir);
-        if (dist > light->reach)
-        {
-            return qfalse;
-        }
-        if (dist < 16)
-        {
-            dist = 16;
-        }
-
-        float surfaceAngle = 1.0f;
-        float coneScale = 1.0f;
-
-        // surface falloff
-        if (normal)
-        {
-            surfaceAngle = CalculateShadingModel(DotProduct(normal, out->dir));
-            if (surfaceAngle <= 0)
-            {
-                return qfalse;
-            }
-        }
-
-        add = CalculateAttenuation(light, dist, light->attenuationModel, light->prestep);
-        
-        // Early distance cull: skip expensive spotlight vector math if distance alone kills it
-        if (add <= MIN_LIGHT_ADD)
-        {
-            return qfalse;
-        }
-
-        if (light->type == emit_spotlight)
-        {
-            float softness;
-            float safetyFloor;
-            float distByNormal;
-            float sampleRadius;
-            vec3_t pointAtDist;
-            vec3_t distToSample;
-            float radiusAtDist;
-
-            distByNormal = -DotProduct(out->dir, light->normal) * dist;
-            if (distByNormal < 0)
-            {
-                return qfalse;
-            }
-            VectorMA(light->origin, distByNormal, light->normal, pointAtDist);
-            radiusAtDist = light->radiusByDist * distByNormal;
-            VectorSubtract(origin, pointAtDist, distToSample);
-            sampleRadius = VectorLength(distToSample);
-
-            if (sampleRadius >= radiusAtDist)
-            {
-                return qfalse;
-            }
-
-            if (light->coneSoftness > 0.0f)
-            {
-                softness = SPOTLIGHT_SOFTNESS_RANGE * light->coneSoftness;
-                if (softness < 0.01f)
-                    softness = 0.01f;
-
-                coneScale = (radiusAtDist - sampleRadius) / softness;
-
-                // Safety Floor: ensure peak intensity at center doesn't drop below 20%
-                // of what a standard linear cone would provide at that radius.
-                safetyFloor = 0.05f * (radiusAtDist - sampleRadius) / radiusAtDist;
-
-                if (coneScale < safetyFloor)
-                    coneScale = safetyFloor;
-
-                if (coneScale > 1.0f)
-                    coneScale = 1.0f;
-            }
-
-            add *= coneScale;
-        }
-
-        out->angle = surfaceAngle;
-        out->isGlow = qfalse;
-    }
-    else
+    // point/spotlight finish (prepare guarantees point/spot here)
+    if (t->trace.passSolid)
     {
         return qfalse;
     }
 
-    if (add <= MIN_LIGHT_ADD)
-    {
-        return qfalse;
-    }
-
-    // occlusion check
-    TraceLine(origin, light->origin, &trace, qfalse, tw);
-    if (trace.passSolid)
-    {
-        return qfalse;
-    }
-
-    out->irradiance[0] = add * light->color[0] * trace.filter[0];
-    out->irradiance[1] = add * light->color[1] * trace.filter[1];
-    out->irradiance[2] = add * light->color[2] * trace.filter[2];
+    VectorCopy(t->dir, out->dir);
+    out->angle = t->angle;
+    out->isGlow = qfalse;
+    out->irradiance[0] = t->add * light->color[0] * t->trace.filter[0];
+    out->irradiance[1] = t->add * light->color[1] * t->trace.filter[1];
+    out->irradiance[2] = t->add * light->color[2] * t->trace.filter[2];
     out->light = light;
 
     int fCount = light->familyCount;
@@ -1211,6 +1356,24 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
     out->familyCount = fCount;
 
     return qtrue;
+}
+
+qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
+                                  const vec3_t normal, contribution_t *out,
+                                  traceWork_t *tw)
+{
+    lightTicket_t t;
+
+    memset(&t, 0, sizeof(t));
+
+    if (!TicketPrepare_Light(light, origin, normal, &t))
+    {
+        return qfalse;
+    }
+
+    TraceLine(t.origin, t.end, &t.trace, t.testAll, tw);
+
+    return TicketFinish_Light(&t, origin, normal, out);
 }
 
 /*

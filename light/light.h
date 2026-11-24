@@ -431,6 +431,49 @@ typedef struct
 	int ignoreSurface;
 } traceWork_t;
 
+// ---------------------------------------------------------------------------
+// Ticket wavefront (Phase 1): ray-request record and per-worker batch.
+// See studies/wavefront_ticket_embree_plan.md §3.2/§3.3 and §6 Phase 1.
+// A ticket is one ray request = (texel, ss, sun/light). The batch helpers
+// are declared non-static so uncalled code cannot trigger -Wunused-function;
+// they are unused until the Phase 3 conversion of TraceLights().
+// ---------------------------------------------------------------------------
+
+typedef struct lightTicket_s {
+	const light_t *light;          // NULL => sun ticket
+	int            texelIdx;       // (i,j) in the surface sample grid (fold target)
+	int            ssIdx;          // supersample index within the texel
+
+	// trace request
+	vec3_t         origin;         // the sample's nudged base position
+	vec3_t         end;            // light->origin, or the sun far point
+	float          dist;           // origin->light (area fade, point attenuation)
+
+	// prepared, trace-independent contribution inputs (Phase 2 split)
+	vec3_t         dir;            // normalized origin->light (area/point); sun uses sunDirection
+	float          add;            // point/spot only: attenuation * coneScale
+	float          angle;          // sun: SunToPlane falloff; point/spot: surfaceAngle
+	qboolean       applyColorFilter; // sun only (direct path: always qtrue)
+	qboolean       testAll;        // sun traces with qtrue (SunToPoint); lights qfalse
+
+	// outputs
+	trace_t        trace;          // filled by the flush stage
+	contribution_t cont;           // completed by the finish stage
+} lightTicket_t;
+
+#define TICKET_BATCH 4096
+
+typedef struct lightTicketBatch_s {
+	lightTicket_t *tickets;   // Q_Alloc'd by Init, freed by Free
+	int            count;     // tickets currently buffered
+	int            capacity;  // fixed by Init (no growth in this phase)
+} lightTicketBatch_t;
+
+void            TicketBatch_Init(lightTicketBatch_t *batch, int capacity);
+lightTicket_t  *TicketBatch_Append(lightTicketBatch_t *batch); // NULL when full
+void            TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw);
+void            TicketBatch_Free(lightTicketBatch_t *batch);
+
 void InitTrace(void);
 void InitTracingGeometry(void);
 qboolean Trace_SampleFilter(struct shaderInfo_s *si, float s, float t, vec3_t filter, qboolean isLightFilter);
