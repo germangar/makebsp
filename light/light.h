@@ -446,6 +446,7 @@ typedef struct lightTicket_s {
 
 	// trace request
 	vec3_t         origin;         // the sample's nudged base position
+	vec3_t         normal;         // the sample's normal (area dot, deluxe sub-dir init)
 	vec3_t         end;            // light->origin, or the sun far point
 	float          dist;           // origin->light (area fade, point attenuation)
 
@@ -471,7 +472,7 @@ typedef struct lightTicketBatch_s {
 
 void            TicketBatch_Init(lightTicketBatch_t *batch, int capacity);
 lightTicket_t  *TicketBatch_Append(lightTicketBatch_t *batch); // NULL when full
-void            TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw);
+int             TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw); // returns count traced
 void            TicketBatch_Free(lightTicketBatch_t *batch);
 
 void InitTrace(void);

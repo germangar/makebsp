@@ -25,6 +25,8 @@ static int c_ticketsRejected;
 static int c_ticketGroups;
 static int c_ticketFlushes;
 static int c_groupOverflowGrow;
+static int c_ticketStrandWarnings;  // TEMP guard: batch non-empty at texel start
+static int c_ticketAppendWarnings;  // TEMP guard: Append returned NULL (reserve failed)
 
 // ---------------------------------------------------------------------------
 // Ticket batch helpers (Phase 1). Declared in light.h, unused until the
@@ -54,11 +56,12 @@ lightTicket_t *TicketBatch_Append(lightTicketBatch_t *batch)
     return &batch->tickets[batch->count++];
 }
 
-void TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
+int TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
 {
     int i;
+    int n = batch->count;
 
-    for (i = 0; i < batch->count; i++) {
+    for (i = 0; i < n; i++) {
         lightTicket_t *t = &batch->tickets[i];
         // Exact same call the direct path makes today; testAll comes from the
         // ticket (sun qtrue, lights qfalse) so the flush loop matches both.
@@ -67,12 +70,16 @@ void TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
         c_ticketsSubmitted++;
     }
 
-    // NOTE: consume/finish step will be inserted here in Phases 2/3
-    // (TicketBatch consume loop) BEFORE the count reset.
+    // Phase 3a: the consume step lives in TraceLights (TicketConsumeTickets),
+    // reading tickets[0..n) AFTER this call and BEFORE any new Append — the
+    // buffer is not overwritten until then, so returning the traced count is
+    // safe. Reset happens here so a fresh group starts appending at 0.
     batch->count = 0;
 
     #pragma omp atomic
     c_ticketFlushes++;
+
+    return n;
 }
 
 void TicketBatch_Free(lightTicketBatch_t *batch)
@@ -726,6 +733,56 @@ static qboolean TicketPrepare_Sun(const vec3_t origin, lightTicket_t *t,
     return qtrue;
 }
 
+// Sun-plane prepare (Phase 3a): the facing culls + falloff angle that Phase 2
+// kept in the SunToPlane wrapper, followed by the sun body prepare. Used by
+// BOTH the SunToPlane wrapper and the Phase 3 ticket generator, so the culls
+// and angle exist in exactly one place. t->angle carries the falloff; the
+// finish still does NOT set out->angle (TraceGrid relies on that).
+static qboolean TicketPrepare_SunPlane(const vec3_t origin, const vec3_t normal,
+                                       lightTicket_t *t, qboolean applyColorFilter,
+                                       traceWork_t *tw)
+{
+    float angle;
+
+    if (!numSkyBrushes || !hasSun)
+    {
+        return qfalse;
+    }
+
+    // if the sun is behind the surface
+    if (tw->forceFrontOnly)
+    {
+        if (DotProduct(normal, sunDirection) < -0.125f)
+        {
+            return qfalse; // facing away
+        }
+    }
+    else if (game->sunShadingModel != SHADING_MODEL_HALFLAMBERT &&
+             game->sunShadingModel != SHADING_MODEL_LAMBERT)
+    {
+        if (DotProduct(normal, sunDirection) <= 0)
+        {
+            return qfalse; // facing away
+        }
+    }
+
+    angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), game->sunShadingModel, sunSoftBias);
+    if (angle <= 0)
+    {
+        return qfalse; // facing away
+    }
+
+    // sun body prepare (re-checks sky, computes the far end point)
+    if (!TicketPrepare_Sun(origin, t, applyColorFilter))
+    {
+        return qfalse;
+    }
+    t->angle = angle;
+    VectorCopy(normal, t->normal);
+
+    return qtrue;
+}
+
 static qboolean TicketFinish_Sun(lightTicket_t *t, contribution_t *out)
 {
     // If the ray hit a solid occluder in Embree, it cannot be the sky!
@@ -779,8 +836,9 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
 SunToPlane
 Returns an amount of light to add at the texel (surface)
 
-Ticket wavefront (Phase 2): the facing culls + angle stay here (all
-pre-trace), then the same sun prepare/trace/finish as SunToPoint.
+Ticket wavefront (Phase 3a): the facing culls + falloff angle moved into
+TicketPrepare_SunPlane (shared with the Phase 3 ticket generator); the
+wrapper is now prepare/trace/finish with the angle carried in the ticket.
 ================
 */
 qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
@@ -788,39 +846,10 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
                     traceWork_t *tw)
 {
     lightTicket_t t;
-    float angle;
-
-    if (!numSkyBrushes || !hasSun)
-    {
-        return qfalse;
-    }
-
-    // if the sun is behind the surface
-    if (tw->forceFrontOnly)
-    {
-        if (DotProduct(normal, sunDirection) < -0.125f)
-        {
-            return qfalse; // facing away
-        }
-    }
-    else if (game->sunShadingModel != SHADING_MODEL_HALFLAMBERT &&
-             game->sunShadingModel != SHADING_MODEL_LAMBERT)
-    {
-        if (DotProduct(normal, sunDirection) <= 0)
-        {
-            return qfalse; // facing away
-        }
-    }
-
-    angle = CalculateSpecificFalloff(DotProduct(normal, sunDirection), game->sunShadingModel, sunSoftBias);
-    if (angle <= 0)
-    {
-        return qfalse; // facing away
-    }
 
     memset(&t, 0, sizeof(t));
 
-    if (!TicketPrepare_Sun(origin, &t, applyColorFilter))
+    if (!TicketPrepare_SunPlane(origin, normal, &t, applyColorFilter, tw))
     {
         return qfalse;
     }
@@ -829,7 +858,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
     if (TicketFinish_Sun(&t, out))
     {
-        out->angle = angle;
+        out->angle = t.angle;
         return qtrue;
     }
 
@@ -1063,6 +1092,7 @@ static qboolean TicketPrepare_Light(const light_t *light, const vec3_t origin,
         VectorCopy(light->origin, t->end);
         t->dist = dist;
         VectorCopy(n, t->dir);
+        if (normal) VectorCopy(normal, t->normal); // NULL on the grid path (no consume there)
         t->add = 0.0f;
         t->angle = 0.0f;
         t->applyColorFilter = qfalse;
@@ -1169,6 +1199,7 @@ static qboolean TicketPrepare_Light(const light_t *light, const vec3_t origin,
         t->dist = dist;
         t->add = add;
         t->angle = surfaceAngle;
+        if (normal) VectorCopy(normal, t->normal); // NULL on the grid path (no consume there)
         t->applyColorFilter = qfalse;
         t->testAll = qfalse;
 
@@ -1746,6 +1777,145 @@ void PrecacheTexelGeometry(void)
 }
 
 /*
+================
+TicketConsumeTickets
+
+Ticket wavefront (Phase 3b, Stage 3): consume a flushed batch of tickets in
+order — finish each ticket, fold the per-group sub-state into the caller's
+per-texel accumulators on group boundaries, and classify the counters.
+
+Group state machine: chunk = one texel, so groups are delimited by ssIdx
+(Phase 3b-widening must extend detection to texelIdx changes). The caller
+guarantees no empty groups in the stream (empty groups fold inline in the
+generation stage).
+
+PARITY NOTES (see plan §6 Phase 3 audit corrections):
+- The per-group subDir initializes to the sample NORMAL, not zeros
+  (LightingAtSample does VectorCopy(normal, dir)) — replicating that here
+  with the group's first ticket's normal.
+- The fold belongs to the PREVIOUS group: curGroupNormal is tracked per
+  group and updated on group change.
+- Failed finishes count blocked/rejected and NOTHING ELSE (no override,
+  no accumulate — the old code is guarded by the success return).
+- The noDeluxeInfluence override applies to lights only, never the sun,
+  and only when the deluxe accumulators exist.
+- The sun's cont.angle is set here from the ticket (replicating the old
+  SunToPlane post-finish set); TicketFinish_Sun deliberately does not set
+  it (TraceGrid relies on that).
+================
+*/
+static void TicketConsumeTickets(lightTicket_t *tickets, int n,
+                                 vec3_t accumColor, vec3_t accumDir,
+                                 vec3_t accumEnergy, vec3_t accumNormal,
+                                 qboolean deluxe, float deluxeMinAngle)
+{
+    contribution_t cont;
+    vec3_t subColor, subDir, subEnergy;
+    vec3_t curGroupNormal;
+    qboolean haveGroup = qfalse;
+    int groupSS = 0;
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+        qboolean ok;
+
+        if (!haveGroup || t->ssIdx != groupSS)
+        {
+            // fold the previous group's sub-state, then start a new group
+            if (haveGroup)
+            {
+                if (deluxe)
+                {
+                    VectorAdd(accumColor, subColor, accumColor);
+                    VectorAdd(accumDir, subDir, accumDir);
+                    VectorAdd(accumEnergy, subEnergy, accumEnergy);
+                    VectorAdd(accumNormal, curGroupNormal, accumNormal);
+                }
+                else
+                {
+                    VectorAdd(accumColor, subColor, accumColor);
+                }
+            }
+
+            // sub-state init exactly as LightingAtSample does it
+            if (deluxe)
+            {
+                VectorClear(subColor);
+                VectorCopy(t->normal, subDir);      // subDir starts as the sample normal!
+                VectorClear(subEnergy);
+            }
+            else
+            {
+                VectorClear(subColor);
+            }
+            VectorCopy(t->normal, curGroupNormal);
+            groupSS = t->ssIdx;
+            haveGroup = qtrue;
+        }
+
+        if (t->light == NULL)
+        {
+            // sun ticket
+            ok = TicketFinish_Sun(t, &cont);
+            if (ok)
+            {
+                cont.angle = t->angle;
+            }
+        }
+        else
+        {
+            ok = TicketFinish_Light(t, t->origin, t->normal, &cont);
+        }
+
+        if (ok)
+        {
+            #pragma omp atomic
+            c_ticketsContributed++;
+
+            if (t->light != NULL && game->deluxeMap && t->light->noDeluxeInfluence && deluxe)
+            {
+                VectorCopy(subDir, cont.dir);
+                cont.isGlow = qfalse;
+            }
+
+            AccumulateContribution(subColor, deluxe ? subDir : NULL, deluxe ? subEnergy : NULL,
+                                   &cont, curGroupNormal, deluxeMinAngle);
+        }
+        else
+        {
+            if (t->trace.passSolid)
+            {
+                #pragma omp atomic
+                c_ticketsBlocked++;
+            }
+            else
+            {
+                #pragma omp atomic
+                c_ticketsRejected++;
+            }
+        }
+    }
+
+    // fold the final group
+    if (haveGroup)
+    {
+        if (deluxe)
+        {
+            VectorAdd(accumColor, subColor, accumColor);
+            VectorAdd(accumDir, subDir, accumDir);
+            VectorAdd(accumEnergy, subEnergy, accumEnergy);
+            VectorAdd(accumNormal, curGroupNormal, accumNormal);
+        }
+        else
+        {
+            VectorAdd(accumColor, subColor, accumColor);
+        }
+    }
+}
+
+/*
 =============
 TraceLights
 =============
@@ -1761,6 +1931,7 @@ void TraceLights(int num)
     double base[3];
     vec3_t origin, normal;
     traceWork_t *tw;
+    lightTicketBatch_t batch;   // Ticket wavefront (Phase 3b)
     byte **occluded = NULL;
     byte *occluded_data = NULL;
     vec3_t **color = NULL;
@@ -2101,6 +2272,20 @@ void TraceLights(int num)
         jitterRadius = ssRadius;
     }
 
+    // Ticket wavefront (Phase 3b): per-surface batch. Capacity is
+    // TICKET_BATCH, grown to fit one whole group (sun + all local lights)
+    // when needed, so a group is never split across flushes.
+    {
+        int batchCapacity = TICKET_BATCH;
+        if (batchCapacity < numLocalLights + 1)
+        {
+            batchCapacity = numLocalLights + 1;
+            #pragma omp atomic
+            c_groupOverflowGrow++;
+        }
+        TicketBatch_Init(&batch, batchCapacity);
+    }
+
     // determine which samples are occluded
     memset(occluded_data, 0, extW * extH * sizeof(byte));
     for (i = 0; i < sampleWidth; i++)
@@ -2117,6 +2302,15 @@ void TraceLights(int num)
             VectorClear(accumNormal);
             hitCount = 0;
             int ss, k;
+
+            // Ticket wavefront guard: the texel-end flush guarantees an
+            // empty batch at every texel start. If this ever fires, a
+            // group leaked across texels — order no longer guaranteed.
+            if (batch.count != 0)
+            {
+                #pragma omp atomic
+                c_ticketStrandWarnings++;
+            }
 
             // Map current sample to global lightmap index for PrecacheTexelGeometry lookup
             int py = ds->lightmapOffset[0][1] * scale + j - currentGutter;
@@ -2272,32 +2466,137 @@ void TraceLights(int num)
                         continue;
                 }
 
-                vec3_t subColor, subDir, subEnergy;
+                // Ticket wavefront (Phase 3b): one group per supersample.
+                // Stage 1 generate (below), Stage 2 flush (trace), Stage 3
+                // consume+fold (TicketConsumeTickets). The old immediate
+                // LightingAtSample call block is fully replaced; the fold
+                // below replicates today's exact VectorAdds.
                 tw->ignoreSurface = realSurfIndex;
-                if (!nodirect)
+                #pragma omp atomic
+                c_ticketGroups++;
+
                 {
-                    if (deluxe)
+                    int before = batch.count;
+
+                    if (!nodirect)
                     {
-                        LightingAtSample(origin, normal, subColor, subDir, subEnergy,
-                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw, si->deluxeMinAngle);
-                        VectorAdd(accumColor, subColor, accumColor);
-                        VectorAdd(accumDir, subDir, accumDir);
-                        VectorAdd(accumEnergy, subEnergy, accumEnergy);
-                        VectorAdd(accumNormal, normal, accumNormal);
+                        // Reserve: a group is at most sun + all local lights;
+                        // flush buffered tickets first if this group would
+                        // not fit, so a group is never split (flushes land
+                        // on group boundaries only).
+                        if (batch.count + (numLocalLights + 1) > batch.capacity)
+                        {
+                            int n = TicketBatch_FlushTraces(&batch, tw);
+                            TicketConsumeTickets(batch.tickets, n,
+                                                 accumColor, accumDir, accumEnergy, accumNormal,
+                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle);
+                        }
+
+                        // sun member — LightingAtSample's guard
+                        // (testOcclusion || forceSunLight) is constant-true
+                        // at this call site (literals qtrue/qfalse/qtrue at
+                        // the old calls); applyColorFilter = qtrue as before.
+                        {
+                            lightTicket_t t;
+                            memset(&t, 0, sizeof(t));
+                            if (TicketPrepare_SunPlane(origin, normal, &t, qtrue, tw))
+                            {
+                                lightTicket_t *slot = TicketBatch_Append(&batch);
+                                if (slot)
+                                {
+                                    t.texelIdx = i * extH + j;
+                                    t.ssIdx = ss;
+                                    *slot = t;
+                                }
+                                else
+                                {
+                                    #pragma omp atomic
+                                    c_ticketAppendWarnings++;
+                                }
+                            }
+                        }
+
+                        // local light members, in localLights[] order
+                        {
+                            int li;
+                            for (li = 0; li < numLocalLights; li++)
+                            {
+                                lightTicket_t t;
+                                memset(&t, 0, sizeof(t));
+                                if (TicketPrepare_Light(localLights[li], origin, normal, &t))
+                                {
+                                    lightTicket_t *slot = TicketBatch_Append(&batch);
+                                    if (slot)
+                                    {
+                                        t.texelIdx = i * extH + j;
+                                        t.ssIdx = ss;
+                                        *slot = t;
+                                    }
+                                    else
+                                    {
+                                        #pragma omp atomic
+                                        c_ticketAppendWarnings++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (batch.count > before)
+                    {
+                        // group has tickets: left buffered; consumed at the
+                        // next reserve flush, the next empty group, or the
+                        // texel-end flush below
                     }
                     else
                     {
-                        LightingAtSample(origin, normal, subColor, NULL, NULL,
-                                         qtrue, qfalse, qtrue, localLights, numLocalLights, tw, si->deluxeMinAngle);
-                        VectorAdd(accumColor, subColor, accumColor);
+                        // EMPTY group (all culls failed, or nodirect): flush
+                        // buffered tickets FIRST (order!), then fold inline
+                        // exactly as today — including the zero adds, which
+                        // are bit-safe (accumulated color is non-negative).
+                        if (batch.count > 0)
+                        {
+                            int n = TicketBatch_FlushTraces(&batch, tw);
+                            TicketConsumeTickets(batch.tickets, n,
+                                                 accumColor, accumDir, accumEnergy, accumNormal,
+                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle);
+                        }
+                        if (!nodirect)
+                        {
+                            vec3_t zeroVec;
+                            VectorClear(zeroVec);
+                            if (deluxe)
+                            {
+                                VectorAdd(accumColor, zeroVec, accumColor);
+                                VectorAdd(accumDir, normal, accumDir);      // subDir inits to normal
+                                VectorAdd(accumEnergy, zeroVec, accumEnergy);
+                                VectorAdd(accumNormal, normal, accumNormal);
+                            }
+                            else
+                            {
+                                VectorAdd(accumColor, zeroVec, accumColor);
+                            }
+                        }
+                        else
+                        {
+                            if (deluxe) VectorAdd(accumNormal, normal, accumNormal);
+                        }
                     }
                 }
-                else
-                {
-                    if (deluxe) VectorAdd(accumNormal, normal, accumNormal);
-                }
-                
+
                 hitCount++;
+            }
+
+            // Ticket wavefront (Phase 3b): texel-end flush — the last group's
+            // tickets must be consumed (and folded into the accumulators)
+            // BEFORE the averaging fold reads them below. Guarantees an empty
+            // batch at the start of every texel.
+            if (batch.count > 0)
+            {
+                int n = TicketBatch_FlushTraces(&batch, tw);
+                TicketConsumeTickets(batch.tickets, n,
+                                     accumColor, accumDir, accumEnergy, accumNormal,
+                                     deluxe ? qtrue : qfalse, si->deluxeMinAngle);
             }
 
             if (hitCount > 0)
@@ -2507,6 +2806,7 @@ void TraceLights(int num)
     if (lmenergy_data) free(lmenergy_data);
     if (normalArray) free(normalArray);
     if (normalArray_data) free(normalArray_data);
+    TicketBatch_Free(&batch);
     free(localLights);
     ThreadCompletedWeighted(surfWeight);
 }
@@ -2881,10 +3181,25 @@ void LightWorld(void)
     _printf("\n");
     _printf("%5.0f seconds elapsed in TraceLights\n", end - start);
 
-    // Phase 0 instrumentation: ticket counters summary (print-only).
+    // Phase 0 instrumentation: ticket counters summary (print-only), with
+    // the Phase 3b invariant checks (exact global atomic totals, so the
+    // comparison is valid after all worker threads have completed).
     _printf("TraceLights tickets: generated=%d submitted=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
             c_ticketsGenerated, c_ticketsSubmitted, c_ticketGroups, c_ticketFlushes,
             c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
+    if (c_ticketsSubmitted != c_ticketsGenerated ||
+        c_ticketsBlocked + c_ticketsContributed + c_ticketsRejected != c_ticketsSubmitted)
+    {
+        _printf("WARNING: TraceLights ticket invariants violated "
+                "(submitted=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
+                c_ticketsSubmitted, c_ticketsGenerated,
+                c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
+    }
+    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow)
+    {
+        _printf("TraceLights ticket guards: strand=%d appendNULL=%d overflowGrow=%d\n",
+                c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow);
+    }
 }
 
 void DilateDeluxeDirections(void)
