@@ -486,6 +486,7 @@ extern long long c_ticketsGenerated, c_ticketsSubmitted, c_ticketsBlocked;
 extern long long c_ticketsContributed, c_ticketsRejected, c_ticketGroups;
 extern long long c_ticketFlushes, c_groupOverflowGrow, c_ticketsDropped;
 extern long long c_gridCapSkips, c_ticketStrandWarnings, c_ticketAppendWarnings;
+extern long long c_texelDoubleFoldWarnings;
 
 void InitTrace(void);
 void InitTracingGeometry(void);

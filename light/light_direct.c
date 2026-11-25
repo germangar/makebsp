@@ -22,7 +22,8 @@ long long c_ticketsRejected;
 long long c_ticketGroups;
 long long c_ticketFlushes;
 long long c_groupOverflowGrow;
-long long c_ticketStrandWarnings;  // guard: batch non-empty at texel start
+long long c_ticketStrandWarnings;  // guard: batch non-empty at texel start (RETIRED Phase 9, stays 0)
+long long c_texelDoubleFoldWarnings;  // guard: averaging fold fired twice for a texel (Phase 9 tripwire)
 long long c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
 long long c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
 long long c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
@@ -44,10 +45,11 @@ void PrintTicketSummary(const char *stageTag)
                 stageTag, c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
                 c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
     }
-    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips)
+    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips || c_texelDoubleFoldWarnings)
     {
-        _printf("%s ticket guards: strand=%lld appendNULL=%lld overflowGrow=%lld capSkips=%lld\n",
-                stageTag, c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips);
+        _printf("%s ticket guards: strand=%lld appendNULL=%lld overflowGrow=%lld capSkips=%lld doubleFold=%lld\n",
+                stageTag, c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips,
+                c_texelDoubleFoldWarnings);
     }
 }
 
@@ -1543,6 +1545,88 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
 #endif // [Reference — NOT COMPILED] LightingAtSample
 
 /*
+================
+texelConsumeCtx_t / FoldTexelAveraging
+
+Ticket wavefront (Phase 9, chunk widening): when the texel path passes a
+context, the consume folds each group into the SLOT TABLE indexed by the
+group's texelIdx (flushes now span texels) and fires each texel's averaging
+fold exactly once, when its last group has been folded. NULL context =
+single-accumulator behavior (the vertex path).
+
+Trigger protocol (audit §9.5.1): generation counts pending[] per appended
+non-empty group and sets closed[] after the texel's ss loop; the consume
+decrements pending[] per folded group; the fold fires only when
+pending == 0 && closed — checked at BOTH sites (generation at close
+catches all-drained-mid-loop, consume catches drain-after-close). The two
+sites are mutually exclusive; the folded[] flag is the standing tripwire.
+================
+*/
+typedef struct {
+    vec3_t *accumColor;      // extW*extH slot tables, texelIdx-indexed
+    vec3_t *accumDir;        // NULL when !deluxe
+    vec3_t *accumEnergy;
+    vec3_t *accumNormal;
+    byte *pending;           // running count of generated-but-unconsumed groups
+    byte *closed;            // texel's ss loop finished
+    byte *folded;            // averaging fold done (tripwire)
+    byte *hitCount;          // supersamples attempted (generation-side)
+    byte **sampleHit;
+    byte **occluded;
+    vec3_t **color;          // averaging writeback targets
+    vec3_t **deluxe;
+    vec3_t **lmenergy;
+    vec3_t **normalArray;
+    qboolean deluxeMode;
+    int extH;
+} texelConsumeCtx_t;
+
+static void FoldTexelAveraging(texelConsumeCtx_t *ctx, int texelIdx)
+{
+    int i = texelIdx / ctx->extH;
+    int j = texelIdx - i * ctx->extH;
+    int k;
+
+    if (ctx->folded[texelIdx])
+    {
+        #pragma omp atomic
+        c_texelDoubleFoldWarnings++;
+        return;
+    }
+    ctx->folded[texelIdx] = 1;
+
+    if (ctx->hitCount[texelIdx] > 0)
+    {
+        ctx->sampleHit[i][j] = qtrue;
+        ctx->occluded[i][j] = qfalse;
+        float invHits = 1.0f / (float)ctx->hitCount[texelIdx];
+        for (k = 0; k < 3; k++)
+            ctx->color[i][j][k] = ctx->accumColor[texelIdx][k] * invHits;
+        if (ctx->deluxeMode)
+        {
+            vec3_t avgDir;
+            VectorScale(ctx->accumDir[texelIdx], invHits, avgDir);
+            VectorNormalize(avgDir, ctx->deluxe[i][j]);
+            VectorScale(ctx->accumEnergy[texelIdx], invHits, ctx->lmenergy[i][j]);
+            vec3_t avgNrm;
+            VectorScale(ctx->accumNormal[texelIdx], invHits, avgNrm);
+            VectorNormalize(avgNrm, ctx->normalArray[i][j]);
+        }
+    }
+    else
+    {
+        ctx->sampleHit[i][j] = qfalse;
+        ctx->occluded[i][j] = qtrue;
+    }
+}
+
+static void TicketConsumeTickets(lightTicket_t *tickets, int n,
+                                 vec3_t accumColor, vec3_t accumDir,
+                                 vec3_t accumEnergy, vec3_t accumNormal,
+                                 qboolean deluxe, float deluxeMinAngle,
+                                 texelConsumeCtx_t *ctx);
+
+/*
 =============
 VertexLighting
 
@@ -1550,10 +1634,6 @@ Vertex lighting will completely ignore occlusion, because
 shadows would not be resolvable anyway.
 =============
 */
-static void TicketConsumeTickets(lightTicket_t *tickets, int n,
-                                 vec3_t accumColor, vec3_t accumDir,
-                                 vec3_t accumEnergy, vec3_t accumNormal,
-                                 qboolean deluxe, float deluxeMinAngle);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
                     qboolean forceSunLight, float scale, light_t **lightList,
                     int numLights, traceWork_t *tw)
@@ -1676,7 +1756,7 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
                 int n = TicketBatch_FlushTraces(&batch, tw);
                 TicketConsumeTickets(batch.tickets, n,
                                      sample, dummyDir, dummyEnergy, dummyNormal,
-                                     qfalse, 0.0f);
+                                     qfalse, 0.0f, NULL);
             }
         }
 
@@ -1965,13 +2045,15 @@ PARITY NOTES (see plan §6 Phase 3 audit corrections):
 static void TicketConsumeTickets(lightTicket_t *tickets, int n,
                                  vec3_t accumColor, vec3_t accumDir,
                                  vec3_t accumEnergy, vec3_t accumNormal,
-                                 qboolean deluxe, float deluxeMinAngle)
+                                 qboolean deluxe, float deluxeMinAngle,
+                                 texelConsumeCtx_t *ctx)
 {
     contribution_t cont;
     vec3_t subColor, subDir, subEnergy;
     vec3_t curGroupNormal;
     qboolean haveGroup = qfalse;
     int groupSS = 0;
+    int groupTexel = 0;
     int i;
 
     for (i = 0; i < n; i++)
@@ -1979,12 +2061,28 @@ static void TicketConsumeTickets(lightTicket_t *tickets, int n,
         lightTicket_t *t = &tickets[i];
         qboolean ok;
 
-        if (!haveGroup || t->ssIdx != groupSS)
+        // Phase 9: a flush may span texels — a group changes when EITHER
+        // id differs (texelIdx is unique per texel, ssIdx resets per texel).
+        if (!haveGroup || t->ssIdx != groupSS || t->texelIdx != groupTexel)
         {
             // fold the previous group's sub-state, then start a new group
             if (haveGroup)
             {
-                if (deluxe)
+                if (ctx)
+                {
+                    if (deluxe)
+                    {
+                        VectorAdd(ctx->accumColor[groupTexel], subColor, ctx->accumColor[groupTexel]);
+                        VectorAdd(ctx->accumDir[groupTexel], subDir, ctx->accumDir[groupTexel]);
+                        VectorAdd(ctx->accumEnergy[groupTexel], subEnergy, ctx->accumEnergy[groupTexel]);
+                        VectorAdd(ctx->accumNormal[groupTexel], curGroupNormal, ctx->accumNormal[groupTexel]);
+                    }
+                    else
+                    {
+                        VectorAdd(ctx->accumColor[groupTexel], subColor, ctx->accumColor[groupTexel]);
+                    }
+                }
+                else if (deluxe)
                 {
                     VectorAdd(accumColor, subColor, accumColor);
                     VectorAdd(accumDir, subDir, accumDir);
@@ -1994,6 +2092,15 @@ static void TicketConsumeTickets(lightTicket_t *tickets, int n,
                 else
                 {
                     VectorAdd(accumColor, subColor, accumColor);
+                }
+
+                // Phase 9: the folded group's texel may now be complete
+                if (ctx)
+                {
+                    if (ctx->pending[groupTexel] > 0)
+                        ctx->pending[groupTexel]--;
+                    if (ctx->pending[groupTexel] == 0 && ctx->closed[groupTexel])
+                        FoldTexelAveraging(ctx, groupTexel);
                 }
             }
 
@@ -2010,6 +2117,7 @@ static void TicketConsumeTickets(lightTicket_t *tickets, int n,
             }
             VectorCopy(t->normal, curGroupNormal);
             groupSS = t->ssIdx;
+            groupTexel = t->texelIdx;
             haveGroup = qtrue;
         }
 
@@ -2059,7 +2167,26 @@ static void TicketConsumeTickets(lightTicket_t *tickets, int n,
     // fold the final group
     if (haveGroup)
     {
-        if (deluxe)
+        if (ctx)
+        {
+            if (deluxe)
+            {
+                VectorAdd(ctx->accumColor[groupTexel], subColor, ctx->accumColor[groupTexel]);
+                VectorAdd(ctx->accumDir[groupTexel], subDir, ctx->accumDir[groupTexel]);
+                VectorAdd(ctx->accumEnergy[groupTexel], subEnergy, ctx->accumEnergy[groupTexel]);
+                VectorAdd(ctx->accumNormal[groupTexel], curGroupNormal, ctx->accumNormal[groupTexel]);
+            }
+            else
+            {
+                VectorAdd(ctx->accumColor[groupTexel], subColor, ctx->accumColor[groupTexel]);
+            }
+
+            if (ctx->pending[groupTexel] > 0)
+                ctx->pending[groupTexel]--;
+            if (ctx->pending[groupTexel] == 0 && ctx->closed[groupTexel])
+                FoldTexelAveraging(ctx, groupTexel);
+        }
+        else if (deluxe)
         {
             VectorAdd(accumColor, subColor, accumColor);
             VectorAdd(accumDir, subDir, accumDir);
@@ -2355,7 +2482,45 @@ void TraceLights(int num)
         normalArray = Q_Alloc(extW * sizeof(vec3_t *));
     }
 
-    if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data)
+    // Ticket wavefront (Phase 9, chunk widening): per-texel accumulator
+    // SLOT tables — the consume folds into slots routed by texelIdx since
+    // flushes now span texels. Zeroed once here; each slot is used by
+    // exactly one texel (replaces the per-texel VectorClear block).
+    vec3_t *accumColor_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+    byte *texPending = Q_Alloc(extW * extH * sizeof(byte));
+    byte *texClosed = Q_Alloc(extW * extH * sizeof(byte));
+    byte *texFolded = Q_Alloc(extW * extH * sizeof(byte));
+    byte *texHitCount = Q_Alloc(extW * extH * sizeof(byte));
+    vec3_t *accumDir_data = NULL, *accumEnergy_data = NULL, *accumNormal_data = NULL;
+    if (deluxeFloats)
+    {
+        accumDir_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+        accumEnergy_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+        accumNormal_data = Q_Alloc(extW * extH * sizeof(vec3_t));
+    }
+
+    texelConsumeCtx_t tctx;
+    memset(&tctx, 0, sizeof(tctx));
+    tctx.accumColor = accumColor_data;
+    tctx.accumDir = accumDir_data;
+    tctx.accumEnergy = accumEnergy_data;
+    tctx.accumNormal = accumNormal_data;
+    tctx.pending = texPending;
+    tctx.closed = texClosed;
+    tctx.folded = texFolded;
+    tctx.hitCount = texHitCount;
+    tctx.sampleHit = sampleHit;
+    tctx.occluded = occluded;
+    tctx.color = color;
+    tctx.deluxe = deluxe;
+    tctx.lmenergy = lmenergy;
+    tctx.normalArray = normalArray;
+    tctx.deluxeMode = (deluxe != NULL);
+    tctx.extH = extH;
+
+    if (!occluded || !occluded_data || !color || !color_data || !sampleHit || !sampleHit_data ||
+        !accumColor_data || !texPending || !texClosed || !texFolded || !texHitCount ||
+        (deluxeFloats && (!accumDir_data || !accumEnergy_data || !accumNormal_data)))
     {
         _printf("WARNING: Failed to allocate TraceLights memory for surface %d (%dx%d)\n", realSurfIndex, extW, extH);
         if (occluded)
@@ -2370,6 +2535,22 @@ void TraceLights(int num)
             free(sampleHit);
         if (sampleHit_data)
             free(sampleHit_data);
+        if (accumColor_data)
+            free(accumColor_data);
+        if (accumDir_data)
+            free(accumDir_data);
+        if (accumEnergy_data)
+            free(accumEnergy_data);
+        if (accumNormal_data)
+            free(accumNormal_data);
+        if (texPending)
+            free(texPending);
+        if (texClosed)
+            free(texClosed);
+        if (texFolded)
+            free(texFolded);
+        if (texHitCount)
+            free(texHitCount);
         free(localLights);
         free(tw);
         return;
@@ -2377,11 +2558,21 @@ void TraceLights(int num)
 
     memset(color_data, 0, extW * extH * sizeof(vec3_t));
     memset(sampleHit_data, 0, extW * extH * sizeof(byte));
+    // Phase 9: the slot tables must be zeroed too (Q_Alloc does not zero;
+    // the per-texel VectorClear block they replace relied on this).
+    memset(accumColor_data, 0, extW * extH * sizeof(vec3_t));
+    memset(texPending, 0, extW * extH * sizeof(byte));
+    memset(texClosed, 0, extW * extH * sizeof(byte));
+    memset(texFolded, 0, extW * extH * sizeof(byte));
+    memset(texHitCount, 0, extW * extH * sizeof(byte));
     if (deluxe_data)
     {
         memset(deluxe_data, 0, extW * extH * sizeof(vec3_t));
         memset(lmenergy_data, 0, extW * extH * sizeof(vec3_t));
         memset(normalArray_data, 0, extW * extH * sizeof(vec3_t));
+        memset(accumDir_data, 0, extW * extH * sizeof(vec3_t));
+        memset(accumEnergy_data, 0, extW * extH * sizeof(vec3_t));
+        memset(accumNormal_data, 0, extW * extH * sizeof(vec3_t));
     }
 
     for (i = 0; i < extW; i++)
@@ -2444,31 +2635,22 @@ void TraceLights(int num)
         TicketBatch_Init(&batch, batchCapacity);
     }
 
+    vec3_t ctxUnusedArg = {0, 0, 0}; // Phase 9: unused when the ctx carries the slot tables
+
     // determine which samples are occluded
     memset(occluded_data, 0, extW * extH * sizeof(byte));
     for (i = 0; i < sampleWidth; i++)
     {
         for (j = 0; j < sampleHeight; j++)
         {
-            vec3_t accumColor;
-            vec3_t accumDir, accumEnergy, accumNormal;
-            int hitCount;
-
-            VectorClear(accumColor);
-            VectorClear(accumDir);
-            VectorClear(accumEnergy);
-            VectorClear(accumNormal);
-            hitCount = 0;
+            // Ticket wavefront (Phase 9, chunk widening): the per-texel
+            // accumulators moved into the slot tables (routed by texelIdx —
+            // a flush may now span texels). Slots are zeroed once at
+            // surface alloc; each slot is used by exactly one texel.
+            // The strand guard is retired: a non-empty batch at texel
+            // start is NORMAL now (see the Phase 9 spec).
+            int texelIdx = i * extH + j;
             int ss, k;
-
-            // Ticket wavefront guard: the texel-end flush guarantees an
-            // empty batch at every texel start. If this ever fires, a
-            // group leaked across texels — order no longer guaranteed.
-            if (batch.count != 0)
-            {
-                #pragma omp atomic
-                c_ticketStrandWarnings++;
-            }
 
             // Map current sample to global lightmap index for PrecacheTexelGeometry lookup
             int py = ds->lightmapOffset[0][1] * scale + j - currentGutter;
@@ -2642,13 +2824,21 @@ void TraceLights(int num)
                         // flush buffered tickets first if this group would
                         // not fit, so a group is never split (flushes land
                         // on group boundaries only).
+                        // Phase 9 FIX (found in gate bisection): `before` must
+                        // be RE-captured after the reserve flush — the flush
+                        // drains the buffer, so the stale pre-flush value made
+                        // `batch.count > before` misclassify the group as
+                        // empty (latent in Phase 3, unobservable while the
+                        // reserve never fired mid-texel; chunking makes it
+                        // routine and it skipped pending++).
                         if (batch.count + (numLocalLights + 1) > batch.capacity)
                         {
                             int n = TicketBatch_FlushTraces(&batch, tw);
                             TicketConsumeTickets(batch.tickets, n,
-                                                 accumColor, accumDir, accumEnergy, accumNormal,
-                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle);
+                                                 ctxUnusedArg, ctxUnusedArg, ctxUnusedArg, ctxUnusedArg,
+                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle, &tctx);
                         }
+                        before = batch.count;
 
                         // sun member — LightingAtSample's guard
                         // (testOcclusion || forceSunLight) is constant-true
@@ -2704,7 +2894,9 @@ void TraceLights(int num)
                     {
                         // group has tickets: left buffered; consumed at the
                         // next reserve flush, the next empty group, or the
-                        // texel-end flush below
+                        // surface-end flush. Phase 9: count it as pending so
+                        // this texel's averaging fold waits for it.
+                        texPending[texelIdx]++;
                     }
                     else
                     {
@@ -2712,12 +2904,13 @@ void TraceLights(int num)
                         // buffered tickets FIRST (order!), then fold inline
                         // exactly as today — including the zero adds, which
                         // are bit-safe (accumulated color is non-negative).
+                        // Phase 9: the folds target this texel's SLOT.
                         if (batch.count > 0)
                         {
                             int n = TicketBatch_FlushTraces(&batch, tw);
                             TicketConsumeTickets(batch.tickets, n,
-                                                 accumColor, accumDir, accumEnergy, accumNormal,
-                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle);
+                                                 ctxUnusedArg, ctxUnusedArg, ctxUnusedArg, ctxUnusedArg,
+                                                 deluxe ? qtrue : qfalse, si->deluxeMinAngle, &tctx);
                         }
                         if (!nodirect)
                         {
@@ -2725,62 +2918,48 @@ void TraceLights(int num)
                             VectorClear(zeroVec);
                             if (deluxe)
                             {
-                                VectorAdd(accumColor, zeroVec, accumColor);
-                                VectorAdd(accumDir, normal, accumDir);      // subDir inits to normal
-                                VectorAdd(accumEnergy, zeroVec, accumEnergy);
-                                VectorAdd(accumNormal, normal, accumNormal);
+                                VectorAdd(tctx.accumColor[texelIdx], zeroVec, tctx.accumColor[texelIdx]);
+                                VectorAdd(tctx.accumDir[texelIdx], normal, tctx.accumDir[texelIdx]);      // subDir inits to normal
+                                VectorAdd(tctx.accumEnergy[texelIdx], zeroVec, tctx.accumEnergy[texelIdx]);
+                                VectorAdd(tctx.accumNormal[texelIdx], normal, tctx.accumNormal[texelIdx]);
                             }
                             else
                             {
-                                VectorAdd(accumColor, zeroVec, accumColor);
+                                VectorAdd(tctx.accumColor[texelIdx], zeroVec, tctx.accumColor[texelIdx]);
                             }
                         }
                         else
                         {
-                            if (deluxe) VectorAdd(accumNormal, normal, accumNormal);
+                            if (deluxe) VectorAdd(tctx.accumNormal[texelIdx], normal, tctx.accumNormal[texelIdx]);
                         }
                     }
                 }
 
-                hitCount++;
+                texHitCount[texelIdx]++;
             }
 
-            // Ticket wavefront (Phase 3b): texel-end flush — the last group's
-            // tickets must be consumed (and folded into the accumulators)
-            // BEFORE the averaging fold reads them below. Guarantees an empty
-            // batch at the start of every texel.
-            if (batch.count > 0)
-            {
-                int n = TicketBatch_FlushTraces(&batch, tw);
-                TicketConsumeTickets(batch.tickets, n,
-                                     accumColor, accumDir, accumEnergy, accumNormal,
-                                     deluxe ? qtrue : qfalse, si->deluxeMinAngle);
-            }
-
-            if (hitCount > 0)
-            {
-                sampleHit[i][j] = qtrue;
-                occluded[i][j] = qfalse;
-                float invHits = 1.0f / (float)hitCount;
-                for (k = 0; k < 3; k++)
-                    color[i][j][k] = accumColor[k] * invHits;
-                if (deluxe)
-                {
-                    vec3_t avgDir;
-                    VectorScale(accumDir, invHits, avgDir);
-                    VectorNormalize(avgDir, deluxe[i][j]);
-                    VectorScale(accumEnergy, invHits, lmenergy[i][j]);
-                    vec3_t avgNrm;
-                    VectorScale(accumNormal, invHits, avgNrm);
-                    VectorNormalize(avgNrm, normalArray[i][j]);
-                }
-            }
-            else
-            {
-                sampleHit[i][j] = qfalse;
-                occluded[i][j] = qtrue;
-            }
+            // Ticket wavefront (Phase 9): texel closed — its group set is
+            // final. If every group was already consumed by reserve/empty
+            // flushes inside the loop, fold the averaging NOW; otherwise the
+            // consume fires it when the last group drains (audit §9.5.1 —
+            // the pending/closed protocol). sampleHit/occluded move into
+            // FoldTexelAveraging (they were generation-side facts anyway).
+            texClosed[texelIdx] = 1;
+            if (texPending[texelIdx] == 0)
+                FoldTexelAveraging(&tctx, texelIdx);
         }
+    }
+
+    // Ticket wavefront (Phase 9): surface-end flush — drains any groups
+    // still buffered (the old per-texel texel-end flush is gone; the
+    // chunk is the buffer). Their folds fire the remaining averaging
+    // folds. New invariant: batch empty at surface end.
+    if (batch.count > 0)
+    {
+        int n = TicketBatch_FlushTraces(&batch, tw);
+        TicketConsumeTickets(batch.tickets, n,
+                             ctxUnusedArg, ctxUnusedArg, ctxUnusedArg, ctxUnusedArg,
+                             deluxe ? qtrue : qfalse, si->deluxeMinAngle, &tctx);
     }
 
     if (isDilated && use_upscale)
@@ -2964,6 +3143,14 @@ void TraceLights(int num)
     if (lmenergy_data) free(lmenergy_data);
     if (normalArray) free(normalArray);
     if (normalArray_data) free(normalArray_data);
+    if (accumColor_data) free(accumColor_data);
+    if (accumDir_data) free(accumDir_data);
+    if (accumEnergy_data) free(accumEnergy_data);
+    if (accumNormal_data) free(accumNormal_data);
+    if (texPending) free(texPending);
+    if (texClosed) free(texClosed);
+    if (texFolded) free(texFolded);
+    if (texHitCount) free(texHitCount);
     TicketBatch_Free(&batch);
     free(localLights);
     ThreadCompletedWeighted(surfWeight);
@@ -3456,6 +3643,7 @@ void LightWorld(void)
     c_ticketsGenerated = c_ticketsSubmitted = c_ticketsBlocked = 0;
     c_ticketsContributed = c_ticketsRejected = c_ticketGroups = 0;
     c_ticketFlushes = c_groupOverflowGrow = 0;
+    c_texelDoubleFoldWarnings = 0;
 
     surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
