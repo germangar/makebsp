@@ -882,6 +882,20 @@ qboolean SunToPoint(const vec3_t origin, traceWork_t *tw, contribution_t *out,
 
 /*
 ================
+[Reference — NOT COMPILED]
+
+Immediate-trace wrapper trio kept per jal 2026-11-25 as the semantic
+oracle for the ticketed direct-light path (see TicketConsumeTickets).
+The Phase 8 conversion retired its last callers (VertexLighting).
+If it is ever resurrected, re-verify it against the CURRENT prepare/
+finish helpers (TicketPrepare_SunPlane / TicketPrepare_Light /
+TicketFinish_Sun / TicketFinish_Light) first — the ticket structs and
+their contents have changed across Phases 3-5.
+================
+*/
+#if 0
+/*
+================
 SunToPlane
 Returns an amount of light to add at the texel (surface)
 
@@ -913,6 +927,7 @@ qboolean SunToPlane(const vec3_t origin, const vec3_t normal,
 
     return qfalse;
 }
+#endif // [Reference — NOT COMPILED] SunToPlane
 
 /*
 ========================
@@ -1440,6 +1455,7 @@ static qboolean TicketFinish_Light(lightTicket_t *t, const vec3_t origin,
     return qtrue;
 }
 
+#if 0 // [Reference — NOT COMPILED] LightContributionToPoint (see SunToPlane note)
 qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
                                   const vec3_t normal, contribution_t *out,
                                   traceWork_t *tw)
@@ -1457,12 +1473,14 @@ qboolean LightContributionToPoint(const light_t *light, const vec3_t origin,
 
     return TicketFinish_Light(&t, origin, normal, out);
 }
+#endif // [Reference — NOT COMPILED] LightContributionToPoint
 
 /*
 ========================
 LightingAtSample
 ========================
 */
+#if 0 // [Reference — NOT COMPILED] LightingAtSample (see SunToPlane note)
 void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
                       vec3_t dir, vec3_t energy,
                       qboolean testOcclusion, qboolean forceSunLight,
@@ -1522,6 +1540,7 @@ void LightingAtSample(const vec3_t origin, const vec3_t normal, vec3_t color,
         }
     }
 }
+#endif // [Reference — NOT COMPILED] LightingAtSample
 
 /*
 =============
@@ -1531,6 +1550,10 @@ Vertex lighting will completely ignore occlusion, because
 shadows would not be resolvable anyway.
 =============
 */
+static void TicketConsumeTickets(lightTicket_t *tickets, int n,
+                                 vec3_t accumColor, vec3_t accumDir,
+                                 vec3_t accumEnergy, vec3_t accumNormal,
+                                 qboolean deluxe, float deluxeMinAngle);
 void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
                     qboolean forceSunLight, float scale, light_t **lightList,
                     int numLights, traceWork_t *tw)
@@ -1539,6 +1562,24 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
     drawVert_t *dv;
     vec3_t sample, normal;
     float max;
+
+    // Ticket wavefront (Phase 8): per-call stack batch, grown to fit one
+    // whole vertex group (sun + all local lights) so a group is never
+    // split; flushed + consumed per vertex (empty at each group start).
+    // The texel batch (TraceLights) is Inited AFTER the vertex call sites,
+    // so the two never coexist. VertexLighting has a single exit — one
+    // Free here covers every path.
+    lightTicketBatch_t batch;
+    {
+        int batchCapacity = TICKET_BATCH;
+        if (batchCapacity < numLights + 1)
+        {
+            batchCapacity = numLights + 1;
+            #pragma omp atomic
+            c_groupOverflowGrow++;
+        }
+        TicketBatch_Init(&batch, batchCapacity);
+    }
 
     VectorCopy(ds->lightmapVecs[2], normal);
 
@@ -1563,15 +1604,79 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
         }
         else
         {
-            if (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP)
+            // Ticket wavefront (Phase 8): one group per vertex — the exact
+            // single-ss shape of the (retired) LightingAtSample call:
+            // deluxe off, deluxeMinAngle 0, sun first, lights in
+            // lightList[] order, accumulate into the cleared sample.
+            // BoxInSolid-culled vertices do NOT count a group (they never
+            // attempted a gather). The consume reads t->normal directly
+            // (no normalValid check) — sNormal must be non-NULL, which
+            // both call sites guarantee (real vertex/surface normals).
+            float *sNormal = (ds->patchWidth || ds->surfaceType == MST_TRIANGLE_SOUP) ? dv->normal : normal;
+
+            VectorClear(sample);
+
+            #pragma omp atomic
+            c_ticketGroups++;
+
+            // sun member — the vertex-path guard; applyColorFilter = qfalse
+            // (ToDo W8: the vertex sun does NOT apply the color filter
+            // while the texel sun does — preserved as-is)
+            if (testOcclusion || forceSunLight)
             {
-                LightingAtSample(v_origin, dv->normal, sample, NULL, NULL, testOcclusion,
-                                 forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
+                lightTicket_t t;
+                memset(&t, 0, sizeof(t));
+                if (TicketPrepare_SunPlane(v_origin, sNormal, &t, qfalse, tw))
+                {
+                    lightTicket_t *slot = TicketBatch_Append(&batch);
+                    if (slot)
+                    {
+                        t.texelIdx = i;
+                        t.ssIdx = 0;
+                        *slot = t;
+                    }
+                    else
+                    {
+                        #pragma omp atomic
+                        c_ticketAppendWarnings++;
+                    }
+                }
             }
-            else
+
+            // local light members, in lightList[] order
             {
-                LightingAtSample(v_origin, normal, sample, NULL, NULL, testOcclusion,
-                                 forceSunLight, qfalse, lightList, numLights, tw, 0.0f);
+                int li;
+                for (li = 0; li < numLights; li++)
+                {
+                    lightTicket_t t;
+                    memset(&t, 0, sizeof(t));
+                    if (TicketPrepare_Light(lightList[li], v_origin, sNormal, &t))
+                    {
+                        lightTicket_t *slot = TicketBatch_Append(&batch);
+                        if (slot)
+                        {
+                            t.texelIdx = i;
+                            t.ssIdx = 0;
+                            *slot = t;
+                        }
+                        else
+                        {
+                            #pragma omp atomic
+                            c_ticketAppendWarnings++;
+                        }
+                    }
+                }
+            }
+
+            if (batch.count > 0)
+            {
+                vec3_t dummyDir = {0, 0, 0};
+                vec3_t dummyEnergy = {0, 0, 0};
+                vec3_t dummyNormal = {0, 0, 0};
+                int n = TicketBatch_FlushTraces(&batch, tw);
+                TicketConsumeTickets(batch.tickets, n,
+                                     sample, dummyDir, dummyEnergy, dummyNormal,
+                                     qfalse, 0.0f);
             }
         }
 
@@ -1601,6 +1706,8 @@ void VertexLighting(dsurface_t *ds, qboolean testOcclusion,
             internalDrawVerts[ds->firstVert + i].color[0][2] += sample[2];
         }
     }
+
+    TicketBatch_Free(&batch);
 }
 
 /*
