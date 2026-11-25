@@ -2049,7 +2049,7 @@ static void PrintLightDigest(const char *stageTag)
         digest = LightDigestAddFNV1a(digest, gridData32,
                                      (size_t)numGridPoints * sizeof(*gridData32));
 
-    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x grid=%08x [%s]\n",
+    _printf("light digest=%08x%s traces=%lld masks: alpha=%08x unreach=%08x grid=%08x [%s]\n",
             digest,
             deluxeFloats ? "" : " (no deluxe buffers)",
             c_totalTrace,
@@ -2273,7 +2273,17 @@ void LightMain(void)
     if (!directonly && !radiosityonly) {
         LightAmbient();
     }
-    
+
+    // Phase 6 step 6.0: per-stage digest + ticket summary AFTER LightAmbient.
+    // The ambient pass's lightFloats addition was previously invisible to the
+    // digests (the post-radiosity point is before it, and
+    // DilateDeluxeDirections mutates the buffers after). This is the baseline
+    // the ambient ticket conversion gates on.
+    if (!directonly && !radiosityonly) {
+        PrintLightDigest("post-ambient");
+        PrintTicketSummary("post-ambient");
+    }
+
     free(surfaceWorkOrder);
 
     if (debugLightmapsAlpha)

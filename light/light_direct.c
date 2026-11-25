@@ -14,18 +14,18 @@ extern int *texelSurfaceDebug;
 // Integer event counts only: updates use #pragma omp atomic, so totals are
 // exact regardless of order and output determinism is unaffected. No float
 // sums ever use these.
-int c_ticketsGenerated;
-int c_ticketsSubmitted;
-int c_ticketsBlocked;
-int c_ticketsContributed;
-int c_ticketsRejected;
-int c_ticketGroups;
-int c_ticketFlushes;
-int c_groupOverflowGrow;
-int c_ticketStrandWarnings;  // guard: batch non-empty at texel start
-int c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
-int c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
-int c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
+long long c_ticketsGenerated;
+long long c_ticketsSubmitted;
+long long c_ticketsBlocked;
+long long c_ticketsContributed;
+long long c_ticketsRejected;
+long long c_ticketGroups;
+long long c_ticketFlushes;
+long long c_groupOverflowGrow;
+long long c_ticketStrandWarnings;  // guard: batch non-empty at texel start
+long long c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
+long long c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
+long long c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
 
 // Phase 5: shared ticket summary (counters + invariant check + guards).
 // Called after each ticketed stage (TraceLights, post-radiosity) — the
@@ -33,20 +33,20 @@ int c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was fu
 // valid and pinpoints the stage if a violation ever appears.
 void PrintTicketSummary(const char *stageTag)
 {
-    _printf("%s tickets: generated=%d submitted=%d dropped=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
+    _printf("%s tickets: generated=%lld submitted=%lld dropped=%lld groups=%lld flushes=%lld blocked=%lld contributed=%lld rejected=%lld\n",
             stageTag, c_ticketsGenerated, c_ticketsSubmitted, c_ticketsDropped, c_ticketGroups, c_ticketFlushes,
             c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
     if (c_ticketsSubmitted + c_ticketsDropped != c_ticketsGenerated ||
         c_ticketsBlocked + c_ticketsContributed + c_ticketsRejected != c_ticketsSubmitted)
     {
         _printf("WARNING: %s ticket invariants violated "
-                "(submitted=%d dropped=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
+                "(submitted=%lld dropped=%lld generated=%lld blocked=%lld contributed=%lld rejected=%lld)\n",
                 stageTag, c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
                 c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
     }
     if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips)
     {
-        _printf("%s ticket guards: strand=%d appendNULL=%d overflowGrow=%d capSkips=%d\n",
+        _printf("%s ticket guards: strand=%lld appendNULL=%lld overflowGrow=%lld capSkips=%lld\n",
                 stageTag, c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips);
     }
 }

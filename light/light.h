@@ -482,10 +482,10 @@ void            PrintTicketSummary(const char *stageTag); // Phase 5: shared tic
 
 // Ticket wavefront counters (defined in light_direct.c; incremented from
 // light_ambient.c too since Phase 4). Integer event counts — atomics only.
-extern int c_ticketsGenerated, c_ticketsSubmitted, c_ticketsBlocked;
-extern int c_ticketsContributed, c_ticketsRejected, c_ticketGroups;
-extern int c_ticketFlushes, c_groupOverflowGrow, c_ticketsDropped;
-extern int c_gridCapSkips, c_ticketStrandWarnings, c_ticketAppendWarnings;
+extern long long c_ticketsGenerated, c_ticketsSubmitted, c_ticketsBlocked;
+extern long long c_ticketsContributed, c_ticketsRejected, c_ticketGroups;
+extern long long c_ticketFlushes, c_groupOverflowGrow, c_ticketsDropped;
+extern long long c_gridCapSkips, c_ticketStrandWarnings, c_ticketAppendWarnings;
 
 void InitTrace(void);
 void InitTracingGeometry(void);
@@ -497,7 +497,7 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
 void TraceLineRanged(const vec3_t start, const vec3_t stop, trace_t *trace,
 					 qboolean testAll, traceWork_t *tw, float nearClip, float farClip); // Phase 5: overrides <= 0 = standard
-extern int c_totalTrace; // light_trace.c: golden total of TraceLine_Embree calls (Phase 0 instrumentation)
+extern long long c_totalTrace; // light_trace.c: golden total of TraceLine_Embree calls (Phase 0 instrumentation)
 qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
 qboolean TriSoupSamplePoint(dsurface_t *ds, float st[2], vec3_t origin, vec3_t normal, vec3_t outCentroid);

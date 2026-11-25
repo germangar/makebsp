@@ -341,10 +341,66 @@ void RunMAOPass(void)
 
 /*
 ================
-GatherAmbientAtPoint
+TicketConsumeAmbientGatherTickets
+
+Ticket wavefront (Phase 6, Stage 3): consume ambient-gather tickets in
+generation order. The weight accumulation stayed in the generation stage
+(it is trace-independent and the per-neighbor order is identical), so this
+applies only the trace outcome: clear -> color + bent-direction
+accumulation, blocked -> nothing here (its weight was already added at
+generation). The neighbor luminance is recomputed from the ticket-carried
+color with the identical expression the generation cull used (bit-identical
+values, bit-identical order of operations). No rejection path: after a
+clear trace the old code always accumulated.
 ================
 */
-static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambColor, vec3_t bentAccum, traceWork_t *tw)
+static void TicketConsumeAmbientGatherTickets(lightTicket_t *tickets, int n,
+                                              vec3_t ambColor, vec3_t bentAccum)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (!t->trace.passSolid)
+        {
+            #pragma omp atomic
+            c_ticketsContributed++;
+
+            ambColor[0] += t->cont.irradiance[0] * t->angle;
+            ambColor[1] += t->cont.irradiance[1] * t->angle;
+            ambColor[2] += t->cont.irradiance[2] * t->angle;
+
+            float lum = t->cont.irradiance[0] * 0.299f + t->cont.irradiance[1] * 0.587f + t->cont.irradiance[2] * 0.114f;
+            bentAccum[0] += t->dir[0] * t->angle * lum;
+            bentAccum[1] += t->dir[1] * t->angle * lum;
+            bentAccum[2] += t->dir[2] * t->angle * lum;
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsBlocked++;
+        }
+    }
+}
+
+/*
+================
+GatherAmbientGenerate
+
+Ticket wavefront (Phase 6, Stage 1): the neighborhood scan, culls and
+weight accumulation of the old GatherAmbientAtPoint, verbatim. All weights
+are trace-independent, so accumulating them here in scan order — solid
+neighbors included (no trace, no ticket) — reproduces the old float sum
+bit-exactly. Traced neighbors become tickets; flush-on-full applies the
+older chunk's outcome before the scan continues (chunk boundaries only cut
+between tickets, so the clear-neighbor subsequence keeps its scan order).
+Returns totalWeight; the caller flushes the remainder, consumes, and
+divides (the old in-function division).
+================
+*/
+static float GatherAmbientGenerate(vec3_t origin, vec3_t normal, lightTicketBatch_t *batch, traceWork_t *tw, vec3_t ambColor, vec3_t bentAccum)
 {
     float gatherRadius = ambient_gatheradius;
     float gatherRadiusSq = gatherRadius * gatherRadius;
@@ -369,7 +425,14 @@ static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambCol
     VectorClear(ambColor);
     VectorClear(bentAccum);
     float totalWeight = 0.0f;
-    
+
+    // Ticket wavefront (Phase 6): one group per gather call (both the vertex
+    // and the texel pass count). Flush-on-full — the fold is a straight
+    // accumulation into the caller's ambColor/bentAccum (no group
+    // sub-state), so chunked flushing is bit-identical to the old interleave.
+    #pragma omp atomic
+    c_ticketGroups++;
+
     for (int gz = iz_min; gz <= iz_max; gz++) {
         for (int gy = iy_min; gy <= iy_max; gy++) {
             for (int gx = ix_min; gx <= ix_max; gx++) {
@@ -409,32 +472,45 @@ static qboolean GatherAmbientAtPoint(vec3_t origin, vec3_t normal, vec3_t ambCol
                     continue;
                 }
 
-                // Trace ray
-                trace_t trace;
-                TraceLine(origin, gPos, &trace, qfalse, tw);
-                if (!trace.passSolid) {
-                    ambColor[0] += gCol[0] * w;
-                    ambColor[1] += gCol[1] * w;
-                    ambColor[2] += gCol[2] * w;
-                    
-                    bentAccum[0] += dir[0] * w * lum;
-                    bentAccum[1] += dir[1] * w * lum;
-                    bentAccum[2] += dir[2] * w * lum;
+                // Trace ray — Phase 6: becomes a ticket; the consume applies
+                // the clear/blocked outcome. Flush-on-full keeps the batch small.
+                if (batch->count >= batch->capacity)
+                {
+                    int fn = TicketBatch_FlushTraces(batch, tw);
+                    TicketConsumeAmbientGatherTickets(batch->tickets, fn, ambColor, bentAccum);
                 }
-                
+                {
+                    lightTicket_t t;
+                    lightTicket_t *slot;
+                    memset(&t, 0, sizeof(t));
+                    t.light = NULL;
+                    VectorCopy(origin, t.origin);
+                    VectorCopy(gPos, t.end);
+                    VectorCopy(dir, t.dir);              // normalized neighbor direction
+                    t.angle = w;                         // weight (consume uses it)
+                    VectorCopy(gCol, t.cont.irradiance); // neighbor MAO color
+                    t.testAll = qfalse;
+                    t.applyColorFilter = qfalse;
+                    t.normalValid = qtrue;
+                    t.texelIdx = gidx;
+                    t.ssIdx = 0;
+                    slot = TicketBatch_Append(batch);
+                    if (slot)
+                        *slot = t;
+                    else
+                    {
+                        #pragma omp atomic
+                        c_ticketAppendWarnings++;
+                    }
+                }
+
                 // Accumulate weight regardless of occlusion so blocked rays darken the final result
                 totalWeight += w;
             }
         }
     }
 
-    if (totalWeight > 0.0001f) {
-        ambColor[0] /= totalWeight;
-        ambColor[1] /= totalWeight;
-        ambColor[2] /= totalWeight;
-        return qtrue;
-    }
-    return qfalse;
+    return totalWeight;
 }
 
 /*
@@ -570,6 +646,12 @@ void TraceAmbient(int num)
     if (!tw) return;
     memset(tw, 0, sizeof(traceWork_t));
 
+    // Ticket wavefront (Phase 6): ONE batch per call (hoisted — the vertex +
+    // texel passes make thousands of gather calls per surface). Freed at
+    // BOTH exits (the no-lightmap early return and the normal end).
+    lightTicketBatch_t batch;
+    TicketBatch_Init(&batch, 256);
+
     realSurfIndex = surfaceWorkOrder[num];
     ds = &drawSurfaces[realSurfIndex];
     shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
@@ -590,8 +672,17 @@ void TraceAmbient(int num)
         
         VectorMA(origin, SAMPLE_NUDGE, normal, origin);
         
-        if (GatherAmbientAtPoint(origin, normal, ambColor, bentAccum, tw))
+        float totalWeight = GatherAmbientGenerate(origin, normal, &batch, tw, ambColor, bentAccum);
         {
+            int n = TicketBatch_FlushTraces(&batch, tw);
+            TicketConsumeAmbientGatherTickets(batch.tickets, n, ambColor, bentAccum);
+        }
+        if (totalWeight > 0.0001f)
+        {
+            ambColor[0] /= totalWeight;
+            ambColor[1] /= totalWeight;
+            ambColor[2] /= totalWeight;
+
             if (internalDrawVerts)
             {
                 internalDrawVerts[vIdx].color[0][0] += ambColor[0];
@@ -603,6 +694,7 @@ void TraceAmbient(int num)
 
     if (ds->lightmapNum[0] < 0)
     {
+        TicketBatch_Free(&batch);
         free(tw);
         ThreadCompletedWeighted(surfWeight);
         return;
@@ -661,8 +753,17 @@ void TraceAmbient(int num)
             vec3_t ambColor;
             vec3_t bentAccum;
             
-            if (!GatherAmbientAtPoint(origin, normal, ambColor, bentAccum, tw))
+            float totalWeight = GatherAmbientGenerate(origin, normal, &batch, tw, ambColor, bentAccum);
+            {
+                int n = TicketBatch_FlushTraces(&batch, tw);
+                TicketConsumeAmbientGatherTickets(batch.tickets, n, ambColor, bentAccum);
+            }
+            if (totalWeight <= 0.0001f)
                 continue;
+
+            ambColor[0] /= totalWeight;
+            ambColor[1] /= totalWeight;
+            ambColor[2] /= totalWeight;
 
             float ambLum = ambColor[0] * 0.299f + ambColor[1] * 0.587f + ambColor[2] * 0.114f;
             if (ambLum < 0.0001f)
@@ -755,6 +856,7 @@ void TraceAmbient(int num)
             }
         }
     }
+    TicketBatch_Free(&batch);
     free(tw);
     ThreadCompletedWeighted(surfWeight);
 }

@@ -30,7 +30,7 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args);
 
 #define TRACE_EPSILON 0.001
 
-int c_totalTrace;
+long long c_totalTrace;
 
 /*
 ====================
