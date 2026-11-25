@@ -461,6 +461,8 @@ typedef struct lightTicket_s {
 	// outputs
 	trace_t        trace;          // filled by the flush stage
 	contribution_t cont;           // completed by the finish stage
+	float          nearClip;       // Phase 5: custom ray range (<= 0 = standard)
+	float          farClip;        // Phase 5: custom ray range (<= 0 = standard)
 } lightTicket_t;
 
 #define TICKET_BATCH 4096
@@ -476,6 +478,7 @@ lightTicket_t  *TicketBatch_Append(lightTicketBatch_t *batch); // NULL when full
 int             TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw); // returns count traced
 int             TicketBatch_FlushTracesRange(lightTicketBatch_t *batch, int first, int count, traceWork_t *tw); // no count reset
 void            TicketBatch_Free(lightTicketBatch_t *batch);
+void            PrintTicketSummary(const char *stageTag); // Phase 5: shared ticket summary
 
 // Ticket wavefront counters (defined in light_direct.c; incremented from
 // light_ambient.c too since Phase 4). Integer event counts — atomics only.
@@ -492,6 +495,8 @@ qboolean BoxInSolid(vec3_t origin, float margin, qboolean structuralonly);
 
 void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
+void TraceLineRanged(const vec3_t start, const vec3_t stop, trace_t *trace,
+					 qboolean testAll, traceWork_t *tw, float nearClip, float farClip); // Phase 5: overrides <= 0 = standard
 extern int c_totalTrace; // light_trace.c: golden total of TraceLine_Embree calls (Phase 0 instrumentation)
 qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);

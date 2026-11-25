@@ -199,46 +199,10 @@ static void RadiosityVoxelAdd(const vec3_t pos, const vec3_t normal, const vec3_
 
 
 // ---------------------------------------------------------------------------
-// Helper: test line-of-sight between two world points via Embree.
-// Returns qtrue if the path is CLEAR (not occluded).
-// ---------------------------------------------------------------------------
-
-static qboolean RadVisCheck(const vec3_t from, const vec3_t to) {
-    struct RTCRay ray;
-    struct RTCOccludedArguments oargs;
-    vec3_t  dir;
-    float   len;
-
-    VectorSubtract(to, from, dir);
-
-    len = VectorLength(dir);
-    if (len < 0.001f)
-        return qfalse; // degenerate
-
-    ray.org_x  = from[0];
-    ray.org_y  = from[1];
-    ray.org_z  = from[2];
-    ray.dir_x  = dir[0] / len;
-    ray.dir_y  = dir[1] / len;
-    ray.dir_z  = dir[2] / len;
-    ray.tnear  = RAD_ORIGIN_NUDGE * 0.5f;
-    ray.tfar   = len - RAD_ORIGIN_NUDGE * 0.5f;
-    ray.mask   = 0xFFFFFFFF;
-    ray.flags  = 0;
-
-    struct MyRayQueryContext context;
-    rtcInitRayQueryContext(&context.context);
-    context.tw = NULL;
-    context.patchshadows = patchshadows;
-
-    rtcInitOccludedArguments(&oargs);
-    oargs.context = &context.context;
-
-    rtcOccluded1(g_scene, &ray, &oargs);
-
-    // If occluded, tfar becomes -infinity in Embree 4
-    return (ray.tfar >= 0.0f) ? qtrue : qfalse;
-}
+// Phase 5b: RadVisCheck deleted - its clipped-ray logic lives in the ticket
+// fields (nearClip/farClip) flushed through TraceLineRanged, with the same
+// untinted NULL-tw context (AlphaFilter guards tw == NULL). See plan
+// //6 Phase 5, 5.3/5.6.
 
 // ---------------------------------------------------------------------------
 // Patch Subdivision Helper
@@ -476,6 +440,57 @@ static void RadiosityEmit(const float *srcBuffer, qboolean isFirstPass) {
 // Phase 2 — Integrate
 // ---------------------------------------------------------------------------
 
+// Phase 5b ticket batching for the integrate family.
+#define RADIOSITY_TICKET_BATCH 128
+
+/*
+================
+TicketConsumeRadiosityEmitterTickets
+
+Ticket wavefront (Phase 5b, Stage 3): consume radiosity emitter tickets in
+generation order — a STRAIGHT fold with no group logic (the caller owns the
+per-dst accumulators and the ThreadLock'd write blocks, which stay exactly
+where they were). The visibility outcome (the old RadVisCheck, now the
+flush's clipped ray) gates the accumulation: clear → AccumulateContribution
+with the contribution prepared at generation; blocked → nothing.
+
+`rejected` is never produced here: after a clear visibility check the old
+code always accumulated. `deluxeMinAngle` = the dst surface's shader value
+(the vertex path passes 0.0f, as the old code did).
+================
+*/
+static void TicketConsumeRadiosityEmitterTickets(lightTicket_t *tickets, int n,
+                                                 vec3_t accum, vec3_t accumDeluxe, vec3_t accumEnergy,
+                                                 qboolean deluxe, float deluxeMinAngle)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (!t->trace.passSolid)
+        {
+            // Phase 5b-revised: apply the averaged-alpha / lightfilter tint
+            // accumulated by the geometry filter (lightgrid-style) to the
+            // prepared contribution before accumulating.
+            for (int c = 0; c < 3; c++)
+                t->cont.irradiance[c] *= t->trace.filter[c];
+
+            AccumulateContribution(accum, deluxe ? accumDeluxe : NULL, deluxe ? accumEnergy : NULL,
+                                   &t->cont, t->normal, deluxeMinAngle);
+
+            #pragma omp atomic
+            c_ticketsContributed++;
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsBlocked++;
+        }
+    }
+}
+
 static void RadiosityIntegrateOneSurface(int surfIdx) {
     dsurface_t   *ds = &drawSurfaces[surfIdx];
     shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
@@ -493,6 +508,23 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         points = VoxelCache_Load(surfIdx, &numPoints);
     }
 
+    // Ticket wavefront (Phase 5b): ONE batch per call (hoisted — the dst
+    // loops can be millions of texels times radiosityPasses); each dst texel
+    // flushes its own group before the ThreadLock'd write.
+    lightTicketBatch_t batch;
+    TicketBatch_Init(&batch, RADIOSITY_TICKET_BATCH);
+
+    // Phase 5b-revised (jal approved): lightgrid-style averaged-alpha
+    // filtering for the visibility rays. The old RadVisCheck used an untinted
+    // NULL-tw context whose geometry-filter reads hit adjacent stack garbage
+    // (UB). With isLightgrid the filter accumulates averaged alpha/
+    // lightfilter tints into each ticket's trace.filter, which the consume
+    // applies to the contribution (TicketConsumeRadiosityEmitterTickets).
+    traceWork_t tw;
+    memset(&tw, 0, sizeof(tw));
+    tw.ignoreSurface = -1;
+    tw.isLightgrid = qtrue;
+    tw.patchshadows = patchshadows;
     int scale = upscale ? 2 : 1;
     int step = (ds->surfaceType == MST_TRIANGLE_SOUP) ? surf_rad_interval : 1;
 
@@ -579,22 +611,61 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
                         if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
 
-                        if (!RadVisCheck(dst, em->center)) continue;
-                        
-                        contribution_t cont;
-                        cont.light = NULL;
-                        VectorCopy(rayDir, cont.dir);
-                        if (game->deluxeMap) {
-                            float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
-                            VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
-                        } else {
-                            VectorScale(em->color, formFactorBase, cont.irradiance);
+                        // Ticket wavefront (Phase 5b): everything except the
+                        // visibility check is pure and moves to generation —
+                        // the full contribution is prepared here (the old
+                        // code built it after RadVisCheck; same expressions,
+                        // same order), and the consume applies the clipped
+                        // ray's outcome.
+                        {
+                            lightTicket_t t;
+                            lightTicket_t *slot;
+                            memset(&t, 0, sizeof(t));
+                            t.light = NULL;
+                            VectorCopy(dst, t.origin);
+                            VectorCopy(em->center, t.end);
+                            VectorCopy(dstNormal, t.normal);
+                            t.nearClip = RAD_ORIGIN_NUDGE * 0.5f;              // old RadVisCheck tnear
+                            t.farClip = dist - RAD_ORIGIN_NUDGE * 0.5f;        // old tfar (dist >= 0.001 culled above)
+                            t.testAll = qfalse;
+                            t.applyColorFilter = qfalse;
+                            t.normalValid = qtrue;
+                            t.texelIdx = k_dst;
+                            t.ssIdx = 0;
+                            t.cont.light = NULL;
+                            VectorCopy(rayDir, t.cont.dir);
+                            if (game->deluxeMap) {
+                                float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
+                                VectorScale(em->color, formFactorBase / clampCos, t.cont.irradiance);
+                            } else {
+                                VectorScale(em->color, formFactorBase, t.cont.irradiance);
+                            }
+                            t.cont.angle = cosDst;
+                            t.cont.isGlow = qfalse;
+                            t.cont.familyCount = 1;
+                            if (batch.count >= batch.capacity)
+                            {
+                                int fn = TicketBatch_FlushTraces(&batch, &tw);
+                                TicketConsumeRadiosityEmitterTickets(batch.tickets, fn,
+                                                                     accum, accumDeluxe, accumEnergy,
+                                                                     game->deluxeMap ? qtrue : qfalse, si->deluxeMinAngle);
+                            }
+                            slot = TicketBatch_Append(&batch);
+                            if (slot)
+                                *slot = t;
+                            else
+                            {
+                                #pragma omp atomic
+                                c_ticketAppendWarnings++;
+                            }
                         }
-                        cont.angle = cosDst;
-                        cont.isGlow = qfalse;
-                        cont.familyCount = 1;
-                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
+                }
+                {
+                    int n = TicketBatch_FlushTraces(&batch, &tw);
+                    TicketConsumeRadiosityEmitterTickets(batch.tickets, n,
+                                                         accum, accumDeluxe, accumEnergy,
+                                                         game->deluxeMap ? qtrue : qfalse, si->deluxeMinAngle);
                 }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
@@ -658,24 +729,60 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
                         float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
                         if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
 
-                        if (!RadVisCheck(dst, em->center)) continue;
-
-                        contribution_t cont;
-                        cont.light = NULL;
-                        VectorCopy(rayDir, cont.dir);
-                        if (game->deluxeMap) {
-                            float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
-                            VectorScale(em->color, formFactorBase / clampCos, cont.irradiance);
-                        } else {
-                            VectorScale(em->color, formFactorBase, cont.irradiance);
+                        // Ticket wavefront (Phase 5b): same conversion as the
+                        // trisoup branch — full contribution prepared at
+                        // generation, clipped-ray visibility at consume.
+                        {
+                            lightTicket_t t;
+                            lightTicket_t *slot;
+                            memset(&t, 0, sizeof(t));
+                            t.light = NULL;
+                            VectorCopy(dst, t.origin);
+                            VectorCopy(em->center, t.end);
+                            VectorCopy(dstNormal, t.normal);
+                            t.nearClip = RAD_ORIGIN_NUDGE * 0.5f;              // old RadVisCheck tnear
+                            t.farClip = dist - RAD_ORIGIN_NUDGE * 0.5f;        // old tfar (dist >= 0.001 culled above)
+                            t.testAll = qfalse;
+                            t.applyColorFilter = qfalse;
+                            t.normalValid = qtrue;
+                            t.texelIdx = k_dst;
+                            t.ssIdx = 0;
+                            t.cont.light = NULL;
+                            VectorCopy(rayDir, t.cont.dir);
+                            if (game->deluxeMap) {
+                                float clampCos = cosDst < 0.01f ? 0.01f : cosDst;
+                                VectorScale(em->color, formFactorBase / clampCos, t.cont.irradiance);
+                            } else {
+                                VectorScale(em->color, formFactorBase, t.cont.irradiance);
+                            }
+                            t.cont.angle = cosDst;
+                            t.cont.isGlow = qfalse;
+                            t.cont.familyCount = 1;
+                            if (batch.count >= batch.capacity)
+                            {
+                                int fn = TicketBatch_FlushTraces(&batch, &tw);
+                                TicketConsumeRadiosityEmitterTickets(batch.tickets, fn,
+                                                                     accum, accumDeluxe, accumEnergy,
+                                                                     game->deluxeMap ? qtrue : qfalse, si->deluxeMinAngle);
+                            }
+                            slot = TicketBatch_Append(&batch);
+                            if (slot)
+                                *slot = t;
+                            else
+                            {
+                                #pragma omp atomic
+                                c_ticketAppendWarnings++;
+                            }
                         }
-                        cont.angle = cosDst;
-                        cont.isGlow = qfalse;
-                        cont.familyCount = 1;
-                        AccumulateContribution(accum, game->deluxeMap ? accumDeluxe : NULL, game->deluxeMap ? accumEnergy : NULL, &cont, dstNormal, si->deluxeMinAngle);
                     }
                 }
 
+                {
+                    int n = TicketBatch_FlushTraces(&batch, &tw);
+                    TicketConsumeRadiosityEmitterTickets(batch.tickets, n,
+                                                         accum, accumDeluxe, accumEnergy,
+                                                         game->deluxeMap ? qtrue : qfalse, si->deluxeMinAngle);
+                }
                 if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
                     ThreadLock();
                     VectorAdd(&radiosityFloats[k_dst * 3], accum, &radiosityFloats[k_dst * 3]);
@@ -689,6 +796,8 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
         }
     }
     
+    TicketBatch_Free(&batch);
+
     if (points) Q_Free(points);
 }
 
@@ -696,6 +805,18 @@ static void RadiosityIntegrateOneSurface(int surfIdx) {
 static void RadiosityIntegrateVertexSurface(int surfIdx) {
     dsurface_t *ds = &drawSurfaces[surfIdx];
     if (ds->numVerts == 0) return;
+
+    // Ticket wavefront (Phase 5b): one batch per call. Phase 5b-revised:
+    // lightgrid-style averaged-alpha filtering (same tw as the texel path —
+    // jal approved applying it to the vertex path too).
+    lightTicketBatch_t batch;
+    TicketBatch_Init(&batch, RADIOSITY_TICKET_BATCH);
+
+    traceWork_t tw;
+    memset(&tw, 0, sizeof(tw));
+    tw.ignoreSurface = -1;
+    tw.isLightgrid = qtrue;
+    tw.patchshadows = patchshadows;
 
     for (int i = 0; i < ds->numVerts; i++) {
         int vIdx = ds->firstVert + i;
@@ -752,26 +873,63 @@ static void RadiosityIntegrateVertexSurface(int surfIdx) {
                 float maxColor = em->color[0] > em->color[1] ? (em->color[0] > em->color[2] ? em->color[0] : em->color[2]) : (em->color[1] > em->color[2] ? em->color[1] : em->color[2]);
                 if (formFactorBase * cosDst * maxColor <= MIN_RADIOSITY_EMITTER_ADD) continue;
 
-                if (!RadVisCheck(dst, em->center)) continue;
-                
-                contribution_t cont;
-                cont.light = NULL;
-                VectorCopy(rayDir, cont.dir);
-                VectorScale(em->color, formFactorBase, cont.irradiance);
-                cont.angle = cosDst;
-                cont.isGlow = qfalse;
-                cont.familyCount = 1;
-                
-                AccumulateContribution(accum, NULL, NULL, &cont, dstNormal, 0.0f);
+                // Ticket wavefront (Phase 5b): same conversion; the vertex
+                // path has no deluxe accumulators (the old accumulate passed
+                // NULL/NULL and 0.0f).
+                {
+                    lightTicket_t t;
+                    lightTicket_t *slot;
+                    memset(&t, 0, sizeof(t));
+                    t.light = NULL;
+                    VectorCopy(dst, t.origin);
+                    VectorCopy(em->center, t.end);
+                    VectorCopy(dstNormal, t.normal);
+                    t.nearClip = RAD_ORIGIN_NUDGE * 0.5f;              // old RadVisCheck tnear
+                    t.farClip = dist - RAD_ORIGIN_NUDGE * 0.5f;        // old tfar (dist >= 0.001 culled above)
+                    t.testAll = qfalse;
+                    t.applyColorFilter = qfalse;
+                    t.normalValid = qtrue;
+                    t.texelIdx = vIdx;
+                    t.ssIdx = 0;
+                    t.cont.light = NULL;
+                    VectorCopy(rayDir, t.cont.dir);
+                    VectorScale(em->color, formFactorBase, t.cont.irradiance);
+                    t.cont.angle = cosDst;
+                    t.cont.isGlow = qfalse;
+                    t.cont.familyCount = 1;
+                    if (batch.count >= batch.capacity)
+                    {
+                        int fn = TicketBatch_FlushTraces(&batch, &tw);
+                        TicketConsumeRadiosityEmitterTickets(batch.tickets, fn,
+                                                             accum, accum, accum,
+                                                             qfalse, 0.0f);
+                    }
+                    slot = TicketBatch_Append(&batch);
+                    if (slot)
+                        *slot = t;
+                    else
+                    {
+                        #pragma omp atomic
+                        c_ticketAppendWarnings++;
+                    }
+                }
             }
         }
-        
+
+        {
+            int n = TicketBatch_FlushTraces(&batch, &tw);
+            TicketConsumeRadiosityEmitterTickets(batch.tickets, n,
+                                                 accum, accum, accum,
+                                                 qfalse, 0.0f);
+        }
         if (accum[0] > 0 || accum[1] > 0 || accum[2] > 0) {
             ThreadLock();
             VectorAdd(&radiosityVertexFloats[vIdx * 3], accum, &radiosityVertexFloats[vIdx * 3]);
             ThreadUnlock();
         }
     }
+
+    TicketBatch_Free(&batch);
 }
 
 static void RadiosityIntegrateThread(int surfIdx) {
@@ -1042,6 +1200,50 @@ static qboolean RadiosityVoxelSample(const vec3_t pos, const vec3_t normal, vec3
     return qtrue;
 }
 
+// Ticket wavefront (Phase 5a, Stage 3): consume lightgrid bounce probes in
+// generation order. The old inline body, verbatim, with t->trace and t->dir
+// standing in for the local trace/dir:
+//   hit + hitFraction < 1 → invDir = -dir → RadiosityVoxelSample(trace.hit,
+//   invDir, ...) → accumulate + hits++.
+// Counter mapping (invariant-safe): contributed = accumulated; blocked =
+// hit geometry but no voxel data at that point; rejected = missed (void).
+static void TicketConsumeRadiosityGridProbes(lightTicket_t *tickets, int n,
+                                             vec3_t accumColor, int *hits)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (t->trace.passSolid && t->trace.hitFraction < 1.0f)
+        {
+            vec3_t invDir;
+            VectorScale(t->dir, -1.0f, invDir);
+
+            vec3_t hitColor = {0, 0, 0};
+            if (RadiosityVoxelSample(t->trace.hit, invDir, hitColor, NULL, NULL))
+            {
+                VectorAdd(accumColor, hitColor, accumColor);
+                (*hits)++;
+
+                #pragma omp atomic
+                c_ticketsContributed++;
+            }
+            else
+            {
+                #pragma omp atomic
+                c_ticketsBlocked++;
+            }
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsRejected++;
+        }
+    }
+}
+
 static void RadiosityIntegrateGridThread(int num) {
     if (!gridData32) return;
 
@@ -1081,6 +1283,14 @@ static void RadiosityIntegrateGridThread(int num) {
     tw.isLightgrid = qtrue;
     tw.patchshadows = patchshadows;
 
+    // Ticket wavefront (Phase 5a): one group per grid point — all 64 bounce
+    // probes generated, flushed in order, then consumed. Standard ray params
+    // (testAll = qtrue, default near/far) so the flush is the exact old call.
+    lightTicketBatch_t batch;
+    #pragma omp atomic
+    c_ticketGroups++;
+    TicketBatch_Init(&batch, numSamples);
+
     for (int i = 0; i < numSamples; i++) {
         float sampleY = 1.0f - (i / (float)(numSamples - 1)) * 2.0f;
         float radius = sqrtf(1.0f - sampleY * sampleY);
@@ -1094,20 +1304,40 @@ static void RadiosityIntegrateGridThread(int num) {
         vec3_t end;
         VectorMA(origin, 65536.0f, dir, end); 
 
-        trace_t trace;
-        TraceLine(origin, end, &trace, qtrue, &tw);
-
-        if (trace.passSolid && trace.hitFraction < 1.0f) {
-            vec3_t invDir;
-            VectorScale(dir, -1.0f, invDir);
-            
-            vec3_t hitColor = {0, 0, 0};
-            if (RadiosityVoxelSample(trace.hit, invDir, hitColor, NULL, NULL)) {
-                VectorAdd(accumColor, hitColor, accumColor);
-                hits++;
+        // Ticket wavefront: generate the probe; the consume applies the hit
+        // outcome (voxel sample at the hit point). t->dir carries the probe
+        // direction (the consume derives invDir from it).
+        {
+            lightTicket_t t;
+            lightTicket_t *slot;
+            memset(&t, 0, sizeof(t));
+            t.light = NULL;
+            VectorCopy(origin, t.origin);
+            VectorCopy(end, t.end);
+            VectorCopy(dir, t.dir);
+            t.testAll = qtrue;               // closest-hit: needs trace.hit
+            t.applyColorFilter = qfalse;
+            t.normalValid = qtrue;
+            t.texelIdx = num;
+            t.ssIdx = i;
+            slot = TicketBatch_Append(&batch);
+            if (slot)
+                *slot = t;
+            else
+            {
+                #pragma omp atomic
+                c_ticketAppendWarnings++;
             }
         }
     }
+
+    // Stage 2+3: flush all probes (tw = &tw, preserving isLightgrid for the
+    // average-alpha filter path), then consume.
+    {
+        int n = TicketBatch_FlushTraces(&batch, &tw);
+        TicketConsumeRadiosityGridProbes(batch.tickets, n, accumColor, &hits);
+    }
+    TicketBatch_Free(&batch);
 
     if (hits > 0) {
         float factor = 1.0f / numSamples;

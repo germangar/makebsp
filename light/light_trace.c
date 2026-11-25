@@ -896,13 +896,20 @@ qboolean PointInSolid(vec3_t start)
 
 /*
 =============
-TraceLine_Embree
+TraceLine_Embree_Ranged / TraceLine_Embree
 
-High-performance Embree tracing path
+High-performance Embree tracing path.
+
+Phase 5: the body is parameterized by an optional ray range so radiosity's
+RadVisCheck rays (tnear = RAD_ORIGIN_NUDGE * 0.5, tfar = len - nudge) can
+flow through the same ticket flush as every other family. Overrides <= 0
+mean "standard" (tnear = 0.0001f, tfar = length) — bit-identical for all
+existing callers, which pass (0, 0).
 =============
 */
-static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
-                             trace_t *trace, qboolean testAll, traceWork_t *tw)
+static void TraceLine_Embree_Ranged(const vec3_t start, const vec3_t stop,
+                                    trace_t *trace, qboolean testAll, traceWork_t *tw,
+                                    float nearOverride, float farOverride)
 {
     int i;
 
@@ -941,14 +948,17 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     }
     VectorScale(dir, 1.0f / length, dir);
 
+    float tnear = nearOverride > 0.0f ? nearOverride : 0.0001f;
+    float tfar = farOverride > 0.0f ? farOverride : length;
+
     rayhit.ray.org_x = start[0];
     rayhit.ray.org_y = start[1];
     rayhit.ray.org_z = start[2];
     rayhit.ray.dir_x = dir[0];
     rayhit.ray.dir_y = dir[1];
     rayhit.ray.dir_z = dir[2];
-    rayhit.ray.tnear = 0.0001f;
-    rayhit.ray.tfar = length;
+    rayhit.ray.tnear = tnear;
+    rayhit.ray.tfar = tfar;
     rayhit.ray.mask = 0xFFFFFFFF;
     rayhit.ray.flags = 0;
     rayhit.hit.geomID = RTC_INVALID_GEOMETRY_ID;
@@ -978,12 +988,18 @@ static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
     }
 
     trace->passSolid = (rayhit.hit.geomID != RTC_INVALID_GEOMETRY_ID);
-    trace->hitFraction = rayhit.ray.tfar / length;
+    trace->hitFraction = rayhit.ray.tfar / tfar;
 
     for (i = 0; i < 3; i++)
     {
         trace->hit[i] = start[i] + (stop[i] - start[i]) * trace->hitFraction;
     }
+}
+
+static void TraceLine_Embree(const vec3_t start, const vec3_t stop,
+                             trace_t *trace, qboolean testAll, traceWork_t *tw)
+{
+    TraceLine_Embree_Ranged(start, stop, trace, testAll, tw, 0.0f, 0.0f);
 }
 
 /*
@@ -995,6 +1011,22 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
                qboolean testAll, traceWork_t *tw)
 {
     TraceLine_Embree(start, stop, trace, testAll, tw);
+}
+
+/*
+=============
+TraceLineRanged
+
+Phase 5: radiosity's visibility rays use a clipped range
+(tnear = RAD_ORIGIN_NUDGE * 0.5, tfar = len - nudge). Overrides <= 0 select
+the standard values, so this is bit-identical to TraceLine for every
+existing caller.
+=============
+*/
+void TraceLineRanged(const vec3_t start, const vec3_t stop, trace_t *trace,
+                     qboolean testAll, traceWork_t *tw, float nearClip, float farClip)
+{
+    TraceLine_Embree_Ranged(start, stop, trace, testAll, tw, nearClip, farClip);
 }
 
 /*

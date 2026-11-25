@@ -2012,7 +2012,7 @@ static unsigned int LightDigestAddFNV1a(unsigned int h, const void *data, size_t
     return h;
 }
 
-static void PrintLightDigest(void)
+static void PrintLightDigest(const char *stageTag)
 {
     unsigned int digest = 2166136261u; // FNV-1a offset basis
     unsigned int maskDigest = 2166136261u;
@@ -2049,7 +2049,7 @@ static void PrintLightDigest(void)
         digest = LightDigestAddFNV1a(digest, gridData32,
                                      (size_t)numGridPoints * sizeof(*gridData32));
 
-    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x grid=%08x\n",
+    _printf("light digest=%08x%s traces=%d masks: alpha=%08x unreach=%08x grid=%08x [%s]\n",
             digest,
             deluxeFloats ? "" : " (no deluxe buffers)",
             c_totalTrace,
@@ -2058,7 +2058,8 @@ static void PrintLightDigest(void)
             (gridData32 && numGridPoints > 0)
                 ? LightDigestAddFNV1a(2166136261u, gridData32,
                                       (size_t)numGridPoints * sizeof(*gridData32))
-                : 0);
+                : 0,
+            stageTag);
 }
 
 void LightMain(void)
@@ -2252,12 +2253,21 @@ void LightMain(void)
     // Captured here (before LightRadiosity/LightAmbient change anything) so it
     // gates exactly on the TraceLights/TraceGrid conversion work.
     if (!ambientonly) {
-        PrintLightDigest();
+        PrintLightDigest("post-LightWorld");
     }
 
     if (!ambientonly && !directonly) {
         // Call radiosity passes
         LightRadiosity();
+    }
+
+    // Phase 5 step 5.0: per-stage digest + ticket summary AFTER the radiosity
+    // passes (before LightAmbient mutates lightFloats). This is the baseline
+    // the radiosity ticket conversion gates on — previously the radiosity
+    // output was invisible to the digests.
+    if (!ambientonly && !directonly) {
+        PrintLightDigest("post-radiosity");
+        PrintTicketSummary("post-radiosity");
     }
 
     if (!directonly && !radiosityonly) {

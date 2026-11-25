@@ -27,6 +27,30 @@ int c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
 int c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
 int c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
 
+// Phase 5: shared ticket summary (counters + invariant check + guards).
+// Called after each ticketed stage (TraceLights, post-radiosity) — the
+// invariant runs on cumulative totals, so checking at both points stays
+// valid and pinpoints the stage if a violation ever appears.
+void PrintTicketSummary(const char *stageTag)
+{
+    _printf("%s tickets: generated=%d submitted=%d dropped=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
+            stageTag, c_ticketsGenerated, c_ticketsSubmitted, c_ticketsDropped, c_ticketGroups, c_ticketFlushes,
+            c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
+    if (c_ticketsSubmitted + c_ticketsDropped != c_ticketsGenerated ||
+        c_ticketsBlocked + c_ticketsContributed + c_ticketsRejected != c_ticketsSubmitted)
+    {
+        _printf("WARNING: %s ticket invariants violated "
+                "(submitted=%d dropped=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
+                stageTag, c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
+                c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
+    }
+    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips)
+    {
+        _printf("%s ticket guards: strand=%d appendNULL=%d overflowGrow=%d capSkips=%d\n",
+                stageTag, c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Ticket batch helpers (Phase 1). Declared in light.h, unused until the
 // Phase 3 conversion of TraceLights(). The trace loop below is the exact
@@ -64,7 +88,10 @@ int TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
         lightTicket_t *t = &batch->tickets[i];
         // Exact same call the direct path makes today; testAll comes from the
         // ticket (sun qtrue, lights qfalse) so the flush loop matches both.
-        TraceLine(t->origin, t->end, &t->trace, t->testAll, tw);
+        // Phase 5: nearClip/farClip (<= 0 = standard) let radiosity's clipped
+        // RadVisCheck rays flow through the same flush.
+        TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
+                        t->nearClip, t->farClip);
         #pragma omp atomic
         c_ticketsSubmitted++;
     }
@@ -91,7 +118,8 @@ int TicketBatch_FlushTracesRange(lightTicketBatch_t *batch, int first, int count
 
     for (i = 0; i < count; i++) {
         lightTicket_t *t = &batch->tickets[first + i];
-        TraceLine(t->origin, t->end, &t->trace, t->testAll, tw);
+        TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
+                        t->nearClip, t->farClip);
         #pragma omp atomic
         c_ticketsSubmitted++;
     }
@@ -3360,22 +3388,9 @@ void LightWorld(void)
     // the invariant checks (exact global atomic totals, so the comparison
     // is valid after all worker threads have completed). `dropped` covers
     // the Phase 4 grid-cap tickets that were generated but never traced.
-    _printf("TraceLights tickets: generated=%d submitted=%d dropped=%d groups=%d flushes=%d blocked=%d contributed=%d rejected=%d\n",
-            c_ticketsGenerated, c_ticketsSubmitted, c_ticketsDropped, c_ticketGroups, c_ticketFlushes,
-            c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
-    if (c_ticketsSubmitted + c_ticketsDropped != c_ticketsGenerated ||
-        c_ticketsBlocked + c_ticketsContributed + c_ticketsRejected != c_ticketsSubmitted)
-    {
-        _printf("WARNING: TraceLights ticket invariants violated "
-                "(submitted=%d dropped=%d generated=%d blocked=%d contributed=%d rejected=%d)\n",
-                c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
-                c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
-    }
-    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips)
-    {
-        _printf("TraceLights ticket guards: strand=%d appendNULL=%d overflowGrow=%d capSkips=%d\n",
-                c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips);
-    }
+    // Phase 5: extracted into PrintTicketSummary() so the post-radiosity
+    // stage can print the same format.
+    PrintTicketSummary("TraceLights");
 }
 
 void DilateDeluxeDirections(void)
