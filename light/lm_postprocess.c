@@ -1252,6 +1252,52 @@ static void ApplyGridDirectBias(void) {
     }
 }
 
+/*
+================
+TicketConsumeSmoothVisTickets
+
+Ticket wavefront (Phase 7, Stage 3): consume grid-smoothing visibility
+tickets (round t) in generation order. A clear ray (hitFraction > 0.999f,
+the identical expression the old per-neighbor loop used) marks the
+candidate slot visible; the notVisible count is decremented only on the
+0->1 transition (a slot is revisited across rounds' consumes, but two
+tickets cannot clear the same slot within one round). Blocked rays count
+only. No rejection path exists. Runs on the point's own thread — the vis
+array and counter are per-point state; only the global counters are
+atomic.
+================
+*/
+typedef struct {
+    int ni;      // neighbor grid index
+    float w;     // fold weight (trace-independent, precomputed at the cull scan)
+    float dirW;  // direct-only: w * lum (ambient leaves it 0)
+} smoothCand_t;
+
+static void TicketConsumeSmoothVisTickets(lightTicket_t *tickets, int n, byte *vis, int *notVisible)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+    {
+        lightTicket_t *t = &tickets[i];
+
+        if (t->trace.hitFraction > 0.999f)
+        {
+            if (!vis[t->texelIdx])
+            {
+                vis[t->texelIdx] = 1;
+                (*notVisible)--;
+            }
+            #pragma omp atomic
+            c_ticketsContributed++;
+        }
+        else
+        {
+            #pragma omp atomic
+            c_ticketsBlocked++;
+        }
+    }
+}
 static void SmoothGridAmbient(void) {
     if (lightgridSmoothAmbient <= 0.0f || lightgridSmoothAmbientPasses <= 0) return;
     
@@ -1291,9 +1337,30 @@ static void SmoothGridAmbient(void) {
             tw.isLightgrid = qtrue;
             tw.forceFrontOnly = qfalse;
             
-            vec3_t accumAmb = {0,0,0};
-            float totalWeight = 0.0f;
-            
+            // Ticket wavefront (Phase 7): cull-only candidate scan in the
+            // old scan order — every cull and the fold weight are trace-
+            // independent, so precomputing them here and folding in
+            // candidate order at finalize reproduces the old float sums
+            // bit-exactly. Self (i == ni) is a candidate preset visible; it
+            // never becomes a ticket. The 5-ray early-out becomes sweep
+            // rounds: round t traces ray t for every not-yet-visible
+            // candidate and the round boundary is the early-out decision
+            // point, so the per-neighbor trace count is exactly the old one.
+            vec3_t offsets[5] = {
+                {0, 0, 0},
+                {gridSize[0] * 0.45f, 0, 0},
+                {-gridSize[0] * 0.45f, 0, 0},
+                {0, gridSize[1] * 0.45f, 0},
+                {0, -gridSize[1] * 0.45f, 0}
+            };
+
+            int maxCands = (2 * rx + 1) * (2 * ry + 1) * (2 * rz + 1);
+            smoothCand_t *cands = Q_Alloc(maxCands * (sizeof(smoothCand_t) + 1));
+            if (!cands) Error("SmoothGridAmbient: failed to allocate candidate scratch");
+            byte *candVis = (byte *)(cands + maxCands);
+            int numCands = 0;
+            int notVisible = 0;
+
             for (int dz = -rz; dz <= rz; dz++) {
                 int nz = z + dz;
                 if (nz < 0 || nz >= gridBounds[2]) continue;
@@ -1303,9 +1370,9 @@ static void SmoothGridAmbient(void) {
                     for (int dx = -rx; dx <= rx; dx++) {
                         int nx = x + dx;
                         if (nx < 0 || nx >= gridBounds[0]) continue;
-                        
+
                         int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
-                        
+
                         vec3_t n_origin;
                         VectorCopy(&gridResolvedOrigins[ni * 3], n_origin);
 
@@ -1316,40 +1383,85 @@ static void SmoothGridAmbient(void) {
 
                         if (gridInvalidMask[ni] & GRID_FLAG_INVALID) continue;
 
-                        qboolean visible = qfalse;
+                        // candidate (old scan order); w is trace-independent
+                        float w = 1.0f - (dist / effectiveRadius);
+                        if (w < 0.0f) w = 0.0f;
+                        cands[numCands].ni = ni;
+                        cands[numCands].w = w;
+                        cands[numCands].dirW = 0.0f;
                         if (i == ni) {
-                            visible = qtrue;
+                            candVis[numCands] = 1; // self: visible without a trace
                         } else {
-                            // 5 traces to center + 4 faces
-                            vec3_t offsets[5] = {
-                                {0, 0, 0},
-                                {gridSize[0] * 0.45f, 0, 0},
-                                {-gridSize[0] * 0.45f, 0, 0},
-                                {0, gridSize[1] * 0.45f, 0},
-                                {0, -gridSize[1] * 0.45f, 0}
-                            };
-                            for (int t = 0; t < 5; t++) {
-                                vec3_t target;
-                                VectorAdd(n_origin, offsets[t], target);
-                                trace_t trace;
-                                TraceLine(origin, target, &trace, qfalse, &tw);
-                                if (trace.hitFraction > 0.999f) {
-                                    visible = qtrue;
-                                    break;
-                                }
-                            }
+                            candVis[numCands] = 0;
+                            notVisible++;
                         }
-                        
-                        if (visible) {
-                            float w = 1.0f - (dist / effectiveRadius);
-                            if (w < 0.0f) w = 0.0f;
-                            VectorMA(accumAmb, w, gridData32[ni].ambient[0], accumAmb);
-                            totalWeight += w;
-                        }
+                        numCands++;
                     }
                 }
             }
-            
+
+            lightTicketBatch_t batch;
+            TicketBatch_Init(&batch, 256);
+
+            for (int t = 0; t < 5 && notVisible > 0; t++) {
+                int appended = 0;
+                for (int s = 0; s < numCands; s++) {
+                    if (candVis[s]) continue;
+                    vec3_t n_origin;
+                    VectorCopy(&gridResolvedOrigins[cands[s].ni * 3], n_origin);
+                    vec3_t target;
+                    VectorAdd(n_origin, offsets[t], target);
+
+                    // flush-on-full; the mid-round consume marks slots that
+                    // are already appended (decision-neutral — audit §7.3.2)
+                    if (batch.count >= batch.capacity)
+                    {
+                        int fn = TicketBatch_FlushTraces(&batch, &tw);
+                        TicketConsumeSmoothVisTickets(batch.tickets, fn, candVis, &notVisible);
+                    }
+                    {
+                        lightTicket_t tk;
+                        lightTicket_t *slot;
+                        memset(&tk, 0, sizeof(tk));
+                        tk.light = NULL;
+                        VectorCopy(origin, tk.origin);
+                        VectorCopy(target, tk.end);
+                        tk.testAll = qfalse;
+                        tk.applyColorFilter = qfalse;
+                        tk.normalValid = qtrue;
+                        tk.texelIdx = s;
+                        tk.ssIdx = 0;
+                        slot = TicketBatch_Append(&batch);
+                        if (slot)
+                            *slot = tk;
+                        else
+                        {
+                            #pragma omp atomic
+                            c_ticketAppendWarnings++;
+                        }
+                    }
+                    appended++;
+                }
+                if (appended)
+                {
+                    #pragma omp atomic
+                    c_ticketGroups++;
+                    int n = TicketBatch_FlushTraces(&batch, &tw);
+                    TicketConsumeSmoothVisTickets(batch.tickets, n, candVis, &notVisible);
+                }
+            }
+            TicketBatch_Free(&batch);
+
+            // Finalize: fold in candidate order = old scan order (bit-exact).
+            vec3_t accumAmb = {0,0,0};
+            float totalWeight = 0.0f;
+            for (int s = 0; s < numCands; s++) {
+                if (!candVis[s]) continue;
+                VectorMA(accumAmb, cands[s].w, gridData32[cands[s].ni].ambient[0], accumAmb);
+                totalWeight += cands[s].w;
+            }
+            Q_Free(cands);
+
             if (totalWeight > 0.001f) {
                 VectorScale(accumAmb, 1.0f / totalWeight, smoothed[i]);
             } else {
@@ -1411,11 +1523,28 @@ static void SmoothGridDirect(void) {
             tw.isLightgrid = qtrue;
             tw.forceFrontOnly = qfalse;
             
-            vec3_t accumDirColor = {0,0,0};
-            vec3_t accumDirVector = {0,0,0};
-            float totalWeight = 0.0f;
-            float totalDirWeight = 0.0f;
-            
+            // Ticket wavefront (Phase 7): same sweep-round design as
+            // SmoothGridAmbient (see the comment there). The cull scan runs
+            // in the old order (lum -> depth -> lateral -> INVALID); self is
+            // a candidate ONLY if it passes the lum cull (the old code
+            // checks lum BEFORE the i == ni shortcut). NOTE: the fold uses
+            // the RAW gridData32[ni].dir — the normalized n_dir is used only
+            // for the depth cull. Do not re-normalize at finalize.
+            vec3_t offsets[5] = {
+                {0, 0, 0},
+                {gridSize[0] * 0.45f, 0, 0},
+                {-gridSize[0] * 0.45f, 0, 0},
+                {0, gridSize[1] * 0.45f, 0},
+                {0, -gridSize[1] * 0.45f, 0}
+            };
+
+            int maxCands = (2 * rx + 1) * (2 * ry + 1) * (2 * rz + 1);
+            smoothCand_t *cands = Q_Alloc(maxCands * (sizeof(smoothCand_t) + 1));
+            if (!cands) Error("SmoothGridDirect: failed to allocate candidate scratch");
+            byte *candVis = (byte *)(cands + maxCands);
+            int numCands = 0;
+            int notVisible = 0;
+
             for (int dz = -rz; dz <= rz; dz++) {
                 int nz = z + dz;
                 if (nz < 0 || nz >= gridBounds[2]) continue;
@@ -1425,12 +1554,12 @@ static void SmoothGridDirect(void) {
                     for (int dx = -rx; dx <= rx; dx++) {
                         int nx = x + dx;
                         if (nx < 0 || nx >= gridBounds[0]) continue;
-                        
+
                         int ni = (nz * gridBounds[1] + ny) * gridBounds[0] + nx;
-                        
+
                         float lum = gridData32[ni].directed[0][0] * 0.299f + gridData32[ni].directed[0][1] * 0.587f + gridData32[ni].directed[0][2] * 0.114f;
                         if (lum < 0.001f) continue;
-                        
+
                         vec3_t n_origin;
                         VectorCopy(&gridResolvedOrigins[ni * 3], n_origin);
 
@@ -1451,54 +1580,100 @@ static void SmoothGridDirect(void) {
                         if (lateral_dist > effectiveRadius) continue;
 
                         if (gridInvalidMask[ni] & GRID_FLAG_INVALID) continue;
-                        
-                        qboolean visible = qfalse;
+
+                        // candidate (old scan order); all weight math is
+                        // trace-independent and precomputed here
+                        float w_lateral = 1.0f - (lateral_dist / effectiveRadius);
+                        float w_depth = 1.0f - (fabs(depth) / disc_thickness);
+                        float w = w_lateral * w_depth;
+                        if (w < 0.0f) w = 0.0f;
+                        cands[numCands].ni = ni;
+                        cands[numCands].w = w;
+                        cands[numCands].dirW = w * lum;
                         if (i == ni) {
-                            visible = qtrue;
+                            candVis[numCands] = 1; // self: visible without a trace
                         } else {
-                            // 5 traces to center + 4 faces
-                            vec3_t offsets[5] = {
-                                {0, 0, 0},
-                                {gridSize[0] * 0.45f, 0, 0},
-                                {-gridSize[0] * 0.45f, 0, 0},
-                                {0, gridSize[1] * 0.45f, 0},
-                                {0, -gridSize[1] * 0.45f, 0}
-                            };
-                            for (int t = 0; t < 5; t++) {
-                                vec3_t target;
-                                VectorAdd(n_origin, offsets[t], target);
-                                trace_t trace;
-                                TraceLine(origin, target, &trace, qfalse, &tw);
-                                if (trace.hitFraction > 0.999f) {
-                                    visible = qtrue;
-                                    break;
-                                }
-                            }
+                            candVis[numCands] = 0;
+                            notVisible++;
                         }
-                        
-                        if (visible) {
-                            float w_lateral = 1.0f - (lateral_dist / effectiveRadius);
-                            float w_depth = 1.0f - (fabs(depth) / disc_thickness);
-                            float w = w_lateral * w_depth;
-                            if (w < 0.0f) w = 0.0f;
-                            
-                            VectorMA(accumDirColor, w, gridData32[ni].directed[0], accumDirColor);
-                            totalWeight += w;
-                            
-                            float dirW = w * lum;
-                            VectorMA(accumDirVector, dirW, gridData32[ni].dir, accumDirVector);
-                            totalDirWeight += dirW;
-                        }
+                        numCands++;
                     }
                 }
             }
-            
+
+            lightTicketBatch_t batch;
+            TicketBatch_Init(&batch, 256);
+
+            for (int t = 0; t < 5 && notVisible > 0; t++) {
+                int appended = 0;
+                for (int s = 0; s < numCands; s++) {
+                    if (candVis[s]) continue;
+                    vec3_t n_origin;
+                    VectorCopy(&gridResolvedOrigins[cands[s].ni * 3], n_origin);
+                    vec3_t target;
+                    VectorAdd(n_origin, offsets[t], target);
+
+                    // flush-on-full; decision-neutral mid-round consume
+                    if (batch.count >= batch.capacity)
+                    {
+                        int fn = TicketBatch_FlushTraces(&batch, &tw);
+                        TicketConsumeSmoothVisTickets(batch.tickets, fn, candVis, &notVisible);
+                    }
+                    {
+                        lightTicket_t tk;
+                        lightTicket_t *slot;
+                        memset(&tk, 0, sizeof(tk));
+                        tk.light = NULL;
+                        VectorCopy(origin, tk.origin);
+                        VectorCopy(target, tk.end);
+                        tk.testAll = qfalse;
+                        tk.applyColorFilter = qfalse;
+                        tk.normalValid = qtrue;
+                        tk.texelIdx = s;
+                        tk.ssIdx = 0;
+                        slot = TicketBatch_Append(&batch);
+                        if (slot)
+                            *slot = tk;
+                        else
+                        {
+                            #pragma omp atomic
+                            c_ticketAppendWarnings++;
+                        }
+                    }
+                    appended++;
+                }
+                if (appended)
+                {
+                    #pragma omp atomic
+                    c_ticketGroups++;
+                    int n = TicketBatch_FlushTraces(&batch, &tw);
+                    TicketConsumeSmoothVisTickets(batch.tickets, n, candVis, &notVisible);
+                }
+            }
+            TicketBatch_Free(&batch);
+
+            // Finalize: fold in candidate order = old scan order (bit-exact).
+            // Accumulation uses the RAW gridData32[ni].dir (old :1489).
+            vec3_t accumDirColor = {0,0,0};
+            vec3_t accumDirVector = {0,0,0};
+            float totalWeight = 0.0f;
+            float totalDirWeight = 0.0f;
+            for (int s = 0; s < numCands; s++) {
+                if (!candVis[s]) continue;
+                int ni = cands[s].ni;
+                VectorMA(accumDirColor, cands[s].w, gridData32[ni].directed[0], accumDirColor);
+                totalWeight += cands[s].w;
+                VectorMA(accumDirVector, cands[s].dirW, gridData32[ni].dir, accumDirVector);
+                totalDirWeight += cands[s].dirW;
+            }
+            Q_Free(cands);
+
             if (totalWeight > 0.001f) {
                 VectorScale(accumDirColor, 1.0f / totalWeight, smoothedDirColor[i]);
             } else {
                 VectorCopy(gridData32[i].directed[0], smoothedDirColor[i]);
             }
-            
+
             if (totalDirWeight > 0.001f) {
                 VectorNormalize(accumDirVector, smoothedDirVector[i]);
             } else {

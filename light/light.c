@@ -2295,6 +2295,15 @@ void LightMain(void)
 
     PostProcessLightmaps();
 
+    // Phase 7 step 7.0: per-stage digest + ticket summary AFTER
+    // PostProcessLightmaps(). The post-process output (lightmap AA/smooth,
+    // grid bias/clamps/smoothing/dilation, saturation) was previously
+    // invisible to the digests — this is the baseline the grid-smoothing
+    // ticket conversion (7.1) gates on, and captures the final float state
+    // before the BSP write.
+    PrintLightDigest("post-postprocess");
+    PrintTicketSummary("post-postprocess");
+
     for (int i = 0; i < numDrawSurfaces; i++)
     {
         if (localSurfaces[i].patchMesh)
