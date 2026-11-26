@@ -487,6 +487,7 @@ extern long long c_ticketsContributed, c_ticketsRejected, c_ticketGroups;
 extern long long c_ticketFlushes, c_groupOverflowGrow, c_ticketsDropped;
 extern long long c_gridCapSkips, c_ticketStrandWarnings, c_ticketAppendWarnings;
 extern long long c_texelDoubleFoldWarnings;
+extern long long c_packetUnmappedLanes;
 
 void InitTrace(void);
 void InitTracingGeometry(void);
@@ -498,6 +499,7 @@ void TraceLine(const vec3_t start, const vec3_t stop, trace_t *trace,
 			   qboolean testAll, traceWork_t *tw);
 void TraceLineRanged(const vec3_t start, const vec3_t stop, trace_t *trace,
 					 qboolean testAll, traceWork_t *tw, float nearClip, float farClip); // Phase 5: overrides <= 0 = standard
+void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWork_t *tw); // Phase 10: packetized Stage 2
 extern long long c_totalTrace; // light_trace.c: golden total of TraceLine_Embree calls (Phase 0 instrumentation)
 qboolean GatherGridAmbientBleed(vec3_t origin, vec3_t envColor, traceWork_t *tw);
 qboolean PointInSolid(vec3_t start);
@@ -509,7 +511,27 @@ struct MyRayQueryContext
 	struct RTCRayQueryContext context;
 	traceWork_t *tw;
 	int patchshadows;
+	// Phase 10 (packetized tracing): lane->ticket mapping for packet queries.
+	// NULL for scalar queries — the filter then targets tw->trace. Packet
+	// callers fill ticketLanes[0..laneCapacity) and set each lane's
+	// ray.id = laneSlot; the filter resolves tickets[lane] via ray.id (NOT
+	// the callback lane index — robust to emulation/compaction/N mismatch).
+	lightTicket_t **ticketLanes;
+	int laneCapacity;
 };
+
+// Phase 10 gate knobs (compile-time):
+//   TRACE_PACKET_WIDTH  1 = scalar path verbatim (SHIPPED DEFAULT — Gate B
+//                       found an Embree packet-vs-scalar sub-quantization
+//                       shift on wfdm1's ambient gather, 2026-11-26; the
+//                       packet path stays in place for the GPU era)
+//                       4/8/16 = packet traversal (Gates A2*/B/C)
+//   TRACE_PACKET_FAKE   1 = fill packets + lane mapping + epilogue, but
+//                       issue each lane through the scalar rtcOccluded1/
+//                       rtcIntersect1 (Gate A2 — plumbing test)
+// Only meaningful with WIDTH > 1. See §10.3/§10.5-10.7 of the wavefront plan.
+#define TRACE_PACKET_WIDTH 1
+#define TRACE_PACKET_FAKE 0
 
 //===============================================================
 

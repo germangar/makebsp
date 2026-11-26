@@ -24,6 +24,7 @@ long long c_ticketFlushes;
 long long c_groupOverflowGrow;
 long long c_ticketStrandWarnings;  // guard: batch non-empty at texel start (RETIRED Phase 9, stays 0)
 long long c_texelDoubleFoldWarnings;  // guard: averaging fold fired twice for a texel (Phase 9 tripwire)
+long long c_packetUnmappedLanes;      // guard: packet lanes whose results did not survive the call (Phase 10 canary)
 long long c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
 long long c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
 long long c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
@@ -45,11 +46,11 @@ void PrintTicketSummary(const char *stageTag)
                 stageTag, c_ticketsSubmitted, c_ticketsDropped, c_ticketsGenerated,
                 c_ticketsBlocked, c_ticketsContributed, c_ticketsRejected);
     }
-    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips || c_texelDoubleFoldWarnings)
+    if (c_ticketStrandWarnings || c_ticketAppendWarnings || c_groupOverflowGrow || c_gridCapSkips || c_texelDoubleFoldWarnings || c_packetUnmappedLanes)
     {
-        _printf("%s ticket guards: strand=%lld appendNULL=%lld overflowGrow=%lld capSkips=%lld doubleFold=%lld\n",
+        _printf("%s ticket guards: strand=%lld appendNULL=%lld overflowGrow=%lld capSkips=%lld doubleFold=%lld unmappedLanes=%lld\n",
                 stageTag, c_ticketStrandWarnings, c_ticketAppendWarnings, c_groupOverflowGrow, c_gridCapSkips,
-                c_texelDoubleFoldWarnings);
+                c_texelDoubleFoldWarnings, c_packetUnmappedLanes);
     }
 }
 
@@ -86,14 +87,13 @@ int TicketBatch_FlushTraces(lightTicketBatch_t *batch, traceWork_t *tw)
     int i;
     int n = batch->count;
 
+    // Ticket wavefront (Phase 10): packetized Stage 2 — both flush sites
+    // route through TraceLineBatchEmbree (width knob in light.h). The
+    // consume still reads tickets[0..n) after this call, before any new
+    // Append.
+    TraceLineBatchEmbree(batch->tickets, 0, n, tw);
+
     for (i = 0; i < n; i++) {
-        lightTicket_t *t = &batch->tickets[i];
-        // Exact same call the direct path makes today; testAll comes from the
-        // ticket (sun qtrue, lights qfalse) so the flush loop matches both.
-        // Phase 5: nearClip/farClip (<= 0 = standard) let radiosity's clipped
-        // RadVisCheck rays flow through the same flush.
-        TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
-                        t->nearClip, t->farClip);
         #pragma omp atomic
         c_ticketsSubmitted++;
     }
@@ -118,10 +118,9 @@ int TicketBatch_FlushTracesRange(lightTicketBatch_t *batch, int first, int count
 {
     int i;
 
+    TraceLineBatchEmbree(batch->tickets, first, count, tw);
+
     for (i = 0; i < count; i++) {
-        lightTicket_t *t = &batch->tickets[first + i];
-        TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
-                        t->nearClip, t->farClip);
         #pragma omp atomic
         c_ticketsSubmitted++;
     }
@@ -3644,6 +3643,7 @@ void LightWorld(void)
     c_ticketsContributed = c_ticketsRejected = c_ticketGroups = 0;
     c_ticketFlushes = c_groupOverflowGrow = 0;
     c_texelDoubleFoldWarnings = 0;
+    c_packetUnmappedLanes = 0;
 
     surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
