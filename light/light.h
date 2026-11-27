@@ -373,6 +373,30 @@ extern qboolean debugLightmapsAlpha;
 extern vec3_t *texelOrigins;
 extern vec3_t *texelNormals;
 
+// Phase 11: per-surface direct supersample geometry cache. Only ss > 0
+// samples are stored; the center cache above remains untouched.
+typedef struct
+{
+	vec3_t origin;
+	vec3_t normal;
+	byte valid; // 0 = invalid/unused; 1 = valid even if normal is zero
+} supersampleRecord_t;
+
+typedef struct
+{
+	int width;
+	int height;
+	int samples; // actualSamples: 8 or 16; record stride is samples - 1
+	int scale;
+	int gutter;
+	float jitterRadius;
+	float cullSampleSize;
+	size_t records;
+	supersampleRecord_t *data;
+} supersampleCache_t;
+
+void FreeSupersampleGeometryCache(void);
+
 //===============================================================
 
 // light.c

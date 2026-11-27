@@ -1074,6 +1074,7 @@ void DownConvertLightingData(void)
 
     // Meticulous cleanup: free all high-precision processing buffers now that 
     // the data has been successfully down-converted to 8-bit for export.
+    FreeSupersampleGeometryCache();
     if (internalDrawVerts) { Q_Free(internalDrawVerts); internalDrawVerts = NULL; }
     if (lightFloats)       { Q_Free(lightFloats);       lightFloats = NULL; }
     if (deluxeFloats)      { Q_Free(deluxeFloats);      deluxeFloats = NULL; }

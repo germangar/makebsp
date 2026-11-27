@@ -26,6 +26,15 @@ long long c_ticketStrandWarnings;  // guard: batch non-empty at texel start (RET
 long long c_texelDoubleFoldWarnings;  // guard: averaging fold fired twice for a texel (Phase 9 tripwire)
 long long c_packetUnmappedLanes;      // guard: packet lanes whose results did not survive the call (Phase 10 canary)
 long long c_ticketAppendWarnings;  // guard: Append returned NULL (reserve failed)
+long long c_ssCacheSurfacesAllocated;
+long long c_ssCacheRecordsAllocated;
+long long c_ssCacheBytesAllocated;
+long long c_ssCacheBudgetSkips;
+long long c_ssCacheAllocFailures;
+long long c_ssCacheMetadataWarnings;
+long long c_ssCacheHits;
+long long c_ssCacheInvalid;
+long long c_ssCacheFallbacks;
 long long c_ticketsDropped;        // Phase 4: grid-cap tickets generated but never traced
 long long c_gridCapSkips;          // Phase 4: grid sun skipped because the cap was full
 
@@ -1850,10 +1859,447 @@ mesh_t *LinearSubdivideMesh(mesh_t *in)
 
 
 /*
-=============
-PrecacheTexelGeometry
-=============
+================
+Phase 11: direct supersample geometry cache.
+
+Only ss > 0 records are cached. The ss == 0 center paths remain inline
+because they consult unreachableMask, which is not final until TraceLights
+runs. The base center cache is untouched.
+
+These caches are optional: use calloc/free (never Q_Alloc) so an allocation
+failure can fall back to the existing inline manual evaluation.
+================
 */
+#define SUPERSAMPLE_CACHE_BUDGET_BYTES (256ull * 1024ull * 1024ull)
+
+static supersampleCache_t *supersampleCaches = NULL;
+
+void FreeSupersampleGeometryCache(void)
+{
+    if (!supersampleCaches)
+        return;
+
+    for (int i = 0; i < numDrawSurfaces; i++)
+    {
+        if (supersampleCaches[i].data)
+        {
+            free(supersampleCaches[i].data);
+            supersampleCaches[i].data = NULL;
+        }
+    }
+
+    free(supersampleCaches);
+    supersampleCaches = NULL;
+}
+
+// Literal extraction of TraceLights' per-surface supersample selection.
+static void ResolveSupersamplePattern(int surfIdx, dsurface_t *ds,
+                                      const float (**outPattern)[2],
+                                      int *outActualSamples,
+                                      float *outJitterRadius)
+{
+    float ssRadius = localSurfaces[surfIdx].superSampleRadius;
+    qboolean doSS = (ssRadius > 0.0f);
+    const float (*pattern)[2] = ssPattern8;
+    int actualSamples = 1;
+    float jitterRadius = 0.0f;
+
+    if (doSS)
+    {
+        int ssize = game->defaultSampleSize;
+        shaderInfo_t *si = ShaderInfoForShader(dshaders[ds->shaderNum].shader);
+
+        if (si && si->lightmapSampleSize)
+        {
+            ssize = si->lightmapSampleSize;
+        }
+        if (ssize <= 0)
+        {
+            ssize = 4;
+        }
+
+        if (ssRadius > 0.5f * (float)ssize)
+        {
+            pattern = ssPattern16;
+            actualSamples = SS_PATTERN16_COUNT;
+        }
+        else
+        {
+            pattern = ssPattern8;
+            actualSamples = SS_PATTERN8_COUNT;
+        }
+
+        jitterRadius = ssRadius;
+    }
+
+    *outPattern = pattern;
+    *outActualSamples = actualSamples;
+    *outJitterRadius = jitterRadius;
+}
+
+// Literal extraction of TraceLights' per-surface direct layout.
+static void GetDirectSurfaceLayout(int surfIdx, dsurface_t *ds,
+                                   int *outScale, int *outGutter,
+                                   int *outSampleWidth, int *outSampleHeight)
+{
+    int use_upscale = localSurfaces[surfIdx].upscale > 1;
+    int isDilated = use_upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
+    int scale = use_upscale ? UPSCALE_FACTOR : 1;
+    int currentGutter = isDilated ? (GUTTER * scale) : 0;
+    int sampleWidth, sampleHeight;
+
+    if (ds->surfaceType == MST_PATCH)
+    {
+        sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
+        sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
+    }
+    else
+    {
+        if (!isDilated)
+        {
+            sampleWidth = ds->lightmapWidth;
+            sampleHeight = ds->lightmapHeight;
+        }
+        else
+        {
+            sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
+            sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
+        }
+    }
+
+    *outScale = scale;
+    *outGutter = currentGutter;
+    *outSampleWidth = sampleWidth;
+    *outSampleHeight = sampleHeight;
+}
+
+// Literal extraction of the manual non-center supersample branch, including
+// the direct-worker BoxInSolid(..., qtrue) cull. No unreachableMask check.
+static qboolean EvaluateManualSupersample(dsurface_t *ds, mesh_t *mesh,
+                                          int surfIdx, int i, int j, int ss,
+                                          int actualSamples,
+                                          const float (*pattern)[2],
+                                          float jitterRadius, int scale,
+                                          int currentGutter,
+                                          const vec3_t lightmapOrigin,
+                                          const vec3_t lightmapVecs[2],
+                                          vec3_t origin, vec3_t normal)
+{
+    float jdx = 0.0f, jdy = 0.0f;
+    if (jitterRadius > 0.0f && ss > 0)
+    {
+        int pidx = ss % actualSamples;
+        jdx = pattern[pidx][0] * jitterRadius;
+        jdy = pattern[pidx][1] * jitterRadius;
+    }
+
+    float u = (float)(i - currentGutter) + jdx + 0.5f;
+    float v = (float)(j - currentGutter) + jdy + 0.5f;
+    float step = 1.0f / (float)scale;
+
+    vec3_t temp_origin;
+    vec3_t centroid;
+    qboolean hasCentroid = qfalse;
+
+    if (ds->surfaceType == MST_TRIANGLE_SOUP)
+    {
+        float st[2];
+        st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+        st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+
+        if (!TriSoupSamplePoint(ds, st, temp_origin, normal, centroid))
+            return qfalse;
+        hasCentroid = qtrue;
+    }
+    else if (ds->surfaceType == MST_PATCH)
+    {
+        float st[2] = {(float)ds->lightmapOffset[0][0] + u * step,
+                       (float)ds->lightmapOffset[0][1] + v * step};
+
+        if (!PatchSamplePoint(mesh, st, temp_origin, normal, centroid))
+            return qfalse;
+        hasCentroid = qtrue;
+    }
+    else
+    {
+        if (ds->surfaceType == MST_PLANAR)
+        {
+            float st[2];
+            st[0] = (float)ds->lightmapOffset[0][0] + u * step;
+            st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+            if (!PlanarSamplePointInside(ds, st, centroid))
+                return qfalse;
+            hasCentroid = qtrue;
+        }
+
+        for (int k = 0; k < 3; k++)
+        {
+            temp_origin[k] = lightmapOrigin[k] +
+                             u * lightmapVecs[0][k] +
+                             v * lightmapVecs[1][k];
+        }
+    }
+
+    vec3_t nudgeOffset;
+    VectorClear(nudgeOffset);
+
+    if (hasCentroid)
+    {
+        vec3_t toCentroid;
+        VectorSubtract(centroid, temp_origin, toCentroid);
+        float dist = VectorLength(toCentroid);
+        if (dist > 0.001f)
+        {
+            VectorScale(toCentroid, 1.0f / dist, toCentroid);
+            float nudgeDist = SAMPLE_NUDGE;
+            if (nudgeDist > dist * 0.5f)
+            {
+                nudgeDist = dist * 0.5f;
+            }
+            VectorScale(toCentroid, nudgeDist, nudgeOffset);
+        }
+    }
+
+    double base[3];
+    for (int k = 0; k < 3; k++)
+    {
+        base[k] = (double)temp_origin[k] +
+                  (double)normal[k] * SAMPLE_NUDGE +
+                  (double)nudgeOffset[k];
+    }
+
+    for (int k = 0; k < 3; k++)
+    {
+        base[k] += localSurfaces[surfIdx].entityOrigin[k];
+    }
+
+    for (int k = 0; k < 3; k++)
+    {
+        origin[k] = (float)base[k];
+    }
+
+    float texelSize = localSurfaces[surfIdx].sampleSize;
+    if (texelSize < 1.0f)
+        texelSize = (float)game->defaultSampleSize;
+    texelSize /= scale;
+    float margin = texelSize * 1.5f;
+
+    if (localSurfaces[surfIdx].upscale > 1)
+        margin *= 2.0f;
+
+    if (BoxInSolid(origin, margin, qtrue))
+        return qfalse;
+
+    return qtrue;
+}
+
+/*
+Allocate the optional per-surface supersample cache. Uses calloc/free, not
+Q_Alloc, so an allocation failure can leave a surface on inline fallback.
+*/
+static void AllocateSupersampleGeometryCache(void)
+{
+    FreeSupersampleGeometryCache();
+
+    c_ssCacheSurfacesAllocated = 0;
+    c_ssCacheRecordsAllocated = 0;
+    c_ssCacheBytesAllocated = 0;
+    c_ssCacheBudgetSkips = 0;
+    c_ssCacheAllocFailures = 0;
+    c_ssCacheMetadataWarnings = 0;
+    c_ssCacheHits = 0;
+    c_ssCacheInvalid = 0;
+    c_ssCacheFallbacks = 0;
+
+    if (ambientonly || numDrawSurfaces <= 0)
+        return;
+
+    supersampleCaches = calloc(numDrawSurfaces, sizeof(supersampleCache_t));
+    if (!supersampleCaches)
+    {
+        _printf("WARNING: Supersample geometry cache container allocation failed; using inline supersamples.\n");
+        return;
+    }
+
+    size_t remaining = (size_t)SUPERSAMPLE_CACHE_BUDGET_BYTES;
+
+    for (int i = 0; i < numDrawSurfaces; i++)
+    {
+        dsurface_t *ds = &drawSurfaces[i];
+        if (ds->lightmapNum[0] < 0)
+            continue;
+
+        const float (*pattern)[2];
+        int actualSamples, scale, currentGutter, sampleWidth, sampleHeight;
+        float jitterRadius;
+        ResolveSupersamplePattern(i, ds, &pattern, &actualSamples, &jitterRadius);
+        GetDirectSurfaceLayout(i, ds, &scale, &currentGutter, &sampleWidth, &sampleHeight);
+
+        if (actualSamples <= 1 || sampleWidth <= 0 || sampleHeight <= 0)
+            continue;
+
+        size_t texels = (size_t)sampleWidth * (size_t)sampleHeight;
+        size_t slots = (size_t)(actualSamples - 1);
+        if (slots == 0 || texels > (size_t)-1 / slots)
+        {
+            c_ssCacheBudgetSkips++;
+            continue;
+        }
+
+        size_t records = texels * slots;
+        if (records > (size_t)-1 / sizeof(supersampleRecord_t))
+        {
+            c_ssCacheBudgetSkips++;
+            continue;
+        }
+
+        size_t bytes = records * sizeof(supersampleRecord_t);
+        if (bytes > remaining)
+        {
+            c_ssCacheBudgetSkips++;
+            continue;
+        }
+
+        supersampleRecord_t *data = calloc(records, sizeof(supersampleRecord_t));
+        if (!data)
+        {
+            c_ssCacheAllocFailures++;
+            continue;
+        }
+
+        supersampleCaches[i].width = sampleWidth;
+        supersampleCaches[i].height = sampleHeight;
+        supersampleCaches[i].samples = actualSamples;
+        supersampleCaches[i].scale = scale;
+        supersampleCaches[i].gutter = currentGutter;
+        supersampleCaches[i].jitterRadius = jitterRadius;
+        supersampleCaches[i].cullSampleSize = localSurfaces[i].sampleSize;
+        supersampleCaches[i].records = records;
+        supersampleCaches[i].data = data;
+
+        remaining -= bytes;
+        c_ssCacheSurfacesAllocated++;
+        c_ssCacheRecordsAllocated += (long long)records;
+        c_ssCacheBytesAllocated += (long long)bytes;
+    }
+
+    _printf("Supersample geometry cache: surfaces=%lld records=%lld bytes=%.1f MiB (budget %.0f MiB, skipped=%lld allocFailed=%lld)\n",
+            c_ssCacheSurfacesAllocated, c_ssCacheRecordsAllocated,
+            (double)c_ssCacheBytesAllocated / (1024.0 * 1024.0),
+            (double)SUPERSAMPLE_CACHE_BUDGET_BYTES / (1024.0 * 1024.0),
+            c_ssCacheBudgetSkips, c_ssCacheAllocFailures);
+}
+
+/*
+Fill one surface's supersample geometry records after the center cache has
+been built. This mirrors TraceLights' manual non-center branch exactly,
+including its qtrue cull. No unreachableMask is consulted for ss > 0.
+*/
+static void FillSupersampleGeometryCache(int surfIdx, dsurface_t *ds)
+{
+    if (!supersampleCaches)
+        return;
+
+    supersampleCache_t *cache = &supersampleCaches[surfIdx];
+    if (!cache->data)
+        return;
+
+    const float (*pattern)[2];
+    int actualSamples, scale, currentGutter, sampleWidth, sampleHeight;
+    float jitterRadius;
+    ResolveSupersamplePattern(surfIdx, ds, &pattern, &actualSamples, &jitterRadius);
+    GetDirectSurfaceLayout(surfIdx, ds, &scale, &currentGutter, &sampleWidth, &sampleHeight);
+
+    size_t expectedRecords = 0;
+    if (actualSamples > 1)
+        expectedRecords = (size_t)sampleWidth * (size_t)sampleHeight * (size_t)(actualSamples - 1);
+
+    if (cache->width != sampleWidth || cache->height != sampleHeight ||
+        cache->samples != actualSamples || cache->scale != scale ||
+        cache->gutter != currentGutter ||
+        cache->jitterRadius != jitterRadius ||
+        cache->cullSampleSize != localSurfaces[surfIdx].sampleSize ||
+        cache->records != expectedRecords)
+    {
+        _printf("WARNING: Supersample cache metadata mismatch on surface %d; using inline supersamples.\n", surfIdx);
+        c_ssCacheMetadataWarnings++;
+        free(cache->data);
+        cache->data = NULL;
+        cache->records = 0;
+        return;
+    }
+
+    mesh_t *mesh = localSurfaces[surfIdx].patchMesh;
+    vec3_t lightmapOrigin, lightmapVecs[2], normal;
+
+    int use_upscale = localSurfaces[surfIdx].upscale > 1;
+    int isDilated = use_upscale || (ds->surfaceType == MST_TRIANGLE_SOUP);
+
+    if (ds->surfaceType != MST_PATCH)
+    {
+        VectorCopy(ds->lightmapVecs[2], normal);
+        VectorCopy(ds->lightmapOrigin, lightmapOrigin);
+
+        if (ds->surfaceType == MST_PLANAR)
+        {
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[0], lightmapOrigin);
+            VectorMA(lightmapOrigin, -0.5f, ds->lightmapVecs[1], lightmapOrigin);
+        }
+
+        if (!isDilated)
+        {
+            VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
+            VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
+        }
+        else
+        {
+            if (use_upscale)
+            {
+                float invScale = 1.0f / (float)cache->scale;
+                VectorScale(ds->lightmapVecs[0], invScale, lightmapVecs[0]);
+                VectorScale(ds->lightmapVecs[1], invScale, lightmapVecs[1]);
+            }
+            else
+            {
+                VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
+                VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
+            }
+        }
+    }
+
+    for (int x = 0; x < cache->width; x++)
+    {
+        for (int y = 0; y < cache->height; y++)
+        {
+            int py = ds->lightmapOffset[0][1] * cache->scale + y - cache->gutter;
+            int px = ds->lightmapOffset[0][0] * cache->scale + x - cache->gutter;
+
+            if (px < 0 || px >= LIGHTMAP_WIDTH * cache->scale || py < 0 || py >= LIGHTMAP_HEIGHT * cache->scale)
+                continue;
+
+            size_t texelIdx = (size_t)x * (size_t)cache->height + (size_t)y;
+
+            for (int ss = 1; ss < cache->samples; ss++)
+            {
+                size_t recordIndex = texelIdx * (size_t)(cache->samples - 1) + (size_t)(ss - 1);
+                supersampleRecord_t *record = &cache->data[recordIndex];
+                vec3_t origin;
+
+                if (EvaluateManualSupersample(ds, mesh, surfIdx, x, y, ss,
+                                              actualSamples, pattern,
+                                              jitterRadius, cache->scale,
+                                              cache->gutter, lightmapOrigin,
+                                              lightmapVecs, origin, normal))
+                {
+                    VectorCopy(origin, record->origin);
+                    VectorCopy(normal, record->normal);
+                    record->valid = 1;
+                }
+            }
+        }
+    }
+}
+
 void PrecacheTexelGeometryThread(int i)
 {
     int x, y, k;
@@ -1993,6 +2439,8 @@ void PrecacheTexelGeometryThread(int i)
         }
     }
 
+    FillSupersampleGeometryCache(i, ds);
+
     ThreadCompletedWeighted(surfWeight);
 }
 
@@ -2007,6 +2455,8 @@ void PrecacheTexelGeometry(void)
             weight += drawSurfaces[i].lightmapWidth * drawSurfaces[i].lightmapHeight;
         numTotalLuxels += weight;
     }
+
+    AllocateSupersampleGeometryCache();
 
     _printf("--- PrecacheTexelGeometry ---\n");
     RunThreadsOnWeighted(numDrawSurfaces, numTotalLuxels, qtrue, PrecacheTexelGeometryThread);
@@ -2403,17 +2853,13 @@ void TraceLights(int num)
     tw->patchshadows = patchshadows;
     tw->forceFrontOnly = qtrue;
 
-    int scale = use_upscale ? UPSCALE_FACTOR : 1;
-    int currentGutter = isDilated ? (GUTTER * scale) : 0;
+    int scale, currentGutter;
+    GetDirectSurfaceLayout(realSurfIndex, ds, &scale, &currentGutter,
+                           &sampleWidth, &sampleHeight);
 
     if (ds->surfaceType == MST_PATCH)
     {
         mesh = localSurfaces[realSurfIndex].patchMesh;
-
-
-        // We don't need to manually subdivide further; we will interpolate in the loop.
-        sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
-        sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
     }
     else
     {
@@ -2431,8 +2877,6 @@ void TraceLights(int num)
         {
             VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
             VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
-            sampleWidth = ds->lightmapWidth;
-            sampleHeight = ds->lightmapHeight;
         }
         else
         {
@@ -2448,9 +2892,6 @@ void TraceLights(int num)
                 VectorCopy(ds->lightmapVecs[0], lightmapVecs[0]);
                 VectorCopy(ds->lightmapVecs[1], lightmapVecs[1]);
             }
-
-            sampleWidth = ds->lightmapWidth * scale + currentGutter * 2;
-            sampleHeight = ds->lightmapHeight * scale + currentGutter * 2;
         }
     }
 
@@ -2588,36 +3029,33 @@ void TraceLights(int num)
     }
 
     // Resolve per-surface supersampling and pattern selection
-    float ssRadius = localSurfaces[realSurfIndex].superSampleRadius;
-    qboolean doSS = (ssRadius > 0.0f);
-    const float (*pattern)[2] = ssPattern8;
-    int actualSamples = 1;
-    float jitterRadius = 0.0f;
+    const float (*pattern)[2];
+    int actualSamples;
+    float jitterRadius;
+    ResolveSupersamplePattern(realSurfIndex, ds, &pattern, &actualSamples,
+                              &jitterRadius);
 
-    if (doSS)
+    // Phase 11: validate the optional per-surface supersample cache.
+    supersampleCache_t *ssCache = NULL;
+    qboolean useSSCache = qfalse;
+    size_t ssExpectedRecords = 0;
+    if (supersampleCaches)
     {
-        int ssize = game->defaultSampleSize;
-        if (si && si->lightmapSampleSize)
+        ssCache = &supersampleCaches[realSurfIndex];
+        if (actualSamples > 1)
         {
-            ssize = si->lightmapSampleSize;
-        }
-        if (ssize <= 0)
-        {
-            ssize = 4;
+            ssExpectedRecords = (size_t)extW * (size_t)extH *
+                                (size_t)(actualSamples - 1);
         }
 
-        if (ssRadius > 0.5f * (float)ssize)
-        {
-            pattern = ssPattern16;
-            actualSamples = SS_PATTERN16_COUNT;
-        }
-        else
-        {
-            pattern = ssPattern8;
-            actualSamples = SS_PATTERN8_COUNT;
-        }
-
-        jitterRadius = ssRadius;
+        useSSCache = ssCache->data && ssCache->width == extW &&
+                     ssCache->height == extH &&
+                     ssCache->samples == actualSamples &&
+                     ssCache->scale == scale &&
+                     ssCache->gutter == currentGutter &&
+                     ssCache->jitterRadius == jitterRadius &&
+                     ssCache->cullSampleSize == localSurfaces[realSurfIndex].sampleSize &&
+                     ssCache->records == ssExpectedRecords;
     }
 
     // Ticket wavefront (Phase 3b): per-surface batch. Capacity is
@@ -2666,19 +3104,6 @@ void TraceLights(int num)
 
             for (ss = 0; ss < actualSamples; ss++)
             {
-                float jdx = 0.0f, jdy = 0.0f;
-                if (jitterRadius > 0.0f && ss > 0)
-                {
-                    int pidx = ss % actualSamples;
-                    jdx = pattern[pidx][0] * jitterRadius;
-                    jdy = pattern[pidx][1] * jitterRadius;
-                }
-
-                // Add 0.5f to move from the texel edge to the exact center
-                float u = (float)(i - currentGutter) + jdx + 0.5f;
-                float v = (float)(j - currentGutter) + jdy + 0.5f;
-                float step = 1.0f / (float)scale;
-
                 int global_scale = upscale ? 2 : 1;
                 if (ss == 0 && scale == global_scale)
                 {
@@ -2696,6 +3121,7 @@ void TraceLights(int num)
                     {
                         base[k] = texelOrigins[p][k];
                         normal[k] = texelNormals[p][k];
+                        origin[k] = (float)base[k];
                     }
                 }
                 else
@@ -2707,102 +3133,65 @@ void TraceLights(int num)
                     if (ss == 0 && unreachableMask && BITMAP_TEST(unreachableMask, native_p))
                         continue;
 
-                    vec3_t temp_origin;
-                    vec3_t centroid;
-                    qboolean hasCentroid = qfalse;
-
-                    if (ds->surfaceType == MST_TRIANGLE_SOUP)
+                    if (ss > 0 && useSSCache)
                     {
-                        float st[2];
-                        st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                        st[1] = (float)ds->lightmapOffset[0][1] + v * step;
+                        size_t recordIndex = (size_t)texelIdx * (size_t)(actualSamples - 1) +
+                                             (size_t)(ss - 1);
+                        if (recordIndex >= ssCache->records)
+                        {
+                            #pragma omp atomic
+                            c_ssCacheMetadataWarnings++;
+                            #pragma omp atomic
+                            c_ssCacheFallbacks++;
 
-                        if (!TriSoupSamplePoint(ds, st, temp_origin, normal, centroid))
-                            continue;
-                        hasCentroid = qtrue;
-                    }
-                    else if (ds->surfaceType == MST_PATCH)
-                    {
-                        float target_s = (float)ds->lightmapOffset[0][0] + u * step;
-                        float target_t = (float)ds->lightmapOffset[0][1] + v * step;
-                        float st[2] = {target_s, target_t};
+                            if (!EvaluateManualSupersample(ds, mesh, realSurfIndex, i, j, ss,
+                                                           actualSamples, pattern, jitterRadius,
+                                                           scale, currentGutter, lightmapOrigin,
+                                                           lightmapVecs, origin, normal))
+                                continue;
+                        }
+                        else
+                        {
+                            supersampleRecord_t *record = &ssCache->data[recordIndex];
+                            if (!record->valid)
+                            {
+                                #pragma omp atomic
+                                c_ssCacheInvalid++;
+                                continue;
+                            }
 
-                        if (!PatchSamplePoint(mesh, st, temp_origin, normal, centroid))
-                            continue;
-                        hasCentroid = qtrue;
+                            VectorCopy(record->origin, origin);
+                            VectorCopy(record->normal, normal);
+
+                            #pragma omp atomic
+                            c_ssCacheHits++;
+                        }
                     }
                     else
                     {
-                        if (ds->surfaceType == MST_PLANAR)
+                        if (ss > 0)
                         {
-                            float st[2];
-                            st[0] = (float)ds->lightmapOffset[0][0] + u * step;
-                            st[1] = (float)ds->lightmapOffset[0][1] + v * step;
-                            if (!PlanarSamplePointInside(ds, st, centroid))
-                                continue;
-                            hasCentroid = qtrue;
+                            #pragma omp atomic
+                            c_ssCacheFallbacks++;
                         }
 
+                        if (!EvaluateManualSupersample(ds, mesh, realSurfIndex, i, j, ss,
+                                                       actualSamples, pattern, jitterRadius,
+                                                       scale, currentGutter, lightmapOrigin,
+                                                       lightmapVecs, origin, normal))
+                            continue;
+                    }
+
+                    if (ss == 0)
+                    {
+                        // Manual center path: preserve the exact double-to-float
+                        // conversion from the original inline branch.
                         for (k = 0; k < 3; k++)
                         {
-                            temp_origin[k] = lightmapOrigin[k] +
-                                             u * lightmapVecs[0][k] +
-                                             v * lightmapVecs[1][k];
+                            base[k] = (double)origin[k];
+                            origin[k] = (float)base[k];
                         }
                     }
-
-                    vec3_t nudgeOffset;
-                    VectorClear(nudgeOffset);
-
-                    if (hasCentroid)
-                    {
-                        vec3_t toCentroid;
-                        VectorSubtract(centroid, temp_origin, toCentroid);
-                        float dist = VectorLength(toCentroid);
-                        if (dist > 0.001f) {
-                            VectorScale(toCentroid, 1.0f / dist, toCentroid);
-                            float nudgeDist = SAMPLE_NUDGE;
-                            if (nudgeDist > dist * 0.5f) {
-                                nudgeDist = dist * 0.5f;
-                            }
-                            VectorScale(toCentroid, nudgeDist, nudgeOffset);
-                        }
-                    }
-
-                    for (k = 0; k < 3; k++)
-                    {
-                        base[k] = (double)temp_origin[k] +
-                                  (double)normal[k] * SAMPLE_NUDGE +
-                                  (double)nudgeOffset[k];
-                    }
-
-                    for (k = 0; k < 3; k++)
-                    {
-                        base[k] += localSurfaces[realSurfIndex].entityOrigin[k];
-                    }
-                }
-
-                // convert to vec3_t for raycast
-                for (k = 0; k < 3; k++)
-                {
-                    origin[k] = (float)base[k];
-                }
-
-                // If this is a supersample or differently scaled surface, PrecacheTexelGeometryThread didn't cull it.
-                // We MUST enforce the culling here, otherwise it receives direct sunlight in the void.
-                if (!(ss == 0 && scale == global_scale))
-                {
-                    float texelSize = localSurfaces[realSurfIndex].sampleSize;
-                    if (texelSize < 1.0f) texelSize = (float)game->defaultSampleSize;
-                    texelSize /= scale;
-                    float margin = texelSize * 1.5f;
-                    
-                    if (localSurfaces[realSurfIndex].upscale > 1) {
-                        margin *= 2.0f;
-                    }
-
-                    if (BoxInSolid(origin, margin, qtrue))
-                        continue;
                 }
 
                 // Ticket wavefront (Phase 3b): one group per supersample.
@@ -3644,6 +4033,10 @@ void LightWorld(void)
     c_ticketFlushes = c_groupOverflowGrow = 0;
     c_texelDoubleFoldWarnings = 0;
     c_packetUnmappedLanes = 0;
+    c_ssCacheHits = 0;
+    c_ssCacheInvalid = 0;
+    c_ssCacheFallbacks = 0;
+    c_ssCacheMetadataWarnings = 0;
 
     surfaceWorkOrder = Q_Alloc(numDrawSurfaces * sizeof(int));
     for (i = 0; i < numDrawSurfaces; i++)
@@ -3686,6 +4079,13 @@ void LightWorld(void)
     // Phase 5: extracted into PrintTicketSummary() so the post-radiosity
     // stage can print the same format.
     PrintTicketSummary("TraceLights");
+
+    // Phase 11: report optional supersample-cache usage, then release it
+    // before radiosity/ambient allocate their large buffers.
+    _printf("Supersample cache: hits=%lld invalid=%lld fallbacks=%lld metadataWarnings=%lld\n",
+            c_ssCacheHits, c_ssCacheInvalid, c_ssCacheFallbacks,
+            c_ssCacheMetadataWarnings);
+    FreeSupersampleGeometryCache();
 }
 
 void DilateDeluxeDirections(void)
