@@ -659,7 +659,7 @@ These switches change the primary mode of the executable.
 - `-fast`: Drop quality for quick tests (disables edge chamfering in makebsp).
 - `-lowmem`: Enables memory-mapped file mode to reduce RAM usage on extremely large maps.
 - `-opencl <0|1>`: Enable (1) or disable (0) OpenCL GPU acceleration for supported passes.
-- `-embree_packet <1|4|8|16>`: Select the Embree CPU traversal packet width. `1` is the shipped scalar default and preserves bit parity; `4`, `8`, and `16` enable packet traversal for testing. This is Embree-specific and does not configure future RadeonRays/GPU dispatch sizes.
+- `-embree_packet <1|4|8|16>`: Select the Embree CPU traversal packet width. `1` is the shipped scalar default and preserves bit parity; `4`, `8`, and `16` enable packet traversal for testing.
 - `-exportlightmaps`: Export a copy of the lightmaps as images for visual inspection (keeps internal BSP lightmaps if external mode is off).
 - `-externallightmaps`: Store lightmaps purely as external image files (zeroes out the internal BSP lump for engines like DarkPlaces/Xonotic).
 - `-debuglightmaps`: Generate BMP files showing lightmap allocation and atlas usage.
