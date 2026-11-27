@@ -55,17 +55,22 @@ static void ClearVoxelCache(void)
     char baseDir[1024];
     char cachePath[1024];
     GetMapOutputDir(source, baseDir);
-    snprintf(cachePath, sizeof(cachePath), "%scache", baseDir);
+    if (!Q_ComposePath(cachePath, sizeof(cachePath), baseDir, "cache"))
+        Error("Voxel cache path is too long");
 #ifdef _WIN32
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd),
+    size_t cmdSize = strlen(cachePath) * 2 + 256;
+    char *cmd = malloc(cmdSize);
+    snprintf(cmd, cmdSize,
              "powershell -NoProfile -Command \"if (Test-Path '%s') { Get-ChildItem '%s' -Filter 'surf_*.vxl' | Remove-Item -Force }\"",
              cachePath, cachePath);
     system(cmd);
+    free(cmd);
 #else
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "rm -f %s/surf_*.vxl", cachePath);
+    size_t cmdSize = strlen(cachePath) + 32;
+    char *cmd = malloc(cmdSize);
+    snprintf(cmd, cmdSize, "rm -f %s/surf_*.vxl", cachePath);
     system(cmd);
+    free(cmd);
 #endif
 }
 qboolean radiosityonly = qfalse;
@@ -556,6 +561,18 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "-upscale")) {
             upscale = qtrue;
             _printf("Upscale detail tracing enabled (2x grid)\n");
+        } else if (!strcmp(argv[i], "-embree_packet")) {
+            if (i + 1 >= argc)
+                Error("-embree_packet requires a width: 1, 4, 8 or 16");
+            g_embreePacketWidth = atoi(argv[i + 1]);
+            if (g_embreePacketWidth != 1 && g_embreePacketWidth != 4 &&
+                g_embreePacketWidth != 8 && g_embreePacketWidth != 16)
+            {
+                Error("-embree_packet width must be 1, 4, 8 or 16 (got %d)", g_embreePacketWidth);
+            }
+            _printf("Embree packet traversal width = %d%s\n", g_embreePacketWidth,
+                    g_embreePacketWidth == 1 ? " (scalar default)" : "");
+            i++;
         } else if (!strcmp(argv[i], "-novertex")) {
             novertexlighting = qtrue;
             _printf("no vertex lighting = true\n");

@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "light.h"
+#include <stddef.h>
 #include <embree4/rtcore.h>
 
 RTCDevice g_device = NULL;
@@ -31,6 +32,10 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args);
 #define TRACE_EPSILON 0.001
 
 long long c_totalTrace;
+
+// Runtime packet width (makelight CLI: -embree_packet <1|4|8|16>). The default is
+// the compile-time pin TRACE_PACKET_WIDTH (light.h; 1 = gated scalar digests).
+int g_embreePacketWidth = TRACE_PACKET_WIDTH;
 
 /*
 ====================
@@ -407,7 +412,18 @@ void AlphaFilter(const struct RTCFilterFunctionNArguments *args)
             unsigned int id = RTCRAYN_ID(args->ray, laneCount, lane);
             if (id >= (unsigned int)mcontext->laneCapacity)
                 Error("AlphaFilter: packet ray id %u out of range (capacity %d)", id, mcontext->laneCapacity);
-            filterTarget = mcontext->ticketLanes[id]->trace.filter;
+            lightTicket_t *ticket = mcontext->ticketLanes[id];
+            if (!ticket)
+            {
+                // Defensive partial-packet/compaction guard: a candidate lane
+                // without a mapped ticket cannot own a filter target. Ignore
+                // it and count it rather than dereferencing NULL.
+                args->valid[lane] = 0;
+                #pragma omp atomic
+                c_packetUnmappedLanes++;
+                continue;
+            }
+            filterTarget = ticket->trace.filter;
         }
         else
         {
@@ -1112,57 +1128,86 @@ TRACE_PACKET_WIDTH = 1: the scalar path verbatim (Gate A / shipped
 default until Gate B proves otherwise).
 
 WIDTH > 1: partitions by testAll (tracing order is free — per-ticket
-results; the consume reads tickets in place), fills AOS packets
-(RTCRayHit16 as a width-agnostic buffer: the RTCRay4/8/16 layouts are
-exact prefixes), maps lanes to tickets via ray.id, and issues
-rtcOccluded4/8/16 or rtcIntersect4/8/16. Per-lane scratch is explicit:
-filter init to (1,1,1), a private active mask (never reuse Embree's
-mutable valid[]), the ORIGINAL tfar per lane (hitFraction's denominator),
-degenerate lanes handled outside the packet (scalar semantics, counted).
+results; the consume reads tickets in place), fills explicitly aligned
+raw SOA storage through float/unsigned field tables, maps lanes to
+tickets via ray.id, and issues rtcOccluded4/8/16 or rtcIntersect4/8/16.
+Per-lane scratch is explicit: filter init to (1,1,1), a private active
+mask (never reuse Embree's mutable valid[]), the ORIGINAL tfar per lane
+(hitFraction's denominator), degenerate lanes handled outside the
+packet (scalar semantics, counted).
 TRACE_PACKET_FAKE=1 issues each lane through the scalar queries extracted
 from the packet (Gate A2 — plumbing test: fill + extraction + lane
 mapping + epilogue with no kernel variable).
 =============
 */
+
+static void TraceLineBatchEmbreePacket(lightTicket_t *tickets, int first, int count, traceWork_t *tw, int packetWidth);
+
 void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWork_t *tw)
 {
     if (count <= 0)
         return;
 
-#if TRACE_PACKET_WIDTH <= 1
-    // Gate A / shipped default: bit-identical to the Phase 9 path.
-    for (int i = first; i < first + count; i++)
+    // Runtime width selection (-embree_packet <n>). The scalar branch is the
+    // shipped default and is bit-identical to the Phase 9 path (Gate A).
+    // Width > 1 uses one runtime-width packet function with raw SOA field
+    // tables and width-specific Embree calls (no duplicated bodies).
+    switch (g_embreePacketWidth)
     {
-        lightTicket_t *t = &tickets[i];
-        TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
-                        t->nearClip, t->farClip);
+    case 1:
+        for (int i = first; i < first + count; i++)
+        {
+            lightTicket_t *t = &tickets[i];
+            TraceLineRanged(t->origin, t->end, &t->trace, t->testAll, tw,
+                            t->nearClip, t->farClip);
+        }
+        break;
+    case 4:
+        TraceLineBatchEmbreePacket(tickets, first, count, tw, 4);
+        break;
+    case 8:
+        TraceLineBatchEmbreePacket(tickets, first, count, tw, 8);
+        break;
+    case 16:
+        TraceLineBatchEmbreePacket(tickets, first, count, tw, 16);
+        break;
+    default:
+        Error("TraceLineBatchEmbree: unknown -embree_packet width %d", g_embreePacketWidth);
     }
-    return;
-#else
-    // Phase 10 §10.7 (gate-found): ALL packet accesses go through the SAME
-    // width-typed pointer that the Embree call receives. Filling through
-    // `struct RTCRayHit16` members while calling through an `RTCRay4*` cast
-    // MISCOMPILES under GCC -O2 (TBAA: the store type and the call pointer
-    // type differ — stores were silently lost, found via probe bisection).
-    // The RTCRayHit16-shaped raw storage is used only for size/alignment.
-    unsigned char packetStorage[sizeof(struct RTCRayHit16)];
-#if TRACE_PACKET_WIDTH == 4
-    struct RTCRay4 *pr = (struct RTCRay4 *)packetStorage;
-    struct RTCRayHit4 *prh = (struct RTCRayHit4 *)packetStorage;
-#elif TRACE_PACKET_WIDTH == 8
-    struct RTCRay8 *pr = (struct RTCRay8 *)packetStorage;
-    struct RTCRayHit8 *prh = (struct RTCRayHit8 *)packetStorage;
-#elif TRACE_PACKET_WIDTH == 16
-    struct RTCRay16 *pr = (struct RTCRay16 *)packetStorage;
-    struct RTCRayHit16 *prh = (struct RTCRayHit16 *)packetStorage;
-#else
-#error "TraceLineBatchEmbree: unsupported packet width"
-#endif
+}
 
-    int queryValid[TRACE_PACKET_WIDTH];    // Embree's mask — may be mutated, never reused
-    float origTfar[TRACE_PACKET_WIDTH];    // hitFraction denominator
-    byte laneActive[TRACE_PACKET_WIDTH];   // our private epilogue mask
-    lightTicket_t *laneTickets[TRACE_PACKET_WIDTH];
+static void TraceLineBatchEmbreePacket(lightTicket_t *tickets, int first, int count, traceWork_t *tw, int packetWidth)
+{
+    // Raw SOA storage, explicitly aligned for the widest packet. Ray fields
+    // are 12 contiguous width-sized arrays; hit fields follow at the
+    // width-specific RTCRayHitN::hit offset. Access through float/unsigned
+    // pointer tables (never through a different RTCRayHitN member type), so
+    // GCC cannot apply the Phase-10 TBAA miscompile to these stores.
+    RTC_ALIGN(64) unsigned char packetStorage[sizeof(struct RTCRayHit16)];
+    size_t hitOffset;
+    switch (packetWidth)
+    {
+    case 4:  hitOffset = offsetof(struct RTCRayHit4, hit); break;
+    case 8:  hitOffset = offsetof(struct RTCRayHit8, hit); break;
+    case 16: hitOffset = offsetof(struct RTCRayHit16, hit); break;
+    default: Error("TraceLineBatchEmbree: unsupported packet width %d", packetWidth);
+    }
+
+    float *rayFloat[12];
+    unsigned int *rayUInt[12];
+    unsigned int *hitUInt[8];
+    for (int f = 0; f < 12; f++)
+    {
+        rayFloat[f] = (float *)packetStorage + (size_t)f * packetWidth;
+        rayUInt[f] = (unsigned int *)packetStorage + (size_t)f * packetWidth;
+    }
+    for (int f = 0; f < 8; f++)
+        hitUInt[f] = (unsigned int *)(packetStorage + hitOffset) + (size_t)f * packetWidth;
+
+    int queryValid[16];    // Embree's mask — may be mutated, never reused
+    float origTfar[16];    // hitFraction denominator
+    byte laneActive[16];   // our private epilogue mask
+    lightTicket_t *laneTickets[16];
     struct MyRayQueryContext context;
 
     memset(&context, 0, sizeof(context)); // explicit: every field, every site (§10.5.1)
@@ -1170,7 +1215,7 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
     context.tw = tw;
     context.patchshadows = tw ? tw->patchshadows : patchshadows;
     context.ticketLanes = laneTickets;
-    context.laneCapacity = TRACE_PACKET_WIDTH;
+    context.laneCapacity = packetWidth;
 
     // Two partitions: occluded (testAll qfalse, the majority) then
     // intersect (testAll qtrue — sun/grid-bounce rays).
@@ -1185,7 +1230,7 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
             // handled by the other pass; each ticket fills exactly once).
             int lanesFilled = 0;
             int scan = i;
-            while (lanesFilled < TRACE_PACKET_WIDTH && scan < first + count)
+            while (lanesFilled < packetWidth && scan < first + count)
             {
                 lightTicket_t *t = &tickets[scan];
                 if (t->testAll == wantTestAll)
@@ -1209,27 +1254,27 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                     {
                         VectorScale(dir, 1.0f / length, dir);
 
-                        pr->org_x[lanesFilled] = t->origin[0];
-                        pr->org_y[lanesFilled] = t->origin[1];
-                        pr->org_z[lanesFilled] = t->origin[2];
-                        pr->dir_x[lanesFilled] = dir[0];
-                        pr->dir_y[lanesFilled] = dir[1];
-                        pr->dir_z[lanesFilled] = dir[2];
-                        pr->tnear[lanesFilled] = t->nearClip > 0.0f ? t->nearClip : 0.0001f;
-                        pr->tfar[lanesFilled] = t->farClip > 0.0f ? t->farClip : length;
-                        pr->time[lanesFilled] = 0.0f;
-                        pr->mask[lanesFilled] = 0xFFFFFFFF;
-                        pr->id[lanesFilled] = (unsigned int)lanesFilled;
-                        pr->flags[lanesFilled] = 0;
-                        prh->hit.geomID[lanesFilled] = RTC_INVALID_GEOMETRY_ID;
-                        prh->hit.instID[0][lanesFilled] = RTC_INVALID_GEOMETRY_ID;
+                        rayFloat[0][lanesFilled] = t->origin[0];
+                        rayFloat[1][lanesFilled] = t->origin[1];
+                        rayFloat[2][lanesFilled] = t->origin[2];
+                        rayFloat[4][lanesFilled] = dir[0];
+                        rayFloat[5][lanesFilled] = dir[1];
+                        rayFloat[6][lanesFilled] = dir[2];
+                        rayFloat[3][lanesFilled] = t->nearClip > 0.0f ? t->nearClip : 0.0001f;
+                        rayFloat[8][lanesFilled] = t->farClip > 0.0f ? t->farClip : length;
+                        rayFloat[7][lanesFilled] = 0.0f;
+                        rayUInt[9][lanesFilled] = 0xFFFFFFFF;
+                        rayUInt[10][lanesFilled] = (unsigned int)lanesFilled;
+                        rayUInt[11][lanesFilled] = 0;
+                        hitUInt[6][lanesFilled] = RTC_INVALID_GEOMETRY_ID;
+                        hitUInt[7][lanesFilled] = RTC_INVALID_GEOMETRY_ID;
 
                         t->trace.filter[0] = 1.0f;
                         t->trace.filter[1] = 1.0f;
                         t->trace.filter[2] = 1.0f;
 
                         laneTickets[lanesFilled] = t;
-                        origTfar[lanesFilled] = pr->tfar[lanesFilled];
+                        origTfar[lanesFilled] = rayFloat[8][lanesFilled];
                         laneActive[lanesFilled] = 1;
                         queryValid[lanesFilled] = -1;
 
@@ -1249,20 +1294,20 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
             // traversal may touch them; never leave NaN/garbage in a packet.
             // The remainder lanes' ray.id is an OUT-OF-RANGE sentinel so the
             // id-scan epilogue (§10.7) can never map them to a ticket.
-            for (int l = lanesFilled; l < TRACE_PACKET_WIDTH; l++)
+            for (int l = lanesFilled; l < packetWidth; l++)
             {
-                pr->org_x[l] = 0.0f;
-                pr->org_y[l] = 0.0f;
-                pr->org_z[l] = 0.0f;
-                pr->tnear[l] = 0.0f;
-                pr->dir_x[l] = 0.0f;
-                pr->dir_y[l] = 0.0f;
-                pr->dir_z[l] = 0.0f;
-                pr->time[l] = 0.0f;
-                pr->tfar[l] = 0.0f;
-                pr->mask[l] = 0;
-                pr->id[l] = 0xFFFFFFFF; // id: invalid sentinel
-                pr->flags[l] = 0;
+                rayFloat[0][l] = 0.0f;
+                rayFloat[1][l] = 0.0f;
+                rayFloat[2][l] = 0.0f;
+                rayFloat[3][l] = 0.0f;
+                rayFloat[4][l] = 0.0f;
+                rayFloat[5][l] = 0.0f;
+                rayFloat[6][l] = 0.0f;
+                rayFloat[7][l] = 0.0f;
+                rayFloat[8][l] = 0.0f;
+                rayUInt[9][l] = 0;
+                rayUInt[10][l] = 0xFFFFFFFF; // id: invalid sentinel
+                rayUInt[11][l] = 0;
                 laneTickets[l] = NULL;
                 laneActive[l] = 0;
                 queryValid[l] = 0;
@@ -1279,38 +1324,38 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                 {
                     struct RTCRayHit rh;
                     memset(&rh, 0, sizeof(rh));
-                    rh.ray.org_x = pr->org_x[l];
-                    rh.ray.org_y = pr->org_y[l];
-                    rh.ray.org_z = pr->org_z[l];
-                    rh.ray.dir_x = pr->dir_x[l];
-                    rh.ray.dir_y = pr->dir_y[l];
-                    rh.ray.dir_z = pr->dir_z[l];
-                    rh.ray.tnear = pr->tnear[l];
-                    rh.ray.tfar = pr->tfar[l];
-                    rh.ray.mask = pr->mask[l];
-                    rh.ray.id = pr->id[l];
-                    rh.ray.flags = pr->flags[l];
+                    rh.ray.org_x = rayFloat[0][l];
+                    rh.ray.org_y = rayFloat[1][l];
+                    rh.ray.org_z = rayFloat[2][l];
+                    rh.ray.dir_x = rayFloat[4][l];
+                    rh.ray.dir_y = rayFloat[5][l];
+                    rh.ray.dir_z = rayFloat[6][l];
+                    rh.ray.tnear = rayFloat[3][l];
+                    rh.ray.tfar = rayFloat[8][l];
+                    rh.ray.mask = rayUInt[9][l];
+                    rh.ray.id = rayUInt[10][l];
+                    rh.ray.flags = rayUInt[11][l];
                     rh.hit.geomID = RTC_INVALID_GEOMETRY_ID;
                     rh.hit.instID[0] = RTC_INVALID_GEOMETRY_ID;
                     rtcIntersect1(g_scene, &rh, &iargs);
-                    pr->tfar[l] = rh.ray.tfar;
-                    prh->hit.geomID[l] = rh.hit.geomID;
-                    prh->hit.instID[0][l] = rh.hit.instID[0];
+                    rayFloat[8][l] = rh.ray.tfar;
+                    hitUInt[6][l] = rh.hit.geomID;
+                    hitUInt[7][l] = rh.hit.instID[0];
                 }
 #else
-                switch (TRACE_PACKET_WIDTH)
+                switch (packetWidth)
                 {
                 case 4:
-                    rtcIntersect4(queryValid, g_scene, (struct RTCRayHit4 *)prh, &iargs);
+                    rtcIntersect4(queryValid, g_scene, (struct RTCRayHit4 *)packetStorage, &iargs);
                     break;
                 case 8:
-                    rtcIntersect8(queryValid, g_scene, (struct RTCRayHit8 *)prh, &iargs);
+                    rtcIntersect8(queryValid, g_scene, (struct RTCRayHit8 *)packetStorage, &iargs);
                     break;
                 case 16:
-                    rtcIntersect16(queryValid, g_scene, (struct RTCRayHit16 *)prh, &iargs);
+                    rtcIntersect16(queryValid, g_scene, (struct RTCRayHit16 *)packetStorage, &iargs);
                     break;
                 default:
-                    Error("TraceLineBatchEmbree: unsupported packet width %d", TRACE_PACKET_WIDTH);
+                    Error("TraceLineBatchEmbree: unsupported packet width %d", packetWidth);
                 }
 #endif
             }
@@ -1324,34 +1369,34 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                 {
                     struct RTCRay rh;
                     memset(&rh, 0, sizeof(rh));
-                    rh.org_x = pr->org_x[l];
-                    rh.org_y = pr->org_y[l];
-                    rh.org_z = pr->org_z[l];
-                    rh.dir_x = pr->dir_x[l];
-                    rh.dir_y = pr->dir_y[l];
-                    rh.dir_z = pr->dir_z[l];
-                    rh.tnear = pr->tnear[l];
-                    rh.tfar = pr->tfar[l];
-                    rh.mask = pr->mask[l];
-                    rh.id = pr->id[l];
-                    rh.flags = pr->flags[l];
+                    rh.org_x = rayFloat[0][l];
+                    rh.org_y = rayFloat[1][l];
+                    rh.org_z = rayFloat[2][l];
+                    rh.dir_x = rayFloat[4][l];
+                    rh.dir_y = rayFloat[5][l];
+                    rh.dir_z = rayFloat[6][l];
+                    rh.tnear = rayFloat[3][l];
+                    rh.tfar = rayFloat[8][l];
+                    rh.mask = rayUInt[9][l];
+                    rh.id = rayUInt[10][l];
+                    rh.flags = rayUInt[11][l];
                     rtcOccluded1(g_scene, &rh, &oargs);
-                    pr->tfar[l] = rh.tfar;
+                    rayFloat[8][l] = rh.tfar;
                 }
 #else
-                switch (TRACE_PACKET_WIDTH)
+                switch (packetWidth)
                 {
                 case 4:
-                    rtcOccluded4(queryValid, g_scene, (struct RTCRay4 *)pr, &oargs);
+                    rtcOccluded4(queryValid, g_scene, (struct RTCRay4 *)packetStorage, &oargs);
                     break;
                 case 8:
-                    rtcOccluded8(queryValid, g_scene, (struct RTCRay8 *)pr, &oargs);
+                    rtcOccluded8(queryValid, g_scene, (struct RTCRay8 *)packetStorage, &oargs);
                     break;
                 case 16:
-                    rtcOccluded16(queryValid, g_scene, (struct RTCRay16 *)pr, &oargs);
+                    rtcOccluded16(queryValid, g_scene, (struct RTCRay16 *)packetStorage, &oargs);
                     break;
                 default:
-                    Error("TraceLineBatchEmbree: unsupported packet width %d", TRACE_PACKET_WIDTH);
+                    Error("TraceLineBatchEmbree: unsupported packet width %d", packetWidth);
                 }
 #endif
             }
@@ -1365,13 +1410,13 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
             // in the unmapped canary (its ticket keeps generation-time
             // trace state; if this ever fires, width 1 is the answer).
             {
-                byte written[TRACE_PACKET_WIDTH];
+                byte written[16];
                 memset(written, 0, sizeof(written));
 
-                for (int l = 0; l < TRACE_PACKET_WIDTH; l++)
+                for (int l = 0; l < packetWidth; l++)
                 {
-                    unsigned int id = pr->id[l];
-                    if (id >= (unsigned int)TRACE_PACKET_WIDTH)
+                    unsigned int id = rayUInt[10][l];
+                    if (id >= (unsigned int)packetWidth)
                         continue; // inactive remainder slot or Embree scratch
                     if (!laneActive[id] || written[id])
                         continue;
@@ -1382,13 +1427,13 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                     float fraction;
                     if (wantTestAll)
                     {
-                        passSolid = (prh->hit.geomID[l] != RTC_INVALID_GEOMETRY_ID);
-                        fraction = pr->tfar[l] / origTfar[id];
+                        passSolid = (hitUInt[6][l] != RTC_INVALID_GEOMETRY_ID);
+                        fraction = rayFloat[8][l] / origTfar[id];
                     }
                     else
                     {
                         // Embree 4 occlusion semantics: tfar becomes -inf on hit.
-                        if (pr->tfar[l] < 0.0f)
+                        if (rayFloat[8][l] < 0.0f)
                         {
                             passSolid = qtrue;
                             fraction = 0.0f;
@@ -1396,7 +1441,7 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                         else
                         {
                             passSolid = qfalse;
-                            fraction = pr->tfar[l] / origTfar[id];
+                            fraction = rayFloat[8][l] / origTfar[id];
                         }
                     }
 
@@ -1406,7 +1451,7 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
                         t->trace.hit[c] = t->origin[c] + (t->end[c] - t->origin[c]) * fraction;
                 }
 
-                for (int id = 0; id < TRACE_PACKET_WIDTH; id++)
+                for (int id = 0; id < packetWidth; id++)
                 {
                     if (laneActive[id] && !written[id])
                     {
@@ -1417,8 +1462,8 @@ void TraceLineBatchEmbree(lightTicket_t *tickets, int first, int count, traceWor
             }
         }
     }
-#endif
 }
+
 
 /*
 =============

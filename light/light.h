@@ -545,17 +545,28 @@ struct MyRayQueryContext
 };
 
 // Phase 10 gate knobs (compile-time):
-//   TRACE_PACKET_WIDTH  1 = scalar path verbatim (SHIPPED DEFAULT — Gate B
-//                       found an Embree packet-vs-scalar sub-quantization
-//                       shift on wfdm1's ambient gather, 2026-11-26; the
-//                       packet path stays in place for the GPU era)
-//                       4/8/16 = packet traversal (Gates A2*/B/C)
+//   TRACE_PACKET_WIDTH  1 = scalar path verbatim (SHIPPED DEFAULT — the
+//                       width > 1 packet path is selectable at RUNTIME via
+//                       makelight -embree_packet <4|8|16>; Gate B found an Embree
+//                       packet-vs-scalar sub-quantization shift in wfdm1's
+//                       post-ambient digest, 2026-11-26 — final exported
+//                       output verified byte-identical on all gate maps)
 //   TRACE_PACKET_FAKE   1 = fill packets + lane mapping + epilogue, but
 //                       issue each lane through the scalar rtcOccluded1/
 //                       rtcIntersect1 (Gate A2 — plumbing test)
-// Only meaningful with WIDTH > 1. See §10.3/§10.5-10.7 of the wavefront plan.
+// See §10.3/§10.5-10.7 of the wavefront plan.
 #define TRACE_PACKET_WIDTH 1
 #define TRACE_PACKET_FAKE 0
+
+// Runtime packet width (makelight CLI: -embree_packet <1|4|8|16>). Initialized to
+// the compile-time pin above; 1 keeps every gated digest.
+extern int g_embreePacketWidth;
+#ifndef TRACE_PACKET_WIDTH
+#define TRACE_PACKET_WIDTH 1
+#endif
+#ifndef TRACE_PACKET_FAKE
+#define TRACE_PACKET_FAKE 0
+#endif
 
 //===============================================================
 
