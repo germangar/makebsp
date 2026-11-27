@@ -970,6 +970,23 @@ void SetPakExtension(const char *ext) {
   g_pakExtPrimary[sizeof(g_pakExtPrimary) - 1] = '\0';
 }
 
+#ifndef _WIN32
+static bool HasPakExtensionCI(const char *name, const char *ext) {
+  size_t nlen = strlen(name), elen = strlen(ext);
+  if (elen == 0 || nlen < elen)
+    return false;
+  const char *suf = name + nlen - elen;
+  for (size_t i = 0; i < elen; i++) {
+    char c = suf[i];
+    if (c >= 'A' && c <= 'Z')
+      c += 32;
+    if (c != ext[i])
+      return false;
+  }
+  return true;
+}
+#endif
+
 void OpenPakFile(const char *filename) {
   int i;
   char *str1, *str2;
