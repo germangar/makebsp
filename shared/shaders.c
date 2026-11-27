@@ -141,19 +141,29 @@ static void CanonicalizeRelativePath(const char *baseDir, const char *relPath, c
     char combined[1024];
     if (relPath[0] == '/' || relPath[0] == '\\')
     {
-        snprintf(combined, sizeof(combined), "%s", relPath + 1);
+        combined[0] = '\0';
+        if (!Q_AppendString(combined, sizeof(combined), relPath + 1))
+        {
+            out[0] = '\0';
+            return;
+        }
     }
     else if (baseDir && baseDir[0])
     {
-        int baseLen = strlen(baseDir);
-        if (baseDir[baseLen - 1] == '/' || baseDir[baseLen - 1] == '\\')
-            snprintf(combined, sizeof(combined), "%s%s", baseDir, relPath);
-        else
-            snprintf(combined, sizeof(combined), "%s/%s", baseDir, relPath);
+        if (!Q_ComposePath(combined, sizeof(combined), baseDir, relPath))
+        {
+            out[0] = '\0';
+            return;
+        }
     }
     else
     {
-        snprintf(combined, sizeof(combined), "%s", relPath);
+        combined[0] = '\0';
+        if (!Q_AppendString(combined, sizeof(combined), relPath))
+        {
+            out[0] = '\0';
+            return;
+        }
     }
 
     for (int i = 0; combined[i]; i++)
@@ -245,13 +255,18 @@ int LoadImageFile(char *filename, byte **bufferptr, qboolean *bTGA, char *resolv
     const char *exts[] = {".tga", ".TGA", ".jpg", ".JPG", ".png", ".PNG", ".bmp", ".BMP", ".ktx", ".KTX", NULL};
 
     char base[1024];
-    strcpy(base, filename);
+    base[0] = '\0';
+    if (!Q_AppendString(base, sizeof(base), filename))
+        return 0;
     StripExtension(base);
 
     for (int i = 0; exts[i] != NULL; i++)
     {
         char testPath[1024];
-        sprintf(testPath, "%s%s", base, exts[i]);
+        testPath[0] = '\0';
+        if (!Q_AppendString(testPath, sizeof(testPath), base) ||
+            !Q_AppendString(testPath, sizeof(testPath), exts[i]))
+            continue;
 
         nLen = vfsLoadFile(testPath, (void **)&buffer);
         if (nLen >= 0)
@@ -1205,7 +1220,7 @@ static void AddShaderFile(const char *identifier, const char *filename, void *bu
 
 static void ShaderLooseCallback(const char *filename)
 {
-    char full[MAX_QPATH];
+    char full[MAX_OS_PATH];
     char absolute[MAX_OS_PATH];
     void *buffer;
     int size;
@@ -1216,8 +1231,9 @@ static void ShaderLooseCallback(const char *filename)
         return;
     }
 
-    sprintf(full, "scripts/%s", filename);
-    sprintf(absolute, "%s%s", current_vfs_path, full);
+    if (!Q_ComposePath(full, sizeof(full), "scripts", filename) ||
+        !Q_ComposePath(absolute, sizeof(absolute), current_vfs_path, full))
+        return;
 
     size = LoadFile(absolute, &buffer);
     if (size == -1) return;
@@ -1241,7 +1257,8 @@ static void ShaderPakCallback(const char *filename)
 
     if (strstr(filename, "scripts/"))
     {
-        sprintf(absolute, "%s%s", current_vfs_path, filename);
+        if (!Q_ComposePath(absolute, sizeof(absolute), current_vfs_path, filename))
+            return;
         
         size = PakLoadAnyFile(absolute, &buffer);
         if (size == -1) return;
@@ -1300,7 +1317,8 @@ void LoadShaderInfo(void)
         
         // Loose files first
         start = numLoadedShaderFiles;
-        sprintf(searchPath, "%sscripts/", vfsPaths[p]);
+        if (!Q_ComposePath(searchPath, sizeof(searchPath), vfsPaths[p], "scripts/"))
+            continue;
         Sys_ListFiles(searchPath, "*.shader", ShaderLooseCallback);
         if (numLoadedShaderFiles > start)
         {

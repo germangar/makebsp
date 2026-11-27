@@ -1008,10 +1008,16 @@ void CreateCollisionTris(modelInstance_t *inst)
         char objPath[1024];
         char coltrisDir[1024];
         GetMapOutputDir(source, baseDir);
-        snprintf(coltrisDir, sizeof(coltrisDir), "%scoltris/", baseDir);
+        if (!Q_ComposePath(coltrisDir, sizeof(coltrisDir), baseDir, "coltris/"))
+            Error("Collision triangle output path is too long");
         CreatePath(coltrisDir);
 
-        snprintf(objPath, sizeof(objPath), "%s%s_coltris.obj", coltrisDir, inst->modelName);
+        size_t leafSize = strlen(inst->modelName) + 32;
+        char *leaf = malloc(leafSize);
+        snprintf(leaf, leafSize, "%s_coltris.obj", inst->modelName);
+        if (!Q_ComposePath(objPath, sizeof(objPath), coltrisDir, leaf))
+            Error("Collision OBJ path is too long");
+        free(leaf);
         CreatePath(objPath);
         WriteCollisionOBJ(inst->collision_meshes, inst->num_collision_meshes, objPath);
     }
@@ -1370,7 +1376,8 @@ void CreateTriangleModelCollision(entity_t *parent)
         char baseDir[1024];
         char debugName[1024];
         GetMapOutputDir(source, baseDir);
-        snprintf(debugName, sizeof(debugName), "%scollision.map", baseDir);
+        if (!Q_ComposePath(debugName, sizeof(debugName), baseDir, "collision.map"))
+            Error("Collision map output path is too long");
         WriteCollisionMap(debugName);
     }
 

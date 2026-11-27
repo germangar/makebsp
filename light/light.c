@@ -1168,6 +1168,8 @@ Loads per-surface metadata from a binary .srf sidecar file.
 static extraSurface_t *LoadSurfaceExtraFile(const char *path, int *numSurfaces)
 {
     char srfPath[1024];
+    char cacheDir[1024];
+    char fileName[260];
     char baseDir[1024];
     char baseName[256];
     FILE *f;
@@ -1176,7 +1178,11 @@ static extraSurface_t *LoadSurfaceExtraFile(const char *path, int *numSurfaces)
 
     ExtractFileBase(path, baseName);
     GetMapOutputDir(path, baseDir);
-    snprintf(srfPath, sizeof(srfPath), "%scache/%s.srf", baseDir, baseName);
+    if (!Q_ComposePath(cacheDir, sizeof(cacheDir), baseDir, "cache"))
+        Error("Surface extra path is too long");
+    snprintf(fileName, sizeof(fileName), "%s.srf", baseName);
+    if (!Q_ComposePath(srfPath, sizeof(srfPath), cacheDir, fileName))
+        Error("Surface extra path is too long");
 
     f = fopen(srfPath, "rb");
     if (!f)
@@ -1785,12 +1791,18 @@ void ExportAlphaMask(const char *filenamePrefix)
     char baseDir[1024];
     char outDir[1024];
     GetMapOutputDir(source, baseDir);
-    snprintf(outDir, sizeof(outDir), "%slightmaps/", baseDir);
+    if (!Q_ComposePath(outDir, sizeof(outDir), baseDir, "lightmaps/"))
+        Error("Lightmap output path is too long");
     CreatePath(outDir);
 
     for (i = 0; i < numPages; i++)
     {
-        snprintf(filename, sizeof(filename), "%s%s%d.bmp", outDir, filenamePrefix, i);
+        size_t leafSize = strlen(filenamePrefix) + 32;
+        char *leaf = malloc(leafSize);
+        snprintf(leaf, leafSize, "%s%d.bmp", filenamePrefix, i);
+        if (!Q_ComposePath(filename, sizeof(filename), outDir, leaf))
+            Error("Lightmap filename is too long");
+        free(leaf);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }
@@ -1974,12 +1986,18 @@ void ExportUVmaps(const char *filenamePrefix)
     char baseDir[1024];
     char outDir[1024];
     GetMapOutputDir(source, baseDir);
-    snprintf(outDir, sizeof(outDir), "%slightmaps/", baseDir);
+    if (!Q_ComposePath(outDir, sizeof(outDir), baseDir, "lightmaps/"))
+        Error("Lightmap output path is too long");
     CreatePath(outDir);
 
     for (i = 0; i < numPages; i++)
     {
-        snprintf(filename, sizeof(filename), "%s%s%d.bmp", outDir, filenamePrefix, i);
+        size_t leafSize = strlen(filenamePrefix) + 32;
+        char *leaf = malloc(leafSize);
+        snprintf(leaf, leafSize, "%s%d.bmp", filenamePrefix, i);
+        if (!Q_ComposePath(filename, sizeof(filename), outDir, leaf))
+            Error("Lightmap filename is too long");
+        free(leaf);
         _printf("    Writing %s...\n", filename);
         SaveBMP(filename, &debugBytes[i * LIGHTMAP_WIDTH * LIGHTMAP_HEIGHT * 3], LIGHTMAP_WIDTH, LIGHTMAP_HEIGHT, 3);
     }

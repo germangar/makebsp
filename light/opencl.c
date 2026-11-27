@@ -117,8 +117,14 @@ cl_program BuildOpenCLProgram(const char *filename, const char *options) {
 #endif
 
     if (!src) {
+        char kernelDir[MAX_OS_PATH];
         char fullPath[MAX_OS_PATH];
-        snprintf(fullPath, sizeof(fullPath), "%smakebspdata/kernels/%s", executablePath, filename);
+        if (!Q_ComposePath(kernelDir, sizeof(kernelDir), executablePath, "makebspdata/kernels/") ||
+            !Q_ComposePath(fullPath, sizeof(fullPath), kernelDir, filename))
+        {
+            _printf("BuildOpenCLProgram: Kernel path is too long\n");
+            return NULL;
+        }
         fileSize = LoadFile(fullPath, (void **)&src);
         if (fileSize <= 0) {
             _printf("BuildOpenCLProgram: Could not load %s\n", fullPath);
@@ -184,7 +190,11 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
 
     if (!commonSrc) {
         char commonPath[MAX_OS_PATH];
-        snprintf(commonPath, sizeof(commonPath), "%smakebspdata/kernels/lm_common.cl", executablePath);
+        if (!Q_ComposePath(commonPath, sizeof(commonPath), executablePath, "makebspdata/kernels/lm_common.cl"))
+        {
+            _printf("BuildOpenCLProgramWithCommon: Common kernel path is too long\n");
+            return NULL;
+        }
         commonSize = LoadFile(commonPath, (void **)&commonSrc);
         if (commonSize <= 0) {
             _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", commonPath);
@@ -194,8 +204,15 @@ cl_program BuildOpenCLProgramWithCommon(const char *filename, const char *option
     }
 
     if (!filterSrc) {
+        char kernelDir[MAX_OS_PATH];
         char filterPath[MAX_OS_PATH];
-        snprintf(filterPath, sizeof(filterPath),  "%smakebspdata/kernels/%s", executablePath, filename);
+        if (!Q_ComposePath(kernelDir, sizeof(kernelDir), executablePath, "makebspdata/kernels/") ||
+            !Q_ComposePath(filterPath, sizeof(filterPath), kernelDir, filename))
+        {
+            _printf("BuildOpenCLProgramWithCommon: Filter kernel path is too long\n");
+            if (commonFreeNeeded) free(commonSrc);
+            return NULL;
+        }
         filterSize = LoadFile(filterPath, (void **)&filterSrc);
         if (filterSize <= 0) {
             _printf("BuildOpenCLProgramWithCommon: Could not load %s\n", filterPath);

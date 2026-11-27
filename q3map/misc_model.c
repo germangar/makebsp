@@ -301,6 +301,7 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
     char virtMat[MAX_QPATH] = {0};
     char modelDir[1024];
     char modelNameOnly[1024];
+    size_t copyLen;
 
     if (mesh->mMaterialIndex >= scene->mNumMaterials)
     {
@@ -314,7 +315,9 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
     if (aiGetMaterialTexture(mat, aiTextureType_DIFFUSE, 0, &path, NULL, NULL,
                              NULL, NULL, NULL, NULL) == aiReturn_SUCCESS)
     {
-        strncpy(rawTex, path.data, sizeof(rawTex) - 1);
+        copyLen = strnlen(path.data, sizeof(rawTex) - 1);
+        memcpy(rawTex, path.data, copyLen);
+        rawTex[copyLen] = '\0';
     }
     else
     {
@@ -323,7 +326,9 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
         {
             if (aiGetMaterialString(mat, "$tex.file", 0, 0, &path) == aiReturn_SUCCESS)
             {
-                strncpy(rawTex, path.data, sizeof(rawTex) - 1);
+                copyLen = strnlen(path.data, sizeof(rawTex) - 1);
+        memcpy(rawTex, path.data, copyLen);
+        rawTex[copyLen] = '\0';
             }
         }
     }
@@ -331,7 +336,9 @@ static void ShaderForMesh(const char *modelPath, const struct aiMesh *mesh,
     // 2. Retrieve raw material name if present
     if (aiGetMaterialString(mat, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS)
     {
-        strncpy(rawMat, matName.data, sizeof(rawMat) - 1);
+        copyLen = strnlen(matName.data, sizeof(rawMat) - 1);
+        memcpy(rawMat, matName.data, copyLen);
+        rawMat[copyLen] = '\0';
     }
 
     // Virtualize & normalize both candidates

@@ -203,7 +203,7 @@ void SetModelNumbers (void)
 {
 	int		i;
 	int		models;
-	char	value[10];
+	char	value[32];
 
 	models = 1;
 	for ( i=1 ; i<num_entities ; i++ ) {
@@ -228,7 +228,7 @@ void SetLightStyles (void)
 	const char	*t;
 	entity_t	*e;
 	int		i, j;
-	char	value[10];
+	char	value[32];
 	char	lighttargets[MAX_SWITCHED_LIGHTS][64];
 
 
@@ -425,7 +425,10 @@ void EndBSPFile( void ) {
 	UnparseEntities ();
 
 	// write the map
-	snprintf (path, sizeof(path), "%s.bsp", source);
+	path[0] = '\0';
+	if (!Q_AppendString(path, sizeof(path), source) ||
+	    !Q_AppendString(path, sizeof(path), ".bsp"))
+		Error("BSP output path is too long");
 	_printf ("Writing %s\n", path);
 	WriteBSPFile (path);
 }

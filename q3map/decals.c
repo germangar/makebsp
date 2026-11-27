@@ -906,7 +906,7 @@ void ParseDecalProjectors(void)
             goto clear_geometry;
         }
 
-        vec3_t fallbackNormal;
+        vec3_t fallbackNormal = {0, 0, 0};
         qboolean hasFallback = qfalse;
         
         if (!isMiscDecal && !isMiscTextDecal)

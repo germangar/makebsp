@@ -323,28 +323,10 @@ void SetBrushContents(bspbrush_t *b)
 {
     int contents;
     side_t *s;
-    int i;
-
-    int allFlags;
 
     s = &b->sides[0];
     contents = s->contents;
     b->contentShader = s->shaderInfo;
-
-
-    allFlags = 0;
-
-    for (i = 1; i < b->numsides; i++, s++)
-    {
-        s = &b->sides[i];
-
-        if (!s->shaderInfo)
-        {
-            continue;
-        }
-
-        allFlags |= s->surfaceFlags;
-    }
 
 
 
@@ -854,7 +836,7 @@ void ParseRawBrush(void)
     vec_t rotate = 0;
     vec_t scale[2];
     char name[MAX_QPATH];
-    char shader[MAX_QPATH];
+    char shader[MAX_QPATH + 16];
     int flags;
 
     buildBrush->numsides = 0;
@@ -928,7 +910,8 @@ void ParseRawBrush(void)
         }
 
         // find default flags and values
-        snprintf(shader, sizeof(shader), "textures/%s", name);
+        if (!Q_ComposePath(shader, sizeof(shader), "textures", name))
+            Error("Shader name is too long: %s", name);
         si = ShaderInfoForShader(shader);
         side->shaderInfo = si;
         side->surfaceFlags = si->surfaceFlags;

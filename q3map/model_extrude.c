@@ -392,7 +392,6 @@ static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *
     float *verts = NULL;
     vec3_t *vertNormals = NULL;
     clipTri_t *tris = NULL;
-    int validTris = 0;
     int exceptionCount = 0;
     int fallbackCount = 0;
 
@@ -474,7 +473,6 @@ static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *
 
     /* 1. Build triangle descriptors with normals and plane distances */
     tris = calloc(numTris, sizeof(clipTri_t));
-    validTris = 0;
 
     for (int i = 0; i < numTris; i++)
     {
@@ -507,7 +505,6 @@ static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *
         }
 
         tris[i].dist = DotProduct(tris[i].normal, p0);
-        validTris++;
     }
 
     /* 2. Merge coplanar adjacent triangles into polygons */
@@ -569,7 +566,6 @@ static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *
     {
         vec3_t (*neighborNormals)[MAX_POLY_VERTS] = calloc(numPolys, sizeof(vec3_t[MAX_POLY_VERTS]));
         int pA, pB, eA, eB, nA, nB, v0A, v1A, v0B, v1B;
-        int failedPolys = 0;
         int i;
 
         for (pA = 0; pA < numPolys; pA++)
@@ -627,10 +623,6 @@ static bspbrush_t *ExtrudeTrianglesToBrushesCore(colMesh_t *mesh, shaderInfo_t *
             {
                 b->next = hulls_list;
                 hulls_list = b;
-            }
-            else
-            {
-                failedPolys++;
             }
         }
 

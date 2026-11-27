@@ -61,7 +61,7 @@ static void WriteBrush(FILE *f, bspbrush_t *b)
                 texMat[1][0], texMat[1][1], texMat[1][2]);
 
         const char *shader = "common/caulk";
-        if (s->shaderInfo && s->shaderInfo->shader && s->shaderInfo->shader[0])
+        if (s->shaderInfo && s->shaderInfo->shader[0])
         {
             shader = s->shaderInfo->shader;
         }
@@ -80,7 +80,7 @@ static void WritePatch(FILE *f, parseMesh_t *p)
 {
     int i, j;
     const char *shader = "common/caulk";
-    if (p->shaderInfo && p->shaderInfo->shader && p->shaderInfo->shader[0])
+    if (p->shaderInfo && p->shaderInfo->shader[0])
     {
         shader = p->shaderInfo->shader;
     }

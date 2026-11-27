@@ -140,7 +140,12 @@ static qboolean JSON_LoadGame_Internal(const char *filename, game_t *game, int d
                 char dir[1024];
                 char templatePath[1024];
                 ExtractFilePath(filename, dir);
-                sprintf(templatePath, "%s%s.json", dir, templateName);
+                size_t leafSize = strlen(templateName) + 6;
+                char *leaf = malloc(leafSize);
+                snprintf(leaf, leafSize, "%s.json", templateName);
+                if (!Q_ComposePath(templatePath, sizeof(templatePath), dir, leaf))
+                    Error("Template profile path is too long");
+                free(leaf);
                 if (FileExists(templatePath))
                 {
                     _printf("Loading template game profile: %s\n", templatePath);

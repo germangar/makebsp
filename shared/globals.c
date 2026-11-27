@@ -237,7 +237,8 @@ Unified game profile initialization logic for both q3map and light tools.
 */
 game_t *InitGame(int argc, char **argv) {
     char gamesDir[1024];
-    sprintf(gamesDir, "%smakebspdata", executablePath);
+    if (!Q_ComposePath(gamesDir, sizeof(gamesDir), executablePath, "makebspdata"))
+        Error("Game data path is too long");
 
     // 1. Export standard profiles if missing (ensures [exeDir]/makebspdata/qfusion.json exists)
     JSON_ExportStandardPackages(gamesDir);
@@ -256,7 +257,10 @@ game_t *InitGame(int argc, char **argv) {
     // 4. Load the specific game JSON to override defaults in the local struct (if requested)
     if (gameName != NULL) {
         char gameJsonPath[1024];
-        sprintf(gameJsonPath, "%s/%s.json", gamesDir, gameName);
+        char leaf[256];
+        snprintf(leaf, sizeof(leaf), "%s.json", gameName);
+        if (!Q_ComposePath(gameJsonPath, sizeof(gameJsonPath), gamesDir, leaf))
+            Error("Game profile path is too long");
         if (FileExists(gameJsonPath)) {
             _printf("Loading game profile: %s\n", gameJsonPath);
             JSON_LoadGame(gameJsonPath, &activeGame);
@@ -294,7 +298,12 @@ void GetMapOutputDir(const char *source, char *out) {
     ExtractFileBase(source, baseName);
     
     // User wants: writedir/maps/<mapname>/
-    sprintf(out, "%smaps/%s/", writedir, baseName);
+    char mapDir[1024];
+    char leaf[258];
+    snprintf(leaf, sizeof(leaf), "%s/", baseName);
+    if (!Q_ComposePath(mapDir, sizeof(mapDir), writedir, "maps") ||
+        !Q_ComposePath(out, MAX_OS_PATH, mapDir, leaf))
+        Error("Map output path is too long");
     
     // Final normalization to ensure consistent slashes
     NormalizePath(out);
@@ -304,15 +313,20 @@ void ClearCacheDirectory(void) {
     char baseDir[1024];
     char cachePath[1024];
     GetMapOutputDir(source, baseDir);
-    sprintf(cachePath, "%scache", baseDir);
+    if (!Q_ComposePath(cachePath, sizeof(cachePath), baseDir, "cache"))
+        Error("Cache path is too long");
     _printf("Clearing cache directory: %s\n", cachePath);
 #ifdef _WIN32
-    char cmd[2048];
-    sprintf(cmd, "powershell -NoProfile -Command \"if (Test-Path '%s') { Get-ChildItem '%s' | Remove-Item -Force -Recurse }\"", cachePath, cachePath);
+    size_t cmdSize = strlen(cachePath) * 2 + 256;
+    char *cmd = malloc(cmdSize);
+    snprintf(cmd, cmdSize, "powershell -NoProfile -Command \"if (Test-Path '%s') { Get-ChildItem '%s' | Remove-Item -Force -Recurse }\"", cachePath, cachePath);
     system(cmd);
+    free(cmd);
 #else
-    char cmd[2048];
-    sprintf(cmd, "rm -rf %s/*", cachePath);
+    size_t cmdSize = strlen(cachePath) + 64;
+    char *cmd = malloc(cmdSize);
+    snprintf(cmd, cmdSize, "rm -rf %s/*", cachePath);
     system(cmd);
+    free(cmd);
 #endif
 }

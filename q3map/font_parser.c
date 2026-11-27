@@ -78,12 +78,15 @@ static int TryLoadFontBuffer(const char *fontPath, void **buffer)
 {
     char path[1024];
     char base[1024];
+    char leaf[1030];
     int len;
 
     // 1. Direct path
-    strcpy(path, fontPath);
-    if (!strstr(path, ".font"))
-        strcat(path, ".font");
+    path[0] = '\0';
+    if (!Q_AppendString(path, sizeof(path), fontPath))
+        return -1;
+    if (!strstr(path, ".font") && !Q_AppendString(path, sizeof(path), ".font"))
+        return -1;
 
     len = vfsLoadFile(path, buffer);
     if (len > 0) return len;
@@ -94,7 +97,9 @@ static int TryLoadFontBuffer(const char *fontPath, void **buffer)
     ExtractFileBase(fontPath, base);
 
     // 2. textures/decals/fonts/<basename>.font
-    snprintf(path, sizeof(path), "textures/decals/fonts/%s.font", base);
+    snprintf(leaf, sizeof(leaf), "%s.font", base);
+    if (!Q_ComposePath(path, sizeof(path), "textures/decals/fonts", leaf))
+        return -1;
     len = vfsLoadFile(path, buffer);
     if (len > 0) return len;
 
@@ -102,7 +107,8 @@ static int TryLoadFontBuffer(const char *fontPath, void **buffer)
     if (len > 0) return len;
 
     // 3. fonts/<basename>.font
-    snprintf(path, sizeof(path), "fonts/%s.font", base);
+    if (!Q_ComposePath(path, sizeof(path), "fonts", leaf))
+        return -1;
     len = vfsLoadFile(path, buffer);
     if (len > 0) return len;
 

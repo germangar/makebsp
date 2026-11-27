@@ -125,11 +125,18 @@ qboolean BakeFontAtlas(const char *fontPath, int atlasSize, int customFontSize)
     ExtractFileBase(fontPath, baseName);
     
     char outBasePath[1024];
-    strcpy(outBasePath, fontPath);
+    outBasePath[0] = '\0';
+    if (!Q_AppendString(outBasePath, sizeof(outBasePath), fontPath))
+        Error("Font output path is too long");
     StripExtension(outBasePath);
-    
-    snprintf(outTgaPath, sizeof(outTgaPath), "%s.tga", outBasePath);
-    snprintf(outJsonPath, sizeof(outJsonPath), "%s.font", outBasePath);
+
+    if (!Q_AppendString(outBasePath, sizeof(outBasePath), ".tga"))
+        Error("Font TGA path is too long");
+    strcpy(outTgaPath, outBasePath);
+    outBasePath[strlen(outBasePath) - 4] = '\0';
+    if (!Q_AppendString(outBasePath, sizeof(outBasePath), ".font"))
+        Error("Font JSON path is too long");
+    strcpy(outJsonPath, outBasePath);
 
     // Convert to RGBA
     _printf("Converting to 32-bit RGBA and writing TGA...\n");

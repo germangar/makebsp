@@ -166,7 +166,7 @@ static int RegisterMaterial(int shaderNum)
     }
     else
     {
-        snprintf(mat->name, sizeof(mat->name), "%s", mat->raw);
+        memcpy(mat->name, mat->raw, strlen(mat->raw) + 1);
     }
 
     return s_numMaterials++;

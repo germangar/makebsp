@@ -861,7 +861,12 @@ static void ExportExternalLightmaps(void)
 
     // Write the new lightmaps (this safely overwrites existing ones)
     for (int i = 0; i < numImages; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
+        size_t leafSize = strlen(ext) + 32;
+        char *leaf = malloc(leafSize);
+        snprintf(leaf, leafSize, "lm_%04d.%s", i, ext);
+        if (!Q_ComposePath(filename, sizeof(filename), outDir, leaf))
+            Error("External lightmap filename is too long");
+        free(leaf);
         if (HdrUsesByteLayout(game->hdr)) {
             if (!stbi_write_png(filename, size, size, 3, &lightBytes[i * totalBytesPerImage], size * 3)) {
                 Error("ExportExternalLightmaps: Failed to write %s", filename);
@@ -889,7 +894,12 @@ static void ExportExternalLightmaps(void)
     // Delete older stale lightmaps from previous runs with more images (.png and .hdr)
     int missCount = 0;
     for (int i = numImages; i < 9999; i++) {
-        snprintf(filename, sizeof(filename), "%slm_%04d.%s", outDir, i, ext);
+        size_t leafSize = strlen(ext) + 32;
+        char *leaf = malloc(leafSize);
+        snprintf(leaf, leafSize, "lm_%04d.%s", i, ext);
+        if (!Q_ComposePath(filename, sizeof(filename), outDir, leaf))
+            Error("External lightmap filename is too long");
+        free(leaf);
         if (remove(filename) == 0) {
             missCount = 0;
         } else {
@@ -1213,7 +1223,8 @@ void VoxelCache_BakeAll(void)
     char baseDir[1024];
     char cacheDir[1024];
     GetMapOutputDir(source, baseDir);
-    snprintf(cacheDir, sizeof(cacheDir), "%scache/", baseDir);
+    if (!Q_ComposePath(cacheDir, sizeof(cacheDir), baseDir, "cache/"))
+        Error("Voxel cache path is too long");
     CreatePath(cacheDir);
 
     int numBaked = 0;
@@ -1437,9 +1448,15 @@ void VoxelCache_BakeAll(void)
 voxelPoint_t *VoxelCache_Load(int surfIdx, int *outNumPoints)
 {
     char baseDir[1024];
+    char cacheDir[1024];
+    char leaf[32];
     char path[1024];
     GetMapOutputDir(source, baseDir);
-    snprintf(path, sizeof(path), "%scache/surf_%d.vxl", baseDir, surfIdx);
+    if (!Q_ComposePath(cacheDir, sizeof(cacheDir), baseDir, "cache/"))
+        Error("Voxel cache path is too long");
+    snprintf(leaf, sizeof(leaf), "surf_%d.vxl", surfIdx);
+    if (!Q_ComposePath(path, sizeof(path), cacheDir, leaf))
+        Error("Voxel cache filename is too long");
 
     FILE *f = fopen(path, "rb");
     if (!f)

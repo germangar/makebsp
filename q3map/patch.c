@@ -104,7 +104,7 @@ void ParsePatch(void)
     int i, j;
     parseMesh_t *pm;
     char texture[MAX_QPATH];
-    char shader[MAX_QPATH];
+    char shader[MAX_QPATH + 16];
     mesh_t m;
     drawVert_t *verts;
 
@@ -167,7 +167,8 @@ void ParsePatch(void)
     pm = malloc(sizeof(*pm));
     memset(pm, 0, sizeof(*pm));
 
-    snprintf(shader, sizeof(shader), "textures/%s", texture);
+    if (!Q_ComposePath(shader, sizeof(shader), "textures", texture))
+        Error("Shader name is too long: %s", texture);
     pm->shaderInfo = ShaderInfoForShader(shader);
     pm->mesh = m;
     pm->entitynum = num_entities - 1;

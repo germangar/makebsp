@@ -56,7 +56,10 @@ void LeakFile(tree_t *tree)
     //
     // write the points to the file
     //
-    snprintf(filename, sizeof(filename), "%s.lin", source);
+    filename[0] = '\0';
+    if (!Q_AppendString(filename, sizeof(filename), source) ||
+        !Q_AppendString(filename, sizeof(filename), ".lin"))
+        Error("Leak filename is too long");
     linefile = fopen(filename, "w");
     if (!linefile)
         Error("Couldn't open %s\n", filename);

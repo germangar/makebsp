@@ -100,7 +100,8 @@ void ExpandWildcards(int *argc, char ***argv)
 
         do
         {
-            sprintf(filename, "%s%s", filebase, fileinfo.name);
+            if (!Q_ComposePath(filename, sizeof(filename), filebase, fileinfo.name))
+                Error("Expanded wildcard path is too long: %s%s", filebase, fileinfo.name);
             ex_argv[ex_argc++] = copystring(filename);
         } while (_findnext(handle, &fileinfo) != -1);
 
@@ -478,7 +479,8 @@ int vfsLoadFile(const char *relativePath, void **bufferptr)
     for (i = 0; i < numVFSPaths; i++)
     {
         // a. Try loose files in this path
-        snprintf(fullPath, sizeof(fullPath), "%s%s", vfsPaths[i], relativePath);
+        if (!Q_ComposePath(fullPath, sizeof(fullPath), vfsPaths[i], relativePath))
+            continue;
         length = TryLoadFile(fullPath, bufferptr);
         if (length >= 0)
             return length;
@@ -543,6 +545,35 @@ char *ExpandGamePath(const char *path)
     return full;
 }
 
+// Bounded path composition. Returns qfalse (leaving out untouched) when the
+// result does not fit; unlike snprintf this cannot silently truncate.
+qboolean Q_ComposePath(char *out, size_t outSize, const char *dir, const char *name)
+{
+    size_t dirLen = strlen(dir);
+    size_t nameLen = strlen(name);
+    qboolean needSlash = dirLen > 0 && dir[dirLen - 1] != '/' && dir[dirLen - 1] != '\\';
+
+    if (dirLen + (needSlash ? 1 : 0) + nameLen + 1 > outSize)
+        return qfalse;
+
+    memcpy(out, dir, dirLen);
+    if (needSlash)
+        out[dirLen++] = '/';
+    memcpy(out + dirLen, name, nameLen + 1);
+    return qtrue;
+}
+
+qboolean Q_AppendString(char *out, size_t outSize, const char *suffix)
+{
+    size_t outLen = strlen(out);
+    size_t suffixLen = strlen(suffix);
+
+    if (outLen + suffixLen + 1 > outSize)
+        return qfalse;
+    memcpy(out + outLen, suffix, suffixLen + 1);
+    return qtrue;
+}
+
 char *ExpandPathAndArchive(const char *path)
 {
     char *expanded;
@@ -552,7 +583,8 @@ char *ExpandPathAndArchive(const char *path)
 
     if (archive)
     {
-        sprintf(archivename, "%s/%s", archivedir, path);
+        if (!Q_ComposePath(archivename, sizeof(archivename), archivedir, path))
+            Error("Archive path is too long: %s/%s", archivedir, path);
         QCopyFile(expanded, archivename);
     }
     return expanded;

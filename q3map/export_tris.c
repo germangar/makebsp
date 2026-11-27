@@ -118,8 +118,15 @@ void ExportModels(int count, char **args)
                 continue;
             }
 
-            snprintf(objName, sizeof(objName), "%s/%s_surf%04d.obj", outDir, base, j);
-            snprintf(mtlName, sizeof(mtlName), "%s/%s_surf%04d.mtl", outDir, base, j);
+            size_t leafSize = strlen(base) + 32;
+            char *leaf = malloc(leafSize);
+            snprintf(leaf, leafSize, "%s_surf%04d.obj", base, j);
+            if (!Q_ComposePath(objName, sizeof(objName), outDir, leaf))
+                Error("OBJ output path is too long");
+            snprintf(leaf, leafSize, "%s_surf%04d.mtl", base, j);
+            if (!Q_ComposePath(mtlName, sizeof(mtlName), outDir, leaf))
+                Error("MTL output path is too long");
+            free(leaf);
             
             // Create MTL for THIS surface
             fMtl = fopen(mtlName, "w");

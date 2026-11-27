@@ -289,7 +289,10 @@ void WritePortalFile (tree_t *tree)
 	qprintf ("--- WritePortalFile ---\n");
 	
 	// write the file
-	snprintf (filename, sizeof(filename), "%s.prt", source);
+	filename[0] = '\0';
+	if (!Q_AppendString(filename, sizeof(filename), source) ||
+	    !Q_AppendString(filename, sizeof(filename), ".prt"))
+		Error("Portal filename is too long");
 	_printf ("writing %s\n", filename);
 	pf = fopen (filename, "w");
 	if (!pf)

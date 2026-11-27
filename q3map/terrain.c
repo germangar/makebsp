@@ -67,7 +67,7 @@ ShaderForLayer
 shaderInfo_t *ShaderForLayer(int minlayer, int maxlayer,
                              const char *shadername)
 {
-    char shader[MAX_QPATH];
+    char shader[MAX_QPATH + 16];
 
     if (minlayer == maxlayer)
     {
@@ -494,9 +494,6 @@ void EmitTerrainVerts(side_t *side, terrainSurf_t *surf, int maxlayer,
     vec_t shift[2] = {0, 0};
     vec_t scale[2] = {0.5, 0.5};
     float vecs[2][4];
-    static int numtimes = 0;
-
-    numtimes++;
 
     if (!surf->verts)
     {
@@ -1123,7 +1120,7 @@ void Terrain_ParseFace(terrainFace_t *face)
     vec_t rotate;
     vec_t scale[2];
     char name[MAX_QPATH];
-    char shader[MAX_QPATH];
+    char shader[MAX_QPATH + 16];
     plane_t p;
 
     // read the texturedef
@@ -1142,7 +1139,8 @@ void Terrain_ParseFace(terrainFace_t *face)
     scale[1] = atof(token);
 
     // find default flags and values
-    snprintf(shader, sizeof(shader), "textures/%s", name);
+    if (!Q_ComposePath(shader, sizeof(shader), "textures", name))
+        Error("Shader name is too long: %s", name);
     si = ShaderInfoForShader(shader);
     face->shaderInfo = si;
     // face->texdef = si->texdef;

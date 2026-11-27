@@ -408,8 +408,6 @@ void RecursiveLeafFlow (int leafnum, threaddata_t *thread, pstack_t *prevstack)
 	leaf = &v_leafs[leafnum];
 //	CheckStack (leaf, thread);
 
-	prevstack->next = &stack;
-
 	stack.next = NULL;
 	stack.leaf = leaf;
 	stack.portal = NULL;
@@ -680,8 +678,6 @@ void RecursivePassageFlow (vportal_t *portal, threaddata_t *thread, pstack_t *pr
 
 	leaf = &v_leafs[portal->leaf];
 
-	prevstack->next = &stack;
-
 	stack.next = NULL;
 	stack.depth = prevstack->depth + 1;
 
@@ -811,8 +807,6 @@ void RecursivePassagePortalFlow (vportal_t *portal, threaddata_t *thread, pstack
 
 	leaf = &v_leafs[portal->leaf];
 //	CheckStack (leaf, thread);
-
-	prevstack->next = &stack;
 
 	stack.next = NULL;
 	stack.leaf = leaf;
@@ -1299,7 +1293,7 @@ MrE: create passages from one portal to all the v_portals in the leaf the portal
 */
 void CreatePassages(int portalnum)
 {
-	int i, j, k, n, numseperators, numsee;
+	int i, j, k, n, numseperators;
 	float d;
 	vportal_t *portal, *p, *target;
 	leaf_t *leaf;
@@ -1341,7 +1335,6 @@ void CreatePassages(int portalnum)
 			portal->passages = passage;
 		lastpassage = passage;
 
-		numsee = 0;
 		//create the passage->cansee
 		for (j = 0; j < v_numportals * 2; j++)
 		{
@@ -1393,7 +1386,6 @@ void CreatePassages(int portalnum)
 			if (k < numseperators)
 				continue;
 			passage->cansee[j >> 3] |= (1<<(j&7));
-			numsee++;
 		}
 	}
 }

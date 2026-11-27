@@ -81,6 +81,8 @@ int Q_filelength(FILE *f);
 int FileTime(const char *path);
 
 void Q_mkdir(const char *path);
+qboolean Q_ComposePath(char *out, size_t outSize, const char *dir, const char *name);
+qboolean Q_AppendString(char *out, size_t outSize, const char *suffix);
 
 #define MAX_VFS_PATHS 128
 extern char  vfsPaths[MAX_VFS_PATHS][1024];

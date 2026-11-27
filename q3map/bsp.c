@@ -213,7 +213,10 @@ void ProcessWorldModel(void)
         if (!novis)
         {
             char portalfile[1024];
-            snprintf(portalfile, sizeof(portalfile), "%s.prt", source);
+            portalfile[0] = '\0';
+            if (!Q_AppendString(portalfile, sizeof(portalfile), source) ||
+                !Q_AppendString(portalfile, sizeof(portalfile), ".prt"))
+                Error("Portal filename is too long");
             _printf("--- Inline VIS ---\n");
 
             // 0. Explicitly set healthy defaults for VIS engine switches
@@ -561,7 +564,10 @@ void OnlyEnts(void)
     epair_t *preservedEpairs = NULL;
     epair_t *ep;
 
-    snprintf(out, sizeof(out), "%s.bsp", source);
+    out[0] = '\0';
+    if (!Q_AppendString(out, sizeof(out), source) ||
+        !Q_AppendString(out, sizeof(out), ".bsp"))
+        Error("BSP filename is too long");
     LoadBSPFile(out);
 
     // LoadBSPFile only copies the raw entity lump bytes; parse them into
@@ -720,10 +726,14 @@ static void WriteSurfaceExtraFile(const char *path)
     ExtractFileBase(path, baseName);
     GetMapOutputDir(path, baseDir);
     
-    snprintf(cacheDir, sizeof(cacheDir), "%scache/", baseDir);
+    if (!Q_ComposePath(cacheDir, sizeof(cacheDir), baseDir, "cache/"))
+        Error("Surface cache path is too long");
     CreatePath(cacheDir);
 
-    snprintf(srfPath, sizeof(srfPath), "%s%s.srf", cacheDir, baseName);
+    char leaf[260];
+    snprintf(leaf, sizeof(leaf), "%s.srf", baseName);
+    if (!Q_ComposePath(srfPath, sizeof(srfPath), cacheDir, leaf))
+        Error("Surface extra path is too long");
 
     f = fopen(srfPath, "wb");
     if (!f)
@@ -1440,9 +1450,15 @@ int main(int argc, char **argv)
         ClearCacheDirectory();
 
         // delete portal and line files
-        snprintf(path, sizeof(path), "%s.prt", source);
+        path[0] = '\0';
+        if (!Q_AppendString(path, sizeof(path), source) ||
+            !Q_AppendString(path, sizeof(path), ".prt"))
+            Error("Portal filename is too long");
         remove(path);
-        snprintf(path, sizeof(path), "%s.lin", source);
+        path[0] = '\0';
+        if (!Q_AppendString(path, sizeof(path), source) ||
+            !Q_AppendString(path, sizeof(path), ".lin"))
+            Error("Leak filename is too long");
         remove(path);
     }
 
@@ -1450,7 +1466,10 @@ int main(int argc, char **argv)
     if (strcmp(name + strlen(name) - 4, ".reg"))
     {
         // if we are doing a full map, delete the last saved region map
-        snprintf(path, sizeof(path), "%s.reg", source);
+        path[0] = '\0';
+        if (!Q_AppendString(path, sizeof(path), source) ||
+            !Q_AppendString(path, sizeof(path), ".reg"))
+            Error("Region filename is too long");
         remove(path);
 
         DefaultExtension(name, ".map"); // might be .reg

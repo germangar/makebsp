@@ -66,7 +66,7 @@ int SelectSplitPlaneNum( node_t *node, bspface_t *list ) {
 	bspface_t	*split;
 	bspface_t	*check;
 	bspface_t	*bestSplit;
-	int			splits, facing, front, back;
+	int			splits, facing;
 	int			side;
 	plane_t		*plane;
 	int			value, bestValue;
@@ -103,8 +103,6 @@ int SelectSplitPlaneNum( node_t *node, bspface_t *list ) {
 		plane = &mapplanes[ split->planenum ];
 		splits = 0;
 		facing = 0;
-		front = 0;
-		back = 0;
 		for ( check = list ; check ; check = check->next ) {
 			if ( check->planenum == split->planenum ) {
 				facing++;
@@ -114,10 +112,6 @@ int SelectSplitPlaneNum( node_t *node, bspface_t *list ) {
 			side = WindingOnPlaneSide( check->w, plane->normal, plane->dist );
 			if ( side == SIDE_CROSS ) {
 				splits++;
-			} else if ( side == SIDE_FRONT ) {
-				front++;
-			} else if ( side == SIDE_BACK ) {
-				back++;
 			}
 		}
 		value =  5*facing - 5*splits; // - abs(front-back);
