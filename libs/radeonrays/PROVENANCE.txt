@@ -1,0 +1,34 @@
+RadeonRays 2.0 source package
+=============================
+
+AMD GPUOpen currently points users who need OpenCL to the legacy RadeonRays 2.0
+source branch:
+
+  https://github.com/GPUOpen-LibrariesAndSDKs/RadeonRays_SDK/tree/legacy-2.0
+
+Downloaded archive:
+
+  https://github.com/GPUOpen-LibrariesAndSDKs/RadeonRays_SDK/archive/ff90589afbfe27d72d3447dc08bdb4fce92e6d77.zip
+
+Branch:  legacy-2.0
+Commit:  ff90589afbfe27d72d3447dc08bdb4fce92e6d77
+Archive: SOURCE_ARCHIVE.zip
+SHA256:  530B76123DFAAAB8DA61B25DDE2C66443573F13E89C6F650105EFC8BA61E7CCE
+
+This replaces an earlier ignored RR4.1 tree that was DX12/Vulkan-only and
+therefore unsuitable for the planned OpenCL-based RR2 work.
+
+Recommended integration configuration (when Phase 12 begins):
+
+  -DRR_USE_OPENCL=ON
+  -DRR_USE_VULKAN=OFF
+  -DRR_USE_EMBREE=OFF
+  -DRR_NO_TESTS=ON
+  -DRR_ENABLE_STATIC=ON
+  -DRR_SHARED_CALC=OFF
+  -DRR_EMBED_KERNELS=ON
+
+Rationale: build RR2/Calc/CLW from source for matching Windows/Linux builds,
+embed OpenCL kernels, avoid Anvil/Vulkan and Embree dependencies, and prefer
+static RadeonRays/Calc/CLW artifacts. The Khronos ICD loader sources and a
+static libOpenCL.a are already vendored under libs/opencl for Linux use.
