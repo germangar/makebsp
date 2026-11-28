@@ -1,6 +1,11 @@
 #include "split_bvh.h"
 #include "math/mathutils.h"
+#include <algorithm>
 #include <cassert>
+#include <limits>
+#include <ostream>
+#include <utility>
+#include <vector>
 
 namespace RadeonRays
 {

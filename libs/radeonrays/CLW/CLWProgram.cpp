@@ -29,6 +29,8 @@ THE SOFTWARE.
 #include <cassert>
 #include <algorithm>
 #include <fstream>
+#include <stdexcept>
+#include <utility>
 
 static void load_file_contents(std::string const& name, std::vector<char>& contents, bool binary)
 {

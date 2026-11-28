@@ -24,6 +24,14 @@ THE SOFTWARE.
 #include <atomic>
 #include <mutex>
 #include <numeric>
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
 #define PARALLEL_BUILD
 

@@ -28,6 +28,9 @@ THE SOFTWARE.
 #include <cassert>
 #include <vector>
 #include <future>
+#include <limits>
+#include <ostream>
+#include <utility>
 
 namespace RadeonRays
 {

@@ -30,6 +30,9 @@ THE SOFTWARE.
 #include <future>
 #include <iostream>
 #include <algorithm>
+#include <chrono>
+#include <functional>
+#include <utility>
 
 namespace RadeonRays
 {

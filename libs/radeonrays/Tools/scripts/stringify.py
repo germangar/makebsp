@@ -8,7 +8,7 @@ def printfile(filename, dir):
     fh = open(dir + "/" + filename)
     for line in fh.readlines():
         a = line.strip('\r\n')
-        inl = re.search("#include\s*<.*/(.+)>", a)
+        inl = re.search(r"#include\s*<.*/(.+)>", a)
         if inl:
             printfile( inl.group(1), dir)
         else:

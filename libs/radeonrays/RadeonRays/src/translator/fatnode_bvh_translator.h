@@ -23,6 +23,7 @@ THE SOFTWARE.
 #define FATNODE_BVH_TRANSLATOR_H
 
 #include <map>
+#include <memory>
 
 #include "radeon_rays.h"
 #include "../accelerator/bvh.h"

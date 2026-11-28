@@ -27,6 +27,11 @@ THE SOFTWARE.
 #include <vector>
 #include <thread>
 #include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <limits>
+#include <memory>
 #include <mmintrin.h>
 #include <xmmintrin.h>
 #include <smmintrin.h>

@@ -23,6 +23,7 @@ THE SOFTWARE.
 #define INTERSECTIONAPI_IMPL
 
 #include <atomic>
+#include <memory>
 
 #include "radeon_rays.h"
 #include "../world/world.h"

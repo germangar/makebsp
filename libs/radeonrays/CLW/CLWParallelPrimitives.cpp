@@ -27,6 +27,9 @@ THE SOFTWARE.
 #include <fstream>
 #include <algorithm>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <utility>
 
 #ifdef RR_EMBED_KERNELS
 #if USE_OPENCL
