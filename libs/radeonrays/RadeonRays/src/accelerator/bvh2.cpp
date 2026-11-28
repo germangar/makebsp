@@ -101,7 +101,7 @@ namespace RadeonRays
     inline
     float mm_select(__m128 v, std::uint32_t index)
     {
-        _MM_ALIGN16 float temp[4];
+        alignas(16) float temp[4];
         _mm_store_ps(temp, v);
         return temp[index];
     }
@@ -167,7 +167,7 @@ namespace RadeonRays
         auto m128_minus_inf = _mm_set_ps(-inf, -inf, -inf, -inf);
 
 #ifndef PARALLEL_BUILD
-        _MM_ALIGN16 SplitRequest requests[kStackSize];
+        alignas(16) SplitRequest requests[kStackSize];
 
         auto sptr = 0u;
 
@@ -260,9 +260,9 @@ namespace RadeonRays
                     requests.pop();
                 }
 
-                _MM_ALIGN16 SplitRequest request;
-                _MM_ALIGN16 SplitRequest request_left;
-                _MM_ALIGN16 SplitRequest request_right;
+                alignas(16) SplitRequest request;
+                alignas(16) SplitRequest request_left;
+                alignas(16) SplitRequest request_right;
 
                 // Process local requests
                 while (!local_requests.empty())

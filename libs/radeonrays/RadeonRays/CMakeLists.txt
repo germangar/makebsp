@@ -174,9 +174,10 @@ endif (RR_EMBED_KERNELS)
 
 #Configure RadeonRays build
 target_include_directories(RadeonRays PUBLIC include)
-target_include_directories(RadeonRays 
-    PRIVATE . 
-    PRIVATE ${EMBREE_INCLUDE_PATH})
+target_include_directories(RadeonRays PRIVATE .)
+if (RR_USE_EMBREE)
+    target_include_directories(RadeonRays PRIVATE ${EMBREE_INCLUDE_PATH})
+endif (RR_USE_EMBREE)
 
 target_link_libraries(RadeonRays PUBLIC Calc Threads::Threads)
 
@@ -218,6 +219,8 @@ target_compile_features(RadeonRays PRIVATE cxx_std_14)
 
 if (UNIX AND NOT APPLE)
         target_compile_options(RadeonRays PUBLIC -msse4.2 -fPIC)
+elseif (MINGW)
+        target_compile_options(RadeonRays PUBLIC -msse4.2)
         target_link_libraries(RadeonRays INTERFACE "-Wl,--no-undefined")
         
         #read version from header

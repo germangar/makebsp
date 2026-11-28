@@ -20,6 +20,7 @@
 # LIBRARIES (NOT self-compiled):
 #   - Intel Embree 4: Uses pre-built binaries (located in libs/embree/prebuilt).
 #   - OpenCL: Linked from system drivers on Linux, local loader on Windows.
+#   - RadeonRays 2.0: Built from libs/radeonrays with OpenCL only for makelight.
 #
 # =============================================================================
 
@@ -32,12 +33,18 @@ ifeq ($(OS),Windows_NT)
     BASE_LDFLAGS = -mconsole -static -lwsock32 -lws2_32 -lm -lstdc++ -fopenmp -Wl,--stack,16777216
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/windows/lib -lembree4 -ltbb12 -Llibs/opencl/lib -lOpenCL -lcfgmgr32 -lruntimeobject -lole32 -lsetupapi
     GENERATE_KERNELS = powershell.exe -NoProfile -ExecutionPolicy Bypass -File stringify_kernels.ps1
+    RR2_PYTHON ?= python
+    RR2_GENERATOR = "MinGW Makefiles"
+    RR2_OPENCL_LIBRARY = -DOpenCL_LIBRARY="$(abspath libs/opencl/lib/libOpenCL.a)"
 else
     EXECUTABLE_EXT = .elf
     BASE_CFLAGS = -O2 -Wall -I. -Icommon -Ilibs -Ilibs/pak -Iq3map -Ishared -Ilight_gpu -Ilibs/assimp/include -Ilibs/MeshLib-Lite/eigen -Ilibs/hacd -Ilibs/xatlas -Ilibs/MeshLib-Lite/MRMeshC -Ilibs/MeshLib-Lite -Ilibs/embree/prebuilt/linux/include -Ilibs/opencl/include -DCL_TARGET_OPENCL_VERSION=120 -DMRMESH_STATIC_LIB -DMRMESH_NO_GTEST -DNDEBUG -DWITH_3RD_PARTY_LIBS=0 -DSTB_IMAGE_IMPLEMENTATION -fopenmp -Wno-unknown-pragmas -Wno-attributes -Wno-sign-compare -Wno-unused-parameter
     BASE_LDFLAGS = -lpthread -ldl -lm -lstdc++ -fopenmp
     LIGHT_LDFLAGS = $(BASE_LDFLAGS) -Llibs/embree/prebuilt/linux/lib -lembree4 -ltbb -lOpenCL
     GENERATE_KERNELS = chmod +x stringify_kernels.sh && ./stringify_kernels.sh
+    RR2_PYTHON ?= python3
+    RR2_GENERATOR = "Unix Makefiles"
+    RR2_OPENCL_LIBRARY =
 endif
 
 C_EXTRA_FLAGS = -Werror=implicit-function-declaration -Werror=implicit-int -Werror=incompatible-pointer-types
@@ -62,14 +69,21 @@ HACD_DIR = libs/hacd
 XATLAS_DIR = libs/xatlas
 OBJ_DIR = obj
 OBJ_LITE_DIR = obj_lite
+RR2_SRC_DIR = libs/radeonrays
 
 ifeq ($(OS),Windows_NT)
     OBJ_ASSIMP_DIR = $(OBJ_LITE_DIR)/assimp
     OBJ_ML_DIR = $(OBJ_LITE_DIR)
+    RR2_BUILD_DIR = $(OBJ_LITE_DIR)/rr2
 else
     OBJ_ASSIMP_DIR = $(OBJ_DIR)/assimp
     OBJ_ML_DIR = $(OBJ_DIR)
+    RR2_BUILD_DIR = $(OBJ_DIR)/rr2
 endif
+
+RR2_RADEONRAYS_LIB = $(RR2_BUILD_DIR)/RadeonRays/libRadeonRays.a
+RR2_CALC_LIB = $(RR2_BUILD_DIR)/Calc/libCalc.a
+RR2_CLW_LIB = $(RR2_BUILD_DIR)/CLW/libCLW.a
 
 # Source files
 COMMON_SRC = $(wildcard $(COMMON_DIR)/*.c)
@@ -203,8 +217,22 @@ $(ASSIMP_LIB): $(ASSIMP_OBJ)
 $(Q3MAP_TARGET): $(Q3MAP_OBJ) $(ML_LITE_LIB) $(ASSIMP_LIB)
 	$(CXX) -o $@ $(Q3MAP_OBJ) $(ML_LITE_LIB) $(ASSIMP_LIB) $(Q3MAP_LDFLAGS)
 
-$(LIGHT_TARGET): $(LIGHT_OBJ)
-	$(CXX) -o $@ $(LIGHT_OBJ) $(LIGHT_LDFLAGS)
+# RadeonRays 2.0: OpenCL-only static build with embedded kernels.
+# This target is intentionally not a dependency of makebsp.
+.PHONY: rr2-build
+rr2-build:
+	mkdir -p $(RR2_BUILD_DIR)
+	cmake -S $(RR2_SRC_DIR) -B $(RR2_BUILD_DIR) -G $(RR2_GENERATOR) \
+		-DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$(CXX)" \
+		-DPYTHON_EXECUTABLE="$(RR2_PYTHON)" \
+		-DOpenCL_INCLUDE_DIR="$(abspath libs/opencl/include)" $(RR2_OPENCL_LIBRARY) \
+		-DRR_USE_OPENCL=ON -DRR_USE_VULKAN=OFF -DRR_USE_EMBREE=OFF \
+		-DRR_NO_TESTS=ON -DRR_ENABLE_STATIC=ON -DRR_SHARED_CALC=OFF \
+		-DRR_EMBED_KERNELS=ON
+	cmake --build $(RR2_BUILD_DIR) --config Release --target RadeonRays --parallel
+
+$(LIGHT_TARGET): $(LIGHT_OBJ) rr2-build
+	$(CXX) -o $@ $(LIGHT_OBJ) $(RR2_RADEONRAYS_LIB) $(RR2_CALC_LIB) $(RR2_CLW_LIB) $(LIGHT_LDFLAGS)
 
 
 # Compile rules

@@ -34,10 +34,6 @@ THE SOFTWARE.
 #include "../primitive/mesh.h"
 #include "../primitive/instance.h"
 
-#ifndef WIN32
-#define _MM_ALIGN16
-#endif
-
 namespace RadeonRays
 {
 

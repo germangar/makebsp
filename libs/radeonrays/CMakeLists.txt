@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.13)
 
 project(RadeonRaysSDK CXX)
 
@@ -18,7 +18,10 @@ mark_as_advanced(FORCE RR_USE_VULKAN)
 
 #global settings
 if (WIN32)
-    add_definitions(/MP -D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    if (MSVC)
+        add_compile_options(/MP)
+    endif (MSVC)
 elseif (UNIX)
     add_definitions(-fvisibility=hidden)
 endif (WIN32)
@@ -33,7 +36,14 @@ endif (RR_SHARED_CALC AND RR_USE_VULKAN)
 #Find required packages
 find_package(Threads)
 
-find_package(PythonInterp 2.7 REQUIRED)
+if (NOT PYTHON_EXECUTABLE)
+    if (CMAKE_VERSION VERSION_LESS 3.12)
+        find_package(PythonInterp 2.7 REQUIRED)
+    else ()
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+    endif ()
+endif ()
 set (STRINGIFY_SCRIPT ${RadeonRaysSDK_SOURCE_DIR}/Tools/scripts/stringify.py)
 set (EMBREE_INCLUDE_PATH ${RadeonRaysSDK_SOURCE_DIR}/3rdParty/embree/include)
 if (WIN32)
@@ -46,7 +56,7 @@ endif (WIN32)
 
 if (RR_USE_OPENCL)
     find_package(OpenCL REQUIRED)
-    add_definitions(-DUSE_OPENCL=1)
+    add_definitions(-DUSE_OPENCL=1 -DCL_TARGET_OPENCL_VERSION=120)
     
     add_subdirectory(CLW)
 endif (RR_USE_OPENCL)

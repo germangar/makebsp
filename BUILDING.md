@@ -7,9 +7,9 @@ This repository is configured to build seamlessly on both Windows and Linux usin
 ### Prerequisites
 1. Install [MSYS2](https://www.msys2.org/).
 2. Open the **MSYS2 MinGW64** terminal.
-3. Install the GCC toolchain and `make` by running:
+3. Install the GCC toolchain, CMake 3.13+, Python, and both top-level and CMake make tools by running:
    ```bash
-   pacman -S mingw-w64-x86_64-gcc make
+   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-python make
    ```
 
 > **Note:**
@@ -32,12 +32,13 @@ make RELEASE=1
 
 ### Prerequisites
 1. Install the GNU compiler collection (`build-essential`) and `make`.
-2. Install the OpenCL development headers. Unlike Windows, the Linux build dynamically links against your system's OpenCL driver, so the headers must be installed.
+2. Install CMake 3.13+ and Python 3; `makelight` uses them to build the vendored RadeonRays 2.0 OpenCL library.
+3. Install the OpenCL development headers. Unlike Windows, the Linux build dynamically links against your system's OpenCL driver, so the headers must be installed.
 
 On Ubuntu/Debian, run:
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential ocl-icd-opencl-dev
+sudo apt-get install build-essential cmake python3 ocl-icd-opencl-dev
 ```
 
 ### Compiling
